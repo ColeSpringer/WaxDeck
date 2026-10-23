@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/pagetext"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -267,8 +268,13 @@ func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 	// original file, and for a virtual track that is the whole backing
 	// rip: far more audio than the owner shared. Refuse rather than
 	// over-serve (the same posture as direct playback, which refuses
-	// span-carved tracks it cannot cut).
+	// span-carved tracks it cannot cut). An engine that is configured
+	// and away is a wait, said with when to come back.
 	if it.Virtual {
+		if s.bridge != nil {
+			flow.RefuseEngineDown(w)
+			return
+		}
 		writeError(w, http.StatusNotImplemented, "feature-unavailable",
 			"this track plays a window of a shared source file, which needs the streaming engine")
 		return

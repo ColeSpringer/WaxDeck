@@ -134,13 +134,65 @@ paths:
         Deletes the account and revokes all its sessions. Administrators
         only, and never the calling account or the last enabled
         administrator (`conflict`). The user's listening history in the
-        catalog is orphaned, not destroyed.
+        catalog is orphaned, not destroyed. The account is disabled
+        first, which is the step that refuses the last enabled
+        administrator, then the playlists it owns are settled as
+        `playlists` says, then the account goes. A deletion that stops
+        part-way leaves the account disabled and what was already
+        settled as it is; repeating the request finishes it, taking up
+        or, when the answer is to delete the playlists, removing any
+        fixed copy of a playlist the stopped request left, and a second
+        request while one is running is a `conflict`. The
+        account's public share links end with it, on its playlists as on
+        anything else it shared: a link is served under the reach of the
+        account that made it, so it is handed to no one. The audit entry
+        `user.delete` records how many playlists were handed over, how
+        many of those went as fixed lists, how many were deleted, and
+        how many links ended, and a deletion that stopped is recorded as
+        failed with the counts so far, naming the fixed copy of a
+        playlist it could not take back, if it left one. A request that
+        finds such a copy left by an earlier one names what became of it,
+        by pid: removed with the rest of the playlists, or kept for the
+        account that took them when the playlist it was made from has
+        been deleted since (`fixedCopiesRemoved`, `fixedCopiesKept`).
       tags: [users]
       parameters:
         - $ref: "#/components/parameters/UserId"
+        - name: playlists
+          in: query
+          description: >
+            What becomes of the playlists the account owns. `transfer`
+            (the default) hands its shared playlists to `transferTo`
+            and deletes its private ones, which nobody else could see.
+            A static playlist keeps its pid and entries, and a smart
+            playlist whose rule reads only the catalog keeps its pid and
+            its rule. A smart playlist whose rule reads the account's own
+            state (stars, ratings, plays, played), or names one of its
+            private playlists, is handed over as a static playlist of the
+            tracks it held for the account, under the same name and
+            visibility and a new pid, because its new owner's state would
+            otherwise replace the account's, and every account's home pin
+            of it follows to the new pid. `delete` deletes them all.
+          schema:
+            type: string
+            enum: [transfer, delete]
+            default: transfer
+        - name: transferTo
+          in: query
+          description: >
+            The account that takes the shared playlists when `playlists`
+            is `transfer`; the calling administrator when omitted. An
+            unknown, disabled or pending account, the deleted account
+            itself, and any value alongside `playlists=delete` are
+            `invalid-request`.
+          schema:
+            type: string
+            pattern: "^us-[0-9A-HJKMNP-TV-Z]{26}$"
       responses:
         "204":
           description: Account deleted.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":

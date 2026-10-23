@@ -56,44 +56,59 @@ func tightServer(t *testing.T, h *harness) string {
 // bytes read and how the body ended: nil when it ran to its end or to
 // limit. Safe off the test's goroutine.
 func pacedRead(url string, pause time.Duration, rate int, limit int64) (int, int64, error) {
-	u, err := neturl.Parse(url)
-	if err != nil {
-		return 0, 0, err
-	}
-	conn, err := net.Dial("tcp", u.Host)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer conn.Close()
-	if tcp, ok := conn.(*net.TCPConn); ok {
-		tcp.SetReadBuffer(64 << 10)
-	}
-	if _, err := fmt.Fprintf(conn, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", u.RequestURI(), u.Host); err != nil {
-		return 0, 0, err
-	}
-	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	status, rest, err := pacedStart(url, rate, limit)
 	if err != nil {
 		return 0, 0, err
 	}
 	time.Sleep(pause)
-	buf := make([]byte, 16<<10)
-	var step time.Duration
-	if rate > 0 {
-		step = time.Second * time.Duration(len(buf)) / time.Duration(rate)
+	got, err := rest()
+	return status, got, err
+}
+
+// pacedStart is pacedRead up to the answer's head, which it answers with
+// the read of the body still to make; the read closes the connection.
+func pacedStart(url string, rate int, limit int64) (int, func() (int64, error), error) {
+	u, err := neturl.Parse(url)
+	if err != nil {
+		return 0, nil, err
 	}
-	var got int64
-	for got < limit {
-		n, err := io.ReadFull(resp.Body, buf[:min(int64(len(buf)), limit-got)])
-		got += int64(n)
-		if err == io.EOF || (err == io.ErrUnexpectedEOF && n < len(buf) && got == resp.ContentLength) {
-			return resp.StatusCode, got, nil
-		}
-		if err != nil {
-			return resp.StatusCode, got, err
-		}
-		time.Sleep(step)
+	conn, err := net.Dial("tcp", u.Host)
+	if err != nil {
+		return 0, nil, err
 	}
-	return resp.StatusCode, got, nil
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		tcp.SetReadBuffer(64 << 10)
+	}
+	if _, err := fmt.Fprintf(conn, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", u.RequestURI(), u.Host); err != nil {
+		conn.Close()
+		return 0, nil, err
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		conn.Close()
+		return 0, nil, err
+	}
+	return resp.StatusCode, func() (int64, error) {
+		defer conn.Close()
+		buf := make([]byte, 16<<10)
+		var step time.Duration
+		if rate > 0 {
+			step = time.Second * time.Duration(len(buf)) / time.Duration(rate)
+		}
+		var got int64
+		for got < limit {
+			n, err := io.ReadFull(resp.Body, buf[:min(int64(len(buf)), limit-got)])
+			got += int64(n)
+			if err == io.EOF || (err == io.ErrUnexpectedEOF && n < len(buf) && got == resp.ContentLength) {
+				return got, nil
+			}
+			if err != nil {
+				return got, err
+			}
+			time.Sleep(step)
+		}
+		return got, nil
+	}, nil
 }
 
 // longTrack adds a track of about 2.3 MB, more than any socket buffer

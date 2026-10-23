@@ -80,7 +80,10 @@ Read by compose itself, not the server.
   this key: an archive holding both the databases and the key is
   plaintext-equivalent for every credential it protects.
 - `WAXDECK_WEB_DIR`: serve the web UI from this directory instead of
-  the embedded build (dev flag; `--web-dir app/app/build/web`).
+  the embedded build (dev flag; `--web-dir app/app/build/web`). A
+  directory without an `index.html` refuses to start; the startup log
+  says which web UI the server serves (`source=dir`, `embedded` or
+  `placeholder`).
 - `WAXDECK_PUBLIC_BASE`: the externally reachable base URL as browsers
   see it, e.g. `https://wax.example.com`. Required for single sign-on
   (the OIDC callback derives from it), and what notification deliveries
@@ -124,7 +127,10 @@ Read by compose itself, not the server.
   warning in the log. A root set here is registered as Mixed - each
   file classified by its own tags - unless `WAXDECK_AUDIOBOOK_ROOTS`
   names it; one whose type was later changed in the console keeps that
-  change.
+  change. A root listed here cannot be removed from the console. One
+  taken out of the list stays in the catalog under its name, no longer
+  marked as configured on the Libraries screen, until it is removed
+  there (see [Removing a library](admin-and-ops.md#removing-a-library)).
 - `WAXDECK_AUDIOBOOK_ROOTS`: root names (comma separated) that hold
   audiobooks. Every audio file in such a root is cataloged as a book, so
   a folder of plain MP3 parts needs no tagging. The setting wins at every
@@ -169,17 +175,26 @@ Read by compose itself, not the server.
 ## Streaming engine
 
 WaxDeck works without an engine (originals stream directly); the
-engine adds transcoding, gapless timelines, and voice boost. Under
-compose all three of these are wired for you.
+engine adds transcoding, gapless timelines, voice boost, and the file
+tools. Under compose the three settings below are wired for you.
 
-- `WAXDECK_FLOW_URL`: WaxFlow sidecar base URL (empty disables
-  streaming through the engine).
+- `WAXDECK_FLOW_URL`: WaxFlow sidecar base URL (empty serves originals
+  directly: no transcoding, gapless timelines or voice boost). The
+  server starts whether or not the engine answers: one that is down at
+  start, or goes away later, is retried in the background while
+  originals play directly, and `/health` reports `streaming.connected`.
+  An engine that answers without what the server needs (one that does
+  not serve progressive streams) is logged once as an error naming what
+  it lacks and stays not connected; the server keeps asking it, so an
+  upgraded sidecar is taken on without a restart.
 - `WAXDECK_FLOW_API_KEY`: the key WaxDeck presents to the sidecar;
   must be one of the values in `WAXFLOW_API_KEYS`.
 - `WAXDECK_FLOW_CONFIG`: the sidecar's JSON config file as WaxDeck
   sees it. WaxDeck owns the file and rewrites its roots when a library
   is created at runtime, then asks the sidecar to reload, so the new
-  root streams without a restart.
+  root streams without a restart. While the sidecar is not answering, a
+  removed root still leaves the file, and a new one waits for its
+  answer, since only a reload checks that the sidecar can open it.
 
 ## Single sign-on
 
@@ -202,8 +217,10 @@ provider.
 
 - `WAXDECK_PODCAST_DIR`: episode download directory - its own library,
   never inside a library root. Defaults to `<data-dir>/podcasts`; an
-  explicit empty (`-podcast-dir=""`) disables podcasts: every subscribe
-  is refused, in the apps, an OPML import and podcast apps alike.
+  explicit empty (`-podcast-dir=""`, or `WAXDECK_PODCAST_DIR` set and
+  empty) disables podcasts: every subscribe is refused, in the apps, an
+  OPML import and podcast apps alike, and the apps hide their podcast
+  entry points.
 - `WAXDECK_PODCAST_ROOT_NAME` (default `podcasts`): WaxFlow root name
   the podcast dir is mounted under.
 - `WAXDECK_FEED_REFRESH_MINUTES` (default `30`): minutes between

@@ -63,6 +63,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aboutVersionsTitle => 'Versiones';
 
   @override
+  String adminAuditChange(String field, String from, String to) {
+    return '$field: $from -> $to';
+  }
+
+  @override
   String get adminAuditEmptyMessage =>
       'Las acciones administrativas se registran aquí según ocurren.';
 
@@ -802,6 +807,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminInvitesEmpty => 'Todavía no hay invitaciones';
 
   @override
+  String get adminLibrariesColumnActions => 'Acciones';
+
+  @override
   String get adminLibrariesColumnFolders => 'Nombrar por carpetas';
 
   @override
@@ -840,7 +848,22 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminLibrariesTitle => 'Bibliotecas';
 
   @override
+  String get adminLibraryAbsentHelp =>
+      'Registra la ruta ahora; se escanea cuando la carpeta exista.';
+
+  @override
+  String get adminLibraryAbsentTitle => 'Carpeta montada más tarde';
+
+  @override
+  String adminLibraryActions(String name) {
+    return 'Acciones de $name';
+  }
+
+  @override
   String get adminLibraryAddGroup => 'Añadir una biblioteca';
+
+  @override
+  String get adminLibraryConfigured => 'Configurada en el servidor';
 
   @override
   String get adminLibraryContentClass => 'Tipo de contenido';
@@ -983,6 +1006,30 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get adminLibraryRemove => 'Quitar biblioteca';
+
+  @override
+  String get adminLibraryRemoveAction => 'Quitar';
+
+  @override
+  String get adminLibraryRemoveBody =>
+      'Sus archivos se quedan en el disco. El catálogo olvida la biblioteca; los elementos sin otra copia se archivan y vuelven si la carpeta se añade de nuevo. Escribe el nombre de la biblioteca para confirmar.';
+
+  @override
+  String get adminLibraryRemoveConfigured =>
+      'Configurada en el servidor; quítala primero de WAXDECK_LIBRARY_ROOTS';
+
+  @override
+  String adminLibraryRemoveTitle(String name) {
+    return '¿Quitar \"$name\"?';
+  }
+
+  @override
+  String adminLibraryRemoving(String name) {
+    return 'Quitando \"$name\"; síguelo en Tareas';
+  }
+
+  @override
   String get adminLibraryRescan => 'Volver a escanear las bibliotecas';
 
   @override
@@ -1005,6 +1052,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminLibraryUnnamedPath => 'sin ruta en este sistema de archivos';
+
+  @override
+  String get adminLibraryUnreachable => 'Carpeta inaccesible';
+
+  @override
+  String get adminLibraryUnwritable => 'El servidor no puede escribir aquí';
 
   @override
   String get adminMigrateAccountHelp =>
@@ -1113,10 +1166,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminOpenTasks => 'Tareas';
-
-  @override
-  String get adminReadOnlyBanner =>
-      'El modo de solo lectura está activado. Las subidas, las ediciones y las eliminaciones se rechazan en todo el servidor.';
 
   @override
   String get adminRestoreAppliesAtRestart =>
@@ -1508,6 +1557,19 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se han podido cargar los enlaces compartidos';
 
   @override
+  String get adminStreamingConnected => 'Conectado';
+
+  @override
+  String get adminStreamingDirect =>
+      'Mientras tanto, los originales se reproducen directamente';
+
+  @override
+  String get adminStreamingNotConfigured => 'Sin configurar';
+
+  @override
+  String get adminStreamingUnreachable => 'Inaccesible';
+
+  @override
   String get adminThumbsBlurb =>
       'Copias redimensionadas de tus portadas, generadas a demanda. Vaciarlas cuesta un momento de decodificación la próxima vez que se dibuje cada una, nunca una imagen.';
 
@@ -1634,6 +1696,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminTileSimilarity => 'Cobertura de similitud';
 
   @override
+  String get adminTileStreaming => 'Motor de transmisión';
+
+  @override
   String adminTileTracksEmbedded(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -1743,6 +1808,15 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get adminTrashReasonBookMerge => 'fusión de libro';
+
+  @override
+  String get adminTrashReasonBookSplit => 'división de libro';
+
+  @override
+  String get adminTrashReasonCueSplit => 'división por CUE';
+
+  @override
   String get adminTrashReasonPermanent => 'permanente';
 
   @override
@@ -1820,8 +1894,23 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String adminUserDeleteBody(String username) {
-    return '$username se elimina para siempre, junto con sus sesiones y preferencias. Los archivos de la biblioteca no se tocan.';
+    return '$username se elimina para siempre, junto con sus sesiones, preferencias y enlaces compartidos, que dejan de funcionar. Los archivos de la biblioteca no se tocan.';
   }
+
+  @override
+  String get adminUserDeletePlaylistsDelete => 'Eliminar sus listas';
+
+  @override
+  String get adminUserDeletePlaylistsDeleteHelp =>
+      'Compartidas y privadas por igual. Quien las tuviera compartidas las pierde.';
+
+  @override
+  String get adminUserDeletePlaylistsTransfer =>
+      'Pasarme sus listas compartidas';
+
+  @override
+  String get adminUserDeletePlaylistsTransferHelp =>
+      'Conservan sus elementos y siguen compartidas. Una lista inteligente que depende de sus favoritos, valoraciones, reproducciones o listas privadas pasa a ser una lista fija con sus pistas. Sus listas privadas se eliminan.';
 
   @override
   String get adminUserDeleteTitle => '¿Eliminar la cuenta?';
@@ -2695,6 +2784,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bookMerge => 'Unir en un solo archivo con capítulos';
 
   @override
+  String get bookMergeAction => 'Fusionar';
+
+  @override
+  String get bookMergeBody =>
+      'Las partes se unen en un solo archivo con capítulos junto a ellas, en la misma biblioteca; la posición de cada oyente se conserva. Los archivos originales van a la papelera salvo que los conserves.';
+
+  @override
+  String get bookMergeKeep => 'Conservar los archivos originales';
+
+  @override
+  String get bookMergeKeepHelp =>
+      'La copia fusionada va a una carpeta propia junto a ellos';
+
+  @override
+  String bookMergeTitle(int count) {
+    return '¿Fusionar $count archivos en uno?';
+  }
+
+  @override
   String get bookMore => 'Más';
 
   @override
@@ -2823,6 +2931,25 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bookSplit => 'Dividir por capítulos';
+
+  @override
+  String get bookSplitAction => 'Dividir';
+
+  @override
+  String get bookSplitBody =>
+      'Se escribe un archivo por capítulo junto al libro. El original va a la papelera salvo que lo conserves.';
+
+  @override
+  String get bookSplitKeep => 'Conservar el archivo original';
+
+  @override
+  String get bookSplitKeepHelp =>
+      'Las partes van a una carpeta propia junto a él';
+
+  @override
+  String bookSplitTitle(int count) {
+    return '¿Dividir en $count capítulos?';
+  }
 
   @override
   String get bookStartOver => 'Empezar de nuevo';
@@ -3486,6 +3613,68 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String errorBookToolCopyElsewhere(String copy) {
+    return 'Este libro tiene una copia en $copy, que quedaría como el libro. Elimina la copia o conserva los originales.';
+  }
+
+  @override
+  String errorBookToolCopyElsewhereIn(String copy, String library) {
+    return 'Este libro tiene una copia en $copy, en la biblioteca $library, que quedaría como el libro. Elimina la copia o conserva los originales.';
+  }
+
+  @override
+  String get errorBookToolMultiFile =>
+      'Este libro ya está dividido en varios archivos. Únelo primero para volver a dividirlo.';
+
+  @override
+  String errorBookToolNameTaken(String name, String folder) {
+    return '$name ya está en $folder. Muévelo a otro sitio y vuelve a intentarlo.';
+  }
+
+  @override
+  String get errorBookToolNoChapters =>
+      'Este libro no tiene capítulos por los que dividirlo.';
+
+  @override
+  String get errorBookToolNoCuts =>
+      'Las marcas de capítulo de este libro no dejan ningún punto donde cortarlo.';
+
+  @override
+  String get errorBookToolNoFile =>
+      'Este libro no tiene ningún archivo que dividir.';
+
+  @override
+  String get errorBookToolNoSampleRate =>
+      'El archivo de este libro no indica su frecuencia de muestreo, así que sus capítulos no se pueden cortar con exactitud.';
+
+  @override
+  String errorBookToolPartsInTrash(int count, String files, int more) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de los archivos de este libro fueron',
+      one: '1 de los archivos de este libro fue',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      more,
+      locale: localeName,
+      other: ' y $more más',
+      zero: '',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Restáuralos',
+      one: 'Restáuralo',
+    );
+    return '$_temp0 a la papelera con una fusión o división que no terminó: $files$_temp1. $_temp2 desde la papelera y vuelve a fusionar o dividir el libro.';
+  }
+
+  @override
+  String get errorBookToolSingleFile =>
+      'Este libro ya es un solo archivo, así que no hay nada que unir.';
+
+  @override
   String get errorCatalogBusy =>
       'Otra tarea está usando los archivos de la biblioteca. Inténtalo de nuevo en un momento.';
 
@@ -3500,6 +3689,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get errorCueRipDelete =>
       'Esta pista es parte de un archivo más grande que también contiene otras pistas, así que solo puede eliminarse junto con ellas.';
+
+  @override
+  String get errorCueSplitNoSheet =>
+      'El archivo del que sale esta pista no tiene a su lado una hoja CUE con su mismo nombre, así que no hay con qué dividirlo.';
 
   @override
   String get errorDirectoryUnavailable =>
@@ -3604,7 +3797,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get errorReadOnly =>
-      'La biblioteca está en modo de solo lectura, así que no se puede cambiar nada.';
+      'El servidor o esta biblioteca está en modo de solo lectura, así que no se puede cambiar nada.';
 
   @override
   String get errorServiceUnreachable =>
@@ -3619,8 +3812,16 @@ class AppLocalizationsEs extends AppLocalizations {
       'El servidor no tiene espacio para esto ahora mismo. Avisa a quien lo administra.';
 
   @override
+  String get errorStorageUnwritable =>
+      'El servidor no puede escribir en la carpeta de esa biblioteca, así que no se cambió nada. Revisa el propietario y los permisos de la carpeta.';
+
+  @override
   String get errorStreamStale =>
       'Este archivo ha cambiado en el servidor. Ábrelo otra vez para reproducirlo.';
+
+  @override
+  String get errorStreamingEngine =>
+      'El motor de transmisión no responde ahora mismo. Los originales se reproducen; la transcodificación, la reproducción sin pausas, el realce de voz y la unión o división de archivos esperan a que vuelva.';
 
   @override
   String get errorSyncReset =>
@@ -3629,6 +3830,19 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get errorTimeout =>
       'El dispositivo no ha respondido a tiempo. Inténtalo de nuevo.';
+
+  @override
+  String errorToolOutputsHidden(String folder, String cause) {
+    return 'Los archivos nuevos de esta tarea en $folder no se pudieron nombrar ni quitar ($cause), así que la tarea se queda. Arregla la carpeta y vuelve a borrarla.';
+  }
+
+  @override
+  String get errorToolTaskParked =>
+      'Una unión o división anterior de esto se detuvo y necesita atención. Descártala en Tareas y vuelve a intentarlo.';
+
+  @override
+  String get errorToolTaskRunning =>
+      'Todavía hay una unión o división de esto en marcha. Vuelve a intentarlo cuando termine.';
 
   @override
   String get errorTranscodeLimited =>
@@ -3817,6 +4031,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Ya hay un enriquecimiento en curso. Corrige esto cuando termine.';
 
   @override
+  String get healthFixPreviewMoves => 'Previsualizar movimientos';
+
+  @override
   String healthFixRule(String rule) {
     return 'Corregir $rule';
   }
@@ -3833,6 +4050,25 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get healthGenreWhitelist => 'Género fuera del árbol canónico';
+
+  @override
+  String get healthIssueFix => 'Mover a su sitio';
+
+  @override
+  String get healthIssueFixAction => 'Mover';
+
+  @override
+  String healthIssueFixHeld(String reason) {
+    return 'Este archivo no se puede mover: $reason';
+  }
+
+  @override
+  String get healthIssueFixInPlace =>
+      'Este archivo ya está donde lo coloca el perfil.';
+
+  @override
+  String get healthIssueFixTitle =>
+      '¿Mover este archivo a donde lo coloca el perfil?';
 
   @override
   String get healthIssuesEmptyMessage =>
@@ -4215,7 +4451,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryDeleteAction => 'Eliminar';
 
   @override
-  String get libraryDeleteFilesLabel => 'Eliminar los archivos';
+  String libraryDeleteAlbumTooLarge(int max) {
+    return 'Este álbum tiene más de $max pistas, demasiadas para eliminarlas de una vez.';
+  }
 
   @override
   String get libraryDeleteFilesMenu => 'Eliminar los archivos...';
@@ -4263,6 +4501,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String libraryDeletePermanentPartial(int failed, int total) {
+    return '$failed de $total archivos no se pudieron eliminar';
+  }
+
+  @override
   String libraryDeletePreview(int count, String size) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -4271,6 +4514,47 @@ class AppLocalizationsEs extends AppLocalizations {
       one: 'Esto elimina 1 archivo, $size.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String libraryDeletePreviewFiles(int count, String list) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+    );
+    return '$_temp0: $list';
+  }
+
+  @override
+  String libraryDeleteRipAction(int count) {
+    return 'Eliminar las $count pistas...';
+  }
+
+  @override
+  String libraryDeleteRipShared(int chosen, int extra) {
+    String _temp0 = intl.Intl.pluralLogic(
+      extra,
+      locale: localeName,
+      other: '$extra pistas más salen',
+      one: '1 pista más sale',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      chosen,
+      locale: localeName,
+      other: 'pistas de las que elegiste',
+      one: 'la pista que elegiste',
+    );
+    return '$_temp0 del mismo archivo que $_temp1, y las pistas que salen de un mismo archivo se eliminan juntas o ninguna.';
+  }
+
+  @override
+  String get libraryDeleteRipTitle => '¿Eliminar también las demás pistas?';
+
+  @override
+  String libraryDeleteRipTooMany(int max) {
+    return 'Con las pistas que comparten sus archivos, son más de $max pistas, demasiadas para eliminarlas de una vez.';
   }
 
   @override
@@ -4285,6 +4569,11 @@ class AppLocalizationsEs extends AppLocalizations {
       one: 'Se ha movido 1 archivo a la papelera',
     );
     return '$_temp0';
+  }
+
+  @override
+  String libraryDeleteTrashPartial(int failed, int total) {
+    return '$failed de $total archivos no se pudieron mover a la papelera';
   }
 
   @override
@@ -5937,6 +6226,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'Suscripciones de podcasts sin modificar';
 
   @override
+  String get notifToolTaskFailedHelp =>
+      'Ha fallado una fusión o división de libro, o una división CUE, que iniciaste, o se ha detenido porque sus ejecuciones terminaban con el servidor.';
+
+  @override
+  String get notifToolTaskFailedTitle => 'Tarea de herramientas fallida';
+
+  @override
   String get organizeApply => 'Aplicar';
 
   @override
@@ -5951,6 +6247,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get organizeColumnTo => 'Se mueve a';
 
   @override
+  String get organizeColumnWhy => 'Motivo';
+
+  @override
   String get organizeConfirmMessage =>
       'Los archivos se mueven a sus nuevas ubicaciones en el servidor. El catálogo los sigue, pero nada más que apunte a las rutas antiguas lo hará.';
 
@@ -5959,6 +6258,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get organizeConfirmTitle => '¿Aplicar el perfil de organización?';
+
+  @override
+  String organizeDirsPruned(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count carpetas vaciadas eliminadas',
+      one: '1 carpeta vaciada eliminada',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get organizeDiscard => 'Descartar la previsualización';
@@ -6003,6 +6313,88 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get organizeHint =>
       'La previsualización comprueba cada biblioteca gestionada con este perfil, así que encuentra archivos añadidos o movidos desde la última vez aunque no haya cambiado nada más. No se mueve nada hasta que apliques.';
+
+  @override
+  String get organizeHistoryMore => 'Mostrar ejecuciones anteriores';
+
+  @override
+  String get organizeHistoryOverline =>
+      'Cada ejecución se puede deshacer mientras dure su registro';
+
+  @override
+  String organizeHistoryRow(int moved, String when) {
+    String _temp0 = intl.Intl.pluralLogic(
+      moved,
+      locale: localeName,
+      other: '$moved movidos',
+      one: '1 movido',
+    );
+    return 'Organizar - $_temp0 - $when';
+  }
+
+  @override
+  String get organizeHistoryTitle => 'Historial';
+
+  @override
+  String organizeHistoryUndoRow(int moved, String when) {
+    String _temp0 = intl.Intl.pluralLogic(
+      moved,
+      locale: localeName,
+      other: '$moved devueltos',
+      one: '1 devuelto',
+    );
+    return 'Deshacer - $_temp0 - $when';
+  }
+
+  @override
+  String get organizeHoldBookHeld => 'Otra parte de su libro está retenida';
+
+  @override
+  String get organizeHoldCollision =>
+      'Otro archivo de esta ejecución ocupa el destino';
+
+  @override
+  String get organizeHoldMissing => 'El archivo no está en el disco';
+
+  @override
+  String get organizeHoldMovedSince =>
+      'Se movió otra vez después de esa ejecución';
+
+  @override
+  String get organizeHoldOccupied => 'El destino ya está ocupado';
+
+  @override
+  String get organizeHoldOccupiedCase =>
+      'Hay un archivo con el mismo nombre salvo mayúsculas';
+
+  @override
+  String get organizeHoldReadOnly => 'La biblioteca es de solo lectura';
+
+  @override
+  String get organizeHoldServerReadOnly =>
+      'El servidor está en modo de solo lectura';
+
+  @override
+  String get organizeHoldUncataloged => 'El catálogo ya no tiene el archivo';
+
+  @override
+  String get organizeHoldUntagged =>
+      'Sin artista ni álbum bajo los que archivarlo';
+
+  @override
+  String get organizeHoldVirtual =>
+      'El archivo compartido de un rip cue se queda donde está';
+
+  @override
+  String organizeHoldsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count movimientos retenidos',
+      one: '1 movimiento retenido',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get organizeLoadError =>
@@ -6166,6 +6558,30 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get organizeTitle => 'Organizar los archivos';
+
+  @override
+  String get organizeUndo => 'Deshacer movimientos';
+
+  @override
+  String get organizeUndoConfirmMessage =>
+      'Cada archivo que movió vuelve a donde estaba, con sus archivos asociados; uno que se haya movido después se queda donde está.';
+
+  @override
+  String get organizeUndoConfirmTitle => '¿Deshacer esta ejecución?';
+
+  @override
+  String get organizeUndoWord => 'DESHACER';
+
+  @override
+  String organizeUndone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos devueltos',
+      one: '1 archivo devuelto',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get playerAddLyrics => 'Añadir la letra';
@@ -10194,6 +10610,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsEndpointsTitle => 'Destinos de reproducción';
 
   @override
+  String get settingsEngineLacksThis =>
+      'El motor de transmisión de este servidor no ofrece esto';
+
+  @override
+  String get settingsEngineUnreachable =>
+      'El motor de transmisión no está accesible ahora mismo';
+
+  @override
   String get settingsFollowsAccountHelp => 'Te sigue a tus otros dispositivos';
 
   @override
@@ -10383,6 +10807,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsMatchTheSystem => 'Igual que el sistema';
+
+  @override
+  String get settingsNeedsEngine =>
+      'Necesita el motor de transmisión, y este servidor funciona sin él';
 
   @override
   String get settingsNotificationsKeywords =>
@@ -11070,6 +11498,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'sin pausas, encadenado, unión, transmisión, navegador';
 
   @override
+  String get settingsWebGaplessNoEngine =>
+      'Este servidor funciona sin motor de transmisión, que es lo que reproduce una cola como un solo flujo';
+
+  @override
   String get settingsWebGaplessTitle => 'Reproducción sin pausas';
 
   @override
@@ -11374,6 +11806,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shellPaletteStationDetail => 'Emisora de radio';
+
+  @override
+  String get shellReadOnlyBanner =>
+      'Este servidor está en modo de solo lectura: las subidas, las ediciones que escriben archivos y las eliminaciones están en pausa.';
 
   @override
   String get shellReconnecting =>
@@ -11794,7 +12230,27 @@ class AppLocalizationsEs extends AppLocalizations {
   String get statsYearTopTracks => 'Pistas más escuchadas';
 
   @override
+  String get toolsBookInTrash =>
+      'Los archivos del libro están en la papelera hasta que esto termine.';
+
+  @override
+  String get toolsClearAllAction => 'Borrar';
+
+  @override
+  String get toolsClearAllBody =>
+      'Se borran los recibos de tareas terminadas y fallidas de todas las cuentas, incluidos informes que aún no han leído. Las tareas en curso se quedan.';
+
+  @override
+  String get toolsClearAllTitle => '¿Borrar las tareas terminadas de todos?';
+
+  @override
   String get toolsClearFinished => 'Borrar las terminadas';
+
+  @override
+  String get toolsClearFinishedAll => 'Borrar las tareas terminadas de todos';
+
+  @override
+  String get toolsClearFinishedMine => 'Borrar mis tareas terminadas';
 
   @override
   String toolsCountAdded(int count) {
@@ -11804,6 +12260,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String toolsCountAnalyzed(int count) {
     return 'analizados $count';
+  }
+
+  @override
+  String toolsCountArchived(int count) {
+    return 'archivados $count';
   }
 
   @override
@@ -11819,6 +12280,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String toolsCountCovers(int count) {
     return 'portadas $count';
+  }
+
+  @override
+  String toolsCountDetached(int count) {
+    return 'desvinculados $count';
   }
 
   @override
@@ -11847,6 +12313,16 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String toolsCountFoldersRemoved(int count) {
+    return 'carpetas eliminadas $count';
+  }
+
+  @override
+  String toolsCountHeld(int count) {
+    return '$count retenidos';
+  }
+
+  @override
   String toolsCountLyrics(int count) {
     return 'letras $count';
   }
@@ -11862,6 +12338,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String toolsCountMovedOf(int moved, int attempted) {
+    return 'movidos $moved de $attempted';
+  }
+
+  @override
   String toolsCountNotWritten(int count) {
     return 'sin escribir $count';
   }
@@ -11874,6 +12355,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String toolsCountSkipped(int count) {
     return 'omitidos $count';
+  }
+
+  @override
+  String toolsCountTrashEntriesDropped(int count) {
+    return 'entradas de la papelera quitadas $count';
   }
 
   @override
@@ -11924,7 +12410,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get toolsJobOrganize => 'Organización';
 
   @override
+  String get toolsJobOrganizeUndo => 'Deshacer la organización';
+
+  @override
   String get toolsJobPurgeTrash => 'Purga de la papelera';
+
+  @override
+  String get toolsJobRemoveRoot => 'Retirada de biblioteca';
 
   @override
   String get toolsJobRestore => 'Restauración';
@@ -11992,6 +12484,12 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get toolsShowAll => 'Ver todo';
+
+  @override
+  String get toolsShowLess => 'Ver menos';
+
+  @override
   String get toolsStateCanceled => 'Detenida';
 
   @override
@@ -12004,6 +12502,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get toolsStateFailed => 'Fallida';
 
   @override
+  String get toolsStateParked => 'Requiere atención';
+
+  @override
   String get toolsStateQueued => 'En cola';
 
   @override
@@ -12013,6 +12514,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String toolsStateRunningPct(int percent) {
     return 'En curso · $percent%';
   }
+
+  @override
+  String get toolsStateWaiting => 'En espera';
 
   @override
   String toolsSummaryListens(String count) {
@@ -12072,6 +12576,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get toolsTaskPlaylistSync => 'Sincronización de lista';
 
   @override
+  String toolsTaskTitled(String task, String title) {
+    return '$task: $title';
+  }
+
+  @override
   String toolsTasksCleared(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12083,10 +12592,66 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String toolsTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count tareas se quedan: sus archivos no se pudieron mover; mira cada fila',
+      one: '1 tarea se queda: sus archivos no se pudieron mover; mira su fila',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get toolsTasksSection => 'Tareas de herramientas';
 
   @override
   String get toolsTitle => 'Tareas de herramientas';
+
+  @override
+  String get toolsWaitCatalogBusy =>
+      'Otra tarea ocupa el catálogo; esto sigue en cuanto quede libre.';
+
+  @override
+  String get toolsWaitCatalogMaintenance =>
+      'El catálogo está en mantenimiento; esto sigue cuando termine.';
+
+  @override
+  String get toolsWaitEngineUnavailable =>
+      'El motor de audio no está disponible; esto sigue cuando vuelva.';
+
+  @override
+  String toolsWaitNextTry(String time) {
+    return 'Próximo intento: $time';
+  }
+
+  @override
+  String get toolsWaitOther =>
+      'Algo pasajero se interpuso; esto lo vuelve a intentar por su cuenta.';
+
+  @override
+  String get toolsWaitPartMissing =>
+      'Un archivo del libro no está donde lo tiene el catálogo. Si no vuelve, esto devuelve lo que movió y se detiene.';
+
+  @override
+  String get toolsWaitPutBackBlocked =>
+      'Un archivo no puede volver de la papelera: su sitio está ocupado o su carpeta no admite al servidor. Libera el sitio o corrige la carpeta y esto seguirá.';
+
+  @override
+  String get toolsWaitReadOnly =>
+      'Una biblioteca en la que trabaja es de solo lectura. Quita la solo lectura de la biblioteca o del servidor y esto seguirá.';
+
+  @override
+  String get toolsWaitStopped =>
+      'Esto se interrumpió, porque el servidor se detuvo o porque se le acabó el tiempo; sigue donde estaba.';
+
+  @override
+  String get toolsWaitStorageUnwritable =>
+      'Una carpeta en la que escribe no admite al servidor. Corrige el propietario y los permisos de la carpeta y esto seguirá.';
+
+  @override
+  String get toolsWaitTryingNow => 'Lo intenta de nuevo ahora';
 
   @override
   String unitBpm(int bpm) {

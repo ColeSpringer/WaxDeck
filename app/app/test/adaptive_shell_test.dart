@@ -58,6 +58,7 @@ Future<ProviderContainer> _pumpShell(
   WaxDeckUser user = _admin,
   bool hasBooks = true,
   bool hasDownloads = true,
+  bool podcastsOn = true,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -85,7 +86,8 @@ Future<ProviderContainer> _pumpShell(
                 title: 'There And Back Again',
               ),
           ])
-          ..books[_bookPid] = testBook(_bookPid),
+          ..books[_bookPid] = testBook(_bookPid)
+          ..serverPodcasts = podcastsOn ? null : false,
       ),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
       // The shell hosts the deck bar, so mounting it builds playback:
@@ -272,6 +274,16 @@ void main() {
 
     testWidgets('keeps its tab where the library has one', (tester) async {
       await _pumpShell(tester);
+      expect(navFor(WaxNavTarget.books), findsWidgets);
+    });
+
+    testWidgets('podcasts loses its tab on a server that keeps none', (
+      tester,
+    ) async {
+      // A server whose podcasts are turned off refuses every subscribe,
+      // so the door to a domain that can only ever be empty goes.
+      await _pumpShell(tester, podcastsOn: false);
+      expect(navFor(WaxNavTarget.podcasts), findsNothing);
       expect(navFor(WaxNavTarget.books), findsWidgets);
     });
 

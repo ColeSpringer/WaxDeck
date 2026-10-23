@@ -310,9 +310,12 @@ func (b *Bridge) forgetTimeline(ctx context.Context, key string) {
 	}
 }
 
-// TimelinesSupported reports whether the sidecar mints timelines.
-func (b *Bridge) TimelinesSupported() bool {
-	return b.caps.Delivery.HLS && b.caps.Delivery.Timelines
+// TimelinesSupported reports whether the sidecar mints timelines, false
+// while it is away.
+func (b *Bridge) TimelinesSupported() bool { return timelinesSupported(b.Caps()) }
+
+func timelinesSupported(caps *client.Caps) bool {
+	return caps != nil && caps.Delivery.HLS && caps.Delivery.Timelines
 }
 
 // TimelineMemberWindowsSupported reports whether the sidecar accepts
@@ -322,7 +325,8 @@ func (b *Bridge) TimelinesSupported() bool {
 // a windowed member, so callers route by this and refuse virtual
 // members otherwise.
 func (b *Bridge) TimelineMemberWindowsSupported() bool {
-	return b.caps.Delivery.TimelineMemberWindows
+	caps := b.Caps()
+	return caps != nil && caps.Delivery.TimelineMemberWindows
 }
 
 // timelineFormat picks the HLS rendering format. The caller's own
@@ -332,8 +336,8 @@ func (b *Bridge) TimelineMemberWindowsSupported() bool {
 // engine can produce, the default ladder decides: AAC casts everywhere
 // (the default receiver's safest codec), lossless FLAC when AAC is
 // absent, then whatever the build offers.
-func (b *Bridge) timelineFormat(prefs []string, ceiling int) string {
-	formats := b.caps.Delivery.HLSFormats
+func timelineFormat(caps *client.Caps, prefs []string, ceiling int) string {
+	formats := caps.Delivery.HLSFormats
 	// A bitrate ceiling is a ceiling however the queue is delivered.
 	// The progressive path applies the account's, so a listener who
 	// switched gapless on would otherwise be handed a lossless render
@@ -576,7 +580,11 @@ func (b *Bridge) SweepTimelineSlots() {
 // that support a virtual member has no timeline-member form, so the
 // mint is refused and the caller treats the pid as timeline-ineligible.
 func (b *Bridge) TimelineFor(ctx context.Context, user string, members []TimelineMember, opts TimelineOptions) (*TimelineResult, error) {
-	if !b.TimelinesSupported() {
+	caps := b.Caps()
+	if caps == nil {
+		return nil, ErrEngineDown
+	}
+	if !timelinesSupported(caps) {
 		return nil, fmt.Errorf("flow: sidecar mints no timelines")
 	}
 	// Marked before the slot is taken and cleared after the row is
@@ -619,7 +627,7 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	req := client.TimelineRequest{CrossfadeSeconds: opts.CrossfadeSeconds}
 	var totalMS int64
 	for _, m := range members {
-		if m.Src.Virtual && !b.TimelineMemberWindowsSupported() {
+		if m.Src.Virtual && !caps.Delivery.TimelineMemberWindows {
 			return nil, fmt.Errorf("%w: %s is a virtual track", ErrTimelineUnrenderable, m.PID)
 		}
 		ref, err := b.srcRef(m.Src.Path)
@@ -640,6 +648,9 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	}
 
 	tl, jobID, err := b.mintTimeline(ctx, req)
+	if b.engineGone(ctx, err) {
+		return nil, ErrEngineDown
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -658,7 +669,7 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	if b.gate != nil {
 		ceiling = b.gate.MaxBitrateKbps(ctx, user)
 	}
-	format := b.timelineFormat(opts.Formats, ceiling)
+	format := timelineFormat(caps, opts.Formats, ceiling)
 	// The ceiling holds the rendering to its rate, as it holds a track's
 	// encode; the engine's own rate could be above it.
 	bitrate := 0
@@ -693,6 +704,9 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		Params:     params,
 		TTLSeconds: int64(ttl / time.Second),
 	})
+	if b.engineGone(ctx, err) {
+		return nil, ErrEngineDown
+	}
 	if err != nil {
 		return nil, fmt.Errorf("flow: signing timeline master: %w", err)
 	}
@@ -854,6 +868,7 @@ func (b *Bridge) TimelineJob(ctx context.Context, user, jobPID string) (state st
 	}
 	job, err := b.client.Job(ctx, tj.upstream)
 	if err != nil {
+		b.engineGone(ctx, err)
 		return "failed", true
 	}
 	switch job.State {
@@ -911,6 +926,10 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 	// account and with the reach it was minted under, and a rendering
 	// with its account, its session and the account's right to the item.
 	if !b.authorize(r.Context(), w, claims) {
+		return
+	}
+	if !b.Up() {
+		RefuseEngineDown(w)
 		return
 	}
 	user, pid := claims.User, claims.PID
@@ -989,8 +1008,9 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 	if rg := r.Header.Get("Range"); rg != "" {
 		req.Header.Set("Range", rg)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := b.engineHTTP.Do(req)
 	if err != nil {
+		b.unreachable(r.Context(), err)
 		writeJSONError(w, http.StatusBadGateway, "internal", "stream backend unavailable")
 		return
 	}

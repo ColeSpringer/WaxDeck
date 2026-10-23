@@ -202,22 +202,26 @@ func TestDisablingTheOwnerEndsTheirLinksRunningTransfers(t *testing.T) {
 			base := tightServer(t, h)
 			pid, size := longTrack(t, h)
 			owner, link := shareAsNewUser(t, h, "dana", pid, map[string]any{"allowDownload": true})
+			// Running is answered: its head is in, so the owner is disabled
+			// under a transfer that has started, not one still on its way.
+			status, rest, err := pacedStart(base+link.Url+c.route, 256<<10, size+1)
+			if err != nil || status != http.StatusOK {
+				t.Fatalf("the transfer = %d, %v; want it started", status, err)
+			}
 			type result struct {
-				status int
-				got    int64
-				err    error
+				got int64
+				err error
 			}
 			done := make(chan result, 1)
 			go func() {
-				status, got, err := pacedRead(base+link.Url+c.route, 0, 256<<10, size+1)
-				done <- result{status, got, err}
+				got, err := rest()
+				done <- result{got, err}
 			}()
-			waitForSlots(t, &h.srv.shareStreams, barePID(link.Pid), 1, within, "the transfer starting")
 			disable(t, h, owner)
 			select {
 			case r := <-done:
-				if r.status != http.StatusOK || r.err == nil || r.got >= size {
-					t.Errorf("after its owner was disabled the transfer got %d of %d bytes, status %d, %v; want it cut", r.got, size, r.status, r.err)
+				if r.err == nil || r.got >= size {
+					t.Errorf("after its owner was disabled the transfer got %d of %d bytes, %v; want it cut", r.got, size, r.err)
 				}
 			case <-time.After(within):
 				t.Fatalf("the transfer was still running %v after its owner was disabled", within)

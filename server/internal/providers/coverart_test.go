@@ -318,11 +318,13 @@ func TestCoverArtForgetsAMissEventually(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	// Wide enough that a loaded machine still asks twice inside it.
+	const ttl = 250 * time.Millisecond
 	caa := NewCoverArt(CoverArtConfig{
 		BaseURL:     srv.URL,
 		HTTPClient:  srv.Client(),
 		MinInterval: time.Nanosecond,
-		MissTTL:     time.Millisecond,
+		MissTTL:     ttl,
 	})
 	caa.FrontCover(context.Background(), "bare")
 	// Stored at all, first: without this the expiry below passes on a
@@ -331,7 +333,7 @@ func TestCoverArtForgetsAMissEventually(t *testing.T) {
 	if got := hits.Load(); got != 1 {
 		t.Fatalf("asked the archive %d times inside the ttl, want 1", got)
 	}
-	time.Sleep(5 * time.Millisecond)
+	time.Sleep(ttl + 50*time.Millisecond)
 	caa.FrontCover(context.Background(), "bare")
 	if got := hits.Load(); got != 2 {
 		t.Fatalf("asked the archive %d times, want 2 - the memory never expired", got)

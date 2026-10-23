@@ -17,6 +17,7 @@ import '../sync/sync_providers.dart';
 import 'lifecycle_banners.dart';
 import 'routes.dart';
 import 'semantics_ids.dart';
+import 'server_health.dart';
 import 'side_panel.dart';
 
 /// Where a target sits in the navigation chrome.
@@ -72,7 +73,12 @@ enum WaxNavTarget {
   // beside them.
   playlists(WaxIcons.playlists, WaxRoute.playlists, WaxNavSection.domainIndex),
 
-  podcasts(WaxIcons.podcasts, WaxRoute.podcasts, WaxNavSection.primary),
+  podcasts(
+    WaxIcons.podcasts,
+    WaxRoute.podcasts,
+    WaxNavSection.primary,
+    needsPodcasts: true,
+  ),
   // "Books" rather than "Audiobooks" on the chrome, which is what the
   // layout system's own tab row says: five labels share a phone's width,
   // and the hub's own title is where the long name belongs.
@@ -151,6 +157,7 @@ enum WaxNavTarget {
     this.adminOnly = false,
     this.needsUpload = false,
     this.needsDownloads = false,
+    this.needsPodcasts = false,
     this.hidesWhenEmpty = false,
   });
 
@@ -168,6 +175,10 @@ enum WaxNavTarget {
   /// permission: it is a platform capability, and the screen behind it
   /// has no data source at all there.
   final bool needsDownloads;
+
+  /// Hidden on a server whose podcasts are turned off: it refuses every
+  /// subscribe, so the domain could only ever be empty.
+  final bool needsPodcasts;
 
   /// Hidden while the server has nothing behind it.
   ///
@@ -190,12 +201,14 @@ enum WaxNavTarget {
   bool visibleTo(
     WaxDeckUser? user, {
     bool hasDownloads = false,
+    bool podcastsOn = true,
     Set<WaxNavTarget> emptyDomains = const <WaxNavTarget>{},
   }) {
     final isAdmin = user?.roles.contains('admin') ?? false;
     if (adminOnly && !isAdmin) return false;
     if (needsUpload && !(user?.uploadEnabled ?? false)) return false;
     if (needsDownloads && !hasDownloads) return false;
+    if (needsPodcasts && !podcastsOn) return false;
     if (hidesWhenEmpty && emptyDomains.contains(this)) return false;
     return true;
   }
@@ -488,12 +501,14 @@ class ShellChrome {
 final shellChromeProvider = Provider.autoDispose<ShellChrome>((ref) {
   final user = ref.watch(authControllerProvider).value?.user;
   final hasDownloads = ref.watch(downloadManagerProvider) != null;
+  final podcastsOn = ref.watch(podcastsOnProvider);
   final empty = ref.watch(emptyDomainsProvider).value ?? const <WaxNavTarget>{};
   final visible = WaxNavTarget.values
       .where(
         (target) => target.visibleTo(
           user,
           hasDownloads: hasDownloads,
+          podcastsOn: podcastsOn,
           emptyDomains: empty,
         ),
       )
@@ -859,7 +874,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       // opens beside the content where there is room for one.
       bottom: const DeckBarHost(),
       panel: shellSidePanel(ref),
-      banners: lifecycleBanners(l10n, ref),
+      banners: lifecycleBanners(context, ref),
       content: widget.shell,
     );
 

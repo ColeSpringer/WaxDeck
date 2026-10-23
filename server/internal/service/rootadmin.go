@@ -2,13 +2,16 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/colespringer/waxbin"
@@ -68,13 +71,44 @@ func (l *Library) refreshLibraryState(ctx context.Context) {
 			FolderFallback: lib.FolderFallback,
 		})
 	}
+	if l.refreshHook != nil {
+		l.refreshHook()
+	}
 	l.rootsMu.Lock()
+	// A root keeps its last probe, read under the lock a probe pass stores
+	// its answer under: a refresh writes nothing into a folder, and never
+	// puts back an answer a pass changed while it read the catalog.
+	unwritable := map[string]bool{}
+	for _, r := range l.roots {
+		unwritable[r.Path] = r.Unwritable
+	}
+	for i := range roots {
+		roots[i].Unwritable = roots[i].Managed && unwritable[roots[i].Path]
+	}
 	// The first build arms the watcher itself; a re-arm drops events.
 	first := !l.rootsBuilt
 	moved := !first && !slices.EqualFunc(l.roots, roots, func(a, b Root) bool { return a.Path == b.Path })
 	changed := !first && !slices.Equal(l.roots, roots)
+	// A managed root coming into the probed set (added elsewhere, its
+	// read-only flag lifted) has no answer of its own yet; the start's
+	// probe answers the first build.
+	var entering []string
+	if changed {
+		probed := map[string]bool{}
+		for _, r := range l.roots {
+			probed[r.Path] = l.probesRoot(r.Managed, r.ReadOnly)
+		}
+		for _, r := range roots {
+			if l.probesRoot(r.Managed, r.ReadOnly) && !probed[r.Path] {
+				entering = append(entering, r.Path)
+			}
+		}
+	}
 	l.roots, l.rootsBuilt = roots, true
 	l.rootsMu.Unlock()
+	if paths := l.rootProbe.unprobed(entering); len(paths) > 0 {
+		l.probeRoots(paths...)
+	}
 	if first || changed {
 		l.invalidateAttribution()
 	}
@@ -115,6 +149,18 @@ func (l *Library) rootNames(ctx context.Context, libs []*model.Library) map[mode
 		for _, lib := range libs {
 			if name := source[rootKey(lib.DisplayRoot)]; out[lib.PID] == "" && name != "" && !taken[name] {
 				out[lib.PID], taken[name] = name, true
+			}
+		}
+	}
+	// A configured name is stored too: a root taken out of the
+	// configuration keeps the name the streaming sidecar mounts it under.
+	for _, lib := range libs {
+		key := rootKey(lib.DisplayRoot)
+		if name := configured[key]; name != "" && out[lib.PID] == name && stored[key] != name {
+			if err := l.db.LibraryRootsUpsert(ctx, wdb.LibraryRoot{
+				Path: lib.DisplayRoot, Name: name, CreatedAtNS: time.Now().UnixNano(),
+			}); err != nil {
+				l.log.Warn("storing a configured library's name", "library", name, "err", err)
 			}
 		}
 	}
@@ -160,7 +206,8 @@ func (l *Library) nudgeWatcher() {
 // holds, named.
 func (l *Library) RootTable() []Root { return slices.Clone(l.libraryRoots()) }
 
-// flowRootSync is the wired bridge, nil before SetFlowRoots.
+// flowRootSync is the wired bridge, nil before SetFlowRoots and on a
+// server with no streaming engine.
 func (l *Library) flowRootSync() FlowRootSync {
 	if p := l.flowRoots.Load(); p != nil {
 		return *p
@@ -168,32 +215,40 @@ func (l *Library) flowRootSync() FlowRootSync {
 	return nil
 }
 
-// syncFlowRoots teaches the streaming bridge the roots it does not map,
-// as a restore or the CLI brings, passing over one it refused at the
-// same path.
+// syncFlowRoots brings the streaming bridge to the root table once it is
+// wired: the mounts of libraries removed while it could not be told are
+// taken off, and the roots it does not map, as a restore or the CLI
+// brings, are taught, passing over one it refused at the same path.
 func (l *Library) syncFlowRoots(ctx context.Context) {
-	flow := l.flowRootSync()
+	p := l.flowRoots.Load()
+	if p == nil {
+		return
+	}
+	flow := *p
+	l.flowSyncMu.Lock()
+	defer l.flowSyncMu.Unlock()
+	l.unmountOwed(ctx, flow)
 	if flow == nil {
 		return
 	}
-	l.flowSyncMu.Lock()
-	defer l.flowSyncMu.Unlock()
 	known := flow.RootNames()
 	for _, r := range l.libraryRoots() {
-		if !slices.Contains(known, r.Name) && l.flowRefused[r.Name] != r.Path {
+		if !slices.Contains(known, r.Name) && l.flowRefused[r.Name].path != r.Path {
 			l.teachFlowRoot(ctx, flow, r.Name, r.Path)
 		}
 	}
 }
 
 // settleRoots brings the catalog's roots to what the server runs with:
-// defined profiles, the configured roots, and the table rebuilt.
+// defined profiles, the configured roots, the table rebuilt, and what the
+// last scans found of their folders.
 func (l *Library) settleRoots(ctx context.Context) error {
 	l.defaultUndefinedProfiles(ctx)
 	if err := l.registerConfiguredRoots(ctx); err != nil {
 		return err
 	}
 	l.refreshLibraryState(ctx)
+	l.seedRootReach(ctx)
 	return nil
 }
 
@@ -277,9 +332,16 @@ func (l *Library) defaultUndefinedProfiles(ctx context.Context) {
 	for _, p := range l.lib.Profiles() {
 		defined[p.Name] = true
 	}
+	// Named as the table names them, which a start has not built yet.
+	var names map[model.PID]string
 	for _, lib := range libs {
 		if lib.Mode == model.ModePodcast || lib.Profile == "" || defined[lib.Profile] {
 			continue
+		}
+		if names == nil {
+			names = l.rootNames(ctx, slices.DeleteFunc(slices.Clone(libs), func(lib *model.Library) bool {
+				return lib.Mode == model.ModePodcast || lib.DisplayRoot == ""
+			}))
 		}
 		l.log.Warn("a library names an organize profile that is not defined; it uses the default",
 			"root", lib.DisplayRoot, "profile", lib.Profile)
@@ -288,7 +350,7 @@ func (l *Library) defaultUndefinedProfiles(ctx context.Context) {
 			l.log.Warn("moving a library to the default profile", "root", lib.DisplayRoot, "err", err)
 			continue
 		}
-		l.Audit(ctx, nil, "library.profile", AuditTarget{Kind: "library", PID: apiPID(PrefixLibrary, lib.PID)},
+		l.Audit(ctx, nil, "library.profile", AuditTarget{Kind: "library", PID: apiPID(PrefixLibrary, lib.PID), Name: names[lib.PID]},
 			map[string]any{"profile": organize.DefaultProfileName, "undefined": lib.Profile})
 	}
 }
@@ -358,19 +420,21 @@ func (l *Library) SetLibraryMedia(ctx context.Context, uc *UserCtx, apiLibraryPI
 		l.log.Warn("a library's media changed while a catalog job is running; rescan it once the job ends",
 			"library", apiLibraryPID, "force", force, "err", scanErr)
 	}
-	l.Audit(ctx, uc, "library.media", AuditTarget{Kind: "library", PID: apiLibraryPID},
+	l.Audit(ctx, uc, "library.media", AuditTarget{Kind: "library", PID: apiLibraryPID, Name: l.libraryInfo(lib).Name},
 		map[string]any{"media": string(to), "from": string(from), "scanStarted": scanErr == nil})
 	info := l.libraryInfo(updated)
 	info.ScanStarted = scanErr == nil
 	return info, nil
 }
 
-// AddLibraryInput describes a runtime library-root creation.
+// AddLibraryInput describes a runtime library-root creation. AllowAbsent
+// registers a folder that is not there yet, a drive mounted later.
 type AddLibraryInput struct {
-	Name    string
-	Path    string
-	Media   string // music|audiobook|mixed; empty defaults to mixed
-	Managed bool
+	Name        string
+	Path        string
+	Media       string // music|audiobook|mixed; empty defaults to mixed
+	Managed     bool
+	AllowAbsent bool
 }
 
 // FlowRootSync is the streaming bridge's runtime-root surface, wired
@@ -389,10 +453,15 @@ type FlowRootSync interface {
 	// bridge's own table. A nil error means streaming works now; any
 	// error says what an administrator still has to do.
 	SyncRoot(ctx context.Context, name, path string) error
+	// RemoveRoot unmounts a removed library's root from the bridge and
+	// the sidecar alike; a name neither maps is no error. A non-nil
+	// error says what the sidecar still serves.
+	RemoveRoot(ctx context.Context, name string) error
 }
 
-// SetFlowRoots wires the bridge's runtime-root surface, and teaches it
-// the roots added while it was being wired.
+// SetFlowRoots wires the bridge's runtime-root surface, and brings it to
+// the root table (syncFlowRoots). Nil says no streaming engine is
+// configured: there is no sidecar to tell anything.
 func (l *Library) SetFlowRoots(s FlowRootSync) {
 	l.flowRoots.Store(&s)
 	l.workers.GoOnce(l.procCtx, "flow-roots", func(ctx context.Context) error {
@@ -419,6 +488,10 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 	if path == "" {
 		return LibraryInfo{}, errInvalid("a library path is required")
 	}
+	if !filepath.IsAbs(path) {
+		return LibraryInfo{}, errInvalid("the library path must be absolute")
+	}
+	path = rootKey(path)
 	var media model.MediaType
 	switch in.Media {
 	case "", string(model.MediaMixed):
@@ -434,7 +507,7 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 	if in.Managed {
 		mode = model.ModeManaged
 	}
-	lib, err := l.registerRoot(ctx, name, path, mode, media)
+	lib, err := l.registerRoot(ctx, name, path, mode, media, in.AllowAbsent)
 	if err != nil {
 		return LibraryInfo{}, err
 	}
@@ -464,7 +537,7 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 		// not only in the server log.
 		detail["streamingWarning"] = streamWarning
 	}
-	l.Audit(ctx, uc, "library.create", AuditTarget{Kind: "library", PID: apiLibPID}, detail)
+	l.Audit(ctx, uc, "library.create", AuditTarget{Kind: "library", PID: apiLibPID, Name: name}, detail)
 	info := l.libraryInfo(lib)
 	// The response carries the warning too: the administrator who made the
 	// change reads it, not the log.
@@ -484,50 +557,160 @@ func (l *Library) syncFlowRoot(ctx context.Context, name, path string) string {
 	}
 	l.flowSyncMu.Lock()
 	defer l.flowSyncMu.Unlock()
-	if slices.Contains(flow.RootNames(), name) {
-		return ""
+	warning := ""
+	if !slices.Contains(flow.RootNames(), name) {
+		warning = l.teachFlowRoot(ctx, flow, name, path)
 	}
-	return l.teachFlowRoot(ctx, flow, name, path)
+	// A root taken while the engine is away is written for the sidecar and
+	// reloaded when the engine answers: nothing refused it, and nothing
+	// streams from it yet.
+	if warning == "" && l.engineAway() {
+		return "streaming from this library starts when the streaming engine answers again"
+	}
+	return warning
+}
+
+// flowRefusal is a root the bridge refused at its path, with how many
+// times the engine had gone away when it was offered: the answer that
+// ends a later outage offers it again.
+type flowRefusal struct {
+	path    string
+	outages uint64
 }
 
 // teachFlowRoot offers the bridge one root, remembering a refusal. The
 // caller holds flowSyncMu.
 func (l *Library) teachFlowRoot(ctx context.Context, flow FlowRootSync, name, path string) string {
+	outages := l.flowOutages.Load()
 	err := flow.SyncRoot(ctx, name, path)
 	if err == nil {
 		delete(l.flowRefused, name)
 		return ""
 	}
 	if l.flowRefused == nil {
-		l.flowRefused = map[string]string{}
+		l.flowRefused = map[string]flowRefusal{}
 	}
-	l.flowRefused[name] = path
+	l.flowRefused[name] = flowRefusal{path: path, outages: outages}
 	l.log.Warn("the streaming sidecar did not take a library's root", "library", name, "err", err)
 	return "streaming from this library is not available yet: " + err.Error()
 }
 
 // registerRoot catalogs a root at a free path under a name nothing uses,
-// the bridge's included (it mounts the podcast dir). rootsMu spans the
-// checks, the stored name and the add, so two creates cannot both pass.
-func (l *Library) registerRoot(ctx context.Context, name, path string, mode model.Mode, media model.MediaType) (*model.Library, error) {
+// the bridge's included (it mounts the podcast dir). A taken path or name
+// is answered first, and the create then holds both (claimRoot) while its
+// folder is looked at off every lock, within a bound, so a mount that
+// stopped answering fails this create alone; the write probe goes only
+// into a folder no library holds, never on a read-only server. path is
+// absolute and clean; allowAbsent takes a folder that does not answer yet.
+func (l *Library) registerRoot(ctx context.Context, name, path string, mode model.Mode, media model.MediaType, allowAbsent bool) (*model.Library, error) {
+	claim, release, err := l.claimRoot(ctx, name, path, mode == model.ModeManaged)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	probed, err := l.lookAtFolder(ctx, claim, allowAbsent)
+	if err != nil {
+		return nil, err
+	}
+	if err := l.rootStillFree(ctx, name, path); err != nil {
+		return nil, err
+	}
 	l.rootsMu.Lock()
 	defer l.rootsMu.Unlock()
-	libs, err := l.lib.Libraries(ctx)
+	key := rootKey(path)
+	// The catalog keeps the root and its policy; the name is WaxDeck's, and
+	// it goes in first. The feed refreshes the table the moment the root
+	// lands, naming any root without a stored name after its directory,
+	// and the bridge would be taught that name beside this one.
+	if err := l.db.LibraryRootsUpsert(ctx, wdb.LibraryRoot{
+		Path: key, Name: name, CreatedAtNS: time.Now().UnixNano(),
+	}); err != nil {
+		return nil, &Error{Kind: KindInternal, Err: err}
+	}
+	var opts []waxbin.RootOption
+	if allowAbsent {
+		opts = append(opts, waxbin.AllowAbsent())
+	}
+	// The look's probe is this root's first answer; the refresh that takes
+	// it in asks for no other.
+	l.rootProbe.createdAt(path, probed)
+	lib, err := l.lib.AddRoot(ctx, config.Root{Path: path, Mode: mode, Media: media}, opts...)
 	if err != nil {
+		l.rootProbe.createdAt(path, false)
+		// Not on the request's context: a client gone mid-create is a likely
+		// reason the add failed, and the name must not outlive it.
+		if derr := l.db.LibraryRootsDelete(context.WithoutCancel(ctx), key); derr != nil {
+			l.log.Warn("dropping the name of a library the catalog refused", "library", name, "err", derr)
+		}
 		return nil, classify(err)
 	}
-	held := map[string]bool{}
-	for _, lib := range libs {
-		held[rootKey(lib.DisplayRoot)] = true
+	return lib, nil
+}
+
+// RemoveLibrary takes a library out of the catalog, its files staying on
+// disk, and answers the job doing it; the job's end drops what WaxDeck
+// keeps of it (followRootRemoval). A root the configuration names comes
+// back at every start, so it is refused, as is the podcast library.
+// Administrators only.
+func (l *Library) RemoveLibrary(ctx context.Context, uc *UserCtx, apiLibraryPID string) (Job, error) {
+	if !uc.Admin {
+		return Job{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	key := rootKey(path)
-	for _, lib := range libs {
-		if samePath(rootKey(lib.DisplayRoot), key) {
-			return nil, &Error{Kind: KindConflict, Msg: "a library at " + path + " already exists"}
+	prefix, pid, ok := parseAPIPID(apiLibraryPID)
+	if !ok || prefix != PrefixLibrary {
+		return Job{}, errNotFound("no library with pid " + apiLibraryPID)
+	}
+	if err := l.CheckWritable(ctx, ""); err != nil {
+		return Job{}, err
+	}
+	lib, err := l.libraryByPID(ctx, pid)
+	if KindOf(err) == KindNotFound {
+		return Job{}, errNotFound("no library with pid " + apiLibraryPID)
+	} else if err != nil {
+		return Job{}, err
+	}
+	if lib.Mode == model.ModePodcast {
+		return Job{}, errInvalid("the podcast library follows the podcast download folder and cannot be removed")
+	}
+	if l.configuredRoot(lib.DisplayRoot) {
+		return Job{}, &Error{Kind: KindConflict,
+			Msg: "this library is configured in WAXDECK_LIBRARY_ROOTS; take it out of the configuration and restart, then remove it here"}
+	}
+	facts := removalFacts{Name: l.libraryInfo(lib).Name, Path: lib.DisplayRoot}
+	detail, err := json.Marshal(facts)
+	if err != nil {
+		return Job{}, &Error{Kind: KindInternal, Err: err}
+	}
+	// Kept before the start: the job can end before its origin lands.
+	seq := l.removals.begin(pid, removal{name: facts.Name, path: facts.Path, userID: uc.ID})
+	jobPID, err := l.lib.StartRemoveRoot(l.procCtx, pid, waxbin.RemoveRootOptions{})
+	if err != nil {
+		l.removals.abandon(pid, seq)
+		return Job{}, classifyMutation(err)
+	}
+	if err := l.adoptJobWith(ctx, wdb.JobOrigin{PID: string(jobPID), UserID: uc.ID, Detail: string(detail)}); err != nil {
+		// No origin holds it, so its end is the follower's, now or when seen.
+		l.removals.unrecord(pid)
+		if j, err := l.lib.Job(ctx, jobPID); err == nil && j.State != model.JobRunning {
+			l.settleLater(func(ctx context.Context) { l.settleUnrecordedRemoval(ctx, j) })
 		}
 	}
+	return l.JobStatus(ctx, apiPID(PrefixJob, jobPID))
+}
+
+// rootTaken refuses a create at a folder a library holds, or under a name
+// a root goes by.
+func (l *Library) rootTaken(ctx context.Context, name, path string, libs []*model.Library) error {
+	held := map[string]bool{}
+	for _, lib := range libs {
+		key := rootKey(lib.DisplayRoot)
+		if samePath(key, path) {
+			return &Error{Kind: KindConflict, Msg: "a library at " + path + " already exists"}
+		}
+		held[key] = true
+	}
 	taken := []string{l.podcastRootName}
-	for _, r := range l.roots {
+	for _, r := range l.libraryRoots() {
 		taken = append(taken, r.Name)
 	}
 	for _, r := range l.configRoots {
@@ -544,31 +727,85 @@ func (l *Library) registerRoot(ctx context.Context, name, path string, mode mode
 		taken = append(taken, flow.RootNames()...)
 	}
 	if slices.Contains(taken, name) {
-		return nil, &Error{Kind: KindConflict, Msg: "a library named " + name + " already exists"}
+		return &Error{Kind: KindConflict, Msg: "a library named " + name + " already exists"}
 	}
+	return nil
+}
+
+// pathsOverlap reports whether one of two clean absolute paths holds the
+// other, or both name one folder.
+func pathsOverlap(a, b string) bool {
+	holds := func(root, path string) bool {
+		rel, err := filepath.Rel(root, path)
+		return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	}
+	return holds(a, b) || holds(b, a)
+}
+
+// folderAnswer is what a look at a new library's folder found.
+type folderAnswer int
+
+const (
+	// folderBroken is a look that ended without an answer.
+	folderBroken folderAnswer = iota
+	folderListed
+	folderIsFile
+	// folderUnlisted is a folder whose names the server cannot read.
+	folderUnlisted
+	// folderForbidden is a path its parents keep the server out of.
+	folderForbidden
+	folderMissing
+	// folderUnreadable is any other error.
+	folderUnreadable
+)
+
+// lookAt looks at the folder at path: a stat, then one name read.
+func lookAt(path string) folderAnswer {
 	switch st, err := os.Stat(path); {
-	case errors.Is(err, fs.ErrNotExist):
-		return nil, errInvalid("there is no folder at " + path + " on the server")
 	case err == nil && !st.IsDir():
-		return nil, errInvalid(path + " is a file, not a folder")
+		return folderIsFile
+	case err == nil && !folderListable(path):
+		return folderUnlisted
+	case err == nil:
+		return folderListed
+	case errors.Is(err, fs.ErrPermission):
+		return folderForbidden
+	case errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR):
+		return folderMissing
+	default:
+		return folderUnreadable
 	}
-	// The catalog keeps the root and its policy; the name is WaxDeck's, and
-	// it goes in first. The feed refreshes the table the moment the root
-	// lands, naming any root without a stored name after its directory,
-	// and the bridge would be taught that name beside this one.
-	if err := l.db.LibraryRootsUpsert(ctx, wdb.LibraryRoot{
-		Path: key, Name: name, CreatedAtNS: time.Now().UnixNano(),
-	}); err != nil {
-		return nil, &Error{Kind: KindInternal, Err: err}
+}
+
+// folderRefusal is why the folder a look found cannot be a new library,
+// or nil; allowAbsent takes one that is not there yet.
+func folderRefusal(path string, found folderAnswer, allowAbsent bool) error {
+	switch {
+	case found == folderListed:
+		return nil
+	case found == folderIsFile:
+		return errInvalid(path + " is a file, not a folder")
+	case found == folderBroken || found == folderUnlisted || found == folderForbidden:
+		// Mounting there later would not change what its parents allow.
+		return errInvalid("the server cannot read the library path")
+	case allowAbsent:
+		// Mounted later, as asked: its scans say unreachable until then.
+		return nil
+	case found == folderMissing:
+		return errInvalid("there is no folder at " + path + " on the server")
+	default:
+		return errInvalid("the server cannot read the library path")
 	}
-	lib, err := l.lib.AddRoot(ctx, config.Root{Path: path, Mode: mode, Media: media})
+}
+
+// folderListable reports whether the server can list a folder's names: a
+// stat needs only its parents searchable, and every scan reads names.
+func folderListable(path string) bool {
+	f, err := os.Open(path)
 	if err != nil {
-		// Not on the request's context: a client gone mid-create is a likely
-		// reason the add failed, and the name must not outlive it.
-		if derr := l.db.LibraryRootsDelete(context.WithoutCancel(ctx), key); derr != nil {
-			l.log.Warn("dropping the name of a library the catalog refused", "library", name, "err", derr)
-		}
-		return nil, classify(err)
+		return false
 	}
-	return lib, nil
+	defer f.Close()
+	_, err = f.Readdirnames(1)
+	return err == nil || errors.Is(err, io.EOF)
 }

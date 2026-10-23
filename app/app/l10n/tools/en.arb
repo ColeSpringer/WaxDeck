@@ -1,9 +1,33 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "toolsBookInTrash": "The book's files are in the trash until this finishes.",
+  "@toolsBookInTrash": {
+    "description": "Line on a book merge or split task whose sources are in the trash and whose new files are not yet the book: the book is missing from the library until the task finishes."
+  },
+  "toolsClearAllAction": "Clear",
+  "@toolsClearAllAction": {
+    "description": "Confirm button of the dialog that asks before clearing every account's finished tasks."
+  },
+  "toolsClearAllBody": "Finished and failed task receipts of every account go, reports they have not read included. Running tasks stay.",
+  "@toolsClearAllBody": {
+    "description": "Body of the dialog an administrator confirms before clearing every account's finished tasks."
+  },
+  "toolsClearAllTitle": "Clear every member's finished tasks?",
+  "@toolsClearAllTitle": {
+    "description": "Title of the dialog an administrator confirms before clearing every account's finished tasks."
+  },
   "toolsClearFinished": "Clear finished",
   "@toolsClearFinished": {
-    "description": "Button that removes every finished task from the list at once."
+    "description": "Label of the Tasks screen's control that clears the signed-in account's finished tasks at once; for an administrator it opens a menu of the two sweeps."
+  },
+  "toolsClearFinishedAll": "Clear everyone's finished tasks",
+  "@toolsClearFinishedAll": {
+    "description": "Menu row, for an administrator, that clears every account's finished tasks after a confirmation."
+  },
+  "toolsClearFinishedMine": "Clear my finished tasks",
+  "@toolsClearFinishedMine": {
+    "description": "Menu row, for an administrator, that clears only their own finished tasks."
   },
   "toolsCountAdded": "added {count}",
   "@toolsCountAdded": {
@@ -22,6 +46,16 @@
       "count": {
         "type": "int",
         "example": "120"
+      }
+    }
+  },
+  "toolsCountArchived": "archived {count}",
+  "@toolsCountArchived": {
+    "description": "Counter in a finished library removal's result: items with no copy in another library, archived with their play state until the folder is added again. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
       }
     }
   },
@@ -51,6 +85,16 @@
       "count": {
         "type": "int",
         "example": "6"
+      }
+    }
+  },
+  "toolsCountDetached": "detached {count}",
+  "@toolsCountDetached": {
+    "description": "Counter in a finished library removal's result: files the catalog let go of, which stay on disk. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "120"
       }
     }
   },
@@ -107,6 +151,26 @@
       }
     }
   },
+  "toolsCountFoldersRemoved": "folders removed {count}",
+  "@toolsCountFoldersRemoved": {
+    "description": "Counter in a finished organize run's result: source folders its moves left empty, which it removed. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsCountHeld": "{count} held",
+  "@toolsCountHeld": {
+    "description": "Counter in a finished path fix's result: items it held back, for any cause. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "toolsCountLyrics": "lyrics {count}",
   "@toolsCountLyrics": {
     "description": "Counter in a finished enrichment's result: tracks some source answered lyrics for. Lower case: it sits in a comma-separated run of counters.",
@@ -137,6 +201,20 @@
       }
     }
   },
+  "toolsCountMovedOf": "moved {moved} of {attempted}",
+  "@toolsCountMovedOf": {
+    "description": "Counter in a finished path fix's result: how many of the items it tried it moved into place. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "moved": {
+        "type": "int",
+        "example": "3"
+      },
+      "attempted": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
   "toolsCountNotWritten": "not written {count}",
   "@toolsCountNotWritten": {
     "description": "Counter in a finished kind change's result: files the change could not be written into. Lower case: it sits in a comma-separated run of counters.",
@@ -159,6 +237,16 @@
   "toolsCountSkipped": "skipped {count}",
   "@toolsCountSkipped": {
     "description": "Counter in a finished job's or fix's result: items left alone. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsCountTrashEntriesDropped": "trash entries dropped {count}",
+  "@toolsCountTrashEntriesDropped": {
+    "description": "Counter in a finished library removal's result: the library's trash entries that went with it, their files staying in its trash folder. Shown only when there were any. Lower case: it sits in a comma-separated run of counters.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -236,9 +324,17 @@
   "@toolsJobOrganize": {
     "description": "Name of a catalog job that moves files into the library's layout."
   },
+  "toolsJobOrganizeUndo": "Organize undo",
+  "@toolsJobOrganizeUndo": {
+    "description": "Name of a catalog job that moves an organize run's files back where the run found them."
+  },
   "toolsJobPurgeTrash": "Purge from the trash",
   "@toolsJobPurgeTrash": {
     "description": "Name of a catalog job that permanently deletes one trashed file."
+  },
+  "toolsJobRemoveRoot": "Library removal",
+  "@toolsJobRemoveRoot": {
+    "description": "Name of a catalog job that takes a library out of the catalog, leaving its files on disk."
   },
   "toolsJobRestore": "Restore",
   "@toolsJobRestore": {
@@ -330,6 +426,14 @@
       }
     }
   },
+  "toolsShowAll": "Show all",
+  "@toolsShowAll": {
+    "description": "Opens a task's account (why it failed or stopped, and where its files are) past its first lines."
+  },
+  "toolsShowLess": "Show less",
+  "@toolsShowLess": {
+    "description": "Folds a task's opened account back to its first lines."
+  },
   "toolsStateCanceled": "Stopped",
   "@toolsStateCanceled": {
     "description": "State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language."
@@ -345,6 +449,10 @@
   "toolsStateFailed": "Failed",
   "@toolsStateFailed": {
     "description": "State of a task that did not finish. Agrees with the word for a task in this language."
+  },
+  "toolsStateParked": "Needs attention",
+  "@toolsStateParked": {
+    "description": "State of a book merge or split, or a CUE split, whose runs kept ending with the server. It counts as failed: it is not run again, it is dismissed and cleared like a failed task, and until then its book takes no other merge or split. Its error line says why and where each of its files is."
   },
   "toolsStateQueued": "Queued",
   "@toolsStateQueued": {
@@ -363,6 +471,10 @@
         "example": "42"
       }
     }
+  },
+  "toolsStateWaiting": "Waiting",
+  "@toolsStateWaiting": {
+    "description": "State of a task in flight that is waiting out a passing failure and tries again on its own; a line under it says why."
   },
   "toolsSummaryListens": "listens {count}",
   "@toolsSummaryListens": {
@@ -460,6 +572,20 @@
   "@toolsTaskPlaylistSync": {
     "description": "Name of the task that reconciles a playlist bound to an external source: enumerate, download what is new, and update membership."
   },
+  "toolsTaskTitled": "{task}: {title}",
+  "@toolsTaskTitled": {
+    "description": "A tool task row's title: what the task does, then the title of the book or album it works on, as it was when the task was queued.",
+    "placeholders": {
+      "task": {
+        "type": "String",
+        "example": "Book merge"
+      },
+      "title": {
+        "type": "String",
+        "example": "The Fixture Book"
+      }
+    }
+  },
   "toolsTasksCleared": "{count, plural, =1{Cleared 1 task} other{Cleared {count} tasks}}",
   "@toolsTasksCleared": {
     "description": "Message after finished tasks were swept, saying how many went.",
@@ -470,6 +596,16 @@
       }
     }
   },
+  "toolsTasksKept": "{count, plural, =1{1 task kept: its files could not be moved; see its row} other{{count} tasks kept: their files could not be moved; see each row}}",
+  "@toolsTasksKept": {
+    "description": "After Clear finished: how many finished tasks stayed because files they left in the library could not be named or removed; each such row says why and what to fix.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "toolsTasksSection": "Tool tasks",
   "@toolsTasksSection": {
     "description": "Heading over the tool tasks list when the catalog's jobs are listed above it."
@@ -477,5 +613,55 @@
   "toolsTitle": "Tool tasks",
   "@toolsTitle": {
     "description": "Title of the screen following long-running library work: merges, splits, downloads, imports."
+  },
+  "toolsWaitCatalogBusy": "Another job holds the catalog; this carries on once it is free.",
+  "@toolsWaitCatalogBusy": {
+    "description": "Why a waiting task waits: another catalog job holds the catalog."
+  },
+  "toolsWaitCatalogMaintenance": "The catalog is under maintenance; this carries on once that is done.",
+  "@toolsWaitCatalogMaintenance": {
+    "description": "Why a waiting task waits: the catalog is suspended for maintenance (a backup or restore)."
+  },
+  "toolsWaitEngineUnavailable": "The audio engine is not available; this carries on once it is back.",
+  "@toolsWaitEngineUnavailable": {
+    "description": "Why a waiting task waits: the engine that cuts or joins audio is not available."
+  },
+  "toolsWaitNextTry": "Next try at {time}",
+  "@toolsWaitNextTry": {
+    "description": "When a waiting task tries again, as a time of day: a countdown would be wrong as soon as the screen stood still. {time} is the local time, such as 3:04 PM.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "3:04 PM"
+      }
+    }
+  },
+  "toolsWaitOther": "Something passing got in the way; this tries again on its own.",
+  "@toolsWaitOther": {
+    "description": "Why a waiting task waits, when the cause has no sentence of its own; the server's words follow."
+  },
+  "toolsWaitPartMissing": "A file of the book is not where the catalog has it. If it does not come back, this puts back what it moved and stops.",
+  "@toolsWaitPartMissing": {
+    "description": "Why a book merge or split waits: one of the book's files is missing from where the catalog has it."
+  },
+  "toolsWaitPutBackBlocked": "A file cannot go back from the trash: its place is taken or its folder refuses the server. Clear the place or fix the folder and this carries on.",
+  "@toolsWaitPutBackBlocked": {
+    "description": "Why a book merge or split waits: undoing, it cannot put a file back from the trash."
+  },
+  "toolsWaitReadOnly": "A library this works in is read-only. Turn read-only off for it, or for the server, and this carries on.",
+  "@toolsWaitReadOnly": {
+    "description": "Why a waiting task waits: a library it works in, or the whole server, is in read-only mode."
+  },
+  "toolsWaitStopped": "This was cut short, by the server stopping or by running out of time; it carries on where it was.",
+  "@toolsWaitStopped": {
+    "description": "Why a waiting task waits: the server stopped, or the run ran out of time, part way through; the sentence names both, as the reason does."
+  },
+  "toolsWaitStorageUnwritable": "A folder this writes to refuses the server. Fix the folder's ownership and permissions and this carries on.",
+  "@toolsWaitStorageUnwritable": {
+    "description": "Why a waiting task waits: a library folder refuses the server's writes."
+  },
+  "toolsWaitTryingNow": "Trying again now",
+  "@toolsWaitTryingNow": {
+    "description": "A waiting task whose next try has come: the worker takes it up within moments."
   }
 }

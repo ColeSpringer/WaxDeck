@@ -410,6 +410,9 @@ String _reasonLabel(AppLocalizations l10n, TrashEntry entry) {
     'user' => l10n.adminTrashReasonUser,
     'prune' => l10n.adminTrashReasonPrune,
     'permanent' => l10n.adminTrashReasonPermanent,
+    'book-merge' => l10n.adminTrashReasonBookMerge,
+    'book-split' => l10n.adminTrashReasonBookSplit,
+    'cue-split' => l10n.adminTrashReasonCueSplit,
     _ => entry.reason,
   };
 }

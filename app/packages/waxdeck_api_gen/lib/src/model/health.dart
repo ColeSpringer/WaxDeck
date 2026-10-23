@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/streaming_engine_state.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -17,6 +18,8 @@ part 'health.g.dart';
 /// * [apiVersion] - Major API version served under `/api/v1`.
 /// * [uploadFormats] - File extensions uploads accept (lowercase, no dot) - the effective set, so an operator's `WAXDECK_UPLOAD_FORMATS` replacement is what appears here, with `rejectedFormats` subtracted (the deny-list wins at the gate whatever the operator listed). Clients filter pickers and drop zones against it; the format check at upload-session create remains the authoritative gate. Absent on servers older than the field. 
 /// * [rejectedFormats] - File extensions refused outright whatever `uploadFormats` says (DRM containers, encrypted by construction). Clients use it to tell \"can never play\" apart from \"not in the accepted set\" when reporting what a filter dropped. Absent on servers older than the field. 
+/// * [streaming] - The streaming engine as the server sees it now. Absent on servers older than the field. 
+/// * [podcasts] - False when this server has podcasts turned off: every subscribe is refused, so clients hide the podcast entry points. Absent on servers older than the field. 
 @BuiltValue()
 abstract class Health implements Built<Health, HealthBuilder> {
   /// Always `ok` when the server can respond.
@@ -38,6 +41,14 @@ abstract class Health implements Built<Health, HealthBuilder> {
   /// File extensions refused outright whatever `uploadFormats` says (DRM containers, encrypted by construction). Clients use it to tell \"can never play\" apart from \"not in the accepted set\" when reporting what a filter dropped. Absent on servers older than the field. 
   @BuiltValueField(wireName: r'rejectedFormats')
   BuiltList<String>? get rejectedFormats;
+
+  /// The streaming engine as the server sees it now. Absent on servers older than the field. 
+  @BuiltValueField(wireName: r'streaming')
+  StreamingEngineState? get streaming;
+
+  /// False when this server has podcasts turned off: every subscribe is refused, so clients hide the podcast entry points. Absent on servers older than the field. 
+  @BuiltValueField(wireName: r'podcasts')
+  bool? get podcasts;
 
   Health._();
 
@@ -89,6 +100,20 @@ class _$HealthSerializer implements PrimitiveSerializer<Health> {
       yield serializers.serialize(
         object.rejectedFormats,
         specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
+    if (object.streaming != null) {
+      yield r'streaming';
+      yield serializers.serialize(
+        object.streaming,
+        specifiedType: const FullType(StreamingEngineState),
+      );
+    }
+    if (object.podcasts != null) {
+      yield r'podcasts';
+      yield serializers.serialize(
+        object.podcasts,
+        specifiedType: const FullType(bool),
       );
     }
   }
@@ -150,6 +175,22 @@ class _$HealthSerializer implements PrimitiveSerializer<Health> {
           ) as BuiltList<String>?;
           if (valueDes == null) continue;
           result.rejectedFormats.replace(valueDes);
+          break;
+        case r'streaming':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(StreamingEngineState),
+          ) as StreamingEngineState?;
+          if (valueDes == null) continue;
+          result.streaming.replace(valueDes);
+          break;
+        case r'podcasts':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.podcasts = valueDes;
           break;
         default:
           unhandled.add(key);

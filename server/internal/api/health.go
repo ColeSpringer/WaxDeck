@@ -106,7 +106,7 @@ func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequest
 		return nil, err
 	}
 	if req.Body == nil {
-		return FixHealthIssues400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a fix body is required"))}, nil
+		return FixHealthIssues400JSONResponse(errObj("invalid-request", "a fix body is required")), nil
 	}
 	var pids []string
 	if req.Body.ItemPids != nil {
@@ -116,7 +116,7 @@ func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequest
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
-			return FixHealthIssues400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+			return FixHealthIssues400JSONResponse(errObj("invalid-request", err.Error())), nil
 		case service.KindForbidden:
 			return FixHealthIssues403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindConflict:
@@ -279,8 +279,8 @@ func (s *Server) ResolveUpgrade(ctx context.Context, req ResolveUpgradeRequestOb
 			return ResolveUpgrade404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
 		case service.KindReadOnly:
 			return ResolveUpgrade409JSONResponse(errObj("read-only", err.Error())), nil
-		case service.KindCatalogBusy:
-			return ResolveUpgrade409JSONResponse(errObj(string(service.KindCatalogBusy), err.Error())), nil
+		case service.KindCatalogBusy, service.KindStorageUnwritable:
+			return ResolveUpgrade409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
 		case service.KindConflict:
 			return ResolveUpgrade409JSONResponse(errObj("conflict", err.Error())), nil
 		}

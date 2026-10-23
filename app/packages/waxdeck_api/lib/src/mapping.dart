@@ -89,6 +89,7 @@ SessionState sessionStateFromGen(gen.SessionInfo info) {
   return SessionState(
     authenticated: info.authenticated,
     user: user == null ? null : userFromGen(user),
+    serverReadOnly: info.server?.readOnly ?? false,
   );
 }
 
@@ -1462,6 +1463,9 @@ LibraryInfo libraryInfoFromGen(gen.ModelLibrary l) => LibraryInfo(
   folderFallback: l.folderFallback ?? false,
   managed: l.managed,
   profile: l.profile,
+  configured: l.configured ?? false,
+  unreachable: l.unreachable ?? false,
+  writable: l.writable,
 );
 
 /// The create response is the same library plus what creating it left
@@ -1479,6 +1483,9 @@ LibraryInfo libraryCreatedFromGen(gen.LibraryCreated l) => LibraryInfo(
   folderFallback: l.folderFallback ?? false,
   managed: l.managed,
   profile: l.profile,
+  configured: l.configured ?? false,
+  unreachable: l.unreachable ?? false,
+  writable: l.writable,
 );
 
 GenreNode genreNodeFromGen(gen.GenreNode n) => GenreNode(
@@ -2139,6 +2146,7 @@ OrganizePlan organizePlanFromGen(gen.OrganizePlan plan) {
     totalActions: plan.totalActions,
     held: plan.held,
     heldByCode: plan.heldByCode?.toMap() ?? const {},
+    holds: plan.holds?.map(organizeHoldFromGen).toList() ?? const [],
     readOnlyLibraries: plan.readOnlyLibraries,
     actions: plan.actions
         .map((a) => OrganizeAction(itemPid: a.itemPid, from: a.from, to: a.to))
@@ -2147,11 +2155,31 @@ OrganizePlan organizePlanFromGen(gen.OrganizePlan plan) {
   );
 }
 
+/// A hold with its code in wire spelling; one this build does not know
+/// has an empty code, which reads as held back for no named cause.
+OrganizeHold organizeHoldFromGen(gen.OrganizeHold hold) {
+  return OrganizeHold(
+    itemPid: hold.itemPid,
+    from: hold.from,
+    to: hold.to,
+    code: hold.code == gen.OrganizeHoldCodeEnum.unknownDefaultOpenApi
+        ? ''
+        : gen.standardSerializers.serialize(
+                hold.code,
+                specifiedType: const FullType(gen.OrganizeHoldCodeEnum),
+              )
+              as String,
+    reason: hold.reason,
+  );
+}
+
 OrganizeReport organizeReportFromGen(gen.OrganizeReport report) {
   return OrganizeReport(
+    jobPid: report.jobPid,
     moved: report.moved,
     skipped: report.skipped,
     held: report.held,
+    holds: report.holds?.map(organizeHoldFromGen).toList() ?? const [],
     readOnlyLibraries: report.readOnlyLibraries,
     failed: report.failed,
     failures:
@@ -2159,6 +2187,29 @@ OrganizeReport organizeReportFromGen(gen.OrganizeReport report) {
             ?.map((f) => OrganizeFailure(path: f.path, reason: f.reason))
             .toList() ??
         const [],
+    dirsPruned: report.dirsPruned ?? 0,
+  );
+}
+
+/// A history row; a kind this build does not know reads as a run, the
+/// kind that names no undo.
+OrganizeBatch organizeBatchFromGen(gen.OrganizeBatch batch) {
+  return OrganizeBatch(
+    jobPid: batch.jobPid,
+    kind: batch.kind == gen.OrganizeBatchKindEnum.unknownDefaultOpenApi
+        ? 'organize'
+        : gen.standardSerializers.serialize(
+                batch.kind,
+                specifiedType: const FullType(gen.OrganizeBatchKindEnum),
+              )
+              as String,
+    state: batch.state,
+    startedAt: batch.startedAt.toUtc(),
+    profile: batch.profile,
+    committed: batch.committed,
+    rolledBack: batch.rolledBack,
+    planned: batch.planned,
+    undoable: batch.undoable,
   );
 }
 
@@ -2168,6 +2219,7 @@ ToolTask toolTaskFromGen(gen.ToolTask task) {
     type: task.type,
     state: task.state,
     itemPid: task.itemPid,
+    itemTitle: task.itemTitle,
     progressPct: task.progressPct,
     error: task.error,
     resultPids: task.resultPids?.toList() ?? const [],
@@ -2176,6 +2228,9 @@ ToolTask toolTaskFromGen(gen.ToolTask task) {
     summary: task.summary?.toMap().map<String, Object?>(
       (key, value) => MapEntry(key, value?.value),
     ),
+    waitReason: task.waitReason,
+    retryAt: task.retryAt?.toUtc(),
+    bookInTrash: task.bookInTrash ?? false,
   );
 }
 
@@ -2689,11 +2744,19 @@ DeleteItemsResult deleteItemsResultFromGen(gen.DeleteItemsResult result) {
                   role: f.role,
                 ),
             ],
+            paths: e.paths?.toList() ?? const [],
             itemSurvives: e.itemSurvives ?? false,
+            failed: e.failed ?? 0,
+            error: e.error,
           ),
         )
         .toList(),
     warnings: result.warnings?.toList() ?? const [],
+    trashed: result.trashed ?? 0,
+    deleted: result.deleted ?? 0,
+    failed: result.failed ?? 0,
+    dirsPruned: result.dirsPruned ?? 0,
+    reclaimedBytes: result.reclaimedBytes ?? 0,
   );
 }
 

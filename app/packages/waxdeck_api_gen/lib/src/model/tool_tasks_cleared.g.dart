@@ -9,12 +9,14 @@ part of 'tool_tasks_cleared.dart';
 class _$ToolTasksCleared extends ToolTasksCleared {
   @override
   final int deleted;
+  @override
+  final int kept;
 
   factory _$ToolTasksCleared([
     void Function(ToolTasksClearedBuilder)? updates,
   ]) => (ToolTasksClearedBuilder()..update(updates))._build();
 
-  _$ToolTasksCleared._({required this.deleted}) : super._();
+  _$ToolTasksCleared._({required this.deleted, required this.kept}) : super._();
   @override
   ToolTasksCleared rebuild(void Function(ToolTasksClearedBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -26,22 +28,26 @@ class _$ToolTasksCleared extends ToolTasksCleared {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is ToolTasksCleared && deleted == other.deleted;
+    return other is ToolTasksCleared &&
+        deleted == other.deleted &&
+        kept == other.kept;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, deleted.hashCode);
+    _$hash = $jc(_$hash, kept.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'ToolTasksCleared',
-    )..add('deleted', deleted)).toString();
+    return (newBuiltValueToStringHelper(r'ToolTasksCleared')
+          ..add('deleted', deleted)
+          ..add('kept', kept))
+        .toString();
   }
 }
 
@@ -53,6 +59,10 @@ class ToolTasksClearedBuilder
   int? get deleted => _$this._deleted;
   set deleted(int? deleted) => _$this._deleted = deleted;
 
+  int? _kept;
+  int? get kept => _$this._kept;
+  set kept(int? kept) => _$this._kept = kept;
+
   ToolTasksClearedBuilder() {
     ToolTasksCleared._defaults(this);
   }
@@ -61,6 +71,7 @@ class ToolTasksClearedBuilder
     final $v = _$v;
     if ($v != null) {
       _deleted = $v.deleted;
+      _kept = $v.kept;
       _$v = null;
     }
     return this;
@@ -87,6 +98,11 @@ class ToolTasksClearedBuilder
             deleted,
             r'ToolTasksCleared',
             'deleted',
+          ),
+          kept: BuiltValueNullFieldError.checkNotNull(
+            kept,
+            r'ToolTasksCleared',
+            'kept',
           ),
         );
     replace(_$result);

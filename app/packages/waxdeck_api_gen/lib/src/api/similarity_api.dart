@@ -108,7 +108,7 @@ class SimilarityApi {
   }
 
   /// Pull analysis work (worker)
-  /// Leases a batch of tracks awaiting embedding, each naming where to pull its decode-ready audio (a cue-carved track&#39;s own window). Leases lapse on their own; an empty batch means sleep &#x60;retryAfterSeconds&#x60;. Worker token.  A server without the streaming engine cannot serve a carved track&#39;s window, so it keeps those tracks for its own analysis. 
+  /// Leases a batch of tracks awaiting embedding, each naming where to pull its decode-ready audio (a cue-carved track&#39;s own window). Leases lapse on their own; an empty batch means sleep &#x60;retryAfterSeconds&#x60;. Worker token.  A server without the streaming engine cannot serve a carved track&#39;s window, so it keeps those tracks for its own analysis. While a configured engine is not reachable, nothing is leased: the batch is empty and &#x60;retryAfterSeconds&#x60; says when to ask again. 
   ///
   /// Parameters:
   /// * [limit] - Maximum work items leased.

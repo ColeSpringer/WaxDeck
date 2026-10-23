@@ -120,5 +120,13 @@
   "notifSubscriptionFailedTitle": "Podcast subscriptions not changed",
   "@notifSubscriptionFailedTitle": {
     "description": "Switch label for the `subscription-failed` notification, and the heading of its inbox row: a subscription change a gpodder client asked for was not made, a feed that did not subscribe or any change from an account that may not change its subscriptions."
+  },
+  "notifToolTaskFailedHelp": "A book merge or split, or a CUE split, you started failed, or stopped after its runs kept ending with the server.",
+  "@notifToolTaskFailedHelp": {
+    "description": "What the tool-task-failed notification is about, in a delivery target's event checklist."
+  },
+  "notifToolTaskFailedTitle": "Tool task failed",
+  "@notifToolTaskFailedTitle": {
+    "description": "Heading of the notification that a book merge or split, or a CUE split, the reader started failed or stopped and needs attention. The line under it says which and why."
   }
 }

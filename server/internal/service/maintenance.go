@@ -123,6 +123,9 @@ func (l *Library) finishOwedReopen(ctx context.Context, gen uint64) bool {
 func (l *Library) onReopen(ctx context.Context, ev waxbin.ReopenEvent) {
 	defer l.endMaintenance(l.suspendGen.Load())
 	defer l.recoverHook("reopen")
+	// Whoever held the catalog may have pruned the organize journal, which
+	// records no change.
+	l.forgetOrganizeHistory()
 	if ev.Replaced {
 		l.catalogReplaced(ctx, ev.Seq, l.tsOf(ctx, ev.Seq))
 		return

@@ -32,7 +32,7 @@ class HealthApi {
   const HealthApi(this._dio, this._serializers);
 
   /// Bulk-fix a health rule
-  /// Fixes one &#x60;fixable&#x60; rule across &#x60;itemPids&#x60; or every failing item. An unscoped metadata fix is an enrichment job (&#x60;jobPid&#x60;) over its rule&#39;s phases; the rest is a &#x60;health-fix&#x60; task (&#x60;taskId&#x60;). Administrators only. 
+  /// Fixes one &#x60;fixable&#x60; rule across &#x60;itemPids&#x60; or every failing item. An unscoped metadata fix is an enrichment job (&#x60;jobPid&#x60;) over its rule&#39;s phases; the rest is a &#x60;health-fix&#x60; task (&#x60;taskId&#x60;). &#x60;path-mismatch&#x60; needs &#x60;itemPids&#x60;: moving every mismatched file is an organize pass, previewed and applied through &#x60;/organize/preview&#x60; and &#x60;/organize/apply&#x60;. A path fix moves its items as organize jobs, each undoable through &#x60;/organize/undo&#x60;, and its summary counts &#x60;moved&#x60; (the items it moved) and &#x60;held&#x60; (by hold code, as &#x60;/organize/preview&#x60; names them) beside &#x60;skipped&#x60; and &#x60;failed&#x60;, and lists the jobs as &#x60;jobPids&#x60;. Administrators only. 
   ///
   /// Parameters:
   /// * [healthFixRequest] 

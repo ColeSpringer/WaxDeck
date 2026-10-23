@@ -111,6 +111,8 @@
   "settingsEndpointsBlurb": "Destinos de transmisión, reproductores y tus otros dispositivos",
   "settingsEndpointsKeywords": "transmitir, chromecast, dlna, altavoz, conectar",
   "settingsEndpointsTitle": "Destinos de reproducción",
+  "settingsEngineLacksThis": "El motor de transmisión de este servidor no ofrece esto",
+  "settingsEngineUnreachable": "El motor de transmisión no está accesible ahora mismo",
   "settingsFollowsAccountHelp": "Te sigue a tus otros dispositivos",
   "settingsGridLarge": "Grande",
   "settingsGridMedium": "Mediano",
@@ -165,6 +167,7 @@
   "settingsListenBrainzToken": "Token de usuario",
   "settingsListenBrainzTokenHelp": "De la página de tu perfil de ListenBrainz",
   "settingsMatchTheSystem": "Igual que el sistema",
+  "settingsNeedsEngine": "Necesita el motor de transmisión, y este servidor funciona sin él",
   "settingsNotificationsKeywords": "ntfy, webhook, discord, push, alertas",
   "settingsNotificationsTitle": "Destinos de notificación",
   "settingsNotifyAbout": "Avisarme de",
@@ -348,6 +351,7 @@
   "settingsWebGaplessFormat": "Este servidor no renderiza ningún formato que este navegador pueda reproducir, así que las pistas se reproducen una a una",
   "settingsWebGaplessHelp": "Reproduce una cola de música como una sola transmisión, para que las pistas se encadenen como fueron masterizadas",
   "settingsWebGaplessKeywords": "sin pausas, encadenado, unión, transmisión, navegador",
+  "settingsWebGaplessNoEngine": "Este servidor funciona sin motor de transmisión, que es lo que reproduce una cola como un solo flujo",
   "settingsWebGaplessTitle": "Reproducción sin pausas",
   "settingsWebGaplessUnavailable": "Este servidor no puede renderizar una cola como una sola transmisión, así que las pistas se reproducen una a una"
 }

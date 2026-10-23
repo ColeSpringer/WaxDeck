@@ -172,7 +172,8 @@ func (l *Library) MarkScheduleRun(ctx context.Context, kind string, runErr error
 // RunPrune is the scheduled prune pass: event log, mutation stamps,
 // gpodder episode actions and subscription removals, bookmark
 // tombstones, held YouTube entries, audit log, ended playback sessions,
-// finished tool tasks, and analysis rows that will never come good.
+// finished tool tasks and the organize journal past the same window, and
+// analysis rows that will never come good.
 // Horizons are deliberately server-owned constants; sync consumers whose
 // cursor falls below the surviving event floor get a clean resync by
 // design.
@@ -248,11 +249,35 @@ func (l *Library) RunPrune(ctx context.Context) error {
 	// a receipt is worth keeping is an operator's policy. Re-read every
 	// pass, so a change needs no restart; 0 is an explicit "keep them".
 	if days := l.TaskRetentionDays(ctx); days > 0 {
-		tn, err := l.db.PruneFinishedToolTasks(ctx,
-			time.Now().Add(-time.Duration(days)*24*time.Hour).UnixNano())
+		before := time.Now().Add(-time.Duration(days) * 24 * time.Hour).UnixNano()
+		// What a finished merge or split left hidden is settled before
+		// its row goes, as a clear by hand settles it.
+		old, err := l.db.FinishedToolTasks(ctx, "", true, before)
+		record("tool tasks", err)
+		ids := make([]string, 0, len(old))
+		for _, t := range old {
+			// One whose hidden files could not take their names stays,
+			// saying so, for the next pass.
+			if l.settleClearedTask(ctx, nil, t) == nil {
+				ids = append(ids, t.ID)
+			}
+		}
+		tn, err := l.db.DeleteToolTasksByID(ctx, ids)
 		record("tool tasks", err)
 		if tn > 0 {
 			l.log.Info("pruned finished tool tasks", "rows", tn, "retentionDays", days)
+		}
+		// An organize run's journal is its receipt too, and its undo goes
+		// with it.
+		prune := l.lib.PruneOrganizeJournal
+		if l.journalPruneHook != nil {
+			prune = l.journalPruneHook
+		}
+		on, err := prune(ctx, time.Duration(days)*24*time.Hour)
+		record("organize journal", err)
+		if on > 0 {
+			l.forgetOrganizeHistory()
+			l.log.Info("pruned organize journal", "rows", on, "retentionDays", days)
 		}
 	}
 	qn, err := l.db.PruneExhaustedAnalysis(ctx,

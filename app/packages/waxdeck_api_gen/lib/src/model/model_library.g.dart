@@ -38,6 +38,15 @@ abstract mixin class ModelLibraryBuilder {
 
   String? get profile;
   set profile(String? profile);
+
+  bool? get configured;
+  set configured(bool? configured);
+
+  bool? get unreachable;
+  set unreachable(bool? unreachable);
+
+  bool? get writable;
+  set writable(bool? writable);
 }
 
 class _$$ModelLibrary extends $ModelLibrary {
@@ -61,6 +70,12 @@ class _$$ModelLibrary extends $ModelLibrary {
   final bool managed;
   @override
   final String? profile;
+  @override
+  final bool? configured;
+  @override
+  final bool? unreachable;
+  @override
+  final bool? writable;
 
   factory _$$ModelLibrary([void Function($ModelLibraryBuilder)? updates]) =>
       ($ModelLibraryBuilder()..update(updates))._build();
@@ -76,6 +91,9 @@ class _$$ModelLibrary extends $ModelLibrary {
     this.folderFallback,
     required this.managed,
     this.profile,
+    this.configured,
+    this.unreachable,
+    this.writable,
   }) : super._();
   @override
   $ModelLibrary rebuild(void Function($ModelLibraryBuilder) updates) =>
@@ -97,7 +115,10 @@ class _$$ModelLibrary extends $ModelLibrary {
         readOnly == other.readOnly &&
         folderFallback == other.folderFallback &&
         managed == other.managed &&
-        profile == other.profile;
+        profile == other.profile &&
+        configured == other.configured &&
+        unreachable == other.unreachable &&
+        writable == other.writable;
   }
 
   @override
@@ -113,6 +134,9 @@ class _$$ModelLibrary extends $ModelLibrary {
     _$hash = $jc(_$hash, folderFallback.hashCode);
     _$hash = $jc(_$hash, managed.hashCode);
     _$hash = $jc(_$hash, profile.hashCode);
+    _$hash = $jc(_$hash, configured.hashCode);
+    _$hash = $jc(_$hash, unreachable.hashCode);
+    _$hash = $jc(_$hash, writable.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -129,7 +153,10 @@ class _$$ModelLibrary extends $ModelLibrary {
           ..add('readOnly', readOnly)
           ..add('folderFallback', folderFallback)
           ..add('managed', managed)
-          ..add('profile', profile))
+          ..add('profile', profile)
+          ..add('configured', configured)
+          ..add('unreachable', unreachable)
+          ..add('writable', writable))
         .toString();
   }
 }
@@ -182,6 +209,19 @@ class $ModelLibraryBuilder
   String? get profile => _$this._profile;
   set profile(covariant String? profile) => _$this._profile = profile;
 
+  bool? _configured;
+  bool? get configured => _$this._configured;
+  set configured(covariant bool? configured) => _$this._configured = configured;
+
+  bool? _unreachable;
+  bool? get unreachable => _$this._unreachable;
+  set unreachable(covariant bool? unreachable) =>
+      _$this._unreachable = unreachable;
+
+  bool? _writable;
+  bool? get writable => _$this._writable;
+  set writable(covariant bool? writable) => _$this._writable = writable;
+
   $ModelLibraryBuilder() {
     $ModelLibrary._defaults(this);
   }
@@ -199,6 +239,9 @@ class $ModelLibraryBuilder
       _folderFallback = $v.folderFallback;
       _managed = $v.managed;
       _profile = $v.profile;
+      _configured = $v.configured;
+      _unreachable = $v.unreachable;
+      _writable = $v.writable;
       _$v = null;
     }
     return this;
@@ -247,6 +290,9 @@ class $ModelLibraryBuilder
             'managed',
           ),
           profile: profile,
+          configured: configured,
+          unreachable: unreachable,
+          writable: writable,
         );
     replace(_$result);
     return _$result;

@@ -354,9 +354,9 @@ func TestDeletingAnItemNamesTheCopyThatKeepsIt(t *testing.T) {
 	}
 }
 
-// A file the trash could not take is not reported deleted: the answer
-// leaves it out of what went, and a warning says it stayed.
-func TestADeleteTheTrashCouldNotTakeSaysTheFileStayed(t *testing.T) {
+// A file the trash could not take is not reported deleted: with nothing
+// gone, the delete is refused in the library's words and the file stays.
+func TestADeleteTheTrashCouldNotTakeIsRefused(t *testing.T) {
 	t.Parallel()
 	skipWithoutUnwritablePaths(t)
 	h := newHarness(t)
@@ -377,15 +377,10 @@ func TestADeleteTheTrashCouldNotTakeSaysTheFileStayed(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
-	res := decodeStatus[DeleteItemsResult](t, h.postJSON(t, "/api/v1/items/"+pid+"/files/delete",
-		map[string]any{"filePids": []string{copyPID}}), 200, "delete the locked copy")
-	for _, e := range res.Entries {
-		if e.Files > 0 {
-			t.Fatalf("entries = %+v, want nothing reported gone", res.Entries)
-		}
-	}
-	if res.Warnings == nil || len(*res.Warnings) != 1 || !strings.Contains((*res.Warnings)[0], "alpha.flac stayed") {
-		t.Fatalf("warnings = %v, want the copy named as staying", res.Warnings)
+	refusal := decodeStatus[Error](t, h.postJSON(t, "/api/v1/items/"+pid+"/files/delete",
+		map[string]any{"filePids": []string{copyPID}}), 409, "delete the locked copy")
+	if refusal.Code != "storage-unwritable" || !strings.Contains(refusal.Message, "permission denied") {
+		t.Fatalf("refusal = %+v, want storage-unwritable saying why", refusal)
 	}
 	if _, err := os.Stat(dst); err != nil {
 		t.Fatalf("the copy is gone after all: %v", err)

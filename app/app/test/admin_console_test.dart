@@ -225,6 +225,29 @@ void main() {
     }
   });
 
+  testWidgets('the dashboard leaves read-only mode to the shell banner', (
+    tester,
+  ) async {
+    // The shell draws one banner for every signed-in account while the
+    // server is read-only; a second one on this page said it twice.
+    final repo = FakeRepository()
+      ..adminSettings = const AdminSettings(
+        signupEnabled: false,
+        readOnly: true,
+        sonicAnalysis: true,
+        backupKeepCount: 5,
+        backupKeepBytes: 0,
+        trashRetentionDays: 0,
+        taskRetentionDays: 30,
+        radioExternalArt: true,
+      );
+    final container = _container(repo);
+    await _pump(tester, container, const AdminDashboardScreen());
+
+    expect(find.textContaining('Read-only mode is on'), findsNothing);
+    expect(find.byType(WaxBanner), findsNothing);
+  });
+
   testWidgets('the dashboard starts a scan and says what happened', (
     tester,
   ) async {

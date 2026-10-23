@@ -11,7 +11,7 @@ import (
 )
 
 func TestPlaceholderServed(t *testing.T) {
-	ts := httptest.NewServer(Handler(""))
+	ts := httptest.NewServer(mustHandler(t, ""))
 	defer ts.Close()
 
 	for _, path := range []string{"/", "/some/spa/route"} {
@@ -48,7 +48,7 @@ func TestDirectoryRequestFallsBackToShell(t *testing.T) {
 		[]byte("do not list me"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(Handler(dir))
+	ts := httptest.NewServer(mustHandler(t, dir))
 	defer ts.Close()
 
 	// A directory navigation must return the SPA shell, never a
@@ -102,7 +102,7 @@ func TestShellAnswersNavigationsOnly(t *testing.T) {
 		[]byte("<html><title>WaxDeck shell</title></html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(Handler(dir))
+	ts := httptest.NewServer(mustHandler(t, dir))
 	defer ts.Close()
 
 	// Subresource-shaped misses 404 wherever they land: a font the
@@ -155,7 +155,7 @@ func TestNegotiatedAnswersVaryAndMissesAreNotStored(t *testing.T) {
 		[]byte("<html><title>WaxDeck shell</title></html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(Handler(dir))
+	ts := httptest.NewServer(mustHandler(t, dir))
 	defer ts.Close()
 
 	// Both answers for one client-owned location.
@@ -201,7 +201,7 @@ func TestConditionalRequestsRevalidate(t *testing.T) {
 		[]byte("pretend this is sixteen megabytes"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(Handler(dir))
+	ts := httptest.NewServer(mustHandler(t, dir))
 	defer ts.Close()
 
 	// First fetch carries a validator; embed.FS has no mtimes, so
@@ -239,7 +239,7 @@ func TestDevDirOverridesEmbeds(t *testing.T) {
 		[]byte("<html><title>WaxDeck dev</title></html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(Handler(dir))
+	ts := httptest.NewServer(mustHandler(t, dir))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/")

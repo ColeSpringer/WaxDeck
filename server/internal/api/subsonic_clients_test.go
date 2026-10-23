@@ -936,6 +936,13 @@ func TestSubsonicAdvertisesTranscodeOffsetWithTheEngine(t *testing.T) {
 	}{
 		"with the engine":    {newHarnessNoExtras, true},
 		"without the engine": {newHarnessDirect, false},
+		// A client reads the list once and keeps it, so an outage, or the
+		// boot before the engine first answers, must not take it off.
+		"with the engine away": {func(t *testing.T) *harness {
+			h := newHarness(t)
+			takeEngineAway(t, h)
+			return h
+		}, true},
 	} {
 		h := c.h(t)
 		secret := newSubsonicSecret(t, h)

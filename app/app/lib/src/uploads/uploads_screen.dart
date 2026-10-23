@@ -154,7 +154,7 @@ class UploadsScreen extends ConsumerWidget {
                   ? l10n.commonLoading
                   : l10n.uploadsLoadMore,
               kind: WaxButtonKind.tonal,
-              icon: WaxIcons.expand,
+              icon: WaxIcons.caretDown,
               semanticsId: SemanticsIds.uploadsMore,
               onPressed: state.loadingMore
                   ? null

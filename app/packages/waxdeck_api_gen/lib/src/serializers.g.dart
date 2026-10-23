@@ -59,6 +59,8 @@ Serializers _$serializers =
           ..add(CatalogSyncPage.serializer)
           ..add(ChapterMark.serializer)
           ..add(ChaptersEdit.serializer)
+          ..add(ClearFinishedTasksRequest.serializer)
+          ..add(ClearFinishedTasksRequestScopeEnum.serializer)
           ..add(CommitCredits.serializer)
           ..add(CommitLyrics.serializer)
           ..add(CoverageCount.serializer)
@@ -244,7 +246,12 @@ Serializers _$serializers =
           ..add(OpmlImportEntry.serializer)
           ..add(OpmlImportResult.serializer)
           ..add(OrganizeAction.serializer)
+          ..add(OrganizeBatch.serializer)
+          ..add(OrganizeBatchKindEnum.serializer)
           ..add(OrganizeFailure.serializer)
+          ..add(OrganizeHistory.serializer)
+          ..add(OrganizeHold.serializer)
+          ..add(OrganizeHoldCodeEnum.serializer)
           ..add(OrganizePlan.serializer)
           ..add(OrganizeProfile.serializer)
           ..add(OrganizeProfileInput.serializer)
@@ -254,6 +261,7 @@ Serializers _$serializers =
           ..add(OrganizeRequest.serializer)
           ..add(OrganizeSample.serializer)
           ..add(OrganizeTemplates.serializer)
+          ..add(OrganizeUndoRequest.serializer)
           ..add(PasswordChange.serializer)
           ..add(Permissions.serializer)
           ..add(PlayInfo.serializer)
@@ -356,6 +364,7 @@ Serializers _$serializers =
           ..add(SessionInfo.serializer)
           ..add(SessionList.serializer)
           ..add(SessionRename.serializer)
+          ..add(SessionServer.serializer)
           ..add(SetItemKindRequest.serializer)
           ..add(SetItemKindRequestMediaTypeEnum.serializer)
           ..add(Share.serializer)
@@ -377,6 +386,7 @@ Serializers _$serializers =
           ..add(StarUpdate.serializer)
           ..add(StarredEntities.serializer)
           ..add(StatsMediaType.serializer)
+          ..add(StreamingEngineState.serializer)
           ..add(SubscribeRequest.serializer)
           ..add(Subscription.serializer)
           ..add(SubscriptionPage.serializer)
@@ -526,6 +536,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DeletePlanFile)]),
             () => ListBuilder<DeletePlanFile>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DeviceSession)]),
@@ -816,6 +830,14 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(OpmlImportEntry)]),
             () => ListBuilder<OpmlImportEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(OrganizeBatch)]),
+            () => ListBuilder<OrganizeBatch>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(OrganizeHold)]),
+            () => ListBuilder<OrganizeHold>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(OrganizeFailure)]),
@@ -1528,6 +1550,10 @@ Serializers _$serializers =
               const FullType(int),
             ]),
             () => MapBuilder<String, int>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(OrganizeHold)]),
+            () => ListBuilder<OrganizeHold>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(OrganizeAction)]),

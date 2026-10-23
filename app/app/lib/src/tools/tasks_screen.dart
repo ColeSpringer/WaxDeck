@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,8 +20,8 @@ import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'tool_tasks_provider.dart';
 
-/// Whether a task has reached a terminal state.
-bool _finished(ToolTask task) => task.state == 'done' || task.state == 'failed';
+/// Whether a task has reached a terminal state, a parked one included.
+bool _finished(ToolTask task) => task.finished;
 
 /// The kinds in words. The three imports name a product rather than a
 /// kind of work, so the name rides in as a placeholder and the sentence
@@ -87,12 +88,35 @@ class TasksScreen extends ConsumerWidget {
         semanticsId: SemanticsIds.tasksScreen,
         actions: <Widget>[
           if (anyFinished)
-            WaxIconButton(
-              glyph: WaxIcons.delete,
-              label: l10n.toolsClearFinished,
-              semanticsId: SemanticsIds.tasksClearFinished,
-              onPressed: () => unawaited(_clearFinished(context, ref)),
-            ),
+            // An administrator's list holds everyone's tasks, so the
+            // sweep asks whose. A member has the one.
+            if (ref.watch(isAdminProvider))
+              WaxMenuButton<bool>(
+                glyph: WaxIcons.delete,
+                label: l10n.toolsClearFinished,
+                semanticsId: SemanticsIds.tasksClearFinished,
+                items: <WaxMenuItem<bool>>[
+                  WaxMenuItem<bool>(
+                    value: false,
+                    label: l10n.toolsClearFinishedMine,
+                    semanticsId: SemanticsIds.tasksClearFinishedMine,
+                  ),
+                  WaxMenuItem<bool>(
+                    value: true,
+                    label: l10n.toolsClearFinishedAll,
+                    semanticsId: SemanticsIds.tasksClearFinishedAll,
+                  ),
+                ],
+                onSelected: (all) =>
+                    unawaited(_clearFinished(context, ref, all: all)),
+              )
+            else
+              WaxIconButton(
+                glyph: WaxIcons.delete,
+                label: l10n.toolsClearFinished,
+                semanticsId: SemanticsIds.tasksClearFinished,
+                onPressed: () => unawaited(_clearFinished(context, ref)),
+              ),
         ],
         slivers: <Widget>[
           if (jobs.isNotEmpty) ...<Widget>[
@@ -155,15 +179,46 @@ class TasksScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _clearFinished(BuildContext context, WidgetRef ref) async {
+  Future<void> _clearFinished(
+    BuildContext context,
+    WidgetRef ref, {
+    bool all = false,
+  }) async {
+    // Read before the dialog: this runs unawaited, so `ref` may be dead
+    // by the time the answer comes back.
     final messenger = ref.read(shellMessengerProvider.notifier);
+    final notifier = ref.read(toolTasksProvider.notifier);
     final l10n = context.l10n;
+    if (all) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(l10n.toolsClearAllTitle),
+          content: WaxProse(l10n.toolsClearAllBody),
+          actions: <Widget>[
+            WaxButton(
+              label: l10n.commonCancel,
+              kind: WaxButtonKind.text,
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+            ),
+            WaxButton(
+              label: l10n.toolsClearAllAction,
+              semanticsId: SemanticsIds.tasksClearFinishedConfirm,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
     try {
-      final deleted = await ref
-          .read(toolTasksProvider.notifier)
-          .clearFinished();
+      final cleared = await notifier.clearFinished(all: all);
+      // What stayed, and where to read why: each kept row says it.
       messenger.show(
-        l10n.toolsTasksCleared(deleted),
+        [
+          l10n.toolsTasksCleared(cleared.deleted),
+          if (cleared.kept > 0) l10n.toolsTasksKept(cleared.kept),
+        ].join('\n'),
         channel: ShellChannel.tasks,
       );
     } on WaxDeckApiException catch (e) {
@@ -184,10 +239,15 @@ class _TaskRow extends ConsumerWidget {
     _ => WaxIcons.downloads,
   };
 
+  /// A running task that is waiting out a passing failure, to try again
+  /// on its own: no work is under way, whatever its percentage says.
+  bool get _waiting => task.state == 'running' && task.waitReason != null;
+
   /// The humanized state, with the running percentage when the engine
   /// reports one.
   String _statusLabel(AppLocalizations l10n) {
     final pct = task.progressPct;
+    if (_waiting) return l10n.toolsStateWaiting;
     return switch (task.state) {
       'queued' => l10n.toolsStateQueued,
       'running' =>
@@ -196,16 +256,34 @@ class _TaskRow extends ConsumerWidget {
             : l10n.toolsStateRunningPct(pct.round()),
       'done' => l10n.toolsStateDone,
       'failed' => l10n.toolsStateFailed,
+      'parked' => l10n.toolsStateParked,
       final other => other,
     };
   }
 
   Color _statusColor(WaxColors colors) => switch (task.state) {
+    _ when _waiting => colors.textSecondary,
     'done' => colors.success,
-    'failed' => colors.error,
+    'failed' || 'parked' => colors.error,
     'running' => colors.accent,
     _ => colors.textTertiary,
   };
+
+  /// Why a waiting task waits, and what would end it where that takes
+  /// somebody; a cause this app has no sentence for reads as passing,
+  /// with the server's words under it.
+  static String _waitSentence(AppLocalizations l10n, String reason) =>
+      switch (reason) {
+        'catalog-busy' => l10n.toolsWaitCatalogBusy,
+        'catalog-maintenance' => l10n.toolsWaitCatalogMaintenance,
+        'read-only' => l10n.toolsWaitReadOnly,
+        'storage-unwritable' => l10n.toolsWaitStorageUnwritable,
+        'engine-unavailable' => l10n.toolsWaitEngineUnavailable,
+        'part-missing' => l10n.toolsWaitPartMissing,
+        'put-back-blocked' => l10n.toolsWaitPutBackBlocked,
+        'stopped' => l10n.toolsWaitStopped,
+        _ => l10n.toolsWaitOther,
+      };
 
   /// The summary as a report, or null when there is none: a health fix
   /// carries its rule from the start, to be named by, and its counts only
@@ -249,9 +327,15 @@ class _TaskRow extends ConsumerWidget {
     Map<String, Object?> summary,
   ) {
     final parts = <String>[
-      // A health fix's: what it filled of what it tried, and the rest.
+      // A health fix's: what it filled of what it tried, and the rest. A
+      // path fix moves its items rather than filling them, and holds some.
       if (_count(summary['attempted']) case final attempted?) ...<String>[
-        l10n.toolsCountFilledOf(_count(summary['filled']) ?? 0, attempted),
+        if (_count(summary['moved']) case final moved?)
+          l10n.toolsCountMovedOf(moved, attempted)
+        else
+          l10n.toolsCountFilledOf(_count(summary['filled']) ?? 0, attempted),
+        if (_skippedTotal(summary['held']) case final held?)
+          l10n.toolsCountHeld(held),
         if (_skippedTotal(summary['skipped']) case final skipped?)
           l10n.toolsCountSkipped(skipped),
         if (_count(summary['failed']) case final failed?)
@@ -417,8 +501,19 @@ class _TaskRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
-    final running = task.state == 'running' || task.state == 'queued';
-    final typeLabel = _typeLabel(l10n, task.type, task.summary);
+    // A bar for work under way: over a task that waits, a finished one
+    // reads as done.
+    final running =
+        (task.state == 'running' && !_waiting) || task.state == 'queued';
+    final waitReason = _waiting ? task.waitReason : null;
+    final retryAt = task.retryAt;
+    final itemTitle = task.itemTitle;
+    final typeLabel = itemTitle == null
+        ? _typeLabel(l10n, task.type, task.summary)
+        : l10n.toolsTaskTitled(
+            _typeLabel(l10n, task.type, task.summary),
+            itemTitle,
+          );
     final open = _openAction(context, ref);
     final error = task.error;
     final summary = task.summary;
@@ -466,26 +561,10 @@ class _TaskRow extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            typeLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: WaxType.titleItem.copyWith(
-                              color: colors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: WaxSpace.s8),
-                        Text(
-                          _statusLabel(l10n),
-                          style: WaxType.overline.copyWith(
-                            color: _statusColor(colors),
-                          ),
-                        ),
-                      ],
+                    _TaskHeading(
+                      title: typeLabel,
+                      status: _statusLabel(l10n),
+                      statusColor: _statusColor(colors),
                     ),
                     if (subject.isNotEmpty) ...<Widget>[
                       const SizedBox(height: WaxSpace.s4),
@@ -506,11 +585,40 @@ class _TaskRow extends ConsumerWidget {
                             : task.progressPct! / 100,
                       ),
                     ],
-                    if (error != null) ...<Widget>[
+                    if (waitReason != null) ...<Widget>[
                       const SizedBox(height: WaxSpace.s4),
                       Text(
-                        error,
-                        style: WaxType.caption.copyWith(color: colors.error),
+                        _waitSentence(l10n, waitReason),
+                        style: WaxType.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      if (retryAt != null) _NextTry(at: retryAt),
+                    ],
+                    // Until a merge or split ends, its sources are in the
+                    // trash and the book is missing for everyone.
+                    if (task.bookInTrash &&
+                        task.state == 'running') ...<Widget>[
+                      const SizedBox(height: WaxSpace.s4),
+                      Text(
+                        l10n.toolsBookInTrash,
+                        style: WaxType.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ],
+                    // A wait's error is the server's account of what it
+                    // waits out: detail under the sentence, not a failure.
+                    if (error != null) ...<Widget>[
+                      const SizedBox(height: WaxSpace.s4),
+                      _TaskAccount(
+                        text: error,
+                        style: WaxType.caption.copyWith(
+                          color: waitReason != null
+                              ? colors.textTertiary
+                              : colors.error,
+                        ),
+                        onTap: open,
                       ),
                     ],
                     if (result != null) ...<Widget>[
@@ -548,6 +656,174 @@ class _TaskRow extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// When a waiting task tries next, as a time of day, and from that time
+/// on that it is trying now: one timer turns the row over when the time
+/// comes, so a screen left open does not read a next try behind it.
+class _NextTry extends StatefulWidget {
+  const _NextTry({required this.at});
+
+  final DateTime at;
+
+  @override
+  State<_NextTry> createState() => _NextTryState();
+}
+
+class _NextTryState extends State<_NextTry> {
+  Timer? _timer;
+  var _due = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  @override
+  void didUpdateWidget(_NextTry old) {
+    super.didUpdateWidget(old);
+    if (old.at != widget.at) _arm();
+  }
+
+  void _arm() {
+    _timer?.cancel();
+    final left = widget.at.difference(DateTime.now());
+    _due = left <= Duration.zero;
+    if (!_due) {
+      _timer = Timer(left, () {
+        if (mounted) setState(() => _due = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Text(
+      _due
+          ? l10n.toolsWaitTryingNow
+          : l10n.toolsWaitNextTry(l10n.formatTimeOfDay(widget.at)),
+      style: WaxType.caption.copyWith(
+        color: WaxColors.of(context).textTertiary,
+      ),
+    );
+  }
+}
+
+/// A row's title and its state: side by side while the state takes no
+/// more than half the line, the state under the title once large type or
+/// a long word would push it past the row's edge.
+class _TaskHeading extends StatelessWidget {
+  const _TaskHeading({
+    required this.title,
+    required this.status,
+    required this.statusColor,
+  });
+
+  final String title;
+  final String status;
+  final Color statusColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final heading = Text(
+      title,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+    );
+    final style = WaxType.overline.copyWith(color: statusColor);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: status, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        final width = painter.width;
+        painter.dispose();
+        if (width + WaxSpace.s8 <= constraints.maxWidth / 2) {
+          return Row(
+            children: <Widget>[
+              Expanded(child: heading),
+              const SizedBox(width: WaxSpace.s8),
+              Text(status, style: style),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            heading,
+            Text(status, style: style),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// A task's own account, folded to its first lines when it runs longer
+/// (a merge of sixty files names sixty), and selectable: it says where
+/// the files are, which is what whoever puts them right copies out.
+class _TaskAccount extends StatefulWidget {
+  const _TaskAccount({required this.text, required this.style, this.onTap});
+
+  final String text;
+  final TextStyle style;
+  final VoidCallback? onTap;
+
+  @override
+  State<_TaskAccount> createState() => _TaskAccountState();
+}
+
+class _TaskAccountState extends State<_TaskAccount> {
+  /// How many lines show while folded.
+  static const _lines = 4;
+
+  var _open = false;
+  var _overflows = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = widget.style;
+    final line = MediaQuery.textScalerOf(
+      context,
+    ).scale(style.fontSize! * (style.height ?? 1)).ceilToDouble();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        ClampedBox(
+          budget: line * _lines,
+          clamped: !_open,
+          onOverflow: (value) {
+            if (!mounted || value == _overflows) return;
+            setState(() => _overflows = value);
+          },
+          child: WaxProse(widget.text, style: style, onTap: widget.onTap),
+        ),
+        // Only where there is more: a short account gets no control that
+        // opens nothing.
+        if (_overflows)
+          WaxButton(
+            label: _open
+                ? context.l10n.toolsShowLess
+                : context.l10n.toolsShowAll,
+            kind: WaxButtonKind.inline,
+            onPressed: () => setState(() => _open = !_open),
+          ),
+      ],
     );
   }
 }
@@ -612,11 +888,13 @@ String _jobLabel(AppLocalizations l10n, String kind) => switch (kind) {
   'enrich' => l10n.toolsJobEnrich,
   'analyze' => l10n.toolsJobAnalyze,
   'organize' => l10n.toolsJobOrganize,
+  'organize-undo' => l10n.toolsJobOrganizeUndo,
   'empty-trash' => l10n.toolsJobEmptyTrash,
   'purge-trash' => l10n.toolsJobPurgeTrash,
   'import' => l10n.toolsJobImport,
   'delete' => l10n.toolsJobDelete,
   'restore' => l10n.toolsJobRestore,
+  'remove-root' => l10n.toolsJobRemoveRoot,
   'set-kind' => l10n.toolsJobSetKind,
   _ => kind,
 };
@@ -632,8 +910,9 @@ class _JobRow extends StatelessWidget {
     'scan' => WaxIcons.refresh,
     'enrich' => WaxIcons.search,
     'analyze' => WaxIcons.waveform,
-    'organize' || 'restore' => WaxIcons.archive,
+    'organize' || 'organize-undo' || 'restore' => WaxIcons.archive,
     'empty-trash' || 'purge-trash' || 'delete' => WaxIcons.delete,
+    'remove-root' => WaxIcons.delete,
     'import' => WaxIcons.upload,
     'set-kind' => WaxIcons.audiobooks,
     _ => WaxIcons.hourglass,
@@ -691,10 +970,26 @@ class _JobRow extends StatelessWidget {
           if (n('fingerprintFallbacks') case final v? when v > 0)
             l10n.toolsCountFallbacks(v),
         ],
-        'organize' => <String>[
+        // An undo reads like the run it takes back: what moved, and what
+        // stayed where it was. The job's skipped counts every file that did
+        // not move, the held ones among them: said apart, as Organize says
+        // them.
+        'organize' || 'organize-undo' => <String>[
           if (n('moved') case final v?) l10n.toolsCountMoved(v),
-          if (n('skipped') case final v?) l10n.toolsCountSkipped(v),
+          if (n('skipped') case final v?)
+            l10n.toolsCountSkipped(max(0, v - (n('held') ?? 0))),
+          if (n('held') case final v? when v > 0) l10n.toolsCountHeld(v),
           if (n('errored') case final v?) l10n.toolsCountErrored(v),
+          if (n('dirsPruned') case final v? when v > 0)
+            l10n.toolsCountFoldersRemoved(v),
+        ],
+        // What the catalog let go of, as the removal's notice says it;
+        // trash entries only when the library had any.
+        'remove-root' => <String>[
+          if (n('filesDetached') case final v?) l10n.toolsCountDetached(v),
+          if (n('itemsArchived') case final v?) l10n.toolsCountArchived(v),
+          if (n('trashRowsDropped') case final v? when v > 0)
+            l10n.toolsCountTrashEntriesDropped(v),
         ],
         // Lists and a map rather than counts: the pids are what a client
         // follows to the items' new forms, and the line is their size.

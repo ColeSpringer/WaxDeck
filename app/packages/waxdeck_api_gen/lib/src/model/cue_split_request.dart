@@ -11,10 +11,10 @@ part 'cue_split_request.g.dart';
 /// Options for a CUE rip split.
 ///
 /// Properties:
-/// * [keepOriginals] - Keep the source file and sheet instead of trashing them. 
+/// * [keepOriginals] - Keep the source file and its sheet instead of moving them to the trash. 
 @BuiltValue()
 abstract class CueSplitRequest implements Built<CueSplitRequest, CueSplitRequestBuilder> {
-  /// Keep the source file and sheet instead of trashing them. 
+  /// Keep the source file and its sheet instead of moving them to the trash. 
   @BuiltValueField(wireName: r'keepOriginals')
   bool? get keepOriginals;
 

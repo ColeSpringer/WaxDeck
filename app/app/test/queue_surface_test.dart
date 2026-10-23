@@ -21,6 +21,8 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'direction_glyph.dart';
+import 'disclosure_glyph.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 
@@ -182,6 +184,22 @@ void main() {
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.queueHistory));
       await tester.pumpAndSettle();
       expect(_rowTitles(tester), hasLength(3));
+    });
+
+    testWidgets('the played head points right closed and down open', (
+      tester,
+    ) async {
+      final container = await _pump(tester);
+      container
+          .read(queueControllerProvider.notifier)
+          .playNow(['tr-1', 'tr-2', 'tr-3'], source: _album, startIndex: 2);
+      await tester.pumpAndSettle();
+      final head = find.bySemanticsIdentifier(SemanticsIds.queueHistory);
+
+      expectDisclosure(tester, head, open: false);
+      await tester.tap(head);
+      await tester.pumpAndSettle();
+      expectDisclosure(tester, head, open: true);
     });
 
     testWidgets('a row drops out when its remove is pressed', (tester) async {
@@ -667,6 +685,30 @@ void main() {
       // Removing clears the selection: what was picked is gone.
       expect(container.read(queueControllerProvider).pids, ['tr-1', 'tr-2']);
       expect(find.textContaining('selected'), findsNothing);
+    });
+
+    testWidgets('the bar\'s moves point where they send the rows', (
+      tester,
+    ) async {
+      final container = await _pump(tester);
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+      ], source: _album);
+      await tester.pumpAndSettle();
+      await longPress(tester, idsAt(container, [2]).single);
+
+      expectPointing(
+        tester,
+        find.bySemanticsIdentifier(SemanticsIds.queueSelectionTop),
+        up: true,
+      );
+      expectPointing(
+        tester,
+        find.bySemanticsIdentifier(SemanticsIds.queueSelectionBottom),
+        up: false,
+      );
     });
 
     testWidgets('shift+click extends a range from the last row touched', (

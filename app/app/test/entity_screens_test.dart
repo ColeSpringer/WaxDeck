@@ -606,6 +606,203 @@ void main() {
       expect(repository.facetDrills.length - drills, 1);
     });
 
+    testWidgets('an album is deleted whole from its overflow', (tester) async {
+      final repository = FakeRepository(sessionState: _adminSession)
+        ..facetItems['album 1'] = <ItemSummary>[
+          _track('One', track: 1),
+          _track('Two', track: 2),
+        ];
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuDelete));
+      await tester.pumpAndSettle();
+      // The plan first, of every track of the release.
+      expect(repository.deleteItemsCalls.single.pids, ['tr-One', 'tr-Two']);
+      expect(repository.deleteItemsCalls.single.dryRun, isTrue);
+      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.pumpAndSettle();
+
+      expect(repository.deleteItemsCalls.last.dryRun, isFalse);
+      expect(repository.deleteItemsCalls.last.pids, ['tr-One', 'tr-Two']);
+      expect(
+        find.byType(AlbumScreen),
+        findsNothing,
+        reason: 'the release is gone; the screen leaves it',
+      );
+    });
+
+    testWidgets('an album delete a file shares offers the file\'s other '
+        'tracks with the album\'s', (tester) async {
+      final repository = FakeRepository(sessionState: _adminSession)
+        ..facetItems['album 1'] = <ItemSummary>[
+          _track('One', track: 1),
+          _track('Two', track: 2),
+        ];
+      // Two is cut from one file with Three, a track of another album.
+      repository.deleteItemsRefusal = (pids, dryRun) =>
+          pids.contains('tr-Three')
+          ? null
+          : const WaxDeckApiException(
+              code: 'invalid-request',
+              message: "a cue rip's tracks share one file",
+              statusCode: 400,
+              params: {'reason': 'cue-rip', 'tracks': 'tr-Two,tr-Three'},
+            );
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuDelete));
+      await tester.pumpAndSettle();
+      // What was picked and what more goes with it, apart: the one more
+      // is another album's.
+      expect(
+        find.text(
+          '1 more track is cut from the same file as tracks you picked, and '
+          'tracks cut from one file are deleted together or not at all.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(_byId(SemanticsIds.itemDeleteRip));
+      await tester.pumpAndSettle();
+      expect(repository.deleteItemsCalls.last.pids, [
+        'tr-One',
+        'tr-Two',
+        'tr-Three',
+      ], reason: 'the album asked for, then the rest of the file');
+      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.pumpAndSettle();
+
+      expect(repository.deleteItemsCalls.last.dryRun, isFalse);
+      expect(
+        find.byType(AlbumScreen),
+        findsNothing,
+        reason: 'every track of the release went; the screen leaves it',
+      );
+    });
+
+    testWidgets('an album whose shared files would take the delete past '
+        'what one names says so and offers nothing', (tester) async {
+      final repository = FakeRepository(sessionState: _adminSession)
+        ..facetItems['album 1'] = <ItemSummary>[
+          for (var i = 1; i <= 499; i++) _track('T$i', track: i),
+        ];
+      // The last track shares its file with two of another album.
+      repository.deleteItemsRefusal = (pids, dryRun) =>
+          const WaxDeckApiException(
+            code: 'invalid-request',
+            message: "a cue rip's tracks share one file",
+            statusCode: 400,
+            params: {'reason': 'cue-rip', 'tracks': 'tr-T499,tr-X1,tr-X2'},
+          );
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuDelete));
+      await tester.pumpAndSettle();
+
+      expect(_byId(SemanticsIds.itemDeleteRip), findsNothing);
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'With the tracks that share their files, this is more than 500 '
+        'tracks, too many to delete in one go.',
+      );
+      expect(repository.deleteItemsCalls, hasLength(1));
+    });
+
+    testWidgets('a partial album delete keeps the album screen', (
+      tester,
+    ) async {
+      final repository = FakeRepository(sessionState: _adminSession)
+        ..facetItems['album 1'] = <ItemSummary>[
+          _track('One', track: 1),
+          _track('Two', track: 2),
+        ]
+        ..deleteItemsFailed = 1;
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuDelete));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.pumpAndSettle();
+
+      expect(repository.deleteItemsCalls.last.dryRun, isFalse);
+      expect(
+        find.byType(AlbumScreen),
+        findsOneWidget,
+        reason: 'a file stayed, so the release did',
+      );
+    });
+
+    testWidgets('an album past what one delete names says so and sends '
+        'nothing', (tester) async {
+      final repository = FakeRepository(sessionState: _adminSession)
+        ..facetItems['album 1'] = <ItemSummary>[
+          for (var i = 1; i <= 650; i++) _track('T$i', track: i),
+        ];
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuDelete));
+      await tester.pumpAndSettle();
+
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'This album has more than 500 tracks, too many to delete in one go.',
+      );
+      expect(repository.deleteItemsCalls, isEmpty);
+    });
+
+    testWidgets('a track row deletes its track', (tester) async {
+      final repository = FakeRepository(sessionState: _adminSession)
+        ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuDelete));
+      await tester.pumpAndSettle();
+      expect(repository.deleteItemsCalls.single.pids, ['tr-One']);
+      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.pumpAndSettle();
+
+      expect(repository.deleteItemsCalls.last.dryRun, isFalse);
+    });
+
+    testWidgets('a member without the delete right is offered no delete', (
+      tester,
+    ) async {
+      final repository = FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-2',
+            username: 'listener',
+            roles: <String>['member'],
+          ),
+        ),
+      )..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      expect(find.text('Pin to Home'), findsOneWidget);
+      expect(_byId(SemanticsIds.itemMenuDelete), findsNothing);
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+
+      await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
+      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.itemMenuSheet('tr-One')), findsOneWidget);
+      expect(_byId(SemanticsIds.itemMenuDelete), findsNothing);
+    });
+
     testWidgets('a member is offered the pin and not the editor', (
       tester,
     ) async {

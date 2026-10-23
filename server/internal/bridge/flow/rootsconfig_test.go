@@ -57,6 +57,7 @@ func newRootBridge(t *testing.T, caps string, configPath string, roots []Root, r
 	if err != nil {
 		t.Fatal(err)
 	}
+	connect(t, b)
 	return b
 }
 

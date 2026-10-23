@@ -754,6 +754,9 @@ func (s *Server) GetSkipMap(ctx context.Context, req GetSkipMapRequestObject) (G
 			// errors on partIndex answer not-found semantics instead of
 			// leaking a 500.
 			return GetSkipMap404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+		case service.KindFeature:
+			// Only an engine that is away refuses a read: its analysis waits.
+			return GetSkipMap503JSONResponse{toolEngineAway(err)}, nil
 		}
 		return nil, err
 	}

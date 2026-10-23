@@ -349,12 +349,12 @@ func TestBookMergeEndToEnd(t *testing.T) {
 		t.Fatalf("carried position = %d, want 4200", st.PositionMs)
 	}
 
-	// A single-file book refuses to merge.
-	resp = h.postJSON(t, "/api/v1/books/"+newPid+"/merge", map[string]any{})
-	if resp.StatusCode != 409 {
-		t.Fatalf("single-file merge status = %d, want 409", resp.StatusCode)
+	// A single-file book refuses to merge, saying why for the client to
+	// word.
+	single := decodeStatus[Error](t, h.postJSON(t, "/api/v1/books/"+newPid+"/merge", map[string]any{}), 409, "single-file merge")
+	if single.Code != "conflict" || single.Params == nil || (*single.Params)["reason"] != "single-file" {
+		t.Fatalf("single-file merge refusal = %+v, want conflict with reason single-file", single)
 	}
-	resp.Body.Close()
 
 	// The tooling is an administrator surface.
 	resp = h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword})
@@ -560,8 +560,8 @@ func TestCueSplitEndToEnd(t *testing.T) {
 		t.Fatalf("split-cue status = %d", resp.StatusCode)
 	}
 	task := decode[ToolTask](t, resp)
-	if task.Type != "cue-split" {
-		t.Fatalf("task = %+v", task)
+	if task.Type != "cue-split" || task.ItemTitle == nil || *task.ItemTitle != "Cue Album" {
+		t.Fatalf("task = %+v, want a cue split named for its album", task)
 	}
 
 	drainToolTasks(t, h)
@@ -612,17 +612,22 @@ func TestCueSplitEndToEnd(t *testing.T) {
 		t.Fatalf("piece %s title = %q, want %q", pieces[1], got, want)
 	}
 
-	// The carvings were retired: the shared rip is in the trash, which is
-	// the one surface that does still name them.
+	// The carvings were retired: the shared rip is in the trash under the
+	// split's reason, the one surface that does still name them.
 	trash := decode[TrashList](t, get(t, h.ts, "/api/v1/admin/trash", h.token)).Entries
 	retired := false
 	for _, e := range trash {
 		if strings.HasSuffix(e.Name, "Cue Album.flac") {
-			retired = true
+			retired = e.Reason == "cue-split"
 		}
 	}
 	if !retired {
-		t.Fatalf("the shared rip was not trashed: %+v", trash)
+		t.Fatalf("the shared rip was not trashed under cue-split: %+v", trash)
+	}
+	events := decode[AuditEventPage](t, get(t, h.ts, "/api/v1/admin/audit?action=item.split-cue", h.token)).Events
+	if len(events) != 1 || events[0].Detail == nil || (*events[0].Detail)["pieces"] != float64(2) ||
+		deref(events[0].TargetName) != "Cue Album" {
+		t.Fatalf("item.split-cue audits = %+v, want the split recorded against its album with its two pieces", events)
 	}
 
 	resp = get(t, h.ts, "/api/v1/items/"+pieces[1]+"/play-state", h.token)
@@ -760,25 +765,71 @@ func TestToolTaskDeleteAndClear(t *testing.T) {
 		t.Fatalf("sam's log after clear = %+v, want empty", page.Tasks)
 	}
 
-	// An administrator's sweep is as wide as the listing and the
-	// per-row delete: everyone's finished rows go, the running one
-	// stays.
-	seed("tk-01JZX5N8QW3F4V9T2B7KDSMD03", sam.User.Id, "done")
+	// An administrator's default sweep is as narrow as anyone's: their
+	// own finished rows go, and a member's stay for the member to read.
+	const samLeft = "tk-01JZX5N8QW3F4V9T2B7KDSMD03"
+	seed(samLeft, sam.User.Id, "done")
+	listed := func(token string) map[string]bool {
+		t.Helper()
+		ids := map[string]bool{}
+		for _, task := range decode[ToolTaskPage](t, get(t, h.ts, "/api/v1/tools/tasks", token)).Tasks {
+			ids[task.Id] = true
+		}
+		return ids
+	}
 	resp = reqAs(t, h, "POST", "/api/v1/tools/tasks/clear-finished", h.token, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("clear status = %d", resp.StatusCode)
 	}
 	cleared := decode[ToolTasksCleared](t, resp)
-	if cleared.Deleted != 2 {
-		t.Fatalf("admin clear deleted = %d, want 2 (own failed + sam's done)", cleared.Deleted)
+	if cleared.Deleted != 1 {
+		t.Fatalf("admin default clear deleted = %d, want 1 (own failed only)", cleared.Deleted)
 	}
-	page = decode[ToolTaskPage](t, get(t, h.ts, "/api/v1/tools/tasks", h.token))
-	ids := map[string]bool{}
-	for _, task := range page.Tasks {
-		ids[task.Id] = true
+	if ids := listed(h.token); len(ids) != 2 || !ids[adminRun] || !ids[samLeft] {
+		t.Fatalf("after the admin's default clear, tasks = %v, want the running one and sam's", ids)
 	}
-	if len(ids) != 1 || !ids[adminRun] {
-		t.Fatalf("after admin clear, tasks = %v", ids)
+
+	// Naming the narrow scope is the same sweep.
+	seed("tk-01JZX5N8QW3F4V9T2B7KDADFL2", me.User.Id, "failed")
+	resp = reqAs(t, h, "POST", "/api/v1/tools/tasks/clear-finished", h.token, map[string]any{"scope": "mine"})
+	if got := decode[ToolTasksCleared](t, resp); got.Deleted != 1 {
+		t.Fatalf("admin mine clear deleted = %d, want 1", got.Deleted)
+	}
+	if ids := listed(h.token); !ids[samLeft] {
+		t.Fatalf("a mine sweep took sam's task: %v", ids)
+	}
+
+	// Everyone's is the administrator's alone, and a refused sweep
+	// deletes nothing.
+	resp = reqAs(t, h, "POST", "/api/v1/tools/tasks/clear-finished", sam.Token, map[string]any{"scope": "all"})
+	if resp.StatusCode != 403 {
+		t.Fatalf("sam's all-scope clear status = %d, want 403", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); e.Code != "forbidden" {
+		t.Fatalf("sam's all-scope clear code = %q, want forbidden", e.Code)
+	}
+	if ids := listed(sam.Token); !ids[samLeft] {
+		t.Fatalf("a refused sweep deleted sam's task: %v", ids)
+	}
+
+	// A scope the contract does not name is a bad request, not a guess.
+	resp = reqAs(t, h, "POST", "/api/v1/tools/tasks/clear-finished", h.token, map[string]any{"scope": "everyone"})
+	if resp.StatusCode != 400 {
+		t.Fatalf("unknown scope status = %d, want 400", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// The administrator's all-scope sweep takes everyone's finished
+	// rows and leaves the running one.
+	resp = reqAs(t, h, "POST", "/api/v1/tools/tasks/clear-finished", h.token, map[string]any{"scope": "all"})
+	if resp.StatusCode != 200 {
+		t.Fatalf("all-scope clear status = %d", resp.StatusCode)
+	}
+	if got := decode[ToolTasksCleared](t, resp); got.Deleted != 1 {
+		t.Fatalf("admin all-scope clear deleted = %d, want 1 (sam's done)", got.Deleted)
+	}
+	if ids := listed(h.token); len(ids) != 1 || !ids[adminRun] {
+		t.Fatalf("after the all-scope clear, tasks = %v", ids)
 	}
 }
 

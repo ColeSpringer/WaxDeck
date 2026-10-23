@@ -838,7 +838,10 @@ paths:
         `read-only`. The file of a cue rip plays every track carved from
         it, so deleting it here when it plays other tracks is
         `invalid-request` with `params.reason` `cue-rip`: delete those
-        tracks together through deleteLibraryItems.
+        tracks together through deleteLibraryItems. A file the
+        filesystem will not move stays, as deleteLibraryItems reports
+        one: `storage-unwritable` when nothing went, else the files that
+        went with `failed` counting the rest.
       tags: [library]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -869,7 +872,10 @@ paths:
             the whole server, is in read-only mode. `catalog-busy`:
             another job holds the catalog's shared file-mutation scope,
             which clears on its own, so an unattended retry is worth
-            something.
+            something. `storage-unwritable`: the library's folder refused
+            every move (its permissions, or a read-only mount), so no file
+            went. `conflict`: a cue rip's tracks changed between the plan
+            and the delete, so nothing was deleted.
           content:
             application/json:
               schema:
@@ -902,6 +908,14 @@ paths:
         re-fetchable rather than journalling a restore. The tracks a
         cue sheet carves out of one file go together: naming some but
         not all is `invalid-request` with `params.reason` `cue-rip`.
+        A file the filesystem will not move stays where it is and is
+        never reported gone. When no file went, the call answers
+        `storage-unwritable` for a folder that refused the move (its
+        permissions, or a read-only mount) and `internal` for any other
+        failure, and nothing changed. When some went, it answers what
+        did: `entries` count the files that went, each entry's `failed`
+        and `error` say what stayed of its item and why, and the result
+        totals both.
       tags: [library]
       requestBody:
         required: true
@@ -930,7 +944,10 @@ paths:
             the whole server, is in read-only mode. `catalog-busy`:
             another job holds the catalog's shared file-mutation scope,
             which clears on its own, so an unattended retry is worth
-            something.
+            something. `storage-unwritable`: the library's folder refused
+            every move (its permissions, or a read-only mount), so no file
+            went. `conflict`: a cue rip's tracks changed between the plan
+            and the delete, so nothing was deleted.
           content:
             application/json:
               schema:
@@ -1444,6 +1461,31 @@ components:
             when there is nothing to say.
           items:
             type: string
+        trashed:
+          type: integer
+          description: Files moved to the trash. Absent from a plan.
+        deleted:
+          type: integer
+          description: >
+            Files deleted outright, in `permanent` mode. Absent from a
+            plan.
+        failed:
+          type: integer
+          description: >
+            Files the deletion tried to remove and could not, which
+            stayed where they were; `entries` say whose. Absent from a
+            plan.
+        dirsPruned:
+          type: integer
+          description: >
+            Folders the deletion emptied and removed. Absent from a plan.
+        reclaimedBytes:
+          type: integer
+          format: int64
+          description: >
+            Disk space the deletion freed: the files a `permanent`
+            deletion removed. A move to the trash frees nothing until the
+            trash is emptied. Absent from a plan.
 
     DeletePlanEntry:
       type: object
@@ -1472,6 +1514,26 @@ components:
             file counts under another track of its rip.
           items:
             $ref: "#/components/schemas/DeletePlanFile"
+        paths:
+          type: array
+          description: >
+            Where the files `fileList` names are, in the same order, each
+            relative to its library's root, so two files of one name in
+            different folders read apart. Absent with `fileList`.
+          items:
+            type: string
+            example: Hum Collective/Shell Songs/01 - Hell Shell.m4a
+        failed:
+          type: integer
+          description: >
+            Files of this item the deletion tried to remove and could
+            not; they stayed, and `files` does not count them. Absent
+            from a plan and when every file went.
+        error:
+          type: string
+          description: >
+            Why the first of the `failed` files stayed, in words without
+            the server's folders.
         itemSurvives:
           type: boolean
           description: >

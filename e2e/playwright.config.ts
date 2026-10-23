@@ -81,6 +81,9 @@ export default defineConfig({
   // names the tests that were live - rather than at the job's cap with
   // nothing. Four times a green run.
   globalTimeout: process.env.CI ? 20 * 60_000 : 0,
+  // The server answers /health before its streaming engine connects;
+  // the run starts once it has.
+  globalSetup: './tests/support/engine-ready.ts',
   use: {
     baseURL,
     // The suite reads English: role-and-name lookups, copy assertions,
@@ -121,6 +124,7 @@ export default defineConfig({
         /admin-ops\.spec\.ts/,
         /catalog-jobs\.spec\.ts/,
         /admin-readonly\.spec\.ts/,
+        /engine-outage\.spec\.ts/,
         /a11y-audit\.spec\.ts/,
         /feishin\.spec\.ts/,
         /identity-dex\.spec\.ts/,
@@ -182,6 +186,14 @@ export default defineConfig({
       dependencies: ['mutators-jobs'],
       ...motion('reduce'),
     },
+    // The streaming engine stopped and continued under the whole stack:
+    // nothing else may be streaming through it while it is away.
+    {
+      name: 'mutators-engine',
+      testMatch: /engine-outage\.spec\.ts/,
+      dependencies: ['mutators-readonly'],
+      ...motion('reduce'),
+    },
     // Unreduced-motion coverage. Before the focus projects: those are the
     // flake-prone tail, and a skipped dependency would take this run's
     // only unreduced pass down with it. Not beside wave: both match
@@ -190,7 +202,7 @@ export default defineConfig({
       name: 'motion-smoke',
       // Anchored both ends or it also matches signup-ui.spec.ts.
       testMatch: /[\\/]ui\.spec\.ts$/,
-      dependencies: ['mutators-readonly'],
+      dependencies: ['mutators-engine'],
       ...motion('no-preference'),
     },
     // Focus-sensitive specs run last, one at a time: they lose OS focus
@@ -236,6 +248,11 @@ export default defineConfig({
       url: `${baseURL}/api/v1/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
+      // Stopped with SIGTERM rather than killed: run-stack.sh traps it,
+      // removes the sidecar pid file the engine-outage spec signals by,
+      // and the server and sidecar shut down cleanly; anything still up
+      // after ten seconds is killed as before.
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 10_000 },
     },
     // The wizard's rootless server. Never reused: its spec walks a door
     // that closes behind it, so a bootstrapped leftover makes the one

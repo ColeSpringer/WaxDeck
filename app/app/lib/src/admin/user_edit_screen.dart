@@ -205,14 +205,16 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
     final l10n = context.l10n;
     final router = GoRouter.of(context);
     final messenger = ref.read(shellMessengerProvider.notifier);
-    final confirmed = await _confirm(
-      title: l10n.adminUserDeleteTitle,
-      body: l10n.adminUserDeleteBody(widget.user.username),
-      action: l10n.adminUserDeleteAction,
+    final playlists = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) =>
+          _DeleteAccountDialog(username: widget.user.username),
     );
-    if (!confirmed) return;
+    if (playlists == null) return;
     try {
-      await ref.read(repositoryProvider).deleteUser(widget.user.id);
+      await ref
+          .read(repositoryProvider)
+          .deleteUser(widget.user.id, playlists: playlists);
       router.leave(fallback: WaxRoute.users, result: true);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
@@ -507,6 +509,75 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Asks before an account goes, and what becomes of its playlists. Pops
+/// the answer as the wire says it - `transfer` or `delete` - and nothing
+/// for a cancel.
+///
+/// The answer that keeps people's playlists is the one already chosen: a
+/// shared playlist deleted by accident is gone for everyone it was shared
+/// with, and one handed over can still be deleted from its new owner.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog({required this.username});
+
+  final String username;
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  String _playlists = 'transfer';
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return AlertDialog(
+      // Each answer carries a line of what it costs, which a short window
+      // or larger text cannot show whole: the content scrolls, so the lower
+      // answer stays reachable and is never under the actions.
+      scrollable: true,
+      title: Text(l10n.adminUserDeleteTitle),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          WaxProse(l10n.adminUserDeleteBody(widget.username)),
+          const SizedBox(height: WaxSpace.s12),
+          WaxRadioGroup<String>(
+            value: _playlists,
+            onChanged: (value) => setState(() => _playlists = value),
+            options: <WaxRadioOption<String>>[
+              WaxRadioOption<String>(
+                value: 'transfer',
+                label: l10n.adminUserDeletePlaylistsTransfer,
+                help: l10n.adminUserDeletePlaylistsTransferHelp,
+                semanticsId: SemanticsIds.userDeletePlaylists('transfer'),
+              ),
+              WaxRadioOption<String>(
+                value: 'delete',
+                label: l10n.adminUserDeletePlaylistsDelete,
+                help: l10n.adminUserDeletePlaylistsDeleteHelp,
+                semanticsId: SemanticsIds.userDeletePlaylists('delete'),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.commonCancel),
+        ),
+        FilledButton(
+          key: const Key('user-confirm'),
+          onPressed: () => Navigator.of(context).pop(_playlists),
+          child: Text(l10n.adminUserDeleteAction),
+        ),
+      ],
     );
   }
 }

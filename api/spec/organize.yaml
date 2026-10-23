@@ -122,7 +122,8 @@ paths:
       description: >
         Plans a profile's moves for `itemPids`, or every managed library,
         touching nothing; read-only files are counted rather than planned.
-        Lists the first 500 actions and the total. Administrators only.
+        Lists the first 500 actions and the total, and the first 500 moves
+        held back with why. Administrators only.
       tags: [organize]
       requestBody:
         required: true
@@ -151,9 +152,11 @@ paths:
       operationId: applyOrganize
       summary: Apply an organize pass
       description: >
-        Recomputes the plan and applies it synchronously, crash-safe per file
-        and respecting locked fields; read-only libraries stay put, and a
-        read-only server answers `read-only`. Administrators only.
+        Recomputes the plan and runs it as an `organize` catalog job,
+        answering once the job ends: crash-safe per file and respecting
+        locked fields, and read-only libraries stay put. The job journals
+        its moves, so `/organize/undo` can move them back. A plan with
+        nothing to move runs no job. Administrators only.
       tags: [organize]
       requestBody:
         required: true
@@ -175,7 +178,117 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
-          $ref: "#/components/responses/ReadOnly"
+          description: >
+            The pass was refused. `read-only`: the server is read-only.
+            `catalog-busy`: another catalog job holds the file-mutation
+            scope; retry when it ends.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /organize/history:
+    get:
+      operationId: listOrganizeHistory
+      summary: List organize runs
+      description: >
+        The organize runs, and the undos of them, whose moves the
+        catalog's journal still holds, newest first by when each started,
+        a page at a time: `nextCursor` reaches the older ones. The
+        scheduled prune drops a run's journal once it is older than the
+        task retention window, and the run can no longer be undone.
+        Administrators only.
+      tags: [organize]
+      parameters:
+        - name: cursor
+          in: query
+          description: Opaque cursor from a previous page's `nextCursor`.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum runs returned.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: The runs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeHistory"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /organize/undo:
+    post:
+      operationId: undoOrganize
+      summary: Undo an organize run
+      description: >
+        Moves back what an organize run (or an undo, which redoes it)
+        moved, as an `organize-undo` catalog job, answering once the job
+        ends. Each file goes from where it stands to where the run found
+        it, with its sidecars and the folder companions the run carried;
+        tags the run wrote stay. A file moved again since, one the catalog
+        no longer holds, one whose old place another file now holds, one
+        gone from disk and one in a read-only library are held back.
+        Administrators only.
+      tags: [organize]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizeUndoRequest"
+      responses:
+        "200":
+          description: >
+            What the undo did, in the words of an applied pass: `moved`
+            counts the files moved back.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeReport"
+        "400":
+          description: >
+            `invalid-request`: the job is not an organize run or an undo of
+            one.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: >
+            `not-found`: no such job, or its journal holds no committed
+            move to undo (never one, or pruned).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            The undo was refused. `read-only`: the server is read-only.
+            `catalog-busy`: the run is still going, or another catalog job
+            holds the file-mutation scope; retry when it ends.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -323,8 +436,11 @@ components:
         held:
           type: integer
           description: >
-            Moves held back, whatever the cause (`heldByCode` says
-            which). Not in `actions` or `totalActions`.
+            Moves held back, by any cause: a read-only server, an occupied
+            destination, a missing file, a cue rip, an untagged item
+            (`heldByCode` says which). Not in `actions` or `totalActions`;
+            a read-only library's files are left out instead, counted in
+            `readOnlyLibraries`.
         heldByCode:
           type: object
           description: >
@@ -334,9 +450,14 @@ components:
             by case or Unicode form stands beside it), `untagged`,
             `missing`, `virtual` (a cue rip's shared file), `book-held`
             (another part of the book is held) and `read-only` (the server
-            or the library). A code with nothing held is absent.
+            is read-only). A code with nothing held is absent.
           additionalProperties:
             type: integer
+        holds:
+          type: array
+          description: The first five hundred moves held back.
+          items:
+            $ref: "#/components/schemas/OrganizeHold"
         readOnlyLibraries:
           type: integer
           description: Managed libraries left out because they are read-only.
@@ -364,11 +485,60 @@ components:
           type: string
           description: Planned library-relative path.
 
+    OrganizeHold:
+      type: object
+      description: One move held back, and why.
+      required: [from, code, reason]
+      properties:
+        itemPid:
+          type: string
+          description: >
+            The item whose file is held. Absent from an undo's holds, which
+            name files by path.
+        from:
+          type: string
+          description: >
+            Where the file is: relative to its library when the pass
+            planned one library, otherwise the server's absolute path.
+        to:
+          type: string
+          description: >
+            Where the move would put it, in the same form; absent when the
+            pass has no place for it.
+        code:
+          type: string
+          description: >
+            Why it is held: the plan's codes (see `heldByCode`), and for an
+            undo `moved-since` (the file moved again after the run) and
+            `uncataloged` (the catalog no longer holds it).
+          enum:
+            - collision
+            - occupied
+            - occupied-case
+            - untagged
+            - missing
+            - virtual
+            - book-held
+            - read-only
+            - moved-since
+            - uncataloged
+        reason:
+          type: string
+          description: >
+            Why, in words: the catalog's own, or `read-only server` for a
+            move the server's read-only mode holds.
+
     OrganizeReport:
       type: object
       description: The outcome of an applied organize pass.
-      required: [moved, skipped, held, readOnlyLibraries, failed]
+      required: [jobPid, moved, skipped, held, readOnlyLibraries, failed]
       properties:
+        jobPid:
+          type: string
+          description: >
+            The catalog job the pass ran as, which `/organize/undo` takes;
+            empty when nothing was left to move and no job ran.
+          example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
         moved:
           type: integer
           description: Files moved.
@@ -379,7 +549,13 @@ components:
           type: integer
           description: >
             Files held back where they are, for any of the causes a
-            plan's `held` counts.
+            plan's `held` counts, `read-only` here being a library made
+            read-only after the plan.
+        holds:
+          type: array
+          description: The first five hundred moves held back.
+          items:
+            $ref: "#/components/schemas/OrganizeHold"
         readOnlyLibraries:
           type: integer
           description: Managed libraries left alone because they are read-only.
@@ -391,6 +567,79 @@ components:
           description: The failures, path and reason each.
           items:
             $ref: "#/components/schemas/OrganizeFailure"
+        dirsPruned:
+          type: integer
+          description: Folders the moves emptied and removed.
+
+    OrganizeUndoRequest:
+      type: object
+      description: The run to undo.
+      required: [jobPid]
+      properties:
+        jobPid:
+          type: string
+          description: The organize run's job, as the history lists it.
+          example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    OrganizeHistory:
+      type: object
+      description: A page of the organize runs the journal still holds.
+      required: [batches]
+      properties:
+        batches:
+          type: array
+          description: The runs, newest first.
+          items:
+            $ref: "#/components/schemas/OrganizeBatch"
+        nextCursor:
+          type: string
+          description: Cursor for the next, older page; absent on the last.
+
+    OrganizeBatch:
+      type: object
+      description: One organize run, or an undo of one, and what its moves came to.
+      required: [jobPid, kind, state, startedAt, committed, rolledBack, planned, undoable]
+      properties:
+        jobPid:
+          type: string
+          description: The run's catalog job.
+          example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          description: An `organize` run, or an `organize-undo` of one.
+          enum:
+            - organize
+            - organize-undo
+        state:
+          type: string
+          description: >
+            The job's state, as `/jobs` reports it; clients treat an
+            unknown value as not finished.
+          example: done
+        startedAt:
+          type: string
+          format: date-time
+          description: When the run started.
+        profile:
+          type: string
+          description: >
+            The profile the run laid out by: the one named, or the library's
+            own when the run planned one managed library. Absent for an undo
+            and for a run that laid several libraries out by their own.
+        committed:
+          type: integer
+          description: Files the run moved.
+        rolledBack:
+          type: integer
+          description: Moves that failed on disk, leaving the file where it was.
+        planned:
+          type: integer
+          description: >
+            Moves a crash left between the disk and the catalog, which the
+            next start settles.
+        undoable:
+          type: boolean
+          description: Whether `/organize/undo` takes the run now.
 
     OrganizeFailure:
       type: object

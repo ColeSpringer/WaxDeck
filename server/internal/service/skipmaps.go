@@ -98,7 +98,8 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 	// lazy on-access path, so an upgrade re-analyzes one item at a time as it
 	// is played rather than sweeping the library at once.
 	if !haveMap || stale {
-		if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
+		away := l.jobsAway()
+		if l.flowJobs == nil || (!away && !l.flowJobs.JobsSupported()) {
 			// No jobs surface to rebuild with; silenceMapStale already reports
 			// false without one, so only a true miss reaches here.
 			return SkipMapResult{State: skipStateUnavailable}, nil
@@ -120,6 +121,11 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 		}
 		if err := l.db.EnqueueAnalysis(ctx, f.EssenceHash, key, time.Now().UnixNano()); err != nil {
 			return SkipMapResult{}, &Error{Kind: KindInternal, Err: err}
+		}
+		if away {
+			// Waiting on the engine, not unmappable: the analysis runs when
+			// it answers.
+			return SkipMapResult{}, l.needsEngine("a skip map")
 		}
 		if !stale {
 			// A true miss has no spans to serve yet.
@@ -200,9 +206,10 @@ func (l *Library) streamFile(ctx context.Context, it *model.ItemView, filePID st
 
 // enqueueAnalysisForItem queues silence analysis for an item's backing
 // file, best effort (a fetch that lands without a map gets one on the
-// first skip-map request instead).
+// first skip-map request instead). One queued while the engine is away
+// runs once it answers.
 func (l *Library) enqueueAnalysisForItem(ctx context.Context, pid model.PID) {
-	if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
+	if l.flowJobs == nil || (!l.flowJobs.JobsSupported() && !l.jobsAway()) {
 		return
 	}
 	loc, err := l.paths.Locate(ctx, pid)
@@ -216,6 +223,19 @@ func (l *Library) enqueueAnalysisForItem(ctx context.Context, pid model.PID) {
 	if err := l.db.EnqueueAnalysis(ctx, f.EssenceHash, string(pid), time.Now().UnixNano()); err != nil {
 		l.log.Warn("queuing analysis", "item", string(pid), "err", err)
 	}
+}
+
+// jobsAway reports a configured engine that is not answering now, read
+// off the bridge where it says, so analysis waits for it; an engine that
+// answers without a jobs surface is not away.
+func (l *Library) jobsAway() bool {
+	if l.flowJobs == nil {
+		return false
+	}
+	if engine, ok := l.flowJobs.(interface{ Up() bool }); ok {
+		return !engine.Up()
+	}
+	return !l.flowJobs.JobsSupported()
 }
 
 // FlowJobs is the jobs surface the bridge provides; a nil bridge (no

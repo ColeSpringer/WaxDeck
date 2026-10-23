@@ -1201,11 +1201,17 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 	}
 
 	if len(toTrash) > 0 {
-		if err := l.trashToolItems(ctx, toTrash); err != nil {
+		stayed, err := l.trashSyncedItems(ctx, toTrash)
+		if err != nil {
 			return out, fmt.Errorf("trashing removed entries: %w", err)
 		}
-		out.counts.Trashed = len(toTrash)
-		for _, id := range trashEntryIDs {
+		out.counts.Trashed = len(toTrash) - len(stayed)
+		for i, id := range trashEntryIDs {
+			// One whose file the trash could not take stays owed, so the
+			// next run tries it again.
+			if stayed[toTrash[i]] {
+				continue
+			}
 			if err := l.db.DeletePlaylistSourceEntryState(ctx, string(pl.PID), id); err != nil {
 				l.log.Warn("clearing trashed entry state", "entry", id, "err", err)
 			}

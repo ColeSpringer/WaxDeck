@@ -21,6 +21,9 @@ part 'model_library.g.dart';
 /// * [folderFallback] - A scan names an untagged file from its folders (setLibraryFolderFallback). In-place libraries only. 
 /// * [managed] - The catalog may place and move files in the library.
 /// * [profile] - The organize profile a managed library is laid out by.
+/// * [configured] - The server's configuration names the library (`WAXDECK_LIBRARY_ROOTS`), so every start registers it and removeLibrary refuses it until the configuration drops it. Absent means false. 
+/// * [unreachable] - The library's folder was not there at its last scan, which marked nothing under it missing: its items stay listed and play once it is back. Absent means false. 
+/// * [writable] - For a managed library, whether the server could write to its folder when last checked; when false, uploads, organize moves and deletes into it fail. The server checks when it starts, when the library is created or arrives from elsewhere (the waxbin CLI), when its read-only flag or the server's is lifted, every half hour, and after a write into a library's folder is refused; listing the libraries checks nothing. Absent on an in-place library and on one the server treats as read-only (its own flag or the whole server's), which are not checked. 
 @BuiltValue(instantiable: false)
 abstract class ModelLibrary  {
   /// Library PID.
@@ -62,6 +65,18 @@ abstract class ModelLibrary  {
   /// The organize profile a managed library is laid out by.
   @BuiltValueField(wireName: r'profile')
   String? get profile;
+
+  /// The server's configuration names the library (`WAXDECK_LIBRARY_ROOTS`), so every start registers it and removeLibrary refuses it until the configuration drops it. Absent means false. 
+  @BuiltValueField(wireName: r'configured')
+  bool? get configured;
+
+  /// The library's folder was not there at its last scan, which marked nothing under it missing: its items stay listed and play once it is back. Absent means false. 
+  @BuiltValueField(wireName: r'unreachable')
+  bool? get unreachable;
+
+  /// For a managed library, whether the server could write to its folder when last checked; when false, uploads, organize moves and deletes into it fail. The server checks when it starts, when the library is created or arrives from elsewhere (the waxbin CLI), when its read-only flag or the server's is lifted, every half hour, and after a write into a library's folder is refused; listing the libraries checks nothing. Absent on an in-place library and on one the server treats as read-only (its own flag or the whole server's), which are not checked. 
+  @BuiltValueField(wireName: r'writable')
+  bool? get writable;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<ModelLibrary> get serializer => _$ModelLibrarySerializer();
@@ -139,6 +154,27 @@ class _$ModelLibrarySerializer implements PrimitiveSerializer<ModelLibrary> {
       yield serializers.serialize(
         object.profile,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.configured != null) {
+      yield r'configured';
+      yield serializers.serialize(
+        object.configured,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.unreachable != null) {
+      yield r'unreachable';
+      yield serializers.serialize(
+        object.unreachable,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.writable != null) {
+      yield r'writable';
+      yield serializers.serialize(
+        object.writable,
+        specifiedType: const FullType(bool),
       );
     }
   }
@@ -280,6 +316,30 @@ class _$$ModelLibrarySerializer implements PrimitiveSerializer<$ModelLibrary> {
           ) as String?;
           if (valueDes == null) continue;
           result.profile = valueDes;
+          break;
+        case r'configured':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.configured = valueDes;
+          break;
+        case r'unreachable':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.unreachable = valueDes;
+          break;
+        case r'writable':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.writable = valueDes;
           break;
         default:
           unhandled.add(key);

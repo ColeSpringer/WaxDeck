@@ -227,7 +227,7 @@ class PlaylistsApi {
   }
 
   /// Delete a playlist
-  /// Deletes a playlist. Owner only.
+  /// Deletes a playlist. Owner only, except that an administrator may also delete any shared playlist (the audit entry names its owner). Another account&#39;s private playlist reads as absent. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

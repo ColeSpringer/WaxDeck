@@ -180,7 +180,9 @@ func (b *Bridge) itemRenderingFor(ctx context.Context, user, apiItemPID string, 
 		Path: "/hls/master.m3u8", Params: sign, TTLSeconds: int64(ttl.Seconds()),
 	})
 	if err != nil {
-		b.log.Warn("item rendering: signing the master", "pid", apiItemPID, "err", err)
+		if !b.engineGone(ctx, err) {
+			b.log.Warn("item rendering: signing the master", "pid", apiItemPID, "err", err)
+		}
 		return PlayInfo{}, false
 	}
 	rendering, ok := "", false

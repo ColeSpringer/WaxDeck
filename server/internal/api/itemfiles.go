@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -88,7 +89,7 @@ func (s *Server) DeleteItemFiles(ctx context.Context, req DeleteItemFilesRequest
 	case service.KindInvalid:
 		e := errObj("invalid-request", err.Error())
 		if errors.Is(err, service.ErrCueRipPart) {
-			e.Params = &map[string]string{"reason": "cue-rip"}
+			e.Params = cueRipParams(err)
 		}
 		return DeleteItemFiles400JSONResponse{InvalidRequestJSONResponse(e)}, nil
 	case service.KindForbidden:
@@ -97,12 +98,23 @@ func (s *Server) DeleteItemFiles(ctx context.Context, req DeleteItemFilesRequest
 		return DeleteItemFiles404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
 	case service.KindReadOnly:
 		return DeleteItemFiles409JSONResponse(errObj("read-only", err.Error())), nil
-	case service.KindCatalogBusy:
-		return DeleteItemFiles409JSONResponse(errObj(string(service.KindCatalogBusy), err.Error())), nil
+	case service.KindCatalogBusy, service.KindStorageUnwritable:
+		return DeleteItemFiles409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
 	default:
 		return nil, err
 	}
 	return DeleteItemFiles200JSONResponse(deleteResultJSON(res)), nil
+}
+
+// cueRipParams are a partial cue rip delete's refusal params: the reason,
+// and every track of the rip when the refusal names them.
+func cueRipParams(err error) *map[string]string {
+	params := map[string]string{"reason": "cue-rip"}
+	var rip *service.CueRipTracks
+	if errors.As(err, &rip) && len(rip.Tracks) > 0 {
+		params["tracks"] = strings.Join(rip.Tracks, ",")
+	}
+	return &params
 }
 
 // bareFilePIDs reads the file pids a request names into the catalog's

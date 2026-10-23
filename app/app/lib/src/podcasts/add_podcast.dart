@@ -286,9 +286,9 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
                 child: WaxButton(
                   label: l10n.podcastAddByUrl,
                   kind: WaxButtonKind.inline,
-                  // Matching every other disclosure in the app: open
-                  // shows the caret that closes it.
-                  icon: _byUrl ? WaxIcons.collapse : WaxIcons.expand,
+                  // The sidebar's groups open the same way: right while
+                  // closed, down while open.
+                  icon: _byUrl ? WaxIcons.collapse : WaxIcons.forward,
                   semanticsId: SemanticsIds.podcastAddByUrl,
                   onPressed: _toggleByUrl,
                 ),

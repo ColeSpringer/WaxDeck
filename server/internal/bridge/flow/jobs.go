@@ -38,14 +38,36 @@ func PermanentJobErr(err error) bool {
 	return false
 }
 
-// JobsSupported reports whether the sidecar runs the jobs surface.
-func (b *Bridge) JobsSupported() bool { return b.caps.Delivery.Jobs }
+// JobsSupported reports whether the sidecar runs the jobs surface, false
+// while it is away.
+func (b *Bridge) JobsSupported() bool {
+	caps := b.Caps()
+	return caps != nil && caps.Delivery.Jobs
+}
+
+// jobsReady is the jobs surface's refusal, nil when it is there to ask.
+func (b *Bridge) jobsReady() error {
+	if !b.Up() {
+		return fmt.Errorf("flow: %w", ErrEngineDown)
+	}
+	if !b.JobsSupported() {
+		return fmt.Errorf("flow: sidecar runs no jobs surface")
+	}
+	return nil
+}
 
 // SilenceDetectorVersion is the sidecar's silence-detector revision, the
 // same value a cached silence map stamps in its version field. An empty
-// string means a sidecar too old to advertise it: callers treat that as
-// "unknown" and never as every cached map being stale.
-func (b *Bridge) SilenceDetectorVersion() string { return b.caps.DSP.SilenceDetector }
+// string means a sidecar too old to advertise it, or one that is away:
+// callers treat that as "unknown" and never as every cached map being
+// stale.
+func (b *Bridge) SilenceDetectorVersion() string {
+	caps := b.Caps()
+	if caps == nil {
+		return ""
+	}
+	return caps.DSP.SilenceDetector
+}
 
 // SilenceAnalysis is the finished analysis for one file: the loudness
 // numbers from the job document and the span map from its result file.
@@ -89,8 +111,8 @@ type silenceDoc struct {
 // creates the job, polls it, and fetches the span map. The caller
 // bounds the wait through ctx; polling backs off to two seconds.
 func (b *Bridge) AnalyzeSilence(ctx context.Context, path string) (SilenceAnalysis, error) {
-	if !b.JobsSupported() {
-		return SilenceAnalysis{}, fmt.Errorf("flow: sidecar runs no jobs surface")
+	if err := b.jobsReady(); err != nil {
+		return SilenceAnalysis{}, err
 	}
 	ref, err := b.srcRef(path)
 	if err != nil {
@@ -161,8 +183,8 @@ func (b *Bridge) AnalyzeSilence(ctx context.Context, path string) (SilenceAnalys
 // server-side to the flat progressive MP4 form, the only shape that
 // carries the QuickTime chapter track the merge exists to write.
 func (b *Bridge) CreateMergeJob(ctx context.Context, srcs []string, titles []string, format string) (string, error) {
-	if !b.JobsSupported() {
-		return "", fmt.Errorf("flow: sidecar runs no jobs surface")
+	if err := b.jobsReady(); err != nil {
+		return "", err
 	}
 	refs := make([]string, len(srcs))
 	for i, p := range srcs {
@@ -198,8 +220,8 @@ func (b *Bridge) CreateMergeJob(ctx context.Context, srcs []string, titles []str
 // fragmented .m4b piece is a file most players refuse to open, and this
 // says so at the call site rather than relying on a sidecar default.
 func (b *Bridge) CreateSplitJob(ctx context.Context, src string, cuts []int64, cue string, format string) (string, error) {
-	if !b.JobsSupported() {
-		return "", fmt.Errorf("flow: sidecar runs no jobs surface")
+	if err := b.jobsReady(); err != nil {
+		return "", err
 	}
 	ref, err := b.srcRef(src)
 	if err != nil {

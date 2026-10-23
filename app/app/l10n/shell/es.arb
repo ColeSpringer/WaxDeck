@@ -60,6 +60,7 @@
   "shellPaletteSearchAllDetail": "Todo lo que coincida",
   "shellPaletteSettingsMore": "{count, plural, =1{1 coincidencia con \"{query}\"} other{{count} coincidencias con \"{query}\"}}",
   "shellPaletteStationDetail": "Emisora de radio",
+  "shellReadOnlyBanner": "Este servidor está en modo de solo lectura: las subidas, las ediciones que escriben archivos y las eliminaciones están en pausa.",
   "shellReconnecting": "Reconectando con el servidor. Lo que ya se esté reproduciendo sigue sonando.",
   "shellReload": "Volver a cargar",
   "shellServerOutdated": "El servidor se ha actualizado. Reinicia WaxDeck para ponerte al día.",

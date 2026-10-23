@@ -74,7 +74,7 @@ func run() error {
 		webDir     = flag.String("web-dir", envOr("WAXDECK_WEB_DIR", ""), "serve the web UI from this directory instead of the embedded build (dev)")
 		dataDir    = flag.String("data-dir", envOr("WAXDECK_DATA_DIR", "./data"), "data directory (waxbin.db + waxdeck.db)")
 		rootsFlag  = flag.String("library-roots", envOr("WAXDECK_LIBRARY_ROOTS", ""), "library roots as name=path pairs, comma separated; names must match the WaxFlow roots serving the same directories")
-		flowURL    = flag.String("flow-url", envOr("WAXDECK_FLOW_URL", ""), "WaxFlow sidecar base URL (empty disables streaming)")
+		flowURL    = flag.String("flow-url", envOr("WAXDECK_FLOW_URL", ""), "WaxFlow sidecar base URL; one that is not answering is retried in the background while originals play directly, and /health reports it (empty serves originals directly: no transcoding, gapless timelines or voice boost)")
 		flowAPIKey = flag.String("flow-api-key", envOr("WAXDECK_FLOW_API_KEY", ""), "API key WaxDeck presents to the WaxFlow sidecar")
 		flowConfig = flag.String("flow-config", envOr("WAXDECK_FLOW_CONFIG", ""), "the WaxFlow sidecar's JSON config file, as WaxDeck sees it; set it (and point the sidecar at the same file) so a library created at runtime streams without a sidecar restart")
 		scanStart  = env.Bool("scan-on-start", "WAXDECK_SCAN_ON_START", true, "launch a library scan at startup")
@@ -83,7 +83,7 @@ func run() error {
 		sessionCap = env.Int("session-cap", "WAXDECK_SESSION_CAP", auth.DefaultSessionCap, "live sign-in sessions one account may hold; signing in past it ends the least recently used")
 		publicBase = flag.String("public-base", envOr("WAXDECK_PUBLIC_BASE", ""), "externally reachable base URL (needed for OIDC callbacks), e.g. https://wax.example.com")
 
-		podcastDir      = flag.String("podcast-dir", envOr("WAXDECK_PODCAST_DIR", ""), "episode download directory (its own library, never inside a library root; defaults to <data-dir>/podcasts, explicit empty via -podcast-dir=\"\" disables podcasts)")
+		podcastDir      = flag.String("podcast-dir", envOr("WAXDECK_PODCAST_DIR", ""), "episode download directory (its own library, never inside a library root; defaults to <data-dir>/podcasts; an explicit empty, -podcast-dir=\"\" or WAXDECK_PODCAST_DIR set and empty, disables podcasts)")
 		podcastRoot     = flag.String("podcast-root-name", envOr("WAXDECK_PODCAST_ROOT_NAME", "podcasts"), "WaxFlow root name the podcast dir is mounted under")
 		feedRefreshMin  = env.Int("feed-refresh-minutes", "WAXDECK_FEED_REFRESH_MINUTES", 30, "minutes between scheduled feed refreshes")
 		retentionKeep   = env.Int64("podcast-retention-default", "WAXDECK_PODCAST_RETENTION_DEFAULT", 0, "default keep-newest-N downloaded episodes for subscribers who leave retention unset (0 keeps all)")
@@ -191,6 +191,45 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// Before anything is opened: a web dir without the app is a typo,
+	// which a server answering every navigation with a 404 would hide.
+	site, webSource, err := web.Handler(*webDir)
+	if err != nil {
+		return err
+	}
+	// Settings the server cannot run with fail the start here, before
+	// anything is opened or started, as a held port does below: found once
+	// the catalog's workers run, they would wait those out (and hold the
+	// port) before saying so. A trusted-proxy list or an origin is refused
+	// rather than defaulted: a typo that silently trusted nothing, or
+	// matched nothing, would look exactly like a working configuration
+	// until the day somebody was locked out by it.
+	trusted, err := api.ParseTrustedProxies(*trustedProxy)
+	if err != nil {
+		return fmt.Errorf("trusted proxies: %w", err)
+	}
+	allowedOrigins, err := normalizeOrigins(splitNonEmpty(*corsOrigins, ","))
+	if err != nil {
+		return fmt.Errorf("cors origins: %w", err)
+	}
+	if *oidcIssuer != "" && *publicBase == "" {
+		return errors.New("WAXDECK_OIDC_ISSUER requires WAXDECK_PUBLIC_BASE for the callback URL")
+	}
+	if *flowURL != "" {
+		if err := flow.CheckBaseURL(*flowURL); err != nil {
+			return err
+		}
+	}
+	// Bound before anything is opened or started: a port another process
+	// holds fails the start here, with nothing to unwind and nothing yet
+	// saying it listens. Connections that arrive while the rest starts
+	// wait in the backlog for the server.
+	ln, err := listen(*addr)
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+	log.Info("serving the web UI", "source", webSource)
 	if err := os.MkdirAll(*dataDir, 0o755); err != nil {
 		return fmt.Errorf("creating data dir: %w", err)
 	}
@@ -278,13 +317,7 @@ func run() error {
 	for name := range books {
 		return fmt.Errorf("WAXDECK_AUDIOBOOK_ROOTS names %q, which is not a configured library root", name)
 	}
-	// Podcasts work out of the box: an unset dir lands beside the
-	// databases. Only an explicit -podcast-dir="" disables the surface
-	// (the flag default is empty so the env fallback stays expressible,
-	// hence the isSet probe rather than a non-empty flag default).
-	if *podcastDir == "" && !flagWasSet("podcast-dir") && os.Getenv("WAXDECK_PODCAST_DIR") == "" {
-		*podcastDir = filepath.Join(*dataDir, "podcasts")
-	}
+	*podcastDir = podcastDirFrom(*podcastDir, flagWasSet("podcast-dir"), os.LookupEnv, *dataDir)
 	if *podcastDir != "" {
 		abs, err := filepath.Abs(*podcastDir)
 		if err != nil {
@@ -508,11 +541,38 @@ func run() error {
 		})
 	}
 	svcCfg.RadioArtResolver = radioArt
+	// The identity provider is asked before the service opens: one that
+	// cannot be reached fails the start with nothing running yet.
+	var oidc *auth.OIDC
+	if *oidcIssuer != "" {
+		oidc, err = auth.NewOIDC(ctx, auth.OIDCConfig{
+			ID:           *oidcID,
+			DisplayName:  *oidcName,
+			Issuer:       *oidcIssuer,
+			ClientID:     *oidcClient,
+			ClientSecret: *oidcSecret,
+			GroupsClaim:  *oidcGroups,
+			AdminGroup:   *oidcAdminGr,
+		}, store)
+		if err != nil {
+			return err
+		}
+		log.Info("single sign-on enabled", "issuer", *oidcIssuer, "provider", *oidcID)
+	}
 	svc, err := service.Open(ctx, svcCfg, store, group)
 	if err != nil {
 		return err
 	}
 	defer svc.Close()
+	// Deferred after the close, so it runs before it on every way out,
+	// a failure found while the rest starts as much as the shutdown: the
+	// workers end before what they use is closed, and a startup scan on
+	// a context nobody canceled cannot hold the close, and the exit, for
+	// as long as it runs.
+	defer func() {
+		stop()
+		group.Wait()
+	}()
 
 	// The event hub fans the service's change wakeups out to WebSocket
 	// subscribers as coalesced invalidation frames.
@@ -640,10 +700,10 @@ func run() error {
 		}
 	})
 
-	// The WaxFlow bridge is optional in development: without it every
-	// catalog surface works and play-info reports streaming unavailable.
-	// When configured it validates against the live sidecar and fails
-	// fast on a bad setup.
+	// The streaming engine is optional: without one, and while a
+	// configured one is not answering, originals play directly. The bridge
+	// asks nothing of it at construction; its supervised loop connects in
+	// the background and reports each crossing to the service.
 	var bridge *flow.Bridge
 	if *flowURL != "" {
 		// The catalog's roots the sidecar serves: the configured ones, and
@@ -676,8 +736,9 @@ func run() error {
 			return err
 		}
 		svc.SetFlowJobs(bridge)
-		svc.SetFlowRoots(bridge)
 		bridge.SetTranscodeGate(svc.TranscodeGate())
+		svc.FollowEngine(ctx, bridge)
+		group.Go(ctx, "flow-bridge", bridge.Run)
 		// A gapless queue holds a transcode slot the way a stream does,
 		// and there is no end-of-response to give it back at: the slot
 		// goes back once every one of a listener's timelines has gone
@@ -697,6 +758,9 @@ func run() error {
 		})
 	} else {
 		log.Warn("WAXDECK_FLOW_URL is not set; playing original files directly (no transcoding, gapless timelines, or voice boost)")
+		// No sidecar config to take a removed library's root out of, so
+		// nothing owed to a bridge waits for one.
+		svc.SetFlowRoots(nil)
 	}
 
 	backups := service.NewBackups(svc, *dataDir, keyProber(sealer))
@@ -1187,26 +1251,6 @@ func run() error {
 		}
 	})
 
-	var oidc *auth.OIDC
-	if *oidcIssuer != "" {
-		if *publicBase == "" {
-			return errors.New("WAXDECK_OIDC_ISSUER requires WAXDECK_PUBLIC_BASE for the callback URL")
-		}
-		oidc, err = auth.NewOIDC(ctx, auth.OIDCConfig{
-			ID:           *oidcID,
-			DisplayName:  *oidcName,
-			Issuer:       *oidcIssuer,
-			ClientID:     *oidcClient,
-			ClientSecret: *oidcSecret,
-			GroupsClaim:  *oidcGroups,
-			AdminGroup:   *oidcAdminGr,
-		}, store)
-		if err != nil {
-			return err
-		}
-		log.Info("single sign-on enabled", "issuer", *oidcIssuer, "provider", *oidcID)
-	}
-
 	// The connect core: endpoint registry, playback sessions, and the
 	// command routing between controllers and endpoints. The advertise
 	// bases are what cast devices and renderers fetch media from; the
@@ -1281,13 +1325,6 @@ func run() error {
 		}
 	}
 
-	// Refused rather than defaulted: a typo that silently trusted nothing
-	// would look exactly like a working configuration until the day
-	// somebody was locked out by it.
-	trusted, err := api.ParseTrustedProxies(*trustedProxy)
-	if err != nil {
-		return fmt.Errorf("trusted proxies: %w", err)
-	}
 	if *trustedProxy != "" {
 		log.Info("trusting forwarded client addresses", "proxies", *trustedProxy)
 	}
@@ -1415,7 +1452,7 @@ func run() error {
 		// Exempt from instrumentation: a scrape must not measure itself.
 		mux.Handle("GET /metrics", metricsHandler(*metricsToken, reg))
 	}
-	mux.Handle("/", httpm.instrument("web", web.Handler(*webDir).ServeHTTP))
+	mux.Handle("/", httpm.instrument("web", site.ServeHTTP))
 
 	// Streaming handlers (the radio proxy, any long response body) hold
 	// their connections active for as long as both sides stay open, and
@@ -1425,10 +1462,6 @@ func run() error {
 	// ends the streams so the drain can finish.
 	reqCtx, reqCancel := context.WithCancel(context.Background())
 	defer reqCancel()
-	allowedOrigins, err := normalizeOrigins(splitNonEmpty(*corsOrigins, ","))
-	if err != nil {
-		return fmt.Errorf("cors origins: %w", err)
-	}
 	if len(allowedOrigins) > 0 {
 		// Logged as parsed, not as written: an exact-match list is the
 		// kind of configuration that fails silently on a stray slash, and
@@ -1442,16 +1475,7 @@ func run() error {
 		BaseContext:       func(net.Listener) context.Context { return reqCtx },
 	}
 
-	group.GoOnce(ctx, "http", func(context.Context) error {
-		log.Info("waxdeck listening", "addr", *addr, "version", version)
-		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			// The process cannot serve anything without its listener;
-			// unwind through the signal context.
-			stop()
-			return err
-		}
-		return nil
-	})
+	served := serve(ctx, group, log, httpSrv, ln, stop)
 
 	<-ctx.Done()
 
@@ -1463,7 +1487,7 @@ func run() error {
 	}
 	group.Wait()
 	log.Info("bye")
-	return nil
+	return served()
 }
 
 // mountGpodder serves the gpodder surface and runs, every interval, the
@@ -1514,6 +1538,21 @@ func parseRoots(s string) ([]root, error) {
 		roots = append(roots, root{Name: name, Path: abs})
 	}
 	return roots, nil
+}
+
+// podcastDirFrom resolves the podcast directory. Podcasts work out of
+// the box: with nothing said the dir lands beside the databases. Only an
+// explicit empty, -podcast-dir="" or WAXDECK_PODCAST_DIR set and empty,
+// turns podcasts off; the flag default is empty so the env fallback
+// stays expressible, hence asking whether either was set at all.
+func podcastDirFrom(value string, flagSet bool, lookupEnv func(string) (string, bool), dataDir string) string {
+	if value != "" || flagSet {
+		return value
+	}
+	if _, set := lookupEnv("WAXDECK_PODCAST_DIR"); set {
+		return ""
+	}
+	return filepath.Join(dataDir, "podcasts")
 }
 
 func envOr(key, def string) string {

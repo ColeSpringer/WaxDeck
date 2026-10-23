@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -393,6 +392,25 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 		perms := permissionsFromGen(*req.Body.Permissions)
 		upd.Permissions = &perms
 	}
+	// Self displayName edits are routine, not audit-worthy; anything an
+	// administrator can change on another account is. Read before the write
+	// so the entry can say from what.
+	//
+	// A read that fails refuses the edit: going ahead would change an
+	// account and leave nothing on the record. An account that is not
+	// there is the update's own answer.
+	var before *service.Account
+	if admin && (req.UserId != p.User.ID || req.Body.Roles != nil || req.Body.Disabled != nil ||
+		req.Body.LibraryAccess != nil || req.Body.Permissions != nil ||
+		req.Body.UploadEnabled != nil || req.Body.UploadQuotaBytes != nil) {
+		read, err := s.svc.Account(ctx, req.UserId)
+		switch {
+		case err == nil:
+			before = read
+		case service.KindOf(err) != service.KindNotFound:
+			return nil, err
+		}
+	}
 	acct, err := s.svc.UpdateAccount(ctx, req.UserId, upd)
 	if err != nil {
 		switch service.KindOf(err) {
@@ -414,27 +432,14 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 	if req.Body.Disabled != nil && *req.Body.Disabled {
 		revokeErr = errors.Join(s.endSessions(ctx, req.UserId, "", ""), s.svc.EndGpodderSessions(ctx, req.UserId))
 	}
-	// Self displayName edits are routine, not audit-worthy; anything an
-	// administrator can change on another account is.
-	if admin && (req.UserId != p.User.ID || req.Body.Roles != nil || req.Body.Disabled != nil ||
-		req.Body.LibraryAccess != nil || req.Body.Permissions != nil ||
-		req.Body.UploadEnabled != nil || req.Body.UploadQuotaBytes != nil) {
-		changed := []string{}
-		for name, set := range map[string]bool{
-			"displayName": req.Body.DisplayName != nil, "roles": req.Body.Roles != nil,
-			"disabled": req.Body.Disabled != nil, "libraryAccess": req.Body.LibraryAccess != nil,
-			"permissions": req.Body.Permissions != nil, "uploadEnabled": req.Body.UploadEnabled != nil,
-			"uploadQuotaBytes": req.Body.UploadQuotaBytes != nil,
-		} {
-			if set {
-				changed = append(changed, name)
+	if before != nil {
+		// A save that changed nothing is not an event.
+		if changes := service.AccountChanges(before, acct); len(changes) > 0 {
+			if uc, _, err := s.requireUserCtx(ctx); err == nil {
+				s.svc.Audit(ctx, uc, "user.update",
+					service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
+					map[string]any{"changes": changes})
 			}
-		}
-		sort.Strings(changed)
-		if uc, _, err := s.requireUserCtx(ctx); err == nil {
-			s.svc.Audit(ctx, uc, "user.update",
-				service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
-				map[string]any{"fields": changed})
 		}
 	}
 	if revokeErr != nil {
@@ -451,13 +456,45 @@ func (s *Server) DeleteUser(ctx context.Context, req DeleteUserRequestObject) (D
 	if req.UserId == p.User.ID {
 		return DeleteUser409JSONResponse{ConflictJSONResponse(errObj("conflict", "you cannot delete the account you are signed in as"))}, nil
 	}
+	uc, _, ucErr := s.requireUserCtx(ctx)
+	if ucErr != nil {
+		return nil, ucErr
+	}
+	opts := service.AccountDeletion{TransferTo: deref(req.Params.TransferTo)}
+	if req.Params.Playlists != nil {
+		opts.Playlists = string(*req.Params.Playlists)
+	}
 	victim, verr := s.svc.Account(ctx, req.UserId)
-	if err := s.svc.DeleteAccount(ctx, req.UserId); err != nil {
+	deleted, err := s.svc.DeleteAccount(ctx, uc, req.UserId, opts)
+	// A deletion that disabled the account is a disable whatever else it
+	// did: its sessions and gpodder logins end now, or they would sign
+	// straight back in if the account is enabled again. A request that has
+	// gone away does not stop that, or the record of what was done.
+	bg := context.WithoutCancel(ctx)
+	if err != nil && deleted.Disabled {
+		if rerr := errors.Join(s.endSessions(bg, req.UserId, "", ""), s.svc.EndGpodderSessions(bg, req.UserId)); rerr != nil {
+			s.log.Warn("ending the sessions of an account whose deletion stopped", "user", req.UserId, "err", rerr)
+		}
+	}
+	if verr == nil && (err == nil || deleted.Changed()) {
+		auditCtx := ctx
+		if err != nil {
+			// What was done before the deletion stopped is on the record
+			// too, so the retry's entry is not read as the whole of it.
+			auditCtx = bg
+		}
+		s.svc.Audit(auditCtx, uc, "user.delete",
+			service.AuditTarget{Kind: "user", PID: victim.User.ID, Name: victim.User.Username},
+			userDeleteDetail(deleted, err))
+	}
+	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindNotFound:
 			return DeleteUser404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no user with id "+req.UserId))}, nil
 		case service.KindConflict:
 			return DeleteUser409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		case service.KindInvalid:
+			return DeleteUser400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		}
 		return nil, err
 	}
@@ -466,12 +503,59 @@ func (s *Server) DeleteUser(ctx context.Context, req DeleteUserRequestObject) (D
 	if err := s.endSessions(ctx, req.UserId, "", ""); err != nil {
 		s.log.Warn("ending a deleted account's sessions", "user", req.UserId, "err", err)
 	}
-	if uc, _, ucErr := s.requireUserCtx(ctx); ucErr == nil && verr == nil {
-		s.svc.Audit(ctx, uc, "user.delete",
-			service.AuditTarget{Kind: "user", PID: victim.User.ID, Name: victim.User.Username}, nil)
-	}
 	return DeleteUser204Response{}, nil
 }
+
+// userDeleteDetail is what a `user.delete` entry records: what was handed
+// over and what deleted, what became of the fixed copies an earlier attempt
+// left, how many public links ended with the account, and, for a deletion
+// that stopped, that it did, whether it left the account disabled, and why.
+func userDeleteDetail(deleted service.AccountDeleted, err error) map[string]any {
+	detail := map[string]any{
+		"playlistsTransferred": deleted.PlaylistsTransferred,
+		"playlistsDeleted":     deleted.PlaylistsDeleted,
+	}
+	if deleted.PlaylistsFixed > 0 {
+		detail["playlistsFixed"] = deleted.PlaylistsFixed
+	}
+	if deleted.TransferredTo != "" {
+		detail["transferredTo"] = deleted.TransferredTo
+	}
+	// What became of the fixed copies an earlier attempt left, which its own
+	// entry named when it failed.
+	if len(deleted.FixedCopiesRemoved) > 0 {
+		detail["fixedCopiesRemoved"] = deleted.FixedCopiesRemoved
+	}
+	if len(deleted.FixedCopiesKept) > 0 {
+		detail["fixedCopiesKept"] = deleted.FixedCopiesKept
+	}
+	if err == nil {
+		// What ended with the account, which a deletion that stopped has
+		// not yet ended.
+		detail["linksEnded"] = deleted.LinksEnded
+	}
+	if err != nil {
+		detail["failed"] = true
+		detail["accountDisabled"] = deleted.Disabled
+		// The sentence of a refusal is written for the person reading it;
+		// an internal fault's text can carry paths and queries.
+		detail["error"] = "internal error"
+		if service.KindOf(err) != service.KindInternal {
+			detail["error"] = err.Error()
+		}
+		// A copy of a playlist that the failure could not take back stays
+		// in the catalog until the next attempt takes it up.
+		var left leftCopier
+		if errors.As(err, &left) {
+			detail["fixedCopyLeft"] = left.LeftCopy()
+		}
+	}
+	return detail
+}
+
+// leftCopier is what an error says when it left a fixed copy of a
+// playlist in the catalog.
+type leftCopier interface{ LeftCopy() string }
 
 func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) (SetPasswordResponseObject, error) {
 	p, ok := principalFromContext(ctx)

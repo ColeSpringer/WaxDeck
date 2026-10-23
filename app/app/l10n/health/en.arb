@@ -229,6 +229,10 @@
   "@healthFixBusy": {
     "description": "Message when a fix was refused because an enrichment pass is already running."
   },
+  "healthFixPreviewMoves": "Preview moves",
+  "@healthFixPreviewMoves": {
+    "description": "The path rule's control in the rules table: opens Organize with a dry run of every move, where the whole library's paths are fixed."
+  },
   "healthFixRule": "Fix {rule}",
   "@healthFixRule": {
     "description": "Accessible name of the button that runs a health rule's bulk fix. {rule} is that rule's own name.",
@@ -262,6 +266,32 @@
   "healthGenreWhitelist": "Genre outside the canonical tree",
   "@healthGenreWhitelist": {
     "description": "Name of the health rule `genre-whitelist`, which counts items tagged with a genre the server's genre tree does not have."
+  },
+  "healthIssueFix": "Move into place",
+  "@healthIssueFix": {
+    "description": "On one misplaced file's row: moves it where its library's profile puts it, after a confirmation."
+  },
+  "healthIssueFixAction": "Move",
+  "@healthIssueFixAction": {
+    "description": "Confirms moving one file where the profile puts it."
+  },
+  "healthIssueFixHeld": "This file cannot move: {reason}",
+  "@healthIssueFixHeld": {
+    "description": "Said in place of the confirmation when the dry run holds the file back; the reason is why, as the Organize screen words it.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "The destination is already taken"
+      }
+    }
+  },
+  "healthIssueFixInPlace": "This file is already where the profile puts it.",
+  "@healthIssueFixInPlace": {
+    "description": "Said in place of the confirmation when the dry run finds nothing to move for the file."
+  },
+  "healthIssueFixTitle": "Move this file where the profile puts it?",
+  "@healthIssueFixTitle": {
+    "description": "Title of the confirmation before one file moves; under it, where the file is now and where it moves to."
   },
   "healthIssuesEmptyMessage": "Every item the sweeper has seen passes it.",
   "@healthIssuesEmptyMessage": {

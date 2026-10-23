@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/connect"
 )
 
@@ -134,6 +135,26 @@ func TestBothSeamsCarryRefusalParams(t *testing.T) {
 	frame := wsErrorFrame{Code: wsErrorCode(err), Message: err.Error(), Params: refusalParams(err)}
 	if frame.Params["feature"] != "windowed-track" || frame.Params["pid"] != "tr-1" {
 		t.Errorf("ws frame params = %v, want the refusal's", frame.Params)
+	}
+
+	// The engine away is a wait: the outage's status over REST, the same
+	// code and params over the socket. The windowed-track refusal above
+	// keeps its 501.
+	if status, _, _ := connectHTTP(err); status != http.StatusNotImplemented {
+		t.Errorf("windowed-track status = %d, want 501", status)
+	}
+	away := connect.InvalidError{
+		Msg:    "this endpoint plays only what the streaming engine renders: tr-1",
+		Code:   "feature-unavailable",
+		Params: map[string]string{"feature": flow.FeatureStreamingEngine, "pid": "tr-1"},
+	}
+	if status, body, _ := connectHTTP(away); status != http.StatusServiceUnavailable ||
+		body.Params == nil || (*body.Params)["feature"] != flow.FeatureStreamingEngine {
+		t.Errorf("streaming-engine refusal = %d %+v, want 503 naming the engine", status, body)
+	}
+	if code, params := wsErrorCode(away), refusalParams(away); code != "feature-unavailable" ||
+		params["feature"] != flow.FeatureStreamingEngine {
+		t.Errorf("ws frame = %q %v, want the refusal's code and params", code, params)
 	}
 
 	// A code the whitelist rejects loses its params with it: they would

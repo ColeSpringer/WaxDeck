@@ -168,7 +168,11 @@ place files into the library, and WaxDeck never moves files into a
 library it only scans, so mark at least one root managed. Managed
 roots are named (by the same names as `WAXDECK_LIBRARY_ROOTS`) in
 `WAXDECK_MANAGED_ROOTS`. Leave your existing beets- or Picard-managed
-library out of it; use a separate root for imported audio.
+library out of it; use a separate root for imported audio. The server
+has to be able to write to a managed root's folder: at start it warns
+in the log about any managed root it cannot write to, unless the root
+or the whole server is read-only, and the Libraries screen marks it,
+since uploads, organize moves and deletes there would fail.
 
 The YouTube downloader is on by default (it embeds WaxTap; no external
 tools). Disable it with `WAXDECK_YOUTUBE=false`.

@@ -1008,20 +1008,19 @@ func (l *Library) contentNarrow(ctx context.Context, uc *UserCtx) []query.Node {
 }
 
 // inSet is field membership within the engine's per-condition value cap
-// (waxbin's maxInValues, 500), chunked into an Or above it - its own
-// docs say a caller needing more should chunk. Without this, a caller
-// following 500+ shows or granted 500+ libraries would fail the count's
-// compile and read null counts forever. An empty set stays one empty
-// OpIn, which compiles to match-nothing: both callers fail closed on
-// purpose.
+// (waxbin's maxInValues, catalogSetCap), chunked into an Or above it -
+// its own docs say a caller needing more should chunk. Without this, a
+// caller following 500+ shows or granted 500+ libraries would fail the
+// count's compile and read null counts forever. An empty set stays one
+// empty OpIn, which compiles to match-nothing: both callers fail closed
+// on purpose.
 func inSet(field string, values []string) query.Node {
-	const maxInValues = 500
-	if len(values) <= maxInValues {
+	if len(values) <= catalogSetCap {
 		return query.Cond{Field: field, Op: query.OpIn, Values: query.Values(values)}
 	}
-	chunks := make([]query.Node, 0, (len(values)+maxInValues-1)/maxInValues)
-	for start := 0; start < len(values); start += maxInValues {
-		end := min(start+maxInValues, len(values))
+	chunks := make([]query.Node, 0, (len(values)+catalogSetCap-1)/catalogSetCap)
+	for start := 0; start < len(values); start += catalogSetCap {
+		end := min(start+catalogSetCap, len(values))
 		chunks = append(chunks, query.Cond{
 			Field: field, Op: query.OpIn, Values: query.Values(values[start:end]),
 		})
@@ -1366,13 +1365,41 @@ func (l *Library) UpdatePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 	return l.playlistDTO(ctx, uc, got, true, nil), nil
 }
 
-// DeletePlaylist deletes an owned playlist.
+// DeletePlaylist deletes a playlist its owner made, or any shared one for
+// an administrator: that is how a shared playlist whose owner is gone is
+// cleared. Editing stays the owner's.
 func (l *Library) DeletePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPID string) error {
-	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
+	pl, err := l.resolvePlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return err
 	}
+	owned := string(pl.OwnerPID) == uc.CatalogPID
+	if !owned && !uc.Admin {
+		return &Error{Kind: KindForbidden, Msg: "only the owner or an administrator may delete a playlist"}
+	}
 	wasShared := pl.Visibility == model.VisibilityShared
+	if err := l.removePlaylist(ctx, pl); err != nil {
+		return err
+	}
+	// A deleted starter stays deleted: without this the boot reconcile
+	// would find it missing from the catalog and seed it again. The REST
+	// and Subsonic deletes both come through here; an account's deletion
+	// does not, and needs no dismissal, since its starter rows go with
+	// it. The catalog names an owner by account id, and it is the owner's
+	// starter.
+	l.dismissStarterPlaylist(ctx, pl.OwnerName, pl.PID)
+	l.emitPlaylistEvent(ctx, uc, wasShared, string(pl.PID))
+	detail := map[string]any{"shared": wasShared}
+	if !owned {
+		detail["owner"] = l.usernameOf(ctx, pl.OwnerName)
+	}
+	l.Audit(ctx, uc, "playlist.delete",
+		AuditTarget{Kind: "playlist", PID: apiPID(PrefixPlaylist, pl.PID), Name: pl.Name}, detail)
+	return nil
+}
+
+// removePlaylist deletes a playlist and what WaxDeck keeps beside it.
+func (l *Library) removePlaylist(ctx context.Context, pl *model.Playlist) error {
 	if err := l.lib.Playlists().Delete(ctx, pl.PID); err != nil {
 		return classify(err)
 	}
@@ -1387,14 +1414,6 @@ func (l *Library) DeletePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 	if err := l.db.DeletePlaylistSource(ctx, string(pl.PID)); err != nil {
 		l.log.Warn("clearing playlist source binding", "playlist", pl.PID, "err", err)
 	}
-	// A deleted starter stays deleted: without this the boot reconcile
-	// would find it missing from the catalog and seed it again. Both
-	// delete paths, REST and Subsonic, come through here.
-	l.dismissStarterPlaylist(ctx, uc, pl.PID)
-	l.emitPlaylistEvent(ctx, uc, wasShared, string(pl.PID))
-	l.Audit(ctx, uc, "playlist.delete",
-		AuditTarget{Kind: "playlist", PID: apiPID(PrefixPlaylist, pl.PID), Name: pl.Name},
-		map[string]any{"shared": wasShared})
 	return nil
 }
 
@@ -1796,11 +1815,16 @@ func playlistVisibility(v string) (model.PlaylistVisibility, error) {
 // the bare catalog pid.
 func (l *Library) emitPlaylistEvent(ctx context.Context, uc *UserCtx, shared bool, barePID string) {
 	l.emitUserEvent(ctx, uc.ID, eventPlaylist, barePID)
-	if !shared {
-		return
+	if shared {
+		l.announcePlaylist(ctx, uc.ID, barePID)
 	}
+}
+
+// announcePlaylist puts a playlist event on every account's stream but
+// exceptID's.
+func (l *Library) announcePlaylist(ctx context.Context, exceptID, barePID string) {
 	err := l.db.EachUser(ctx, func(u *wdb.User) error {
-		if u.ID != uc.ID {
+		if u.ID != exceptID {
 			l.emitUserEvent(ctx, u.ID, eventPlaylist, barePID)
 		}
 		return nil

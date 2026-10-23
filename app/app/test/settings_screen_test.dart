@@ -899,7 +899,7 @@ void main() {
       // The client's own sentence for the code, not the server's line.
       expect(
         shellMessageText(raisedMessage(tester)),
-        'The library is read-only right now, so nothing can be changed.',
+        'The server or this library is read-only right now, so nothing can be changed.',
       );
       // Nothing was stored, and nothing on the row moved either: the
       // sentence is the only thing that happened.
@@ -932,7 +932,7 @@ void main() {
 
       expect(
         shellMessageText(raisedMessage(tester)),
-        'The library is read-only right now, so nothing can be changed.',
+        'The server or this library is read-only right now, so nothing can be changed.',
       );
       expect(repo.prefs.locale, isNull);
     });

@@ -50,6 +50,7 @@ enum NotificationKind {
   playlistSynced('playlist-synced', WaxIcons.refresh, WaxRoute.playlists),
   jobFinished('job-finished', WaxIcons.success, WaxRoute.tasks),
   jobFailed('job-failed', WaxIcons.warning, WaxRoute.tasks),
+  toolTaskFailed('tool-task-failed', WaxIcons.warning, WaxRoute.tasks),
   healthFixFinished('health-fix-finished', WaxIcons.success, WaxRoute.health);
 
   const NotificationKind(this.token, this.glyph, this.location);
@@ -127,7 +128,8 @@ enum NotificationKind {
     NotificationKind.importCompleted => l10n.bellSurfaceImports,
     NotificationKind.playlistSynced => l10n.bellSurfacePlaylists,
     NotificationKind.jobFinished ||
-    NotificationKind.jobFailed => l10n.bellSurfaceTasks,
+    NotificationKind.jobFailed ||
+    NotificationKind.toolTaskFailed => l10n.bellSurfaceTasks,
     NotificationKind.healthFixFinished => l10n.bellSurfaceHealth,
   };
 

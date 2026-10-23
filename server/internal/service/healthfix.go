@@ -2,16 +2,19 @@ package service
 
 // Health fixes. An unscoped fix of an enrichment-backed rule is the
 // catalog's own pass over the phases that fill it, run as a job; a fix
-// scoped to items, and every fix of path-mismatch or write-unsynced, is a
-// health-fix tool task working item by item. Either ends by re-checking
-// the rule for the items it covers, which the summary shows at once; the
-// score waits for the next full sweep.
+// scoped to items, and every fix of write-unsynced, is a health-fix tool
+// task working item by item. A path-mismatch fix names its items, which it
+// moves as organize jobs: the whole library's is an organize pass. Either
+// ends by re-checking the rule for the items it covers, which the summary
+// shows at once; the score waits for the next full sweep.
 
 import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"sort"
@@ -41,7 +44,18 @@ const (
 
 	// healthFixPathChunk is how many items one organize plan covers, the
 	// catalog's cap on a set-membership condition.
-	healthFixPathChunk = 500
+	healthFixPathChunk = catalogSetCap
+
+	// pathFixJobSilence is how long a path fix waits on an organize job
+	// that reports nothing new before taking its row for one the catalog
+	// failed to close. A run beats once per file, after the file's whole
+	// move, which a tag rewrite of a large audiobook or a copy across
+	// devices on slow storage stretches to minutes, never to an hour.
+	pathFixJobSilence = time.Hour
+
+	// catalogBusyReason is a path fix's word for items another job's hold
+	// on the file-mutation scope kept from moving.
+	catalogBusyReason = "catalog busy"
 )
 
 // What an install lacks to fix a rule, as the summary's fixBlocked says it.
@@ -219,6 +233,11 @@ func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, 
 	if !uc.Admin {
 		return HealthFixStartDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
+	// The whole library's moves are an organize pass, which an
+	// administrator previews before it runs.
+	if rule == rulePathMismatch && len(apiItemPids) == 0 {
+		return HealthFixStartDTO{}, errInvalid("the path fix moves every mismatched file; preview and apply it from /organize")
+	}
 	if rule == ruleWriteUnsynced || rule == rulePathMismatch {
 		if err := l.CheckWritable(ctx, ""); err != nil {
 			return HealthFixStartDTO{}, err
@@ -226,6 +245,9 @@ func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, 
 	}
 	if fixable, _ := l.healthFixability(rule); !fixable {
 		return HealthFixStartDTO{}, errInvalid("no automated fix for rule " + rule + " on this server")
+	}
+	if len(apiItemPids) > maxItemPids {
+		return HealthFixStartDTO{}, errInvalid(fmt.Sprintf("at most %d items per fix", maxItemPids))
 	}
 	var scope []string
 	for _, p := range apiItemPids {
@@ -300,6 +322,12 @@ type healthFixSummary struct {
 	Filled    int            `json:"filled"`
 	Skipped   map[string]int `json:"skipped"`
 	Failed    int            `json:"failed"`
+	// A path fix's alone: the items it moved, which are the ones it
+	// filled, those held back by hold code, and the organize jobs that
+	// moved them.
+	Moved   *int           `json:"moved,omitempty"`
+	Held    map[string]int `json:"held,omitempty"`
+	JobPIDs []string       `json:"jobPids,omitempty"`
 }
 
 // runHealthFixTask works a health-fix task's items, then re-checks the
@@ -316,12 +344,9 @@ func (l *Library) runHealthFixTask(ctx context.Context, t *wdb.ToolTask, p toolT
 	sum := healthFixSummary{Rule: p.Rule, Skipped: map[string]int{}}
 	prog := newToolProgress(l, t)
 	if p.Rule == rulePathMismatch {
-		for i := 0; i < len(scope); i += healthFixPathChunk {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			l.fixPaths(ctx, scope[i:min(i+healthFixPathChunk, len(scope))], &sum)
-			prog.report(ctx, 100*float64(min(i+healthFixPathChunk, len(scope)))/float64(len(scope)))
+		var err error
+		if sum, err = l.fixPathScope(ctx, t, &p, scope, prog, healthFixPathChunk); err != nil {
+			return err
 		}
 	} else {
 		for i, pid := range scope {
@@ -344,18 +369,138 @@ func (l *Library) runHealthFixTask(ctx context.Context, t *wdb.ToolTask, p toolT
 	return nil
 }
 
+// pathFixProgress is how far a path fix has gone, kept in its task as it
+// goes: how many of its items' chunks are done, their totals with every
+// organize run the fix made, and the items the chunk in hand set out to
+// move. A rerun after a stop goes on from there, and the fix's end, however
+// it ends, covers every attempt.
+type pathFixProgress struct {
+	Done   int              `json:"done"`
+	Sum    healthFixSummary `json:"sum"`
+	Moving []string         `json:"moving,omitempty"`
+}
+
+// add counts a finished chunk into the totals.
+func (s *healthFixSummary) add(chunk healthFixSummary) {
+	s.Attempted += chunk.Attempted
+	s.Filled += chunk.Filled
+	s.Failed += chunk.Failed
+	for r, n := range chunk.Skipped {
+		s.Skipped[r] += n
+	}
+	for c, n := range chunk.Held {
+		s.Held[c] += n
+	}
+}
+
+// fixPathScope moves a path fix's items, chunk by chunk, from where an
+// earlier attempt left off, keeping in the task how far it got, and
+// answers what the whole fix did. A chunk a stop cuts short is done again
+// by the next attempt, which counts what this one moved of it.
+func (l *Library) fixPathScope(ctx context.Context, t *wdb.ToolTask, p *toolTaskParams, scope []string,
+	prog *toolProgress, chunk int) (healthFixSummary, error) {
+	pf := p.PathFix
+	if pf == nil {
+		pf = &pathFixProgress{}
+		p.PathFix = pf
+	}
+	pf.Sum.Rule = p.Rule
+	if pf.Sum.Skipped == nil {
+		pf.Sum.Skipped = map[string]int{}
+	}
+	if pf.Sum.Held == nil {
+		pf.Sum.Held = map[string]int{}
+	}
+	save := func() {
+		raw := marshalJSON(*p)
+		if err := l.db.UpdateToolTaskParams(context.WithoutCancel(ctx), t.ID, raw); err != nil {
+			l.log.Warn("recording a path fix's progress", "task", t.ID, "err", err)
+			return
+		}
+		t.Params = raw
+	}
+	for pf.Done < len(scope) {
+		if err := ctx.Err(); err != nil {
+			return healthFixSummary{}, err
+		}
+		end := min(pf.Done+chunk, len(scope))
+		sum := healthFixSummary{Skipped: map[string]int{}, Held: map[string]int{}}
+		l.fixPaths(ctx, scope[pf.Done:end], &sum, prog, pf, save)
+		if err := ctx.Err(); err != nil {
+			return healthFixSummary{}, err
+		}
+		pf.Sum.add(sum)
+		pf.Done, pf.Moving = end, nil
+		save()
+		prog.report(ctx, 100*float64(end)/float64(len(scope)))
+	}
+	out := pf.Sum
+	moved := out.Filled
+	out.Moved = &moved
+	return out, nil
+}
+
+// auditPathFix records a path fix's end as the fix, once, however it
+// ended: naming every organize run it made, which History lists and an
+// undo takes back, and what every attempt of it did. A fix that did not
+// finish counts what it moved of the chunk in hand by where those items
+// are now.
+func (l *Library) auditPathFix(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) {
+	ctx = context.WithoutCancel(ctx)
+	var sum healthFixSummary
+	if t.State != taskStateDone || json.Unmarshal([]byte(t.Summary), &sum) != nil {
+		if p.PathFix != nil {
+			sum = p.PathFix.Sum
+			if len(p.PathFix.Moving) > 0 {
+				placed, err := l.itemsInPlace(ctx, p.PathFix.Moving)
+				if err != nil {
+					l.log.Warn("path fix: reading where its last items are", "task", t.ID, "err", err)
+				}
+				sum.Filled += len(placed)
+			}
+		}
+	}
+	l.Audit(ctx, &UserCtx{ID: t.UserID}, "health.fix", AuditTarget{Kind: "health-rule", Name: rulePathMismatch},
+		map[string]any{"task": t.ID, "jobPids": sum.JobPIDs, "moved": sum.Filled, "held": sum.Held, "failed": sum.Failed})
+}
+
+// itemsInPlace answers which of pids have every file where their library's
+// profile places it.
+func (l *Library) itemsInPlace(ctx context.Context, pids []string) (map[model.PID]bool, error) {
+	plan, err := l.lib.PlanOrganize(ctx, visibleItems().WhereValues("pid", query.OpIn, query.Values(pids)...).Build(),
+		waxbin.OrganizeOptions{})
+	if err != nil {
+		return nil, classify(err)
+	}
+	out := map[model.PID]bool{}
+	for i := range plan.Actions {
+		a := &plan.Actions[i]
+		if a.ItemPID == "" {
+			continue
+		}
+		if placed, seen := out[a.ItemPID]; !seen || placed {
+			out[a.ItemPID] = a.Skip && a.Code == organize.HoldInPlace
+		}
+	}
+	maps.DeleteFunc(out, func(_ model.PID, placed bool) bool { return !placed })
+	return out, nil
+}
+
 // healthFixTaskEnded tells every account a fix task's rule is no longer
 // being fixed, once the task's end is recorded, and its starter what it
-// did or why it failed.
+// did or why it failed. A path fix is audited here, at its one end.
 func (l *Library) healthFixTaskEnded(ctx context.Context, t *wdb.ToolTask) {
 	var p toolTaskParams
 	_ = json.Unmarshal([]byte(t.Params), &p)
+	if p.Rule == rulePathMismatch {
+		l.auditPathFix(ctx, t, p)
+	}
 	l.emitEveryoneEvent(ctx, eventHealth)
 	body := "The fix failed: " + cmp.Or(t.Error, "no reason was recorded")
 	if t.State == taskStateDone {
 		var sum healthFixSummary
 		if json.Unmarshal([]byte(t.Summary), &sum) == nil {
-			body = healthFixBody(sum)
+			body = healthFixBody(sum, l.readOnlyCause())
 		}
 	}
 	l.EmitNotificationFor(ctx, "health-fix-finished", healthFixTitle(p.Rule), body, t.ID, []string{t.UserID})
@@ -376,7 +521,7 @@ func (l *Library) fixHealthItem(ctx context.Context, rule string, pid model.PID,
 	if rule == ruleWriteUnsynced {
 		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
 			if KindOf(err) == KindReadOnly {
-				sum.Skipped[readOnlyReason]++
+				sum.Skipped[l.readOnlyCause()]++
 			} else {
 				sum.Failed++
 			}
@@ -405,24 +550,41 @@ func (l *Library) fixHealthItem(ctx context.Context, rule string, pid model.PID,
 }
 
 // fixPaths moves one chunk of path-mismatched items where their library's
-// profile places them, counting items rather than files: a book moves as
-// all its parts, and fails if one of them does.
-func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSummary) {
+// profile places them, as an organize job, counting items rather than
+// files: a book moves as all its parts, and fails if one of them does.
+// The items it sets out to move and the job it runs go into the fix's
+// progress pf, saved by save, before the job runs; an item an earlier
+// attempt set out to move and that is in place now counts as moved.
+func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSummary, prog *toolProgress,
+	pf *pathFixProgress, save func()) {
 	sum.Attempted += len(pids)
-	plan, err := l.lib.PlanOrganize(ctx,
-		query.New(query.EntityItems).WhereValues("pid", query.OpIn, query.Values(pids)...).Build(),
-		waxbin.OrganizeOptions{})
+	q := query.New(query.EntityItems).WhereValues("pid", query.OpIn, query.Values(pids)...).Build()
+	plan, err := l.lib.PlanOrganize(ctx, q, waxbin.OrganizeOptions{})
 	if err != nil {
 		sum.Failed += len(pids)
 		return
 	}
 	l.holdReadOnly(plan)
+	earlier, listed := map[model.PID]bool{}, map[model.PID]bool{}
+	for _, pid := range pf.Moving {
+		earlier[model.PID(pid)], listed[model.PID(pid)] = true, true
+	}
 	// Nothing to move is no job, and no lease a scan could be holding.
 	var rep *organize.Report
 	if plan.Pending() > 0 {
-		rep, err = l.lib.ApplyOrganize(ctx, plan)
+		for i := range plan.Actions {
+			if a := &plan.Actions[i]; !a.Skip && a.ItemPID != "" && !listed[a.ItemPID] {
+				listed[a.ItemPID] = true
+				pf.Moving = append(pf.Moving, string(a.ItemPID))
+			}
+		}
+		save()
+		rep, err = l.organizePaths(ctx, q, pf, save, prog)
 	}
-	// The apply holds again as things then stand, so its report has the
+	// Another job holding the scope refused the run before it moved
+	// anything.
+	busy := KindOf(err) == KindCatalogBusy
+	// The job holds again as things then stand, so its report has the
 	// last word on what was held and what failed.
 	held := map[model.PID]organize.HoldCode{}
 	failedFiles := map[model.PID]bool{}
@@ -435,8 +597,8 @@ func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSum
 		}
 	}
 	type outcome struct {
-		moved, failed bool
-		held          string
+		moved, failed, busy bool
+		held                organize.HoldCode
 	}
 	byItem := map[model.PID]*outcome{}
 	for i := range plan.Actions {
@@ -454,11 +616,15 @@ func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSum
 		case failedFiles[a.FilePID]:
 			o.failed = true
 		case isHeld:
-			if label := holdLabel(code); o.held == "" || label == holdLabelTaken {
-				o.held = label
+			// A book's other parts are held for the one that cannot
+			// move, which names the item's hold.
+			if o.held == "" || o.held == organize.HoldBookHeld {
+				o.held = code
 			}
 		case a.Skip && (rep == nil || a.Code == organize.HoldInPlace):
 			// Already in place, which is the default below.
+		case busy:
+			o.busy = true
 		case err != nil:
 			// A run cut short cannot say which moves landed, since the
 			// blocked ones run last.
@@ -481,31 +647,63 @@ func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSum
 		o := byItem[model.PID(pid)]
 		switch {
 		case o == nil && readOnly[model.PID(pid)]:
-			sum.Skipped[readOnlyReason]++
+			sum.Held[string(organize.HoldReadOnly)]++
 		case o == nil:
 			// Planned for nothing: gone, or no longer under a managed root.
 			sum.Skipped["not placed by organize"]++
 		case o.failed:
 			sum.Failed++
-		case o.moved && o.held == "":
+		case o.held != "":
+			sum.Held[string(o.held)]++
+		case o.busy:
+			sum.Skipped[catalogBusyReason]++
+		case o.moved, earlier[model.PID(pid)]:
+			// Moved now, or by an attempt a stop cut short.
 			sum.Filled++
 		default:
-			sum.Skipped[cmp.Or(o.held, "already in place")]++
+			sum.Skipped["already in place"]++
 		}
 	}
 }
 
-// holdLabelTaken is the summary's word for a destination another file holds.
-const holdLabelTaken = "destination taken"
+// organizePaths runs a path fix's chunk as an organize job, naming it in
+// the fix's progress, keeping the task's lease while it waits the job out,
+// and answers what the job recorded; a job that did not finish is an
+// error beside what it did.
+func (l *Library) organizePaths(ctx context.Context, q query.Query, pf *pathFixProgress, save func(),
+	prog *toolProgress) (*organize.Report, error) {
+	pid, err := l.lib.RunOrganize(l.procCtx, q, waxbin.OrganizeOptions{})
+	if err != nil {
+		return nil, classifyMutation(err)
+	}
+	l.followJob(pid)
+	pf.Sum.JobPIDs = append(pf.Sum.JobPIDs, apiPID(PrefixJob, pid))
+	save()
+	j, err := l.awaitJob(ctx, pid, pathFixJobSilence, func(ctx context.Context) { prog.report(ctx, prog.lastPct) })
+	if errors.Is(err, errJobSilent) {
+		l.log.Warn("path fix: an organize job stopped reporting; its moves count as failed", "job", string(pid))
+	}
+	if err != nil {
+		return nil, err
+	}
+	var rep *organize.Report
+	if res := organizeRunResult(j); res != nil {
+		rep = &res.Report
+	}
+	if j.State != model.JobDone {
+		return rep, fmt.Errorf("organize job %s ended %s: %s", pid, j.State, j.Error)
+	}
+	return rep, nil
+}
 
-// holdLabel words a hold for a fix's summary from its code alone, since a
-// hold's reason can carry a path.
-func holdLabel(c organize.HoldCode) string {
+// holdLabel words a hold for a fix's news from its code alone, since a
+// hold's reason can carry a path; readOnly is what made a read-only hold.
+func holdLabel(c organize.HoldCode, readOnly string) string {
 	switch c {
 	case organize.HoldCollision, organize.HoldOccupied, organize.HoldOccupiedCase:
-		return holdLabelTaken
+		return "destination taken"
 	case organize.HoldReadOnly:
-		return readOnlyReason
+		return readOnly
 	case organize.HoldUntagged:
 		return "missing tags"
 	case organize.HoldMissing:
@@ -584,7 +782,7 @@ func (l *Library) recheckHealthRule(ctx context.Context, rule string, scope []st
 	var in recheckInputs
 	switch rule {
 	case rulePathMismatch:
-		if in.moves, err = l.readPlannedMoves(ctx); err != nil {
+		if in.moves, err = l.plannedMovesOf(ctx, pids); err != nil {
 			return res, err
 		}
 	case ruleWriteUnsynced:
@@ -621,6 +819,29 @@ func (l *Library) recheckHealthRule(ctx context.Context, rule string, scope []st
 		}
 	}
 	return res, nil
+}
+
+// plannedMovesOf is readPlannedMoves for the named items alone, so a
+// re-check stats their files rather than the library's.
+func (l *Library) plannedMovesOf(ctx context.Context, pids []string) (map[model.PID]bool, error) {
+	out := map[model.PID]bool{}
+	for i := 0; i < len(pids); i += healthFixPathChunk {
+		chunk := pids[i:min(i+healthFixPathChunk, len(pids))]
+		if l.pathPlanHook != nil {
+			l.pathPlanHook(chunk)
+		}
+		plan, err := l.lib.PlanOrganize(ctx, visibleItems().WhereValues("pid", query.OpIn, query.Values(chunk)...).Build(),
+			waxbin.OrganizeOptions{})
+		if err != nil {
+			return nil, classify(err)
+		}
+		for j := range plan.Actions {
+			if a := &plan.Actions[j]; a.ItemPID != "" && misplaced(a) {
+				out[a.ItemPID] = true
+			}
+		}
+	}
+	return out, nil
 }
 
 // presentItems reads which of pids are present items, as the sweep
@@ -730,25 +951,53 @@ func healthFixTitle(rule string) string {
 }
 
 // healthFixBody says what a fix task did: "Filled 120 of 180; 60 skipped
-// (no match 55, locked 5); 0 failed".
-func healthFixBody(s healthFixSummary) string {
+// (no match 55, locked 5); 0 failed", or for a path fix "Moved 2 of 3; 1
+// held (destination taken 1); 0 failed". readOnly words its read-only
+// holds: a fix starts only on a writable server, so the switch on at its
+// end is what held them.
+func healthFixBody(s healthFixSummary, readOnly string) string {
+	if s.Moved != nil {
+		body := fmt.Sprintf("Moved %d of %d", *s.Moved, s.Attempted)
+		held := map[string]int{}
+		for code, n := range s.Held {
+			held[holdLabel(organize.HoldCode(code), readOnly)] += n
+		}
+		if n, words := countsInWords(held); n > 0 {
+			body += fmt.Sprintf("; %d held (%s)", n, words)
+		}
+		if n, words := countsInWords(s.Skipped); n > 0 {
+			body += fmt.Sprintf("; %d skipped (%s)", n, words)
+		}
+		return body + fmt.Sprintf("; %d failed", s.Failed)
+	}
 	body := fmt.Sprintf("Filled %d of %d", s.Filled, s.Attempted)
 	if n := s.Attempted - s.Filled - s.Failed; n > 0 {
-		reasons := make([]string, 0, len(s.Skipped))
-		for r := range s.Skipped {
-			reasons = append(reasons, r)
-		}
-		sort.Slice(reasons, func(a, b int) bool {
-			if s.Skipped[reasons[a]] != s.Skipped[reasons[b]] {
-				return s.Skipped[reasons[a]] > s.Skipped[reasons[b]]
-			}
-			return reasons[a] < reasons[b]
-		})
-		parts := make([]string, len(reasons))
-		for i, r := range reasons {
-			parts[i] = fmt.Sprintf("%s %d", r, s.Skipped[r])
-		}
-		body += fmt.Sprintf("; %d skipped (%s)", n, strings.Join(parts, ", "))
+		_, words := countsInWords(s.Skipped)
+		body += fmt.Sprintf("; %d skipped (%s)", n, words)
 	}
 	return body + fmt.Sprintf("; %d failed", s.Failed)
+}
+
+// countsInWords sums counts by reason and words them, most first:
+// "no match 55, locked 5".
+func countsInWords(counts map[string]int) (int, string) {
+	reasons := make([]string, 0, len(counts))
+	total := 0
+	for r, n := range counts {
+		if n > 0 {
+			reasons = append(reasons, r)
+			total += n
+		}
+	}
+	sort.Slice(reasons, func(a, b int) bool {
+		if counts[reasons[a]] != counts[reasons[b]] {
+			return counts[reasons[a]] > counts[reasons[b]]
+		}
+		return reasons[a] < reasons[b]
+	})
+	parts := make([]string, len(reasons))
+	for i, r := range reasons {
+		parts[i] = fmt.Sprintf("%s %d", r, counts[r])
+	}
+	return total, strings.Join(parts, ", ")
 }

@@ -35,6 +35,9 @@ paths:
 
         A server without the streaming engine cannot serve a carved
         track's window, so it keeps those tracks for its own analysis.
+        While a configured engine is not reachable, nothing is leased:
+        the batch is empty and `retryAfterSeconds` says when to ask
+        again.
       tags: [similarity]
       security:
         - workerAuth: []

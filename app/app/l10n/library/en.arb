@@ -13,9 +13,15 @@
   "@libraryDeleteAction": {
     "description": "Confirming button of the dialog that deletes an item's files."
   },
-  "libraryDeleteFilesLabel": "Delete files",
-  "@libraryDeleteFilesLabel": {
-    "description": "Accessible name of the overflow control offering to delete an item's files."
+  "libraryDeleteAlbumTooLarge": "This album has more than {max} tracks, too many to delete in one go.",
+  "@libraryDeleteAlbumTooLarge": {
+    "description": "Snackbar when an album's delete is asked for an album with more tracks than one delete can name; nothing is deleted. {max} is that limit.",
+    "placeholders": {
+      "max": {
+        "type": "int",
+        "example": "500"
+      }
+    }
   },
   "libraryDeleteFilesMenu": "Delete files...",
   "@libraryDeleteFilesMenu": {
@@ -64,6 +70,20 @@
       }
     }
   },
+  "libraryDeletePermanentPartial": "{failed} of {total} files could not be deleted",
+  "@libraryDeletePermanentPartial": {
+    "description": "Snackbar line after a permanent deletion some of whose files the server could not remove; they stayed where they were.",
+    "placeholders": {
+      "failed": {
+        "type": "int",
+        "example": "1"
+      },
+      "total": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "libraryDeletePreview": "{count, plural, =1{This removes 1 file, {size}.} other{This removes {count} files, {size}.}}",
   "@libraryDeletePreview": {
     "description": "What the dry run found, shown in the delete dialog before anything moves. {size} is the total on disk, already formatted.",
@@ -77,6 +97,57 @@
       }
     }
   },
+  "libraryDeletePreviewFiles": "{count, plural, =1{1 file} other{{count} files}}: {list}",
+  "@libraryDeletePreviewFiles": {
+    "description": "What a screen reader hears for the delete dialog's file list: how many files, then each by its place in its library.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "list": {
+        "type": "String",
+        "example": "Hum Collective/Shell Songs/01 - Hell Shell.m4a, Hum Collective/Shell Songs/02 - Tide.m4a"
+      }
+    }
+  },
+  "libraryDeleteRipAction": "Delete all {count} tracks...",
+  "@libraryDeleteRipAction": {
+    "description": "Button offering to delete the tracks asked for together with every other track their shared files hold, after a delete naming only some of a file's tracks was refused. The ellipsis says the delete dialog follows.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "libraryDeleteRipShared": "{extra, plural, =1{1 more track is} other{{extra} more tracks are}} cut from the same file as {chosen, plural, =1{the track you picked} other{tracks you picked}}, and tracks cut from one file are deleted together or not at all.",
+  "@libraryDeleteRipShared": {
+    "description": "Body of the dialog shown when a delete names only some tracks of a CUE rip: how many more tracks share a file with the ones picked and would go with them. Said of the extra tracks, since among several picked tracks only some may share a file; extra is never zero.",
+    "placeholders": {
+      "chosen": {
+        "type": "int",
+        "example": "2"
+      },
+      "extra": {
+        "type": "int",
+        "example": "9"
+      }
+    }
+  },
+  "libraryDeleteRipTitle": "Delete the other tracks too?",
+  "@libraryDeleteRipTitle": {
+    "description": "Title of the dialog offering to delete, with the tracks chosen, every other track their shared files hold, after a delete of only some of them was refused."
+  },
+  "libraryDeleteRipTooMany": "With the tracks that share their files, this is more than {max} tracks, too many to delete in one go.",
+  "@libraryDeleteRipTooMany": {
+    "description": "Snackbar when the tracks picked and the others that share their files are more than one delete may name.",
+    "placeholders": {
+      "max": {
+        "type": "int",
+        "example": "500"
+      }
+    }
+  },
   "libraryDeleteTitle": "Delete files?",
   "@libraryDeleteTitle": {
     "description": "Title of the dialog confirming that an item's files are deleted."
@@ -87,6 +158,20 @@
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "libraryDeleteTrashPartial": "{failed} of {total} files could not be moved to the trash",
+  "@libraryDeleteTrashPartial": {
+    "description": "Snackbar line after a delete some of whose files the server could not move to the trash; they stayed where they were.",
+    "placeholders": {
+      "failed": {
+        "type": "int",
+        "example": "1"
+      },
+      "total": {
+        "type": "int",
+        "example": "12"
       }
     }
   },

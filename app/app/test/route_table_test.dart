@@ -186,6 +186,9 @@ final _locations = <String, Type>{
   WaxRoute.healthRule('missing-artwork'): HealthIssuesScreen,
   WaxRoute.diagnostics: DiagnosticsScreen,
   WaxRoute.organize: OrganizeScreen,
+  // The same section with a dry run under way, which the path rule's fix
+  // opens. A query, so the one route answers both.
+  WaxRoute.organizePreviewOwn: OrganizeScreen,
   WaxRoute.adminEnrichment: EnrichmentScreen,
   WaxRoute.users: UsersScreen,
   WaxRoute.adminShares: AdminSharesScreen,

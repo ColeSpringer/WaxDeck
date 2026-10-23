@@ -402,8 +402,9 @@ its first part.
 Silence trimming skips mapped quiet spans client-side by seeking over
 them, so positions stay honest and the hours-saved counter is exact.
 Maps are computed in the background by the streaming sidecar the first
-time they are asked for; offline listening keeps trimming because
-downloads store the map alongside the audio.
+time they are asked for, or when an episode lands; one asked for while
+the sidecar is away is computed once it answers again. Offline listening
+keeps trimming because downloads store the map alongside the audio.
 
 Voice boost levels spoken-word loudness. Clients with local audio
 processing apply it themselves; for the web and other thin clients the

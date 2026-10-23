@@ -63,6 +63,29 @@ void main() {
     );
   });
 
+  test('a lost place in the event walk re-reads the session too', () async {
+    final alive = container.listen(accountBinderProvider, (_, _) {});
+    addTearDown(alive.close);
+    expect(container.read(serverReadOnlyProvider), isFalse);
+
+    // The change log was pruned, or a restore changed the switch: the
+    // markers that said so were dropped, and the walk says only that it
+    // lost its place.
+    repo.sessionState = const SessionState(
+      authenticated: true,
+      user: _plain,
+      serverReadOnly: true,
+    );
+    bus.reset();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      container.read(serverReadOnlyProvider),
+      isTrue,
+      reason: 'the banner follows the session, so the session is re-read',
+    );
+  });
+
   test('markers about other things are ignored', () async {
     final alive = container.listen(accountBinderProvider, (_, _) {});
     addTearDown(alive.close);

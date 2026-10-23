@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/colespringer/waxbin/model"
 	"github.com/oklog/ulid/v2"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
@@ -333,30 +335,320 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 	return l.accountFor(ctx, u)
 }
 
-// DeleteAccount removes the account. The catalog user and its listening
-// history are orphaned, not destroyed: history survives an accidental
-// delete-and-recreate, and an admin purge can reap orphans later.
-// Deleting the last enabled administrator conflicts, guarded on the
-// delete statement itself.
-func (l *Library) DeleteAccount(ctx context.Context, id string) error {
+// AccountChanges is what an edit changed between two reads of one
+// account, as the audit log records it: each changed field under its API
+// name with the value before and after. The permission toggles and the
+// library grant are fields of their own, so an edit of one lists that
+// one. A save that changed nothing answers an empty map, and no
+// credential is among the fields.
+func AccountChanges(before, after *Account) map[string]map[string]any {
+	changes := map[string]map[string]any{}
+	record := func(field string, same bool, from, to any) {
+		if !same {
+			changes[field] = map[string]any{"from": from, "to": to}
+		}
+	}
+	// Lists answer [] rather than null, so an empty grant reads as empty.
+	list := func(s []string) []string { return append([]string{}, s...) }
+	rules := func(s []TagRule) []TagRule { return append([]TagRule{}, s...) }
+	sameSet := func(a, b []string) bool {
+		a, b = slices.Sorted(slices.Values(a)), slices.Sorted(slices.Values(b))
+		return slices.Equal(a, b)
+	}
+
+	b, a := before.User, after.User
+	record("displayName", b.DisplayName == a.DisplayName, b.DisplayName, a.DisplayName)
+	record("roles", sameRoles(b.Roles, a.Roles), list(b.Roles), list(a.Roles))
+	record("disabled", b.Disabled == a.Disabled, b.Disabled, a.Disabled)
+	record("uploadEnabled", b.UploadEnabled == a.UploadEnabled, b.UploadEnabled, a.UploadEnabled)
+	record("uploadQuotaBytes", b.UploadQuotaBytes == a.UploadQuotaBytes, b.UploadQuotaBytes, a.UploadQuotaBytes)
+	record("libraryAccess.mode", b.LibraryAccess == a.LibraryAccess, b.LibraryAccess, a.LibraryAccess)
+	record("libraryAccess.libraryPids", sameSet(before.LibraryPIDs, after.LibraryPIDs),
+		list(before.LibraryPIDs), list(after.LibraryPIDs))
+	pb, pa := permissionsOf(b), permissionsOf(a)
+	record("permissions.download", pb.Download == pa.Download, pb.Download, pa.Download)
+	record("permissions.delete", pb.Delete == pa.Delete, pb.Delete, pa.Delete)
+	record("permissions.explicitContent", pb.Explicit == pa.Explicit, pb.Explicit, pa.Explicit)
+	record("permissions.sharedOutputs", pb.SharedOutputs == pa.SharedOutputs, pb.SharedOutputs, pa.SharedOutputs)
+	record("permissions.managePodcasts", pb.ManagePodcasts == pa.ManagePodcasts, pb.ManagePodcasts, pa.ManagePodcasts)
+	record("permissions.maxTranscodeKbps", pb.MaxTranscodeKbps == pa.MaxTranscodeKbps,
+		pb.MaxTranscodeKbps, pa.MaxTranscodeKbps)
+	record("permissions.tagAllow", slices.Equal(pb.TagAllow, pa.TagAllow), rules(pb.TagAllow), rules(pa.TagAllow))
+	record("permissions.tagDeny", slices.Equal(pb.TagDeny, pa.TagDeny), rules(pb.TagDeny), rules(pa.TagDeny))
+	return changes
+}
+
+// What becomes of the playlists an account owns when it is deleted.
+const (
+	PlaylistsTransfer = "transfer"
+	PlaylistsDelete   = "delete"
+)
+
+// AccountDeletion says what DeleteAccount does with the account's
+// playlists.
+type AccountDeletion struct {
+	// Playlists is PlaylistsTransfer (the default) or PlaylistsDelete.
+	Playlists string
+	// TransferTo is the account id that takes the shared playlists; empty
+	// is the acting administrator.
+	TransferTo string
+}
+
+// AccountDeleted is what a deletion did, or had done when it stopped.
+type AccountDeleted struct {
+	PlaylistsTransferred int
+	PlaylistsDeleted     int
+	// PlaylistsFixed counts the transferred playlists that went over as
+	// fixed lists of the tracks they held, because their rules read the
+	// deleted account's own stars, ratings or plays, or name a private
+	// playlist that goes with it.
+	PlaylistsFixed int
+	// TransferredTo is the username of the account that took the shared
+	// playlists; empty when none moved.
+	TransferredTo string
+	// LinksEnded counts the public share links the account had serving,
+	// of its playlists and of anything else, which end with it.
+	LinksEnded int
+	// FixedCopiesRemoved and FixedCopiesKept are the API pids of the fixed
+	// copies of playlists that an earlier attempt left and this one dealt
+	// with: removed with the rest of the account's playlists, or, when the
+	// list they were made from has been deleted since, kept for the account
+	// that took the playlists. A copy that took its playlist's place in
+	// this attempt is not among them, it is a playlist handed over.
+	FixedCopiesRemoved []string
+	FixedCopiesKept    []string
+	// Disabled says this call disabled the account. A deletion that stops
+	// part-way leaves it disabled, for a retry to finish.
+	Disabled bool
+}
+
+// Changed says whether the call changed anything before it stopped or
+// finished: disabled the account, handed over or deleted a playlist, or
+// dealt with a copy an earlier attempt left.
+func (d AccountDeleted) Changed() bool {
+	return d.Disabled || d.PlaylistsTransferred > 0 || d.PlaylistsDeleted > 0 ||
+		len(d.FixedCopiesRemoved) > 0 || len(d.FixedCopiesKept) > 0
+}
+
+// DeleteAccount removes the account, after handing its shared playlists to
+// another account or deleting them, as opts says; its private ones are
+// deleted either way, since nobody else could see them. The catalog user
+// and its listening history are orphaned, not destroyed: history survives
+// an accidental delete-and-recreate, and an admin purge can reap orphans
+// later.
+//
+// The account is disabled first, by the update that refuses to disable
+// the last enabled administrator. That refusal therefore lands before a
+// playlist is touched, atomically, and the account can start nothing new
+// while its playlists, listed again once it is disabled, are settled. The
+// playlists go before the account, so a failure leaves a disabled account
+// that a retry can finish rather than playlists nobody can reach; the
+// result says what was done even when the error is not nil. Only one
+// deletion of an account runs at a time. The account's public share links
+// are not handed to anyone: they end with it.
+func (l *Library) DeleteAccount(ctx context.Context, actor *UserCtx, id string, opts AccountDeletion) (AccountDeleted, error) {
+	if _, running := l.deletingAccounts.LoadOrStore(id, struct{}{}); running {
+		return AccountDeleted{}, &Error{Kind: KindConflict, Msg: "this account is already being deleted"}
+	}
+	defer l.deletingAccounts.Delete(id)
 	u, err := l.db.UserByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
-			return errNotFound("no user with id " + id)
+			return AccountDeleted{}, errNotFound("no user with id " + id)
 		}
-		return &Error{Kind: KindInternal, Err: err}
+		return AccountDeleted{}, &Error{Kind: KindInternal, Err: err}
+	}
+	owned, err := l.ownedPlaylists(ctx, u)
+	if err != nil {
+		return AccountDeleted{}, err
+	}
+	taker, err := l.playlistTaker(ctx, actor, u, opts)
+	if err != nil {
+		return AccountDeleted{}, err
+	}
+	if taker == nil && opts.Playlists != PlaylistsDelete && slices.ContainsFunc(owned, sharedPlaylist) {
+		return AccountDeleted{}, errInvalid("name the account that takes the shared playlists")
 	}
 	removesAdmin := hasRole(u.Roles, "admin") && !u.Disabled
+	disabledHere := false
+	if !u.Disabled {
+		off := true
+		if _, err := l.UpdateAccount(ctx, id, AccountUpdate{Disabled: &off}); err != nil {
+			return AccountDeleted{}, err
+		}
+		disabledHere = true
+	}
+	if l.accountDisabledHook != nil {
+		l.accountDisabledHook(ctx)
+	}
+	// Listed again now the account can start nothing new: one made since
+	// the first look is settled with the rest.
+	if owned, err = l.ownedPlaylists(ctx, u); err != nil {
+		return AccountDeleted{Disabled: disabledHere}, err
+	}
+	if taker == nil && opts.Playlists != PlaylistsDelete && slices.ContainsFunc(owned, sharedPlaylist) {
+		return AccountDeleted{Disabled: disabledHere}, errInvalid("name the account that takes the shared playlists")
+	}
+	settled, err := l.settlePlaylists(ctx, u, owned, taker)
+	settled.Disabled = disabledHere
+	if err != nil {
+		return settled, err
+	}
+	// Counted before the rows go: the account's public links end with it,
+	// whatever they pointed at, and the record says how many.
+	ended, err := l.db.CountLiveShares(ctx, id, time.Now())
+	if err != nil {
+		return settled, &Error{Kind: KindInternal, Err: err}
+	}
 	if err := l.db.DeleteUser(ctx, id, removesAdmin); err != nil {
 		if errors.Is(err, wdb.ErrConflict) {
-			return &Error{Kind: KindConflict, Msg: "this is the last enabled administrator"}
+			return settled, &Error{Kind: KindConflict, Msg: "this is the last enabled administrator"}
 		}
 		if errors.Is(err, wdb.ErrNotFound) {
-			return errNotFound("no user with id " + id)
+			return settled, errNotFound("no user with id " + id)
 		}
-		return &Error{Kind: KindInternal, Err: err}
+		return settled, &Error{Kind: KindInternal, Err: err}
 	}
-	return nil
+	settled.LinksEnded = ended
+	if err := l.db.DeletePlaylistHandoversOf(ctx, id); err != nil {
+		l.log.Warn("clearing a deleted account's playlist handover records", "user", id, "err", err)
+	}
+	return settled, nil
+}
+
+func sharedPlaylist(pl *model.Playlist) bool { return pl.Visibility == model.VisibilityShared }
+
+// ownedPlaylists lists the playlists the catalog says the account owns.
+func (l *Library) ownedPlaylists(ctx context.Context, u *wdb.User) ([]*model.Playlist, error) {
+	// An empty pid names the catalog's default user, whose playlists are
+	// nobody's to take.
+	catalogUser := l.catalogPID(u)
+	if catalogUser == "" {
+		return nil, nil
+	}
+	all, err := l.lib.Playlists().List(ctx, model.PID(catalogUser))
+	if err != nil {
+		// A catalog user the catalog never made owns nothing.
+		if KindOf(classify(err)) == KindNotFound {
+			return nil, nil
+		}
+		return nil, classify(err)
+	}
+	return slices.DeleteFunc(all, func(pl *model.Playlist) bool {
+		return string(pl.OwnerPID) != catalogUser
+	}), nil
+}
+
+// playlistTaker resolves the account that takes a deleted account's
+// shared playlists: the one named, else the actor. Nil when the playlists
+// are deleted instead, and when there is no actor and nobody named, which
+// DeleteAccount refuses if there is anything to hand over.
+func (l *Library) playlistTaker(ctx context.Context, actor *UserCtx, victim *wdb.User, opts AccountDeletion) (*wdb.User, error) {
+	switch opts.Playlists {
+	case "", PlaylistsTransfer:
+	case PlaylistsDelete:
+		if opts.TransferTo != "" {
+			return nil, errInvalid("transferTo applies only when the playlists are transferred")
+		}
+		return nil, nil
+	default:
+		return nil, errInvalid("playlists must be transfer or delete")
+	}
+	takerID := opts.TransferTo
+	if takerID == "" && actor != nil {
+		takerID = actor.ID
+	}
+	if takerID == "" {
+		return nil, nil
+	}
+	if takerID == victim.ID {
+		return nil, errInvalid("the playlists cannot go to the account being deleted")
+	}
+	taker, err := l.db.UserByID(ctx, takerID)
+	switch {
+	case errors.Is(err, wdb.ErrNotFound):
+		return nil, errInvalid("no account with id " + takerID)
+	case err != nil:
+		return nil, &Error{Kind: KindInternal, Err: err}
+	case taker.Disabled:
+		return nil, errInvalid("that account is disabled")
+	case taker.Pending:
+		return nil, errInvalid("that signup has not been approved yet")
+	}
+	switch known, err := l.hasCatalogUser(ctx, taker); {
+	case err != nil:
+		return nil, err
+	case !known:
+		return nil, errInvalid("that account has no library user to own playlists")
+	}
+	return taker, nil
+}
+
+// settlePlaylists hands the shared playlists to taker, or deletes them
+// when taker is nil, and deletes the private ones. The handing over comes
+// first, while every playlist a rule of theirs might name still exists. A
+// shared playlist changing hands or going is news to every other account's
+// stream. A playlist someone else deleted meanwhile has nothing left to
+// settle. The result says what was done even when the error is not nil.
+func (l *Library) settlePlaylists(ctx context.Context, victim *wdb.User, owned []*model.Playlist, taker *wdb.User) (AccountDeleted, error) {
+	var out AccountDeleted
+	var handed, removed []*model.Playlist
+	leaving := map[model.PID]bool{}
+	for _, pl := range owned {
+		if taker != nil && sharedPlaylist(pl) {
+			handed = append(handed, pl)
+			continue
+		}
+		removed = append(removed, pl)
+		leaving[pl.PID] = true
+	}
+	for _, pl := range handed {
+		fixed, err := l.handOverPlaylist(ctx, victim, taker, pl, leaving)
+		if err != nil {
+			if err = l.unlessGone(ctx, pl, err); err != nil {
+				return out, err
+			}
+			continue
+		}
+		out.PlaylistsTransferred++
+		out.TransferredTo = taker.Username
+		l.announcePlaylist(ctx, victim.ID, string(pl.PID))
+		if fixed != "" {
+			out.PlaylistsFixed++
+			l.announcePlaylist(ctx, victim.ID, string(fixed))
+		}
+	}
+	for _, pl := range removed {
+		if err := l.removePlaylist(ctx, pl); err != nil {
+			if err = l.unlessGone(ctx, pl, err); err != nil {
+				return out, err
+			}
+			continue
+		}
+		out.PlaylistsDeleted++
+		if sharedPlaylist(pl) {
+			l.announcePlaylist(ctx, victim.ID, string(pl.PID))
+		}
+	}
+	// What earlier attempts left of playlists that are not handed over now.
+	if err := l.settleHandoverLeftovers(ctx, victim, taker, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// unlessGone drops the error for a playlist someone else deleted while an
+// account's were being settled. A not-found about a playlist that is still
+// there is about an account the catalog does not know, which is not the
+// account being deleted, whatever it says.
+func (l *Library) unlessGone(ctx context.Context, pl *model.Playlist, err error) error {
+	if KindOf(err) != KindNotFound {
+		return err
+	}
+	if l.playlistGone(ctx, pl.PID) {
+		return nil
+	}
+	return &Error{Kind: KindInternal, Err: err}
 }
 
 // SetAccountPassword replaces the account's password hash.

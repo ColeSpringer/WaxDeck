@@ -20,6 +20,9 @@ var jobNames = map[string][2]string{
 	"organize":    {"Organize finished", "Organize failed"},
 	"empty-trash": {"Trash emptied", "Emptying the trash failed"},
 	"set-kind":    {"Kind changed", "Changing the kind failed"},
+
+	"organize-undo": {"Organize undone", "Undoing the organize failed"},
+	"remove-root":   {"Library removed", "Removing the library failed"},
 }
 
 func jobTitle(kind string, failed bool) string {
@@ -45,10 +48,14 @@ func jobSubject(kind string) string {
 		return "Analysis"
 	case "organize":
 		return "Organize"
+	case "organize-undo":
+		return "Organize undo"
 	case "empty-trash":
 		return "Trash"
 	case "set-kind":
 		return "Kind change"
+	case "remove-root":
+		return "Library removal"
 	}
 	return "Library job"
 }
@@ -107,6 +114,10 @@ func jobBody(j Job) string {
 			body += fmt.Sprintf(", %d not written", n)
 		}
 		return body
+	case j.RemoveRoot != nil:
+		r := j.RemoveRoot
+		return fmt.Sprintf("%s: %d detached, %d archived; the files stay on disk",
+			subject, r.FilesDetached, r.ItemsArchived)
 	}
 	return subject + " finished"
 }

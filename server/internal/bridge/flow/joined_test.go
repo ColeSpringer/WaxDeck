@@ -174,6 +174,7 @@ func newJoinedBridge(t *testing.T, engine http.HandlerFunc, bk *book) (*Bridge, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	connect(t, b)
 	gate := &fakeGate{}
 	b.SetTranscodeGate(gate)
 	return b, gate

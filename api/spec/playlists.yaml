@@ -399,7 +399,10 @@ paths:
     delete:
       operationId: deletePlaylist
       summary: Delete a playlist
-      description: Deletes a playlist. Owner only.
+      description: >
+        Deletes a playlist. Owner only, except that an administrator may
+        also delete any shared playlist (the audit entry names its
+        owner). Another account's private playlist reads as absent.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"

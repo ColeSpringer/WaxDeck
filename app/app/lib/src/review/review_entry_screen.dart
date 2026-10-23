@@ -541,7 +541,7 @@ class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
           WaxButton(
             label: l10n.reviewSearchToggle,
             kind: WaxButtonKind.text,
-            icon: _open ? WaxIcons.collapse : WaxIcons.expand,
+            icon: _open ? WaxIcons.collapse : WaxIcons.forward,
             semanticsId: SemanticsIds.reviewIdentifyToggle,
             onPressed: () => setState(() => _open = !_open),
           ),

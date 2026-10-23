@@ -31,6 +31,12 @@ class _$LibraryCreated extends LibraryCreated {
   final bool managed;
   @override
   final String? profile;
+  @override
+  final bool? configured;
+  @override
+  final bool? unreachable;
+  @override
+  final bool? writable;
 
   factory _$LibraryCreated([void Function(LibraryCreatedBuilder)? updates]) =>
       (LibraryCreatedBuilder()..update(updates))._build();
@@ -48,6 +54,9 @@ class _$LibraryCreated extends LibraryCreated {
     this.folderFallback,
     required this.managed,
     this.profile,
+    this.configured,
+    this.unreachable,
+    this.writable,
   }) : super._();
   @override
   LibraryCreated rebuild(void Function(LibraryCreatedBuilder) updates) =>
@@ -71,7 +80,10 @@ class _$LibraryCreated extends LibraryCreated {
         readOnly == other.readOnly &&
         folderFallback == other.folderFallback &&
         managed == other.managed &&
-        profile == other.profile;
+        profile == other.profile &&
+        configured == other.configured &&
+        unreachable == other.unreachable &&
+        writable == other.writable;
   }
 
   @override
@@ -89,6 +101,9 @@ class _$LibraryCreated extends LibraryCreated {
     _$hash = $jc(_$hash, folderFallback.hashCode);
     _$hash = $jc(_$hash, managed.hashCode);
     _$hash = $jc(_$hash, profile.hashCode);
+    _$hash = $jc(_$hash, configured.hashCode);
+    _$hash = $jc(_$hash, unreachable.hashCode);
+    _$hash = $jc(_$hash, writable.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -107,7 +122,10 @@ class _$LibraryCreated extends LibraryCreated {
           ..add('readOnly', readOnly)
           ..add('folderFallback', folderFallback)
           ..add('managed', managed)
-          ..add('profile', profile))
+          ..add('profile', profile)
+          ..add('configured', configured)
+          ..add('unreachable', unreachable)
+          ..add('writable', writable))
         .toString();
   }
 }
@@ -170,6 +188,19 @@ class LibraryCreatedBuilder
   String? get profile => _$this._profile;
   set profile(covariant String? profile) => _$this._profile = profile;
 
+  bool? _configured;
+  bool? get configured => _$this._configured;
+  set configured(covariant bool? configured) => _$this._configured = configured;
+
+  bool? _unreachable;
+  bool? get unreachable => _$this._unreachable;
+  set unreachable(covariant bool? unreachable) =>
+      _$this._unreachable = unreachable;
+
+  bool? _writable;
+  bool? get writable => _$this._writable;
+  set writable(covariant bool? writable) => _$this._writable = writable;
+
   LibraryCreatedBuilder() {
     LibraryCreated._defaults(this);
   }
@@ -189,6 +220,9 @@ class LibraryCreatedBuilder
       _folderFallback = $v.folderFallback;
       _managed = $v.managed;
       _profile = $v.profile;
+      _configured = $v.configured;
+      _unreachable = $v.unreachable;
+      _writable = $v.writable;
       _$v = null;
     }
     return this;
@@ -239,6 +273,9 @@ class LibraryCreatedBuilder
             'managed',
           ),
           profile: profile,
+          configured: configured,
+          unreachable: unreachable,
+          writable: writable,
         );
     replace(_$result);
     return _$result;

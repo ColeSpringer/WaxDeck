@@ -31,7 +31,7 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   'unauthenticated' => l.errorUnauthenticated,
   'forbidden' => l.errorForbidden,
   'not-found' => l.errorNotFound,
-  'conflict' => l.errorConflict,
+  'conflict' => _conflict(l, e) ?? l.errorConflict,
   'internal' => l.errorInternal,
   'rate-limited' => l.errorRateLimited,
   'stream-stale' => l.errorStreamStale,
@@ -49,6 +49,7 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   'endpoint-failed' => l.errorEndpointFailed,
   'quota-exceeded' => l.errorQuotaExceeded,
   'storage-full' => l.errorStorageFull,
+  'storage-unwritable' => l.errorStorageUnwritable,
   'field-locked' => l.errorFieldLocked,
   'unsupported-format' => switch (e.params?['reason']) {
     'unreadable' => l.errorUnreadableFile,
@@ -166,6 +167,46 @@ String? _invalidRequest(AppLocalizations l, WaxDeckApiException e) =>
         _ => null,
       };
 
+/// The sentence for a `conflict` whose params say which refusal it is: a
+/// file tool refused before it was queued. Null for any other, which
+/// the table's `conflict` sentence answers.
+String? _conflict(AppLocalizations l, WaxDeckApiException e) {
+  final p = e.params ?? const <String, String>{};
+  return switch (p['reason']) {
+    'single-file' => l.errorBookToolSingleFile,
+    'multi-file' => l.errorBookToolMultiFile,
+    'no-chapters' => l.errorBookToolNoChapters,
+    'no-cuts' => l.errorBookToolNoCuts,
+    'no-sample-rate' => l.errorBookToolNoSampleRate,
+    'no-file' => l.errorBookToolNoFile,
+    'no-sheet' => l.errorCueSplitNoSheet,
+    'name-taken' => l.errorBookToolNameTaken(
+      p['name'] ?? '',
+      p['folder'] ?? '',
+    ),
+    'copy-elsewhere' => switch (p['library']) {
+      final library? when library.isNotEmpty => l.errorBookToolCopyElsewhereIn(
+        p['copy'] ?? '',
+        library,
+      ),
+      _ => l.errorBookToolCopyElsewhere(p['copy'] ?? ''),
+    },
+    'task-running' => l.errorToolTaskRunning,
+    'task-parked' => l.errorToolTaskParked,
+    'parts-in-trash' => l.errorBookToolPartsInTrash(
+      int.tryParse(p['count'] ?? '') ??
+          (p['files'] ?? '').split(', ').where((f) => f.isNotEmpty).length,
+      p['files'] ?? '',
+      int.tryParse(p['more'] ?? '') ?? 0,
+    ),
+    'outputs-hidden' => l.errorToolOutputsHidden(
+      p['folder'] ?? '',
+      p['cause'] ?? '',
+    ),
+    _ => null,
+  };
+}
+
 /// The sentence for how the feed side failed, by the `reason` a
 /// `feed-unreachable` or an import entry carries, or null to keep the
 /// server's words.
@@ -211,5 +252,6 @@ String _featureUnavailable(AppLocalizations l, WaxDeckApiException e) =>
     switch (e.params?['feature']) {
       'windowed-track' => l.errorWindowedTrack,
       'podcasts' => l.errorPodcastsOff,
+      'streaming-engine' => l.errorStreamingEngine,
       _ => l.errorFeatureUnavailable,
     };

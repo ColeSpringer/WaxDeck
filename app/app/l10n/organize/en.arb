@@ -23,6 +23,10 @@
   "@organizeColumnTo": {
     "description": "Column of the dry-run table: where the profile would put it."
   },
+  "organizeColumnWhy": "Why",
+  "@organizeColumnWhy": {
+    "description": "Column heading for why a move is held back."
+  },
   "organizeConfirmMessage": "Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.",
   "@organizeConfirmMessage": {
     "description": "Body of the typed confirmation before files are moved."
@@ -34,6 +38,16 @@
   "organizeConfirmTitle": "Apply organize profile?",
   "@organizeConfirmTitle": {
     "description": "Title of the typed confirmation before files are moved."
+  },
+  "organizeDirsPruned": "{count, plural, =1{1 emptied folder removed} other{{count} emptied folders removed}}",
+  "@organizeDirsPruned": {
+    "description": "Under a finished run: source folders its moves left empty, which it removed.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   },
   "organizeDiscard": "Discard preview",
   "@organizeDiscard": {
@@ -78,6 +92,100 @@
   "organizeHint": "Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.",
   "@organizeHint": {
     "description": "Drawn where the plan or the report goes, before either exists."
+  },
+  "organizeHistoryMore": "Show older runs",
+  "@organizeHistoryMore": {
+    "description": "Button under the organize history that lists the next, older page of runs. Shown while the server holds older ones."
+  },
+  "organizeHistoryOverline": "Every run can be undone while its journal lasts",
+  "@organizeHistoryOverline": {
+    "description": "Overline of the list of runs: the scheduled prune drops a run's journal, and its undo, after the task retention window."
+  },
+  "organizeHistoryRow": "Organize - {moved} moved - {when}",
+  "@organizeHistoryRow": {
+    "description": "One organize run in the history: how many files it moved, and when it started.",
+    "placeholders": {
+      "moved": {
+        "type": "int",
+        "example": "382"
+      },
+      "when": {
+        "type": "String",
+        "example": "Oct 21, 2026 9:14 PM"
+      }
+    }
+  },
+  "organizeHistoryTitle": "History",
+  "@organizeHistoryTitle": {
+    "description": "Heading over the organize runs the server can still undo."
+  },
+  "organizeHistoryUndoRow": "Undo - {moved} moved back - {when}",
+  "@organizeHistoryUndoRow": {
+    "description": "One undo of a run in the history: how many files it moved back, and when it started.",
+    "placeholders": {
+      "moved": {
+        "type": "int",
+        "example": "382"
+      },
+      "when": {
+        "type": "String",
+        "example": "Oct 21, 2026 9:14 PM"
+      }
+    }
+  },
+  "organizeHoldBookHeld": "Another part of its book is held",
+  "@organizeHoldBookHeld": {
+    "description": "Why a move is held back: a book moves whole, and another of its parts cannot move."
+  },
+  "organizeHoldCollision": "Another file in this run takes the destination",
+  "@organizeHoldCollision": {
+    "description": "Why a move is held back: another move of the same run claims the place first."
+  },
+  "organizeHoldMissing": "The file is not on disk",
+  "@organizeHoldMissing": {
+    "description": "Why a move is held back: the catalog's file is gone from the disk."
+  },
+  "organizeHoldMovedSince": "Moved again since that run",
+  "@organizeHoldMovedSince": {
+    "description": "Why an undo leaves a file where it is: it moved again after the run being undone."
+  },
+  "organizeHoldOccupied": "The destination is already taken",
+  "@organizeHoldOccupied": {
+    "description": "Why a move is held back: a file the run does not move already holds the place."
+  },
+  "organizeHoldOccupiedCase": "A file named the same except for case stands beside it",
+  "@organizeHoldOccupiedCase": {
+    "description": "Why a move is held back: a file whose name differs from the destination only by letter case or accents sits in the folder."
+  },
+  "organizeHoldReadOnly": "The library is read-only",
+  "@organizeHoldReadOnly": {
+    "description": "Why a run or an undo held a file back: its library is read-only."
+  },
+  "organizeHoldServerReadOnly": "The server is read-only",
+  "@organizeHoldServerReadOnly": {
+    "description": "Why a dry run holds a move back: the whole server is read-only."
+  },
+  "organizeHoldUncataloged": "The catalog no longer holds the file",
+  "@organizeHoldUncataloged": {
+    "description": "Why an undo leaves a file where it is: the catalog dropped the file after the run."
+  },
+  "organizeHoldUntagged": "No artist or album to file it under",
+  "@organizeHoldUntagged": {
+    "description": "Why a move is held back: the item has no artist, album artist or album for the profile to file it under."
+  },
+  "organizeHoldVirtual": "A cue rip's shared file stays where it is",
+  "@organizeHoldVirtual": {
+    "description": "Why a move is held back: the file is one cue rip carrying several tracks."
+  },
+  "organizeHoldsTitle": "{count, plural, =1{1 move held back} other{{count} moves held back}}",
+  "@organizeHoldsTitle": {
+    "description": "Heading over the moves the dry run holds back, each with why.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
   },
   "organizeLoadError": "Could not load organize profiles",
   "@organizeLoadError": {
@@ -312,5 +420,31 @@
   "organizeTitle": "Organize files",
   "@organizeTitle": {
     "description": "Title of the screen that rewrites the library's on-disk layout."
+  },
+  "organizeUndo": "Undo moves",
+  "@organizeUndo": {
+    "description": "A run's control in the history: moves the files it moved back where it found them, behind a typed confirmation."
+  },
+  "organizeUndoConfirmMessage": "Every file it moved goes back where it was found, with its sidecars; a file moved again since stays where it is.",
+  "@organizeUndoConfirmMessage": {
+    "description": "Body of the typed confirmation before a run is undone."
+  },
+  "organizeUndoConfirmTitle": "Undo this run?",
+  "@organizeUndoConfirmTitle": {
+    "description": "Title of the typed confirmation before a run is undone."
+  },
+  "organizeUndoWord": "UNDO",
+  "@organizeUndoWord": {
+    "description": "The word typed to confirm an undo; typed as shown, so keep it one plain word."
+  },
+  "organizeUndone": "{count, plural, =1{1 file moved back} other{{count} files moved back}}",
+  "@organizeUndone": {
+    "description": "Said when an undo ends: how many files went back where the run found them.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "382"
+      }
+    }
   }
 }

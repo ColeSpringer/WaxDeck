@@ -37,6 +37,14 @@ extension WaxFormats on AppLocalizations {
   String formatStamp(DateTime at) =>
       _stampFormat(localeName).format(at.toLocal());
 
+  /// A time of day: "3:04 PM", "15:04".
+  ///
+  /// In local time, as [formatStamp]. For a moment within the hour or
+  /// so, where the day goes without saying and a countdown would be
+  /// wrong as soon as the screen stood still.
+  String formatTimeOfDay(DateTime at) =>
+      _timeFormat(localeName).format(at.toLocal());
+
   /// A day without its year: "Aug 12".
   ///
   /// For a list whose rows are read in the order they arrived, where the
@@ -178,7 +186,7 @@ extension WaxFormats on AppLocalizations {
   }
 }
 
-/// The four patterns this app draws, one instance per locale.
+/// The patterns this app draws, one instance per locale.
 ///
 /// Constructing a `DateFormat` parses its skeleton and verifies its
 /// locale, which intl's own source calls an expensive operation and does
@@ -191,6 +199,10 @@ final Map<String, DateFormat> _stampCache = <String, DateFormat>{};
 final Map<String, DateFormat> _monthDayCache = <String, DateFormat>{};
 final Map<String, DateFormat> _numericCache = <String, DateFormat>{};
 final Map<String, DateFormat> _monthInitialCache = <String, DateFormat>{};
+final Map<String, DateFormat> _timeCache = <String, DateFormat>{};
+
+DateFormat _timeFormat(String locale) =>
+    _timeCache[locale] ??= DateFormat.jm(locale);
 
 /// The standalone narrow month, which is the axis label's case: `LLLLL`
 /// rather than `MMMMM`, because a label stands on its own rather than

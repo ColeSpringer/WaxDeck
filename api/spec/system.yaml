@@ -6,7 +6,12 @@ paths:
       summary: Liveness and version probe
       description: >
         Unauthenticated liveness probe. Reports the server version and the API
-        version it serves.
+        version it serves, the streaming engine's state, and whether podcasts
+        are on. The server answers healthy whether or not its streaming
+        engine does: an engine that is configured but not reachable is
+        retried in the background, originals play directly meanwhile, and
+        the pid-less `server` sync marker tells signed-in clients when the
+        engine goes away or comes back.
       tags: [system]
       security: []
       responses:
@@ -61,3 +66,47 @@ components:
           items:
             type: string
           example: [aax, aaxc]
+        streaming:
+          allOf:
+            - $ref: "#/components/schemas/StreamingEngineState"
+          description: >
+            The streaming engine as the server sees it now. Absent on
+            servers older than the field.
+        podcasts:
+          type: boolean
+          description: >
+            False when this server has podcasts turned off: every
+            subscribe is refused, so clients hide the podcast entry
+            points. Absent on servers older than the field.
+
+    StreamingEngineState:
+      type: object
+      description: >
+        Whether the streaming engine is set up, answering, and what it
+        offers. Without it, originals play directly: no transcoding, no
+        gapless queue timelines, no voice boost, and no file tools.
+      required: [configured, connected, timelines, voiceBoost, fileTools]
+      properties:
+        configured:
+          type: boolean
+          description: An engine URL is set.
+        connected:
+          type: boolean
+          description: >
+            The engine answered its capabilities and is being probed.
+            False while a configured engine is not reachable.
+        timelines:
+          type: boolean
+          description: >
+            It renders a queue as one gapless timeline. False while not
+            connected.
+        voiceBoost:
+          type: boolean
+          description: >
+            It applies voice boost to spoken word. False while not
+            connected.
+        fileTools:
+          type: boolean
+          description: >
+            It runs the file tools (book merge and split, cue splits) and
+            the silence analysis trimming reads. False while not connected.

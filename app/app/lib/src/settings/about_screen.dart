@@ -1,21 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
-import '../providers.dart';
 import '../shell/app_version.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-
-/// The server's own version, read once per settings visit.
-///
-/// `GET /health` is unauthenticated and cheap, and the numbers on it are
-/// the first thing anybody filing a bug is asked for.
-final serverHealthProvider = FutureProvider<ServerHealth>(
-  (ref) => ref.watch(repositoryProvider).health(),
-);
+import '../shell/server_health.dart';
 
 /// The row that opens About, for the two places that offer it.
 ///

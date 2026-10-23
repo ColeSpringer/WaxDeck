@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -24,6 +25,9 @@ func toolTaskJSON(d service.ToolTaskDTO) ToolTask {
 	if d.ItemPID != "" {
 		out.ItemPid = ptr(d.ItemPID)
 	}
+	if d.ItemTitle != "" {
+		out.ItemTitle = ptr(d.ItemTitle)
+	}
 	if d.ProgressPct > 0 {
 		out.ProgressPct = ptr(d.ProgressPct)
 	}
@@ -35,6 +39,13 @@ func toolTaskJSON(d service.ToolTaskDTO) ToolTask {
 	}
 	if d.FinishedAtNS > 0 {
 		out.FinishedAt = ptr(time.Unix(0, d.FinishedAtNS).UTC())
+	}
+	if d.WaitReason != "" {
+		out.WaitReason = ptr(d.WaitReason)
+		out.RetryAt = ptr(time.Unix(0, d.RetryAtNS).UTC())
+	}
+	if d.BookInTrash {
+		out.BookInTrash = ptr(true)
 	}
 	return out
 }
@@ -61,9 +72,12 @@ func (s *Server) MergeBook(ctx context.Context, req MergeBookRequestObject) (Mer
 			return MergeBook403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
 			return MergeBook404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such book"))}, nil
-		case service.KindConflict:
-			return MergeBook409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		case service.KindConflict, service.KindReadOnly, service.KindStorageUnwritable:
+			return MergeBook409JSONResponse(toolRefusalObj(err)), nil
 		case service.KindFeature:
+			if s.engineIsAway() {
+				return MergeBook503JSONResponse{toolEngineAway(err)}, nil
+			}
 			return MergeBook501JSONResponse{FeatureUnavailableJSONResponse(errObj("feature-unavailable", err.Error()))}, nil
 		}
 		return nil, err
@@ -89,14 +103,42 @@ func (s *Server) SplitBook(ctx context.Context, req SplitBookRequestObject) (Spl
 			return SplitBook403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
 			return SplitBook404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such book"))}, nil
-		case service.KindConflict:
-			return SplitBook409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		case service.KindConflict, service.KindReadOnly, service.KindStorageUnwritable:
+			return SplitBook409JSONResponse(toolRefusalObj(err)), nil
 		case service.KindFeature:
+			if s.engineIsAway() {
+				return SplitBook503JSONResponse{toolEngineAway(err)}, nil
+			}
 			return SplitBook501JSONResponse{FeatureUnavailableJSONResponse(errObj("feature-unavailable", err.Error()))}, nil
 		}
 		return nil, err
 	}
 	return SplitBook202JSONResponse(toolTaskJSON(task)), nil
+}
+
+// engineIsAway reports a configured streaming engine that is not answering,
+// read off the bridge as /health reads it.
+func (s *Server) engineIsAway() bool {
+	return s.bridge != nil && !s.bridge.Status().Connected
+}
+
+// toolEngineAway is a file tool refused while its configured engine is
+// away: the outage's answer, naming the engine and when to ask again,
+// not the 501 of a server that has none.
+func toolEngineAway(err error) EngineAwayOrMaintenanceJSONResponse {
+	e := errObj("feature-unavailable", err.Error())
+	e.Params = &map[string]string{"feature": flow.FeatureStreamingEngine}
+	return EngineAwayOrMaintenanceJSONResponse{Body: e, Headers: EngineAwayOrMaintenanceResponseHeaders{RetryAfter: ptr(flow.EngineRetrySeconds)}}
+}
+
+// toolRefusalObj is a file tool refused before it was queued: its code,
+// the service's sentence, and the reason it carries for a client to word.
+func toolRefusalObj(err error) Error {
+	e := errObj(string(service.KindOf(err)), err.Error())
+	if p := service.RefusalParams(err); len(p) > 0 {
+		e.Params = &p
+	}
+	return e
 }
 
 func (s *Server) SplitCueRip(ctx context.Context, req SplitCueRipRequestObject) (SplitCueRipResponseObject, error) {
@@ -117,9 +159,12 @@ func (s *Server) SplitCueRip(ctx context.Context, req SplitCueRipRequestObject) 
 			return SplitCueRip403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
 			return SplitCueRip404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such item"))}, nil
-		case service.KindConflict:
-			return SplitCueRip409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		case service.KindConflict, service.KindReadOnly:
+			return SplitCueRip409JSONResponse(toolRefusalObj(err)), nil
 		case service.KindFeature:
+			if s.engineIsAway() {
+				return SplitCueRip503JSONResponse{toolEngineAway(err)}, nil
+			}
 			return SplitCueRip501JSONResponse{FeatureUnavailableJSONResponse(errObj("feature-unavailable", err.Error()))}, nil
 		}
 		return nil, err
@@ -178,7 +223,9 @@ func (s *Server) DeleteToolTask(ctx context.Context, req DeleteToolTaskRequestOb
 		case service.KindNotFound:
 			return DeleteToolTask404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such task"))}, nil
 		case service.KindConflict:
-			return DeleteToolTask409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+			// A clear kept for the files it could not settle names the
+			// reason, for a client to word.
+			return DeleteToolTask409JSONResponse{ConflictJSONResponse(toolRefusalObj(err))}, nil
 		}
 		return nil, err
 	}
@@ -190,9 +237,19 @@ func (s *Server) ClearFinishedToolTasks(ctx context.Context, req ClearFinishedTo
 	if err != nil {
 		return nil, err
 	}
-	deleted, err := s.svc.ClearFinishedToolTasksFor(ctx, uc)
+	scope := service.ToolTasksMine
+	if req.Body != nil && req.Body.Scope != nil {
+		if !req.Body.Scope.Valid() {
+			return ClearFinishedToolTasks400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "scope must be mine or all"))}, nil
+		}
+		scope = service.ToolTaskScope(*req.Body.Scope)
+	}
+	deleted, kept, err := s.svc.ClearFinishedToolTasksFor(ctx, uc, scope)
 	if err != nil {
+		if service.KindOf(err) == service.KindForbidden {
+			return ClearFinishedToolTasks403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
 		return nil, err
 	}
-	return ClearFinishedToolTasks200JSONResponse(ToolTasksCleared{Deleted: deleted}), nil
+	return ClearFinishedToolTasks200JSONResponse(ToolTasksCleared{Deleted: deleted, Kept: kept}), nil
 }

@@ -149,7 +149,8 @@ whether your subject is really the app.
 ## Projects
 
 ```
-setup → wave → mutators-uploads → mutators-admin → mutators-readonly → motion-smoke → focus-a11y
+setup -> wave -> mutators-playlist-sync -> mutators-uploads -> mutators-admin
+  -> mutators-jobs -> mutators-readonly -> mutators-engine -> motion-smoke -> focus-a11y
 ```
 
 `wave` is everything that owns its own state, four workers wide. The
@@ -158,7 +159,13 @@ disk, the trash, the library table, the admin settings row - and uploads
 runs before the console because the read-only switch refuses every upload
 while it is on. `mutators-admin` runs parallel except its backup pair
 (serial by declaration); `mutators-readonly` holds the read-only window
-alone, so nothing else ever meets a refusing server. motion-smoke sits
+alone, so nothing else ever meets a refusing server. `mutators-engine`
+stops the streaming sidecar under the whole stack and continues it, so it
+runs alone too: nothing else may be streaming through the engine while it
+is away. It signals only the pid `run-stack.sh` wrote to
+`.run/sidecar.pid`, and only while that pid is a live sidecar; the script
+removes the file when the stack exits (Playwright stops it with SIGTERM,
+which the script traps), and the spec skips against any other stack. motion-smoke sits
 before the focus projects on purpose - they fight the OS for focus and
 are the flake-prone tail, and a late failure there must not cost the one
 unreduced-motion pass. `feishin` and `sso-dex` join only when their
@@ -174,7 +181,11 @@ like a missing feature.
 
 The config's `webServer` starts `server/waxdeck` and waits on
 `/api/v1/health`; set `WAXDECK_BASE_URL` to target an already-running
-instance instead, in which case `make e2e` rebuilds nothing. A second,
+instance instead, in which case `make e2e` rebuilds nothing. The server
+answers that before its streaming engine connects (the sidecar starts by
+waiting for the catalog the server creates), so `globalSetup`
+(`tests/support/engine-ready.ts`) then waits, up to 120 s, for `/health`
+to say the engine connected before the first test runs. A second,
 rootless server (`run-wizard-stack.sh`, port 4430, no sidecar) backs
 the `wizard` project alone: the first-run wizard's entry condition - an
 administrator whose server has no libraries - can never hold on the

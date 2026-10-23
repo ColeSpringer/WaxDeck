@@ -88,6 +88,23 @@ void main() {
     expect(bridge.stale, isFalse);
   });
 
+  test('a stream only the engine makes, refused while it is away, is too', () {
+    final refusal = read(
+      503,
+      '{"code":"feature-unavailable",'
+      '"message":"the streaming engine is not reachable right now",'
+      '"params":{"feature":"streaming-engine"}}',
+    ).refusal!;
+    expect(refusal.engineDown, isTrue);
+    expect(refusal.stale, isFalse);
+    final other = read(
+      503,
+      '{"code":"feature-unavailable","message":"no",'
+      '"params":{"feature":"podcasts"}}',
+    ).refusal!;
+    expect(other.engineDown, isFalse);
+  });
+
   test('only the server\'s word that its engine is away is engine down', () {
     // The podcast and station proxies answer a host behind the server
     // being away with a 502 of their own, which no mint reaches past.

@@ -65,8 +65,10 @@ type streamer interface {
 type Handler struct {
 	svc *service.Library
 	// bridge may hold a nil *flow.Bridge, which answers Up false: ask Up,
-	// never compare the field with nil.
+	// never compare the field with nil. engine says whether one is
+	// configured at all, which Up cannot tell from one that is away.
 	bridge  streamer
+	engine  bool
 	media   *auth.MediaTokens
 	version string
 	log     *slog.Logger
@@ -140,7 +142,7 @@ const playlistTotalsCap = 4096
 // (media mints the tokens), refusing only span-carved tracks it
 // cannot cut.
 func New(svc *service.Library, bridge *flow.Bridge, media *auth.MediaTokens, version string, log *slog.Logger) *Handler {
-	return &Handler{svc: svc, bridge: bridge, media: media, version: version, log: log}
+	return &Handler{svc: svc, bridge: bridge, engine: bridge != nil, media: media, version: version, log: log}
 }
 
 // SessionSource is the slice of the connect subsystem getNowPlaying reads.
@@ -782,58 +784,8 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 		h.fail(w, r, 70, "no such song")
 		return
 	}
-	// Without the streaming engine the original bytes serve directly.
-	// Subsonic clients cannot clip, so a track carved out of a larger
-	// file is the one thing this mode must refuse.
 	if !h.bridge.Up() {
-		if h.media == nil {
-			h.fail(w, r, 0, "streaming is not configured on this server")
-			return
-		}
-		// A book in parts streams as one where no encode is needed: parts
-		// all MP3 at one rate and one channel count join frame by frame.
-		// Any other plays its first part, named, since the download route
-		// serves a book in parts one file at a time.
-		var parts []flow.Part
-		if book {
-			if parts, err = h.svc.StreamParts(r.Context(), id); err != nil {
-				h.failFromService(w, r, err, "no such song")
-				return
-			}
-		}
-		if service.JoinableMP3(parts) {
-			token, _ := h.media.MintFor(auth.MediaClaims{
-				User: uc.ID, Cred: credOf(r), Purpose: auth.PurposeStream, PID: id, Shape: service.JoinShape,
-			}, 0)
-			http.Redirect(w, r, "/media/download?pid="+url.QueryEscape(id)+
-				"&mt="+url.QueryEscape(token)+"&"+service.JoinShape, http.StatusFound)
-			return
-		}
-		part := ""
-		if len(parts) > 1 {
-			part = parts[0].FilePID
-		}
-		res, err := h.svc.DirectPlayInfo(r.Context(), uc, id, part)
-		if err != nil {
-			if h.redirectToEnclosure(w, r, uc.ID, id, err) {
-				return
-			}
-			h.failFromService(w, r, err, "no such song")
-			return
-		}
-		if res.HasSpan {
-			h.fail(w, r, 0, "this track is a window into a larger file; playing it needs the streaming engine")
-			return
-		}
-		token, _ := h.media.MintFor(auth.MediaClaims{
-			User: uc.ID, Cred: credOf(r), Purpose: auth.PurposeStream, PID: id,
-		}, 0)
-		loc := "/media/download?pid=" + url.QueryEscape(id) + "&mt=" + url.QueryEscape(token) +
-			"&id=" + url.QueryEscape(res.File.ETag)
-		if part != "" {
-			loc += "&f=" + url.QueryEscape(part)
-		}
-		http.Redirect(w, r, loc, http.StatusFound)
+		h.streamDirect(w, r, uc, id, book)
 		return
 	}
 	format := strings.ToLower(strings.TrimSpace(r.Form.Get("format")))
@@ -845,7 +797,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 			return
 		}
 		if len(parts) > 1 {
-			h.streamBook(w, r, uc.ID, id, format, parts)
+			h.streamBook(w, r, uc, id, format, parts)
 			return
 		}
 	}
@@ -881,6 +833,10 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 		opts.CutOriginal = true
 	}
 	info, err := h.bridge.PlayInfoFor(r.Context(), uc.ID, id, opts)
+	if errors.Is(err, flow.ErrEngineDown) {
+		h.streamDirect(w, r, uc, id, book)
+		return
+	}
 	if err != nil {
 		// An episode the server has not fetched is relayed as the feed's
 		// own file, which no offset cuts. Handed over from its top, it
@@ -902,6 +858,70 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	http.Redirect(w, r, info.URL, http.StatusFound)
 }
 
+// streamDirect serves the original bytes, by redirect to the download
+// route: what a server without the streaming engine always does, and one
+// whose engine is away does until it answers. Subsonic clients cannot
+// clip, so a track carved out of a larger file is the one thing this
+// must refuse; and an offset is refused while the engine is away, since
+// a client positioning by timeOffset alone would read its clock as the
+// place it asked for while the file plays from its top.
+func (h *Handler) streamDirect(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, id string, book bool) {
+	if h.media == nil {
+		h.fail(w, r, 0, "streaming is not configured on this server")
+		return
+	}
+	raw := strings.ToLower(strings.TrimSpace(r.Form.Get("format"))) == "raw"
+	if _, offset := timeOffsetMS(r); offset && h.engine && !raw {
+		h.fail(w, r, 0, "the streaming engine is not reachable right now, so this cannot start part way in")
+		return
+	}
+	// A book in parts streams as one where no encode is needed: parts
+	// all MP3 at one rate and one channel count join frame by frame.
+	// Any other plays its first part, named, since the download route
+	// serves a book in parts one file at a time.
+	var parts []flow.Part
+	if book {
+		var err error
+		if parts, err = h.svc.StreamParts(r.Context(), id); err != nil {
+			h.failFromService(w, r, err, "no such song")
+			return
+		}
+	}
+	if service.JoinableMP3(parts) {
+		token, _ := h.media.MintFor(auth.MediaClaims{
+			User: uc.ID, Cred: credOf(r), Purpose: auth.PurposeStream, PID: id, Shape: service.JoinShape,
+		}, 0)
+		http.Redirect(w, r, "/media/download?pid="+url.QueryEscape(id)+
+			"&mt="+url.QueryEscape(token)+"&"+service.JoinShape, http.StatusFound)
+		return
+	}
+	part := ""
+	if len(parts) > 1 {
+		part = parts[0].FilePID
+	}
+	res, err := h.svc.DirectPlayInfo(r.Context(), uc, id, part)
+	if err != nil {
+		if h.redirectToEnclosure(w, r, uc.ID, id, err) {
+			return
+		}
+		h.failFromService(w, r, err, "no such song")
+		return
+	}
+	if res.HasSpan {
+		h.fail(w, r, 0, "this track is a window into a larger file; playing it needs the streaming engine")
+		return
+	}
+	token, _ := h.media.MintFor(auth.MediaClaims{
+		User: uc.ID, Cred: credOf(r), Purpose: auth.PurposeStream, PID: id,
+	}, 0)
+	loc := "/media/download?pid=" + url.QueryEscape(id) + "&mt=" + url.QueryEscape(token) +
+		"&id=" + url.QueryEscape(res.File.ETag)
+	if part != "" {
+		loc += "&f=" + url.QueryEscape(part)
+	}
+	http.Redirect(w, r, loc, http.StatusFound)
+}
+
 // streamBook redirects to a book in parts, laid out as parts, as the one
 // stream the client plays it as: from the part its offset falls in,
 // resolved as play-info resolves it and cut from inside, through the last
@@ -909,7 +929,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 // joins the parts, so a format is a preference it overrides, and raw, the
 // file as it is, which such a book has none of, still gets the book from
 // its offset, at the book's own rate rather than a cap.
-func (h *Handler) streamBook(w http.ResponseWriter, r *http.Request, userID, id, format string, parts []service.PlayPart) {
+func (h *Handler) streamBook(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, id, format string, parts []service.PlayPart) {
 	opts := flow.PlayOptions{Cred: credOf(r)}
 	if br := formInt(r, "maxBitRate", 0); br > 0 && format != "raw" {
 		opts.MaxBitrateKbps = br
@@ -922,7 +942,11 @@ func (h *Handler) streamBook(w http.ResponseWriter, r *http.Request, userID, id,
 		opts.FilePID = part.FilePID
 		opts.StartMS = max(ms-part.StartMS, 0)
 	}
-	info, err := h.bridge.JoinedPlayInfo(r.Context(), userID, id, opts)
+	info, err := h.bridge.JoinedPlayInfo(r.Context(), uc.ID, id, opts)
+	if errors.Is(err, flow.ErrEngineDown) {
+		h.streamDirect(w, r, uc, id, true)
+		return
+	}
 	if err != nil {
 		h.fail(w, r, 0, "resolving stream failed")
 		return

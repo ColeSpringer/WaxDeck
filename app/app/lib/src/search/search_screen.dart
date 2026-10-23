@@ -14,6 +14,7 @@ import '../radio/radio_screen.dart';
 import '../shell/adaptive_shell.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/server_health.dart';
 import '../shell/shell_messages.dart';
 import 'search_controller.dart';
 import 'search_open.dart';
@@ -669,7 +670,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// here", which is what lets the caller fall through to its own empty
   /// state when the library found nothing either.
   List<Widget> _podcastDirectory(String query) {
-    if (query.length < 2) return const <Widget>[];
+    // Nothing in it can be followed on a server whose podcasts are off,
+    // so the public directory is not asked at all.
+    if (query.length < 2 || !ref.watch(podcastsOnProvider)) {
+      return const <Widget>[];
+    }
     final entries = ref.watch(podcastDirectoryResultsProvider);
     final header = SliverPadding(
       padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),

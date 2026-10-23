@@ -656,7 +656,7 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
                     ),
                   ),
                   WaxIcon(
-                    showHistory ? WaxIcons.collapse : WaxIcons.expand,
+                    showHistory ? WaxIcons.collapse : WaxIcons.forward,
                     size: 16,
                     color: colors.textTertiary,
                   ),
@@ -795,14 +795,14 @@ class _SelectionBar extends StatelessWidget {
           WaxButton(
             label: context.l10n.queueMoveToTop,
             kind: WaxButtonKind.tonal,
-            icon: WaxIcons.collapse,
+            icon: WaxIcons.caretUp,
             semanticsId: SemanticsIds.queueSelectionTop,
             onPressed: onTop,
           ),
           WaxButton(
             label: context.l10n.queueMoveToBottom,
             kind: WaxButtonKind.tonal,
-            icon: WaxIcons.expand,
+            icon: WaxIcons.caretDown,
             semanticsId: SemanticsIds.queueSelectionBottom,
             onPressed: onBottom,
           ),

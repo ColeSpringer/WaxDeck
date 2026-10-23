@@ -12,11 +12,16 @@ part 'tool_tasks_cleared.g.dart';
 ///
 /// Properties:
 /// * [deleted] - How many tasks were deleted.
+/// * [kept] - How many finished tasks stayed because what they left in the library could not be settled: a book merge's or split's hidden files that could not be named or removed. Each row's `error` says why. 
 @BuiltValue()
 abstract class ToolTasksCleared implements Built<ToolTasksCleared, ToolTasksClearedBuilder> {
   /// How many tasks were deleted.
   @BuiltValueField(wireName: r'deleted')
   int get deleted;
+
+  /// How many finished tasks stayed because what they left in the library could not be settled: a book merge's or split's hidden files that could not be named or removed. Each row's `error` says why. 
+  @BuiltValueField(wireName: r'kept')
+  int get kept;
 
   ToolTasksCleared._();
 
@@ -44,6 +49,11 @@ class _$ToolTasksClearedSerializer implements PrimitiveSerializer<ToolTasksClear
     yield r'deleted';
     yield serializers.serialize(
       object.deleted,
+      specifiedType: const FullType(int),
+    );
+    yield r'kept';
+    yield serializers.serialize(
+      object.kept,
       specifiedType: const FullType(int),
     );
   }
@@ -75,6 +85,13 @@ class _$ToolTasksClearedSerializer implements PrimitiveSerializer<ToolTasksClear
             specifiedType: const FullType(int),
           ) as int;
           result.deleted = valueDes;
+          break;
+        case r'kept':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.kept = valueDes;
           break;
         default:
           unhandled.add(key);

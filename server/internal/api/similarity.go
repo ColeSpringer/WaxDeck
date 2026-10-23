@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -93,6 +94,12 @@ func (s *Server) PullSimilarityWork(ctx context.Context, req PullSimilarityWorkR
 	limit, ok := pageLimit(req.Params.Limit, 10, 50)
 	if !ok {
 		return nil, &service.Error{Kind: service.KindInvalid, Msg: "limit must be between 1 and 50"}
+	}
+	// A lease spends one of the few attempts a track gets, and while the
+	// engine is away a worker could not fetch the audio it names: nothing
+	// is leased until the engine answers.
+	if s.engineIsAway() {
+		return PullSimilarityWork200JSONResponse(SimilarityWorkPage{Items: []SimilarityWorkItem{}, RetryAfterSeconds: flow.EngineRetrySeconds}), nil
 	}
 	work, err := s.svc.LeaseSimilarityWork(ctx, limit, s.bridge != nil)
 	if err != nil {

@@ -1,11 +1,11 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,10 +19,12 @@ import (
 
 	"github.com/colespringer/waxbin"
 	waxart "github.com/colespringer/waxbin/art"
+	"github.com/colespringer/waxbin/identity"
 	"github.com/colespringer/waxbin/inbox"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/scan"
+	"github.com/colespringer/waxbin/trash"
 
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -30,23 +32,29 @@ import (
 
 // File tooling: audiobook merge to a chaptered single file, chapter
 // split into per-chapter files, and CUE rip split into real per-track
-// files, all cut by the streaming engine's jobs surface and re-imported
-// through the catalog's own planner. Tasks persist in tool_tasks and
-// run on the supervised drain worker; lifecycle changes fan out on the
-// task event kind to the owner and every administrator.
+// files, all cut by the streaming engine's jobs surface. A book's new
+// files are written beside it in its own library and scanned in; a rip's
+// pieces enter through the catalog's own planner. Tasks persist in
+// tool_tasks and run on the supervised drain worker; lifecycle changes
+// fan out on the task event kind to the owner and every administrator.
 
 const (
 	taskTypeBookMerge = "book-merge"
 	taskTypeBookSplit = "book-split"
 	taskTypeCueSplit  = "cue-split"
 
-	taskStateQueued = "queued"
-	taskStateDone   = "done"
-	taskStateFailed = "failed"
+	taskStateQueued  = "queued"
+	taskStateRunning = "running"
+	taskStateDone    = "done"
+	taskStateFailed  = "failed"
+	// taskStateParked is a task stopped for good, its runs having kept
+	// ending with the server: finished and failed, it is not run again,
+	// and it holds its book or rip until it is cleared.
+	taskStateParked = "parked"
 
-	// toolTaskLease bounds one attempt between renewals; the poll loop
-	// renews while a long engine job runs, so the lease only expires
-	// when the worker dies.
+	// toolTaskLease bounds one attempt between renewals; a run renews
+	// it for as long as it holds the task (holdToolTask), so the lease
+	// only expires when the worker dies.
 	toolTaskLease       = 5 * time.Minute
 	toolTaskMaxAttempts = 3
 	toolLeaseRenew      = time.Minute
@@ -77,6 +85,7 @@ type ToolTaskDTO struct {
 	Type        string
 	State       string
 	ItemPID     string
+	ItemTitle   string
 	ProgressPct float64
 	Error       string
 	ResultPIDs  []string
@@ -84,6 +93,13 @@ type ToolTaskDTO struct {
 	Summary      map[string]any
 	CreatedAtNS  int64
 	FinishedAtNS int64
+	// WaitReason says why a running task waits to try again, at
+	// RetryAtNS; empty when it does not.
+	WaitReason string
+	RetryAtNS  int64
+	// BookInTrash says a book merge's or split's sources are in the
+	// trash until the task finishes.
+	BookInTrash bool
 }
 
 // toolTaskParams is the persisted work order, captured at creation so
@@ -94,12 +110,68 @@ type toolTaskParams struct {
 	Titles          []string `json:"titles,omitempty"`
 	PartPaths       []string `json:"partPaths,omitempty"`
 	PartDurationsMS []int64  `json:"partDurationsMs,omitempty"`
+	// PartFilePIDs are the catalog's files of the parts, one per path:
+	// with the originals going, the only files the merge's trash takes.
+	PartFilePIDs []string `json:"partFilePids,omitempty"`
+	// SourceIdents is what a book tool knows each file it works from by,
+	// in source order, whatever the catalog calls the file now: recorded
+	// when the task is queued and again as the run's trash takes it.
+	SourceIdents []fileIdent `json:"sourceIdents,omitempty"`
 	// Split fields (book and cue).
 	SrcPath     string   `json:"srcPath,omitempty"`
 	Format      string   `json:"format,omitempty"`
 	Cuts        []int64  `json:"cuts,omitempty"`
 	PieceTitles []string `json:"pieceTitles,omitempty"`
 	CuePath     string   `json:"cuePath,omitempty"`
+	// SrcFilePID is a book split's file in the catalog, the only file
+	// its trash takes, or a CUE split's rip.
+	SrcFilePID string `json:"srcFilePid,omitempty"`
+	// Dir is the folder a book tool's outputs go in, chosen from where
+	// its files were when it first staged them.
+	Dir string `json:"dir,omitempty"`
+	// Step is how far a file tool's run has gone (the toolStep values),
+	// recorded before the run takes it; Waits counts the waits in a row
+	// since the last step, which set the next wait's length, and
+	// WaitFromNS is when that run of waits began, which caps it.
+	Step       string `json:"step,omitempty"`
+	Waits      int    `json:"waits,omitempty"`
+	WaitFromNS int64  `json:"waitFromNs,omitempty"`
+	// RunsStarted and RunsEnded count the runs begun and the runs that
+	// came back; the difference is runs that ended with the process.
+	RunsStarted int `json:"runsStarted,omitempty"`
+	RunsEnded   int `json:"runsEnded,omitempty"`
+	// The files a book tool's run made in the library, by exact path:
+	// its staged outputs and their temporaries, the folder it made for
+	// them, and the outputs that took their names. Nothing else is ever
+	// removed by the run.
+	Created []string `json:"created,omitempty"`
+	MadeDir string   `json:"madeDir,omitempty"`
+	Placed  []string `json:"placed,omitempty"`
+	// Idents is what the run recorded of each file it wrote, by path, to
+	// know it again before removing it.
+	Idents map[string]fileIdent `json:"idents,omitempty"`
+	// TrashedFrom is where each source was, in source order, when the
+	// run's trash took it ("" for one it has not taken); Forward says the
+	// run can only go on, what its trash took being gone from the trash;
+	// StrandWaits counts the waits on a source missing from its place.
+	TrashedFrom []string `json:"trashedFrom,omitempty"`
+	Forward     bool     `json:"forward,omitempty"`
+	StrandWaits int      `json:"strandWaits,omitempty"`
+	// A book tool's run: when its trash started (what a put-back takes
+	// back is what the trash took from then on), the names its outputs
+	// take, the book the scan made of them, and the failure an undo ends
+	// the run with.
+	TrashFromNS int64    `json:"trashFromNs,omitempty"`
+	Names       []string `json:"names,omitempty"`
+	ResultPID   string   `json:"resultPid,omitempty"`
+	Failure     string   `json:"failure,omitempty"`
+	// A CUE split's run: the pieces it cut, by their place in its
+	// workspace, where the import puts each and the audio of each, and
+	// the tracks it made.
+	PieceNames    []string `json:"pieceNames,omitempty"`
+	PieceDests    []string `json:"pieceDests,omitempty"`
+	PieceEssences []string `json:"pieceEssences,omitempty"`
+	PiecePIDs     []string `json:"piecePids,omitempty"`
 	// Acquisition fields.
 	URL        string `json:"url,omitempty"`
 	MediaType  string `json:"mediaType,omitempty"`
@@ -111,9 +183,11 @@ type toolTaskParams struct {
 	// Playlist-sync field: the API pid of the bound playlist to sync.
 	PlaylistPID string `json:"playlistPid,omitempty"`
 	// Health-fix fields: the rule, and the bare item pids to fix (none
-	// is every item failing it when the task runs).
-	Rule     string   `json:"rule,omitempty"`
-	ItemPIDs []string `json:"itemPids,omitempty"`
+	// is every item failing it when the task runs). PathFix is how far a
+	// path fix has gone.
+	Rule     string           `json:"rule,omitempty"`
+	ItemPIDs []string         `json:"itemPids,omitempty"`
+	PathFix  *pathFixProgress `json:"pathFix,omitempty"`
 }
 
 // StartBookMerge queues a merge of a multi-file audiobook into one
@@ -123,14 +197,20 @@ func (l *Library) StartBookMerge(ctx context.Context, uc *UserCtx, apiBookPID st
 		return ToolTaskDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
 	if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
-		return ToolTaskDTO{}, &Error{Kind: KindFeature, Msg: "book merging needs the streaming engine"}
+		return ToolTaskDTO{}, l.needsEngine("book merging")
 	}
 	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
 	if err != nil {
 		return ToolTaskDTO{}, err
 	}
+	if err := l.refuseHeldBook(ctx, bd.Item.PID); err != nil {
+		return ToolTaskDTO{}, err
+	}
+	if err := l.refusePartsInTrash(ctx, bd.Item.PID); err != nil {
+		return ToolTaskDTO{}, err
+	}
 	if len(bd.Files) < 2 {
-		return ToolTaskDTO{}, &Error{Kind: KindConflict, Msg: "the book is already a single file"}
+		return ToolTaskDTO{}, toolRefusal(refusalSingleFile, "the book is already a single file")
 	}
 	if len(titles) > 0 && len(titles) != len(bd.Files) {
 		return ToolTaskDTO{}, errInvalid(fmt.Sprintf(
@@ -138,6 +218,7 @@ func (l *Library) StartBookMerge(ctx context.Context, uc *UserCtx, apiBookPID st
 	}
 	paths := make([]string, len(bd.Files))
 	durs := make([]int64, len(bd.Files))
+	files := make([]string, len(bd.Files))
 	for i, f := range bd.Files {
 		file, err := l.lib.File(ctx, f.FilePID)
 		if err != nil {
@@ -145,13 +226,16 @@ func (l *Library) StartBookMerge(ctx context.Context, uc *UserCtx, apiBookPID st
 		}
 		paths[i] = string(file.Path)
 		durs[i] = f.DurationMS
+		files[i] = string(f.FilePID)
 	}
-	if err := l.checkPathWritable(ctx, paths[0]); err != nil {
+	p := toolTaskParams{
+		KeepOriginals: keepOriginals, Titles: titles, PartPaths: paths, PartDurationsMS: durs, PartFilePIDs: files,
+		SourceIdents: identsOf(paths...),
+	}
+	if err := l.mergeTool(nil, &p, bd.Item.PID, bd.Item.Title, paths).check(ctx); err != nil {
 		return ToolTaskDTO{}, err
 	}
-	return l.insertToolTask(ctx, uc, taskTypeBookMerge, apiPID(PrefixBook, bd.Item.PID), toolTaskParams{
-		KeepOriginals: keepOriginals, Titles: titles, PartPaths: paths, PartDurationsMS: durs,
-	})
+	return l.queueBookTool(ctx, uc, taskTypeBookMerge, bd, p)
 }
 
 // StartBookSplit queues a split of a single-file audiobook at its
@@ -161,31 +245,37 @@ func (l *Library) StartBookSplit(ctx context.Context, uc *UserCtx, apiBookPID st
 		return ToolTaskDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
 	if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
-		return ToolTaskDTO{}, &Error{Kind: KindFeature, Msg: "book splitting needs the streaming engine"}
+		return ToolTaskDTO{}, l.needsEngine("book splitting")
 	}
 	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
 	if err != nil {
 		return ToolTaskDTO{}, err
 	}
+	if err := l.refuseHeldBook(ctx, bd.Item.PID); err != nil {
+		return ToolTaskDTO{}, err
+	}
+	if err := l.refusePartsInTrash(ctx, bd.Item.PID); err != nil {
+		return ToolTaskDTO{}, err
+	}
 	if len(bd.Files) >= 2 {
-		return ToolTaskDTO{}, &Error{Kind: KindConflict, Msg: "the book is already split across files; merge it first"}
+		return ToolTaskDTO{}, toolRefusal(refusalMultiFile, "the book is already split across files; merge it first")
 	}
 	if len(bd.Chapters) == 0 {
-		return ToolTaskDTO{}, &Error{Kind: KindConflict, Msg: "the book has no chapters to split at"}
+		return ToolTaskDTO{}, toolRefusal(refusalNoChapters, "the book has no chapters to split at")
+	}
+	if len(bd.Files) == 0 {
+		return ToolTaskDTO{}, toolRefusal(refusalNoFile, "the book has no file to split")
 	}
 	loc, err := l.paths.Locate(ctx, bd.Item.PID)
 	if err != nil {
 		return ToolTaskDTO{}, classify(err)
-	}
-	if err := l.checkPathWritable(ctx, loc.Path); err != nil {
-		return ToolTaskDTO{}, err
 	}
 	rate := loc.SampleRate
 	if rate <= 0 {
 		rate = bd.Item.SampleRate
 	}
 	if rate <= 0 {
-		return ToolTaskDTO{}, &Error{Kind: KindConflict, Msg: "the file declares no sample rate to place cuts by"}
+		return ToolTaskDTO{}, toolRefusal(refusalNoSampleRate, "the file declares no sample rate to place cuts by")
 	}
 	// The engine cuts at source sample offsets, strictly ascending and
 	// interior: chapter zero's start is the implied cut at 0, and a
@@ -204,12 +294,165 @@ func (l *Library) StartBookSplit(ctx context.Context, uc *UserCtx, apiBookPID st
 		titles = append(titles, chapterTitle(bd.Chapters[i].Title, i))
 	}
 	if len(cuts) == 0 {
-		return ToolTaskDTO{}, &Error{Kind: KindConflict, Msg: "the chapter marks yield no interior cut points"}
+		return ToolTaskDTO{}, toolRefusal(refusalNoCuts, "the chapter marks yield no interior cut points")
 	}
-	return l.insertToolTask(ctx, uc, taskTypeBookSplit, apiPID(PrefixBook, bd.Item.PID), toolTaskParams{
-		KeepOriginals: keepOriginals, SrcPath: loc.Path,
-		Format: toolSplitFormat(bd.Item.Codec), Cuts: cuts, PieceTitles: titles,
-	})
+	p := toolTaskParams{
+		KeepOriginals: keepOriginals, SrcPath: loc.Path, SrcFilePID: string(bd.Files[0].FilePID),
+		Format: toolSplitFormat(bd.Item.Codec), Cuts: cuts, PieceTitles: titles, SourceIdents: identsOf(loc.Path),
+	}
+	if err := l.splitTool(nil, &p, bd.Item.PID, bd.Item.Title, loc.Path).check(ctx); err != nil {
+		return ToolTaskDTO{}, err
+	}
+	return l.queueBookTool(ctx, uc, taskTypeBookSplit, bd, p)
+}
+
+// The reasons a book tool is refused before it is queued, which a
+// refusal's params carry for a client to word.
+const (
+	refusalSingleFile    = "single-file"
+	refusalMultiFile     = "multi-file"
+	refusalNoChapters    = "no-chapters"
+	refusalNoCuts        = "no-cuts"
+	refusalNoSampleRate  = "no-sample-rate"
+	refusalNoFile        = "no-file"
+	refusalNameTaken     = "name-taken"
+	refusalCopyElsewhere = "copy-elsewhere"
+	refusalTaskRunning   = "task-running"
+	refusalTaskParked    = "task-parked"
+	refusalPartsInTrash  = "parts-in-trash"
+	refusalOutputsHidden = "outputs-hidden"
+	refusalNoSheet       = "no-sheet"
+)
+
+// toolRefusal is a file tool refused before it is queued, for reason:
+// conflict, with the reason and each key and value of params.
+func toolRefusal(reason, msg string, params ...string) *Error {
+	p := map[string]string{"reason": reason}
+	for i := 0; i+1 < len(params); i += 2 {
+		p[params[i]] = params[i+1]
+	}
+	return &Error{Kind: KindConflict, Msg: msg, Params: p}
+}
+
+// bookToolLock is what a merge or split of book holds while it is live:
+// one at a time per book, since a second would take the first's parts.
+func bookToolLock(book model.PID) string { return "book:" + string(book) }
+
+// ripToolLock is what a CUE split of the rip in file holds while it is
+// live: a second would import the rip's tracks again.
+func ripToolLock(file model.PID) string { return "rip:" + string(file) }
+
+// refuseHeld refuses a file tool over what a live task holds.
+func (l *Library) refuseHeld(ctx context.Context, lock, what string) error {
+	held, err := l.db.ToolTaskHolding(ctx, lock)
+	if err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	if held != "" {
+		return l.heldRefusal(ctx, what, held)
+	}
+	return nil
+}
+
+// heldRefusal refuses what task holds, what naming the task's kind: one
+// parked never finishes by itself, so it is cleared in Tasks first; any
+// other is still at work.
+func (l *Library) heldRefusal(ctx context.Context, what, task string) error {
+	if t, err := l.db.ToolTaskByID(ctx, task); err == nil && t.State == taskStateParked {
+		return toolRefusal(refusalTaskParked, what+" stopped and needs attention: clear it in Tasks, then try again", "task", task)
+	}
+	return toolRefusal(refusalTaskRunning, what+" has not finished yet", "task", task)
+}
+
+// refuseHeldBook refuses a merge or split of a book another one is at
+// work on, or that a parked one holds.
+func (l *Library) refuseHeldBook(ctx context.Context, book model.PID) error {
+	return l.refuseHeld(ctx, bookToolLock(book), "a merge or split of this book")
+}
+
+// refusePartsInTrash refuses a merge or split of a book an earlier one
+// left part of in the trash, naming those files: from what remains it
+// would make a book that looks whole without them, and the trash would
+// lose them at its next purge. Restored, they are the book's again.
+func (l *Library) refusePartsInTrash(ctx context.Context, book model.PID) error {
+	taken, err := l.db.ToolTrashOf(ctx, string(book))
+	if err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	if len(taken) == 0 {
+		return nil
+	}
+	byItem, err := l.lib.RestorableTrash(ctx, []model.PID{book})
+	if err != nil {
+		return classify(err)
+	}
+	inTrash := map[string]model.TrashEntry{}
+	for _, e := range byItem[book] {
+		if e.Reason == taskTypeBookMerge || e.Reason == taskTypeBookSplit {
+			inTrash[string(e.OrigPath)] = e
+		}
+	}
+	var names, gone []string
+	for _, p := range taken {
+		if e, ok := inTrash[p]; ok {
+			names = append(names, l.scrubStoragePaths(e.OrigDisplay))
+		} else {
+			gone = append(gone, p)
+		}
+	}
+	// Restored since, or purged: nothing of it left to restore.
+	if len(gone) > 0 {
+		if err := l.db.ForgetToolTrash(ctx, string(book), gone); err != nil {
+			l.log.Warn("forgetting a tool's trash", "book", string(book), "err", err)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return partsInTrashRefusal(names)
+}
+
+// partsInTrashNamed is how many of the files an unfinished run left in
+// the trash its refusal names; the rest it counts.
+const partsInTrashNamed = 5
+
+// partsInTrashRefusal is the refusal naming the files a merge or split
+// that did not finish left in the trash, a few of them and how many more,
+// and how to finish what it started.
+func partsInTrashRefusal(names []string) *Error {
+	shown := names[:min(len(names), partsInTrashNamed)]
+	more := len(names) - len(shown)
+	files := strings.Join(shown, ", ")
+	if more > 0 {
+		files += fmt.Sprintf(", and %d more", more)
+	}
+	return toolRefusal(refusalPartsInTrash, fmt.Sprintf(
+		"%d of the book's files went to the trash with a merge or split that did not finish (%s); restore them from the trash, then merge or split the book again",
+		len(names), files),
+		"count", strconv.Itoa(len(names)), "files", strings.Join(shown, ", "), "more", strconv.Itoa(more))
+}
+
+// queueBookTool persists a queued merge or split of bd, holding the
+// book, unless another task took it since the check.
+func (l *Library) queueBookTool(ctx context.Context, uc *UserCtx, typ string, bd *model.BookDetail, p toolTaskParams) (ToolTaskDTO, error) {
+	t := newToolTask(uc, typ, apiPID(PrefixBook, bd.Item.PID), p, "")
+	t.ItemTitle, t.LockKey = bd.Item.Title, bookToolLock(bd.Item.PID)
+	return l.queueLockedToolTask(ctx, t, "a merge or split of this book")
+}
+
+// queueLockedToolTask persists a queued task holding its lock key and
+// notifies its audience, or refuses it, naming the task holding it; what
+// names that task's kind.
+func (l *Library) queueLockedToolTask(ctx context.Context, t wdb.ToolTask, what string) (ToolTaskDTO, error) {
+	holder, err := l.db.InsertLockedToolTask(ctx, t)
+	if err != nil {
+		return ToolTaskDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
+	if holder != "" {
+		return ToolTaskDTO{}, l.heldRefusal(ctx, what, holder)
+	}
+	l.notifyToolTask(ctx, t.ID)
+	return toolTaskDTO(t), nil
 }
 
 // StartCueSplit queues a physical split of the single-file rip behind a
@@ -220,7 +463,7 @@ func (l *Library) StartCueSplit(ctx context.Context, uc *UserCtx, apiTrackPID st
 		return ToolTaskDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
 	if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
-		return ToolTaskDTO{}, &Error{Kind: KindFeature, Msg: "cue splitting needs the streaming engine"}
+		return ToolTaskDTO{}, l.needsEngine("cue splitting")
 	}
 	it, err := l.getVisibleItem(ctx, uc, apiTrackPID)
 	if err != nil {
@@ -233,17 +476,27 @@ func (l *Library) StartCueSplit(ctx context.Context, uc *UserCtx, apiTrackPID st
 	if err != nil {
 		return ToolTaskDTO{}, classify(err)
 	}
-	cue, err := findCueSheet(loc.Path)
+	rip, err := l.ripFileOf(ctx, it.PID)
 	if err != nil {
-		return ToolTaskDTO{}, &Error{Kind: KindConflict, Msg: err.Error()}
+		return ToolTaskDTO{}, err
+	}
+	const held = "a split of this rip"
+	if err := l.refuseHeld(ctx, ripToolLock(rip), held); err != nil {
+		return ToolTaskDTO{}, err
+	}
+	cue, ok := ownCueSheet(loc.Path)
+	if !ok {
+		return ToolTaskDTO{}, toolRefusal(refusalNoSheet, "the rip has no cue sheet of its own name beside it")
 	}
 	if err := l.checkPathWritable(ctx, loc.Path); err != nil {
 		return ToolTaskDTO{}, err
 	}
-	return l.insertToolTask(ctx, uc, taskTypeCueSplit, apiPID(PrefixTrack, it.PID), toolTaskParams{
-		KeepOriginals: keepOriginals, SrcPath: loc.Path, CuePath: cue,
+	t := newToolTask(uc, taskTypeCueSplit, apiPID(PrefixTrack, it.PID), toolTaskParams{
+		KeepOriginals: keepOriginals, SrcPath: loc.Path, CuePath: cue, SrcFilePID: string(rip),
 		Format: toolSplitFormat(it.Codec),
-	})
+	}, "")
+	t.ItemTitle, t.LockKey = firstNonEmpty(it.Album, it.Title), ripToolLock(rip)
+	return l.queueLockedToolTask(ctx, t, held)
 }
 
 // ListToolTasksFor pages tool tasks newest first: everyone's for an
@@ -288,10 +541,11 @@ func (l *Library) GetToolTaskFor(ctx context.Context, uc *UserCtx, taskID string
 	return l.toolTaskFor(uc, t), nil
 }
 
-// DeleteToolTaskFor removes one finished task under the same
-// owner-or-admin visibility the read has; a task still queued or
-// running answers conflict, because deleting a row out from under a
-// worker leases nothing back.
+// DeleteToolTaskFor removes one finished task (parked included, which
+// frees the book or rip it held) under the same owner-or-admin
+// visibility the read has; a task still queued or running answers
+// conflict, because deleting a row out from under a worker leases
+// nothing back.
 func (l *Library) DeleteToolTaskFor(ctx context.Context, uc *UserCtx, taskID string) error {
 	t, err := l.db.ToolTaskByID(ctx, taskID)
 	if errors.Is(err, wdb.ErrNotFound) {
@@ -305,8 +559,11 @@ func (l *Library) DeleteToolTaskFor(ctx context.Context, uc *UserCtx, taskID str
 		// row exists.
 		return errNotFound("no task with id " + taskID)
 	}
-	if t.State != taskStateDone && t.State != taskStateFailed {
+	if !ToolTaskFinished(t.State) {
 		return &Error{Kind: KindConflict, Msg: "the task has not finished"}
+	}
+	if err := l.settleClearedTask(ctx, uc, t); err != nil {
+		return err
 	}
 	// The statement re-checks ownership: empty scopes an administrator
 	// to any row, the convention the listing uses.
@@ -332,20 +589,120 @@ func (l *Library) DeleteToolTaskFor(ctx context.Context, uc *UserCtx, taskID str
 	return nil
 }
 
-// ClearFinishedToolTasksFor deletes every finished task the caller can
-// see - everyone's for an administrator, the same scope the listing
-// shows and the per-row delete already grants - and answers how many
-// went. No task event, for the reason DeleteToolTaskFor gives.
-func (l *Library) ClearFinishedToolTasksFor(ctx context.Context, uc *UserCtx) (int, error) {
-	owner := uc.ID
-	if uc.Admin {
-		owner = ""
+// ToolTaskScope is whose finished tasks a sweep takes.
+type ToolTaskScope string
+
+const (
+	// ToolTasksMine is the caller's own, for everyone and administrators
+	// too: a member's unread report is theirs to clear.
+	ToolTasksMine ToolTaskScope = "mine"
+	// ToolTasksAll is every account's, and an administrator's alone.
+	ToolTasksAll ToolTaskScope = "all"
+)
+
+// ClearFinishedToolTasksFor deletes the caller's finished tasks, or with
+// ToolTasksAll every account's, and answers how many went and how many
+// stayed. No task event, for the reason DeleteToolTaskFor gives.
+func (l *Library) ClearFinishedToolTasksFor(ctx context.Context, uc *UserCtx, scope ToolTaskScope) (deleted, kept int, err error) {
+	everyone := false
+	switch scope {
+	case "", ToolTasksMine:
+	case ToolTasksAll:
+		if !uc.Admin {
+			return 0, 0, &Error{Kind: KindForbidden, Msg: "administrators only"}
+		}
+		everyone = true
+	default:
+		return 0, 0, errInvalid("unknown scope " + string(scope))
 	}
-	n, err := l.db.DeleteFinishedToolTasks(ctx, owner)
+	// The rows read first, so each is settled before it goes, and only
+	// those go: a task that ends meanwhile waits for the next sweep.
+	finished, err := l.db.FinishedToolTasks(ctx, uc.ID, everyone, 0)
 	if err != nil {
-		return 0, &Error{Kind: KindInternal, Err: err}
+		return 0, 0, &Error{Kind: KindInternal, Err: err}
 	}
-	return n, nil
+	ids := make([]string, 0, len(finished))
+	for _, t := range finished {
+		// A task whose hidden files could not be named or removed stays,
+		// and is counted.
+		if l.settleClearedTask(ctx, uc, t) != nil {
+			kept++
+			continue
+		}
+		ids = append(ids, t.ID)
+	}
+	deleted, err = l.db.DeleteToolTasksByID(ctx, ids)
+	if err != nil {
+		return deleted, kept, &Error{Kind: KindInternal, Err: err}
+	}
+	return deleted, kept, nil
+}
+
+// settleClearedTask settles what a finished merge or split left hidden in
+// the library as its task is cleared (see bookTool.settleCleared), and
+// records the clear, saying what became of those files, under uc, or the
+// task's starter for the prune. A hidden file that could not take its
+// name keeps the task, its error saying so, and answers the refusal the
+// clear meets; other tasks leave nothing to settle.
+func (l *Library) settleClearedTask(ctx context.Context, uc *UserCtx, t wdb.ToolTask) error {
+	if t.Type != taskTypeBookMerge && t.Type != taskTypeBookSplit {
+		return nil
+	}
+	var p toolTaskParams
+	if json.Unmarshal([]byte(t.Params), &p) != nil {
+		return nil
+	}
+	b, err := l.bookToolFor(ctx, &t, &p)
+	if err != nil {
+		return nil
+	}
+	ctx = context.WithoutCancel(ctx)
+	out := b.settleCleared(ctx)
+	if out.outputs == "" {
+		return nil
+	}
+	detail := map[string]any{"task": t.ID, "result": "cleared", "outputs": out.outputs, "library": l.libraryNameOf(b.dir)}
+	if len(out.named) > 0 {
+		detail["files"] = out.named
+	}
+	audit := func() {
+		if uc != nil {
+			l.Audit(ctx, uc, b.action(), b.target(), detail)
+		} else {
+			l.auditToolTask(ctx, &t, b.action(), b.target(), detail)
+		}
+	}
+	if len(out.stuck) == 0 {
+		audit()
+		return nil
+	}
+	folder := l.scrubStoragePaths(b.dir)
+	why := fmt.Sprintf("clearing it could not give %s their names in %s (%s), so the task stays",
+		strings.Join(out.stuck, ", "), folder, out.cause)
+	if out.outputs == "removed" {
+		why = fmt.Sprintf("clearing it could not remove %s from %s (%s), so the task stays",
+			strings.Join(out.stuck, ", "), folder, out.cause)
+	}
+	// Recorded, audited and told once for the cause: the prune tries the
+	// clear again every night, and a cause that holds is no news.
+	if !strings.Contains(t.Error, why) {
+		t.Error = strings.TrimPrefix(t.Error+"; "+why, "; ")
+		if err := l.db.UpdateToolTask(ctx, t); err != nil {
+			l.log.Warn("recording a kept clear", "task", t.ID, "err", err)
+		}
+		detail["result"], detail["hidden"], detail["error"] = "kept", out.stuck, out.cause
+		audit()
+		l.notifyToolTask(ctx, t.ID)
+	}
+	// Kept, it holds its book as a parked task does until it can be
+	// cleared: a merge into a folder that refuses the server would fail
+	// as this one did.
+	if t.State == taskStateFailed {
+		if err := l.db.HoldFinishedToolTask(ctx, t.ID); err != nil {
+			l.log.Warn("holding a kept task's book", "task", t.ID, "err", err)
+		}
+	}
+	return toolRefusal(refusalOutputsHidden, why, "folder", folder, "cause", out.cause)
 }
 
 // DrainToolTasks retires exhausted tasks and works one leased task other
@@ -363,23 +720,17 @@ func (l *Library) DrainHealthFixes(ctx context.Context) bool {
 }
 
 func (l *Library) drainToolTasks(ctx context.Context, types wdb.TaskTypes) bool {
+	return l.drainToolTasksAt(ctx, types, time.Now().UnixNano())
+}
+
+// drainToolTasksAt is drainToolTasks as of now, which a test sets past
+// the leases it holds.
+func (l *Library) drainToolTasksAt(ctx context.Context, types wdb.TaskTypes, now int64) bool {
 	// A task run against a suspended catalog spends an attempt on nothing.
 	if l.Maintenance() {
 		return false
 	}
-	now := time.Now().UnixNano()
-	if ids, err := l.db.FailExhaustedToolTasks(ctx, now, toolTaskMaxAttempts); err != nil {
-		l.log.Warn("retiring exhausted tool tasks", "err", err)
-	} else {
-		for _, id := range ids {
-			l.settleMigrationExport(ctx, id)
-			l.scrubTaskSecrets(ctx, id)
-			l.notifyToolTask(ctx, id)
-			if t, err := l.db.ToolTaskByID(ctx, id); err == nil {
-				l.toolTaskEnded(ctx, &t)
-			}
-		}
-	}
+	l.retireExhaustedToolTasks(ctx, now)
 	row, err := l.db.LeaseToolTask(ctx, now, toolTaskLease.Nanoseconds(), toolTaskMaxAttempts, types)
 	if err != nil {
 		if !errors.Is(err, wdb.ErrNotFound) {
@@ -398,12 +749,27 @@ func (l *Library) drainToolTasks(ctx context.Context, types wdb.TaskTypes) bool 
 	err = l.runToolTask(runCtx, &row)
 	cancel()
 	if err != nil {
-		if permanentToolErr(err) || row.Attempts >= toolTaskMaxAttempts {
+		var wait *toolRetry
+		switch {
+		case errors.Is(err, errToolParked):
+			// The run parked its task, which says why; nothing to record.
+		case errors.As(err, &wait):
+			l.deferToolTask(ctx, &row, wait)
+		case permanentToolErr(err):
 			l.failToolTask(ctx, &row, err)
-		} else {
-			// Transient (engine unreachable, timeout): the row stays
-			// leased and untouched; the lease expires and the attempts
-			// machinery re-runs it, or FailExhaustedToolTasks retires it.
+		case ctx.Err() != nil:
+			// The server is stopping, which is no failure of the task's:
+			// the lease runs out and the task runs again once it is back.
+		case row.Attempts >= toolTaskMaxAttempts && !row.Resumable:
+			// A task whose run must be finished ends only by its run's own
+			// endings, never by a count of attempts: its lease runs out
+			// and it runs again, as the lease and the retire pass allow.
+			l.failToolTask(ctx, &row, err)
+		default:
+			// Transient (a timeout, an engine request cut off): the row
+			// stays leased and untouched; the lease expires and the
+			// attempts machinery re-runs it, or FailExhaustedToolTasks
+			// retires it.
 			l.log.Warn("tool task attempt failed", "task", row.ID, "type", row.Type,
 				"attempt", row.Attempts, "err", err)
 		}
@@ -411,21 +777,139 @@ func (l *Library) drainToolTasks(ctx context.Context, types wdb.TaskTypes) bool 
 	return true
 }
 
+// toolRetry is a failure a run waits out rather than fails on: what it
+// put in the library stays as it is, and the task comes back after the
+// delay, the attempt not counted. reason names the wait for a client.
+type toolRetry struct {
+	after  time.Duration
+	err    error
+	reason string
+}
+
+// errToolParked is a run that parked its task rather than run again.
+var errToolParked = errors.New("the task is parked")
+
+// ToolTaskFinished reports whether a task state is terminal: done,
+// failed, or parked, which counts as failed. A finished task is never
+// run again, and only a finished one may be deleted, swept or pruned.
+func ToolTaskFinished(state string) bool {
+	return state == taskStateDone || state == taskStateFailed || state == taskStateParked
+}
+
+func (r *toolRetry) Error() string { return r.err.Error() }
+func (r *toolRetry) Unwrap() error { return r.err }
+
+// toolBackoff is how long a run waits after its nth wait in a row: a
+// quarter minute, doubling, at most half an hour.
+func toolBackoff(n int) time.Duration {
+	d := 15 * time.Second
+	for i := 1; i < n && d < 30*time.Minute; i++ {
+		d *= 2
+	}
+	return min(d, 30*time.Minute)
+}
+
+// deferToolTask hands a waiting task back until its delay is out, counted
+// from when the run ended, saying why it waits, and tells its watchers.
+func (l *Library) deferToolTask(ctx context.Context, t *wdb.ToolTask, wait *toolRetry) {
+	ctx = context.WithoutCancel(ctx)
+	l.log.Info("tool task waits", "task", t.ID, "type", t.Type, "for", wait.after, "err", wait.err)
+	until := time.Now().Add(wait.after).UnixNano()
+	if err := l.db.DeferToolTask(ctx, t.ID, until, toolFailure(wait.err).Msg, cmp.Or(wait.reason, "other")); err != nil {
+		l.log.Warn("deferring tool task", "task", t.ID, "err", err)
+	}
+	l.notifyToolTaskProgress(ctx, t.ID)
+}
+
+// holdToolTask marks a task as one a run in this process holds, which the
+// retire pass leaves, and renews its lease until the returned release:
+// the lease covers the whole run, every step and every wait in it.
+func (l *Library) holdToolTask(taskID string) func() {
+	l.toolRunsMu.Lock()
+	if l.toolRuns == nil {
+		l.toolRuns = map[string]int{}
+	}
+	l.toolRuns[taskID]++
+	l.toolRunsMu.Unlock()
+	every := l.toolLeaseEvery
+	if every <= 0 {
+		every = toolLeaseRenew
+	}
+	stop, done := make(chan struct{}), make(chan struct{})
+	started := l.workers != nil && l.procCtx != nil && l.workers.GoOnce(l.procCtx, "tool-lease", func(ctx context.Context) error {
+		defer close(done)
+		tick := time.NewTicker(every)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-stop:
+				return nil
+			case <-tick.C:
+				until := time.Now().Add(toolTaskLease).UnixNano()
+				if err := l.db.RenewToolTaskLease(ctx, taskID, until); err != nil {
+					l.log.Warn("renewing tool task lease", "task", taskID, "err", err)
+				}
+			}
+		}
+	})
+	return func() {
+		close(stop)
+		if started {
+			<-done
+		}
+		l.toolRunsMu.Lock()
+		if l.toolRuns[taskID]--; l.toolRuns[taskID] <= 0 {
+			delete(l.toolRuns, taskID)
+		}
+		l.toolRunsMu.Unlock()
+	}
+}
+
+// heldToolTasks are the tasks a run in this process holds.
+func (l *Library) heldToolTasks() []string {
+	l.toolRunsMu.Lock()
+	defer l.toolRunsMu.Unlock()
+	out := make([]string, 0, len(l.toolRuns))
+	for id := range l.toolRuns {
+		out = append(out, id)
+	}
+	return out
+}
+
+// retireExhaustedToolTasks fails every task whose attempts ran out with
+// its last lease, as of now, but for those a run holds and those whose
+// run must be finished, which the lease keeps taking.
+func (l *Library) retireExhaustedToolTasks(ctx context.Context, now int64) {
+	ids, err := l.db.FailExhaustedToolTasks(ctx, now, toolTaskMaxAttempts, l.heldToolTasks())
+	if err != nil {
+		l.log.Warn("retiring exhausted tool tasks", "err", err)
+		return
+	}
+	for _, id := range ids {
+		t, err := l.db.ToolTaskByID(ctx, id)
+		if err == nil {
+			l.settleRetired(ctx, &t)
+		}
+		l.settleMigrationExport(ctx, id)
+		l.scrubTaskSecrets(ctx, id)
+		l.notifyToolTask(ctx, id)
+		if err == nil {
+			l.notifyFileToolEnd(ctx, &t)
+			l.toolTaskEnded(ctx, &t)
+		}
+	}
+}
+
 // runToolTask executes one leased task to completion.
 func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
+	defer l.holdToolTask(t.ID)()
+	// What a wait said is old news once the task runs again.
+	t.Error = ""
 	var p toolTaskParams
 	if err := json.Unmarshal([]byte(t.Params), &p); err != nil {
 		return fmt.Errorf("%w: bad task params: %v", errToolPermanent, err)
-	}
-	switch t.Type {
-	case taskTypeBookMerge, taskTypeBookSplit, taskTypeCueSplit:
-		if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
-			// Transient by design: the engine was present at creation
-			// and may come back before the attempts budget runs out.
-			// Acquisitions never need the engine, so the gate is
-			// per-type.
-			return errors.New("streaming engine unavailable")
-		}
 	}
 	var results []string
 	var err error
@@ -452,14 +936,9 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 	if err != nil {
 		return err
 	}
-	t.State = taskStateDone
-	t.ProgressPct = 100
-	t.Error = ""
-	t.ResultPIDs = marshalJSON(results)
-	t.FinishedAtNS = time.Now().UnixNano()
-	if err := l.db.UpdateToolTask(ctx, *t); err != nil {
-		l.log.Warn("recording tool task completion", "task", t.ID, "err", err)
-	}
+	// Recorded whatever happens to the attempt now: the work is done.
+	ctx = context.WithoutCancel(ctx)
+	l.recordToolTaskDone(ctx, t, results)
 	// Before the scrub, which drops an export id once the upload it
 	// names is gone: settling is what makes that true.
 	l.settleMigrationExport(ctx, t.ID)
@@ -469,286 +948,123 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 	return nil
 }
 
-// runBookMerge joins a multi-file book into one chaptered M4B.
+// errEngineAway is the streaming engine gone since the task was queued.
+var errEngineAway = errors.New("streaming engine unavailable")
+
+// engineAwayErr reports a failure that is the streaming engine being
+// away, which passes once it answers again.
+func engineAwayErr(err error) bool {
+	return errors.Is(err, errEngineAway) || errors.Is(err, flow.ErrEngineDown)
+}
+
+// errNoEngine is a tool's engine work on a server that now runs without
+// one: no engine is coming back to wait on.
+var errNoEngine = &Error{Kind: KindFeature, Err: errToolPermanent,
+	Msg: "this needs the streaming engine, which this server runs without"}
+
+// toolEngineUp gates a tool's engine work. An engine configured but away
+// comes back, which the run waits out without spending an attempt
+// (engineAwayErr); a server started without one fails the work at once.
+// Only the engine work waits on it: a book tool whose outputs are already
+// staged finishes without it.
+func (l *Library) toolEngineUp() error {
+	if l.flowJobs == nil {
+		return errNoEngine
+	}
+	if !l.flowJobs.JobsSupported() {
+		return errEngineAway
+	}
+	return nil
+}
+
+// runBookMerge joins a multi-file book into one chaptered M4B, written
+// beside the parts in the book's own library, so who can see it does not
+// change.
 func (l *Library) runBookMerge(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) ([]string, error) {
-	_, oldPID, ok := parseAPIPID(t.ItemPID)
-	if !ok {
-		return nil, fmt.Errorf("%w: bad item pid %q", errToolPermanent, t.ItemPID)
-	}
-	bd, err := l.lib.Book(ctx, oldPID)
-	if err != nil {
-		return nil, classify(err)
-	}
-	// Format aac on purpose: any mix of part codecs merges, and the
-	// resolved flat MP4 form is the one that carries the chapter track.
-	// The cost is a transcode even when every part is already AAC; the
-	// bridge documents the trade.
-	jobID, err := l.flowJobs.CreateMergeJob(ctx, p.PartPaths, p.Titles, "aac")
+	b, err := l.bookToolFor(ctx, t, &p)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := l.pollToolJob(ctx, t, jobID, 1); err != nil {
-		return nil, err
-	}
-	ws, err := l.toolWorkspace(t.ID)
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(ws)
-	title := bd.Item.Title
-	if p.KeepOriginals {
-		// The catalog identifies a book by author and title (plus any
-		// ASIN/ISBN/edition). An unmarked merged copy would join the
-		// surviving original as one more part of the same item, so the
-		// kept-originals form gets a visible marker instead.
-		title += " (Merged)"
-	}
-	merged := filepath.Join(ws, safeFileName(title)+".m4b")
-	// The merged book reads as its parts did, for whatever else reads the
-	// library.
-	mode := os.FileMode(0o644)
-	if len(p.PartPaths) > 0 {
-		mode = fileModeBeside(p.PartPaths[0])
-	}
-	if err := l.flowJobs.DownloadJobResult(ctx, jobID, 0, merged, mode); err != nil {
-		return nil, err
-	}
-	// The engine deliberately carries no source tags, so the book's
-	// richer identity and its cover are stamped in a post-pass.
-	if err := l.tagToolBookFile(ctx, merged, bd, title, title, 0); err != nil {
-		return nil, err
-	}
-	// Read every user's resume point before anything moves: a
-	// multi-file book's position is already a book-timeline millisecond
-	// by the catalog's contract, so it carries onto the merged single
-	// file unchanged.
-	positions := l.collectToolPositions(ctx, []model.PID{oldPID})
-	if !p.KeepOriginals {
-		// Trash before import: the merged file shares the original's
-		// identity key, and importing first would attach it to the old
-		// item as an extra part. A post-trash import failure leaves the
-		// originals restorable from the trash journal.
-		if err := l.trashToolItems(ctx, []model.PID{oldPID}); err != nil {
+	return b.runOnce(ctx, func(ctx context.Context, ws string) ([]string, error) {
+		if err := l.toolEngineUp(); err != nil {
 			return nil, err
 		}
-	}
-	newPID, err := l.importToolFile(ctx, merged, model.KindBook)
-	if err != nil {
-		return nil, err
-	}
-	for userPID, byItem := range positions {
-		if pos := byItem[oldPID]; pos.positionMS > 0 {
-			if err := l.lib.Playback().Checkpoint(ctx, userPID, newPID, pos.positionMS, pos.asOf()); err != nil {
-				l.log.Warn("carrying merge resume position", "user", string(userPID), "err", err)
-			}
+		bd, err := l.lib.Book(ctx, b.book)
+		if err != nil {
+			return nil, classify(err)
 		}
-	}
-	return []string{apiPID(PrefixBook, newPID)}, nil
+		// Format aac on purpose: any mix of part codecs merges, and the
+		// resolved flat MP4 form is the one that carries the chapter
+		// track. The cost is a transcode even when every part is already
+		// AAC; the bridge documents the trade. The parts are read where
+		// the catalog has them now, which follows a move since the queue.
+		jobID, err := l.flowJobs.CreateMergeJob(ctx, b.partPaths(ctx), p.Titles, "aac")
+		if err != nil {
+			return nil, err
+		}
+		if _, err := l.pollToolJob(ctx, t, jobID, 1); err != nil {
+			return nil, err
+		}
+		merged := filepath.Join(ws, b.names[0])
+		if err := l.flowJobs.DownloadJobResult(ctx, jobID, 0, merged, b.mode); err != nil {
+			return nil, err
+		}
+		// The engine deliberately carries no source tags, so the book's
+		// richer identity and its cover are stamped in a post-pass.
+		if err := l.tagToolBookFile(ctx, merged, bd, b.label, b.label, 0); err != nil {
+			return nil, err
+		}
+		return []string{merged}, nil
+	})
 }
 
-// runBookSplit cuts a single-file book at its chapter marks and imports
-// the pieces as one multi-file book.
+// runBookSplit cuts a single-file book at its chapter marks and writes
+// the pieces as one multi-file book in the book's own library. The pieces
+// bypass the import planner on purpose: its audiobook layout renders one
+// title-named destination per book, so a second part of the same book
+// always collides and quarantines. They are placed with the multi-part
+// folder convention (a folder named for the book, parts ordered by file
+// name) and cataloged by a scan of the library.
 func (l *Library) runBookSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) ([]string, error) {
-	_, oldPID, ok := parseAPIPID(t.ItemPID)
-	if !ok {
-		return nil, fmt.Errorf("%w: bad item pid %q", errToolPermanent, t.ItemPID)
-	}
-	bd, err := l.lib.Book(ctx, oldPID)
-	if err != nil {
-		return nil, classify(err)
-	}
-	jobID, err := l.flowJobs.CreateSplitJob(ctx, p.SrcPath, p.Cuts, "", p.Format)
+	b, err := l.bookToolFor(ctx, t, &p)
 	if err != nil {
 		return nil, err
 	}
-	outs, err := l.pollToolJob(ctx, t, jobID, len(p.Cuts)+1)
-	if err != nil {
-		return nil, err
-	}
-	ws, err := l.toolWorkspace(t.ID)
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(ws)
-	title := bd.Item.Title
-	if p.KeepOriginals {
-		// Same identity-key rule as the merge: unmarked pieces would
-		// join the surviving single-file original as extra parts.
-		title += " (Split)"
-	}
-	bookDir := filepath.Join(ws, safeFileName(title))
-	if err := os.MkdirAll(bookDir, 0o755); err != nil {
-		return nil, &Error{Kind: KindInternal, Err: err}
-	}
-	// Pieces of an mp4-family split keep the .m4b extension so the
-	// rescan classifies them as audiobook parts; other codecs rely on
-	// the narrator tag stamped below.
-	ext := "." + toolSplitExt(p.Format, true)
-	// The pieces read as the book did. Read before the original goes to
-	// the trash, which would leave nothing to read it from.
-	mode := fileModeBeside(p.SrcPath)
-	pieces := make([]string, 0, outs)
-	for i := 0; i < outs; i++ {
-		pieceTitle := chapterTitle("", i)
-		if i < len(p.PieceTitles) {
-			pieceTitle = p.PieceTitles[i]
-		}
-		dst := filepath.Join(bookDir, fmt.Sprintf("%02d - %s%s", i+1, safeFileName(pieceTitle), ext))
-		if err := l.flowJobs.DownloadJobResult(ctx, jobID, i, dst, mode); err != nil {
+	return b.runOnce(ctx, func(ctx context.Context, ws string) ([]string, error) {
+		if err := l.toolEngineUp(); err != nil {
 			return nil, err
 		}
-		if err := l.tagToolBookFile(ctx, dst, bd, title, pieceTitle, i+1); err != nil {
+		bd, err := l.lib.Book(ctx, b.book)
+		if err != nil {
+			return nil, classify(err)
+		}
+		jobID, err := l.flowJobs.CreateSplitJob(ctx, b.partPaths(ctx)[0], p.Cuts, "", p.Format)
+		if err != nil {
 			return nil, err
 		}
-		pieces = append(pieces, dst)
-	}
-	positions := l.collectToolPositions(ctx, []model.PID{oldPID})
-	if !p.KeepOriginals {
-		if err := l.trashToolItems(ctx, []model.PID{oldPID}); err != nil {
+		outs, err := l.pollToolJob(ctx, t, jobID, len(b.names))
+		if err != nil {
 			return nil, err
 		}
-	}
-	// The pieces bypass the import planner on purpose: its audiobook
-	// layout renders one title-named destination per BOOK, so a second
-	// part of the same book always collides and quarantines. They are
-	// placed directly with the multi-part directory convention (a
-	// folder named for the book, parts ordered by file name) and
-	// cataloged by a scoped synchronous scan.
-	destDir := filepath.Join(filepath.Dir(p.SrcPath), safeFileName(title))
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return nil, &Error{Kind: KindInternal, Err: err}
-	}
-	for _, piece := range pieces {
-		if err := copyToolFile(piece, filepath.Join(destDir, filepath.Base(piece)), mode); err != nil {
-			return nil, &Error{Kind: KindInternal, Err: err}
-		}
-	}
-	bookPID, err := l.scanToolBookDir(ctx, destDir, oldPID, title, len(pieces))
-	if err != nil {
-		return nil, err
-	}
-	// The pieces group into one multi-file book by identity key, whose
-	// position is a book-timeline millisecond spanning the parts: the
-	// old single-file position is the same number on the new timeline,
-	// so one checkpoint per user carries the resume point.
-	for userPID, byItem := range positions {
-		if pos := byItem[oldPID]; pos.positionMS > 0 {
-			if err := l.lib.Playback().Checkpoint(ctx, userPID, bookPID, pos.positionMS, pos.asOf()); err != nil {
-				l.log.Warn("carrying split resume position", "user", string(userPID), "err", err)
+		pieces := make([]string, 0, outs)
+		for i := range outs {
+			dst := filepath.Join(ws, b.names[i])
+			if err := l.flowJobs.DownloadJobResult(ctx, jobID, i, dst, b.mode); err != nil {
+				return nil, err
 			}
-		}
-	}
-	return []string{apiPID(PrefixBook, bookPID)}, nil
-}
-
-// runCueSplit cuts a shared album rip at its cue sheet's boundaries and
-// imports one real file per virtual track.
-func (l *Library) runCueSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) ([]string, error) {
-	_, seedPID, ok := parseAPIPID(t.ItemPID)
-	if !ok {
-		return nil, fmt.Errorf("%w: bad item pid %q", errToolPermanent, t.ItemPID)
-	}
-	seed, err := l.lib.Get(ctx, seedPID)
-	if err != nil {
-		return nil, classify(err)
-	}
-	ripFile, sibs, err := l.cueRip(ctx, seed)
-	if err != nil {
-		return nil, err
-	}
-	jobID, err := l.flowJobs.CreateSplitJob(ctx, p.SrcPath, nil, p.CuePath, p.Format)
-	if err != nil {
-		return nil, err
-	}
-	outs, err := l.pollToolJob(ctx, t, jobID, 0)
-	if err != nil {
-		return nil, err
-	}
-	if outs != len(sibs) {
-		// Tag what aligns and log the mismatch rather than failing a
-		// finished cut; the extra pieces get generated names.
-		l.log.Warn("cue split piece count differs from virtual tracks",
-			"task", t.ID, "pieces", outs, "tracks", len(sibs))
-	}
-	ws, err := l.toolWorkspace(t.ID)
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(ws)
-	albumDir := filepath.Join(ws, safeFileName(firstNonEmpty(seed.Album, "Split Album")))
-	if err := os.MkdirAll(albumDir, 0o755); err != nil {
-		return nil, &Error{Kind: KindInternal, Err: err}
-	}
-	pieces := make([]string, 0, outs)
-	// The pieces read as the rip did.
-	mode := fileModeBeside(p.SrcPath)
-	for i := 0; i < outs; i++ {
-		title := fmt.Sprintf("Track %02d", i+1)
-		trackNo := i + 1
-		artist := seed.Artist
-		if i < len(sibs) {
-			title = firstNonEmpty(sibs[i].Title, title)
-			if sibs[i].TrackNo > 0 {
-				trackNo = sibs[i].TrackNo
+			if err := l.tagToolBookFile(ctx, dst, bd, b.label, b.pieceTitle(i), i+1); err != nil {
+				return nil, err
 			}
-			artist = firstNonEmpty(sibs[i].Artist, artist)
+			pieces = append(pieces, dst)
 		}
-		dst := filepath.Join(albumDir, fmt.Sprintf("%02d - %s.%s",
-			i+1, safeFileName(title), toolSplitExt(p.Format, false)))
-		if err := l.flowJobs.DownloadJobResult(ctx, jobID, i, dst, mode); err != nil {
-			return nil, err
-		}
-		if err := l.tagToolTrackFile(ctx, dst, seed, title, artist, trackNo); err != nil {
-			return nil, err
-		}
-		pieces = append(pieces, dst)
-	}
-	// Import first, trash after: track items carry no shared identity
-	// key, so the pieces and the virtual originals coexist while play
-	// state is copied across.
-	sibPIDs := make([]model.PID, len(sibs))
-	for i, s := range sibs {
-		sibPIDs[i] = s.PID
-	}
-	piecePIDs, err := l.importToolDir(ctx, albumDir, pieces)
-	if err != nil {
-		return nil, err
-	}
-	positions := l.collectToolPositions(ctx, sibPIDs)
-	for userPID, byItem := range positions {
-		for i, sib := range sibPIDs {
-			if pos := byItem[sib]; pos.positionMS > 0 && i < len(piecePIDs) && piecePIDs[i] != "" {
-				if err := l.lib.Playback().Checkpoint(ctx, userPID, piecePIDs[i], pos.positionMS, pos.asOf()); err != nil {
-					l.log.Warn("carrying cue split position", "user", string(userPID), "err", err)
-				}
-			}
-		}
-	}
-	if !p.KeepOriginals {
-		// The rip goes to the catalog's trash with every track it carves.
-		// The sheet is not an item the journal can carry, and without its
-		// rip it names nothing, so it is removed outright.
-		if err := l.trashRip(ctx, ripFile); err != nil {
-			return nil, err
-		}
-		if err := os.Remove(p.CuePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			l.log.Warn("removing cue sheet", "path", p.CuePath, "err", err)
-		}
-	}
-	results := make([]string, 0, len(piecePIDs))
-	for _, pid := range piecePIDs {
-		if pid != "" {
-			results = append(results, apiPID(PrefixTrack, pid))
-		}
-	}
-	return results, nil
+		return pieces, nil
+	})
 }
 
 // pollToolJob polls one engine job to completion, mirroring the
 // task's progress and renewing the lease as it goes. wantOutputs > 0
 // asserts the finished output count.
 func (l *Library) pollToolJob(ctx context.Context, t *wdb.ToolTask, jobID string, wantOutputs int) (int, error) {
-	lastRenew := time.Now()
 	lastPct := -1.0
 	for {
 		state, pct, outs, errMsg, err := l.flowJobs.JobStatus(ctx, jobID)
@@ -778,13 +1094,6 @@ func (l *Library) pollToolJob(ctx context.Context, t *wdb.ToolTask, jobID string
 				l.log.Warn("recording tool task progress", "task", t.ID, "err", uerr)
 			}
 			l.notifyToolTaskProgress(ctx, t.ID)
-		}
-		if time.Since(lastRenew) >= toolLeaseRenew {
-			lastRenew = time.Now()
-			until := time.Now().Add(toolTaskLease).UnixNano()
-			if rerr := l.db.RenewToolTaskLease(ctx, t.ID, until); rerr != nil {
-				l.log.Warn("renewing tool task lease", "task", t.ID, "err", rerr)
-			}
 		}
 		select {
 		case <-ctx.Done():
@@ -935,139 +1244,224 @@ func (l *Library) executeToolTagPlan(ctx context.Context, ed *waxlabel.Editor, p
 	return nil
 }
 
-// importToolFile moves one finished file into the library through the
-// acquired-import path and resolves the item it produced.
-func (l *Library) importToolFile(ctx context.Context, path string, kind model.Kind) (model.PID, error) {
-	// No SourceType: this call knows the file arrived, not how. The
-	// store writes manual when it first records the row and leaves a
-	// standing origin alone on a re-record, so a track a download
-	// acquired keeps its rss or youtube provenance through the tool
-	// that split or merged it. Passing manual here would be a claim,
-	// and it would overwrite one.
-	res, err := l.lib.ImportAcquired(ctx, waxbin.AcquiredFile{Path: path}, kind, waxbin.AcquiredMeta{
-		Copy: false, DupPolicy: model.DupAllow,
-	})
-	if err != nil {
-		return "", classify(err)
-	}
-	if res.Plan == nil {
-		return "", fmt.Errorf("%w: the import planner produced no plan", errToolPermanent)
-	}
-	report, err := l.lib.ApplyImport(ctx, res.Plan)
-	if err != nil {
-		return "", classify(err)
-	}
-	if report.Imported == 0 {
-		return "", fmt.Errorf("%w: the import did not land the result: %s", errToolPermanent,
-			l.scrubStoragePaths(importFailureReason(res.Plan, report)))
-	}
-	return l.resolveToolImport(ctx, res.Plan, path)
-}
-
-// importToolDir imports a workspace directory of finished pieces as one
-// batch and resolves each piece's item in input order. A piece can
-// legitimately fail to resolve alone: essence resolution finds an item
-// through its primary file, and every non-primary part of a multi-file
-// book answers nothing. Those entries come back empty; only a batch
-// where nothing resolves is an error.
-func (l *Library) importToolDir(ctx context.Context, dir string, srcs []string) ([]model.PID, error) {
-	plan, err := l.lib.PlanImport(ctx, waxbin.ImportRequest{Source: dir, DupPolicy: model.DupAllow})
-	if err != nil {
-		return nil, classify(err)
-	}
-	report, err := l.lib.ApplyImport(ctx, plan)
-	if err != nil {
-		return nil, classify(err)
-	}
-	if report.Imported == 0 {
-		return nil, fmt.Errorf("%w: the import landed no piece: %s", errToolPermanent,
-			l.scrubStoragePaths(importFailureReason(plan, report)))
-	}
-	pids := make([]model.PID, len(srcs))
-	resolved := 0
-	for i, src := range srcs {
-		pid, err := l.resolveToolImport(ctx, plan, src)
-		if err != nil {
-			l.log.Warn("tool import piece did not resolve", "piece", filepath.Base(src), "err", err)
-			continue
+// scanToolOutputs catalogs a book tool's outputs, placed in dir, each by
+// its own path, so the scan catalogs them and nothing else, then resolves
+// the book they formed: the one holding the first's exact bytes, else the
+// original item when the identity key revived it (the kept-originals
+// marker changes the key, so the copy stays its own book), else the book
+// the (possibly marked) title names. A shutdown or a busy catalog ends it
+// as it found it; any other failure comes after the files are in place,
+// which no retry should repeat, since their sources may be in the trash.
+func (l *Library) scanToolOutputs(ctx context.Context, dir string, files []string, oldPID model.PID, title string) (model.PID, error) {
+	for _, file := range files {
+		req := waxbin.ScanRequest{SubPath: file}
+		if libPID, err := l.libraryForPath(ctx, file); err == nil && libPID != "" {
+			req.LibraryPID = model.PID(libPID)
 		}
-		pids[i] = pid
-		resolved++
+		if err := l.toolScan(ctx, req); err != nil {
+			if e := classifyMutation(err); catalogWaits(e) || ctx.Err() != nil {
+				return "", e
+			}
+			return "", l.uncataloged(dir, "and the next scan of the library will catalog them: "+l.failureCause(classify(err).Error()))
+		}
 	}
-	if resolved == 0 {
-		return nil, fmt.Errorf("%w: no imported piece resolved to an item", errToolPermanent)
+	if hash, err := identity.ContentHash(files[0]); err == nil {
+		if items, err := l.lib.ItemsByContentHash(ctx, hash); err == nil {
+			for _, it := range items {
+				if it.Kind == model.KindBook {
+					return it.PID, nil
+				}
+			}
+		}
 	}
-	return pids, nil
-}
-
-// scanToolBookDir catalogs a directly-placed book directory with a
-// synchronous scan scoped to its library, then resolves the book the
-// pieces formed: the original item when the identity key revived it
-// (the kept-originals marker changes the key, so the copy stays its own
-// book), else the book the (possibly marked) title names.
-func (l *Library) scanToolBookDir(ctx context.Context, dir string, oldPID model.PID, title string, pieceCount int) (model.PID, error) {
-	req := waxbin.ScanRequest{}
-	if libPID, err := l.libraryForPath(ctx, dir); err == nil && libPID != "" {
-		req.LibraryPID = model.PID(libPID)
-	}
-	if _, err := l.lib.Scan(ctx, req); err != nil {
-		return "", classify(err)
-	}
-	if bd, err := l.lib.Book(ctx, oldPID); err == nil && len(bd.Files) == pieceCount {
+	if bd, err := l.lib.Book(ctx, oldPID); err == nil && len(bd.Files) == len(files) {
 		return oldPID, nil
 	}
-	b := query.New(query.EntityItems).
+	// Visible books only: the original the run trashed carries the same
+	// title and is no answer.
+	b := visibleItems().
 		Where("kind", query.OpIs, string(model.KindBook)).
 		Where("title", query.OpIs, title).Limit(1)
 	items, err := l.lib.Query(ctx, b.Build(), "")
 	if err != nil {
-		return "", classify(err)
+		if e := classify(err); catalogWaits(e) || ctx.Err() != nil {
+			return "", e
+		}
+		return "", l.uncataloged(dir, "and were scanned, but their book could not be found: "+l.failureCause(classify(err).Error()))
 	}
 	if len(items) == 0 {
-		return "", fmt.Errorf("%w: the scanned pieces produced no book", errToolPermanent)
+		return "", l.uncataloged(dir, "but the scan made no book of them")
 	}
 	return items[0].PID, nil
 }
 
-// copyToolFile copies a staged piece into the library with the repo's
-// crash-safe write discipline, in mode, the mode of the file it was cut
-// from; staging may sit on another filesystem, so a plain rename cannot
-// carry it.
-func copyToolFile(src, dst string, mode os.FileMode) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
+// toolItemFiles is a tool's read of an item's files, or what a test's
+// mutateHook answers in its place.
+func (l *Library) toolItemFiles(ctx context.Context, item model.PID) ([]model.ItemFileRef, error) {
+	if l.mutateHook != nil {
+		if err := l.mutateHook("files"); err != nil {
+			return nil, err
+		}
 	}
-	defer in.Close()
-	tmp, err := os.CreateTemp(filepath.Dir(dst), ".waxdeck-piece-*")
-	if err != nil {
-		return err
+	return l.lib.ItemFiles(ctx, item)
+}
+
+// toolScan is a tool's scan of a library, or what a test's mutateHook
+// answers in its place.
+func (l *Library) toolScan(ctx context.Context, req waxbin.ScanRequest) error {
+	if l.mutateHook != nil {
+		if err := l.mutateHook("scan"); err != nil {
+			return err
+		}
 	}
-	tmpName := tmp.Name()
-	if _, err := io.Copy(tmp, in); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return err
+	_, err := l.lib.Scan(ctx, req)
+	return err
+}
+
+// catalogWaits reports whether a catalog failure passes on its own: a
+// conflicting job holding the catalog, the catalog suspended for
+// maintenance, or the attempt's own deadline or stop.
+func catalogWaits(err error) bool {
+	switch KindOf(err) {
+	case KindCatalogBusy, KindMaintenance:
+		return true
 	}
-	// A temp file is created 0600. The mode is best effort, as the tag
-	// writer's is: a mount that refuses it still takes the piece.
-	_ = tmp.Chmod(mode)
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return err
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// uncataloged is a failure after a tool's files took their names in dir,
+// saying what became of them.
+func (l *Library) uncataloged(dir, what string) error {
+	return fmt.Errorf("%w: the new files are in %s, %s", errToolPermanent, l.scrubStoragePaths(dir), what)
+}
+
+// toolCrashPoint is where a test may end a book tool's run, as a crash
+// or a shutdown would.
+func (l *Library) toolCrashPoint(step string) error {
+	if l.toolStepHook != nil {
+		return l.toolStepHook(step)
 	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
-		return err
+	return nil
+}
+
+// toolWriteErr is a failed write of a tool's output into the library: a
+// folder that refused it is the library's to fix, else the server's.
+// Nothing was placed, so neither is worth a retry.
+func (l *Library) toolWriteErr(err error) error {
+	if cause := l.storageRefused(err.Error()); cause != "" {
+		e := errStorageUnwritable(cause)
+		e.Err = errToolPermanent
+		return e
 	}
-	if err := os.Rename(tmpName, dst); err != nil {
-		os.Remove(tmpName)
-		return err
+	return &Error{Kind: KindInternal, Msg: "writing into the library failed: " + l.failureCause(err.Error()), Err: errToolPermanent}
+}
+
+// toolBookFolder is the folder a book tool writes title's files into,
+// for a book named book whose files are in dir, in the library rooted at
+// root: dir itself when it is named for the book and title is that name,
+// else a folder named for title in the folder that holds the book's - the
+// parent of a folder named for the book, or dir itself - which keeps a
+// marked copy out of the original's folder and never leaves the library.
+func toolBookFolder(root, dir, book, title string) string {
+	home := dir
+	if !samePath(dir, root) && strings.EqualFold(filepath.Base(dir), safeFileName(book)) {
+		if strings.EqualFold(filepath.Base(dir), safeFileName(title)) {
+			return dir
+		}
+		home = filepath.Dir(dir)
 	}
-	if d, err := os.Open(filepath.Dir(dst)); err == nil {
-		_ = d.Sync()
-		d.Close()
+	return filepath.Join(home, safeFileName(title))
+}
+
+// partsFolder is the deepest folder holding every part of a book, in the
+// library rooted at root: the book's own folder above disc folders. Parts
+// that share no folder inside the library answer the first part's.
+func partsFolder(root string, parts []string) string {
+	first := filepath.Dir(parts[0])
+	if root == "" {
+		root = first
+	}
+	dir := first
+	for _, p := range parts[1:] {
+		for !pathsOverlap(dir, p) {
+			if samePath(dir, root) || dir == filepath.Dir(dir) {
+				return first
+			}
+			dir = filepath.Dir(dir)
+		}
+	}
+	return dir
+}
+
+// libraryNameOf is the name of the library holding path, or "".
+func (l *Library) libraryNameOf(path string) string {
+	root := l.storageRootFor(path)
+	for _, r := range l.libraryRoots() {
+		if root != "" && filepath.Clean(r.Path) == root {
+			return r.Name
+		}
+	}
+	return ""
+}
+
+// mergeFolder is where a book merge writes: beside the parts, or with the
+// originals kept, a folder of its own beside the book.
+func (l *Library) mergeFolder(parts []string, book string, keepOriginals bool) string {
+	root := l.storageRootFor(parts[0])
+	dir := partsFolder(root, parts)
+	if !keepOriginals {
+		return dir
+	}
+	return toolBookFolder(root, dir, book, book+mergedMark)
+}
+
+// splitFolder is where a book split writes its pieces: the book's folder
+// when one is named for it, else a new folder named for the book beside
+// its file, or with the original kept, a folder of their own beside it.
+func (l *Library) splitFolder(src, book string, keepOriginals bool) string {
+	title := book
+	if keepOriginals {
+		title += splitMark
+	}
+	return toolBookFolder(l.storageRootFor(src), filepath.Dir(src), book, title)
+}
+
+// The marks a kept original's copy carries in its title. The catalog
+// identifies a book by author and title, so an unmarked copy would join
+// the surviving original as more parts of the same item.
+const (
+	mergedMark = " (Merged)"
+	splitMark  = " (Split)"
+)
+
+// probeToolFolders refuses a book tool when a folder it writes in will
+// not take a file, before the task is queued and again before its trash
+// runs: each folder named, or for one not made yet, the folder it would
+// be made in.
+func (l *Library) probeToolFolders(dirs ...string) error {
+	seen := map[string]bool{}
+	for _, dir := range dirs {
+		for {
+			if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) || dir == filepath.Dir(dir) {
+				break
+			}
+			dir = filepath.Dir(dir)
+		}
+		if seen[dir] {
+			continue
+		}
+		seen[dir] = true
+		// Permanent for a task that probes as it runs: a folder that will
+		// not take a file does not mend between attempts.
+		if err := probeWritable(dir); err != nil {
+			if cause := l.storageRefused(err.Error()); cause != "" {
+				e := errStorageUnwritable(cause)
+				e.Err = errToolPermanent
+				return e
+			}
+			return &Error{Kind: KindInternal, Err: errToolPermanent,
+				Msg: "the book's folder could not be written: " + l.failureCause(err.Error())}
+		}
 	}
 	return nil
 }
@@ -1149,22 +1543,27 @@ func (l *Library) forEachCatalogUser(ctx context.Context, fn func(model.PID)) {
 	}
 }
 
+// ripFileOf answers the file a carved track plays a window of.
+func (l *Library) ripFileOf(ctx context.Context, track model.PID) (model.PID, error) {
+	files, err := l.lib.ItemFiles(ctx, track)
+	if err != nil {
+		return "", classify(err)
+	}
+	for _, f := range files {
+		if f.Virtual && f.Role == fileRolePrimary {
+			return f.FilePID, nil
+		}
+	}
+	return "", &Error{Kind: KindConflict, Err: errToolPermanent, Msg: "the track is no longer cut from a rip"}
+}
+
 // cueRip answers the file a carved track plays a window of and every
 // track the catalog carves from it, in start order, which a delete plan of
 // that file lists.
 func (l *Library) cueRip(ctx context.Context, seed *model.ItemView) (model.PID, []*model.ItemView, error) {
-	files, err := l.lib.ItemFiles(ctx, seed.PID)
+	file, err := l.ripFileOf(ctx, seed.PID)
 	if err != nil {
-		return "", nil, classify(err)
-	}
-	var file model.PID
-	for _, f := range files {
-		if f.Virtual && f.Role == fileRolePrimary {
-			file = f.FilePID
-		}
-	}
-	if file == "" {
-		return "", nil, fmt.Errorf("%w: the track is no longer cut from a rip", errToolPermanent)
+		return "", nil, err
 	}
 	plan, err := l.lib.PlanDeleteFiles(ctx, []model.PID{file}, model.DeleteTrash)
 	if err != nil {
@@ -1194,30 +1593,98 @@ func (l *Library) cueRip(ctx context.Context, seed *model.ItemView) (model.PID, 
 }
 
 // trashRip moves a cue rip's file to the catalog's trash with the tracks
-// it carves as they stand now.
+// it carves as they stand now, under the cue split's reason.
 func (l *Library) trashRip(ctx context.Context, file model.PID) error {
-	plan, err := l.lib.PlanDeleteFiles(ctx, []model.PID{file}, model.DeleteTrash)
+	plan, err := l.lib.PlanDeleteFiles(ctx, []model.PID{file}, model.DeleteTrash, waxbin.DeleteReason(taskTypeCueSplit))
 	if err != nil {
 		return classify(err)
 	}
-	if _, err := l.lib.ApplyDelete(ctx, plan); err != nil {
-		return classify(err)
+	if _, e := l.applyToolTrash(ctx, plan); e != nil {
+		e.Msg += ", so the rip stays beside the tracks split from it"
+		return e
 	}
 	return nil
 }
 
-// trashToolItems moves items to the catalog's reversible trash. No
-// episode guard: every caller is a book merge or split, so only books
-// reach here.
-func (l *Library) trashToolItems(ctx context.Context, pids []model.PID) error {
+// trashSyncedItems moves the tracks a mirror sync dropped to the trash
+// and answers the items a file of which stayed: a run that moved nothing
+// and failed is refused as a delete is, and a copy a read-only library
+// holds keeps its item, as a delete leaves one.
+func (l *Library) trashSyncedItems(ctx context.Context, pids []model.PID) (map[model.PID]bool, error) {
 	plan, err := l.lib.PlanDeletePIDs(ctx, pids, model.DeleteTrash)
 	if err != nil {
-		return classify(err)
+		return nil, classify(err)
 	}
-	if _, err := l.lib.ApplyDelete(ctx, plan); err != nil {
-		return classify(err)
+	rep, stayedFiles, err := l.applyDeletion(ctx, plan)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if refused := l.deletionRefused(ctx, plan, rep, stayedFiles); refused != nil {
+		return nil, refused
+	}
+	stayed := map[model.PID]bool{}
+	for _, a := range plan.Actions {
+		if _, ok := stayedFiles[a.FilePID]; ok {
+			stayed[a.ItemPID] = true
+		}
+	}
+	return stayed, nil
+}
+
+// applyToolTrash applies a tool's trash plan and answers how many files
+// went, or why one stayed, which ends the task: a file that stayed would
+// join what the tool writes beside it as one more part of the same book.
+// A plan that would leave a file refuses before anything moves. The run
+// is not cut short between files, which would move files no failure then
+// names.
+func (l *Library) applyToolTrash(ctx context.Context, plan *trash.Plan) (int, *Error) {
+	for _, a := range plan.Actions {
+		if a.Skip {
+			return 0, &Error{Kind: KindConflict, Err: errToolPermanent,
+				Msg: fmt.Sprintf("%s would stay where it is (%s)", libraryPath(a), a.Reason)}
+		}
+	}
+	rep, stayed, err := l.applyDeletion(ctx, plan)
+	if err != nil {
+		// A busy or suspended catalog refused the run before it moved
+		// anything, which a later attempt gets past.
+		e := &Error{Kind: KindOf(err), Msg: "the move to the trash failed: " + l.failureCause(err.Error()), Err: err}
+		if !catalogWaits(err) {
+			e.Err = errToolPermanent
+		}
+		return 0, e
+	}
+	if len(stayed) == 0 {
+		return rep.Trashed, nil
+	}
+	first, cause := "", ""
+	for _, a := range plan.Actions {
+		if why, ok := stayed[a.FilePID]; ok {
+			first, cause = libraryPath(a), why
+			break
+		}
+	}
+	kind := KindInternal
+	switch refusal := storageRefusal(cause); {
+	case refusal != "":
+		kind, cause = KindStorageUnwritable, refusal
+	case cause == "library is read-only":
+		kind = KindReadOnly
+	case strings.HasPrefix(cause, "the cue rip's tracks changed"):
+		kind = KindConflict
+	}
+	return rep.Trashed, &Error{Kind: kind, Err: errToolPermanent, Msg: fmt.Sprintf(
+		"%d of %d files could not be moved to the trash (%s: %s)", len(stayed), len(plan.Actions), first, cause)}
+}
+
+// auditToolTask records a file tool's run under the account that queued
+// it, by id, as a failed migration is: an account disabled or deleted
+// since still ordered the run.
+func (l *Library) auditToolTask(ctx context.Context, t *wdb.ToolTask, action string, target AuditTarget, detail map[string]any) {
+	if t.UserID == "" {
+		return
+	}
+	l.Audit(context.WithoutCancel(ctx), &UserCtx{ID: t.UserID}, action, target, detail)
 }
 
 // insertToolTask persists a queued task and notifies its audience.
@@ -1228,7 +1695,11 @@ func (l *Library) insertToolTask(ctx context.Context, uc *UserCtx, typ, itemPID 
 // insertToolTaskWith is insertToolTask with a summary the task carries
 // from the start, so its row can say what it is before it runs.
 func (l *Library) insertToolTaskWith(ctx context.Context, uc *UserCtx, typ, itemPID string, p toolTaskParams, summary string) (ToolTaskDTO, error) {
-	t := newToolTask(uc, typ, itemPID, p, summary)
+	return l.queueToolTask(ctx, newToolTask(uc, typ, itemPID, p, summary))
+}
+
+// queueToolTask persists a queued task and notifies its audience.
+func (l *Library) queueToolTask(ctx context.Context, t wdb.ToolTask) (ToolTaskDTO, error) {
 	if err := l.db.InsertToolTask(ctx, t); err != nil {
 		return ToolTaskDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
@@ -1267,8 +1738,10 @@ func (l *Library) taskUserCtx(ctx context.Context, userID string) *UserCtx {
 	return uc
 }
 
-// failToolTask records a terminal failure.
+// failToolTask records a terminal failure, which a shutdown does not
+// keep from the record.
 func (l *Library) failToolTask(ctx context.Context, t *wdb.ToolTask, cause error) {
+	ctx = context.WithoutCancel(ctx)
 	l.log.Warn("a tool task failed", "task", t.ID, "type", t.Type, "err", cause)
 	t.State = taskStateFailed
 	t.Error = taskFailureText(cause)
@@ -1279,7 +1752,52 @@ func (l *Library) failToolTask(ctx context.Context, t *wdb.ToolTask, cause error
 	l.settleMigrationExport(ctx, t.ID)
 	l.scrubTaskSecrets(ctx, t.ID)
 	l.notifyToolTask(ctx, t.ID)
+	l.notifyFileToolEnd(ctx, t)
 	l.toolTaskEnded(ctx, t)
+}
+
+// fileToolNames are the file tools by task type, as their starters read
+// them: the tasks that work on the library's files and can park.
+var fileToolNames = map[string]string{
+	taskTypeBookMerge: "Book merge",
+	taskTypeBookSplit: "Book split",
+	taskTypeCueSplit:  "CUE split",
+}
+
+// notifyFileToolEnd files a merge or split that failed, or parked, in its
+// starter's inbox, as a failed job is. The recorded failure names the
+// server's paths, which only an administrator reads.
+func (l *Library) notifyFileToolEnd(ctx context.Context, t *wdb.ToolTask) {
+	name, ok := fileToolNames[t.Type]
+	if !ok || t.UserID == "" {
+		return
+	}
+	title := name + " failed"
+	if t.State == taskStateParked {
+		title = name + " needs attention"
+	}
+	if t.ItemTitle != "" {
+		title += ": " + t.ItemTitle
+	}
+	body := cmp.Or(t.Error, "no reason was recorded")
+	u, err := l.db.UserByID(ctx, t.UserID)
+	var uc *UserCtx
+	if err == nil {
+		uc, err = l.UserCtx(ctx, u)
+	}
+	switch {
+	case err != nil:
+		body = l.failureWordsFor(&UserCtx{}, body)
+	case !uc.Admin:
+		body = l.failureWordsFor(uc, body)
+	}
+	// The which-one goes in the body, as a failed job's does: a client
+	// heads the row with its own words for the event.
+	subject := name
+	if t.ItemTitle != "" {
+		subject += " of " + t.ItemTitle
+	}
+	l.EmitNotificationFor(ctx, "tool-task-failed", title, subject+": "+body, t.ID, []string{t.UserID})
 }
 
 // taskOpName is an operation name a library threads onto its errors: a
@@ -1444,17 +1962,16 @@ func (l *Library) markToolTask(ctx context.Context, taskID, kind string) {
 }
 
 // toolProgress mirrors a task's progress to the store in five percent
-// steps, telling the task's watchers each time, and keeps its lease alive
-// across a long run.
+// steps, telling the task's watchers each time. The run's hold on the
+// task keeps its lease.
 type toolProgress struct {
-	l         *Library
-	t         *wdb.ToolTask
-	lastPct   float64
-	lastRenew time.Time
+	l       *Library
+	t       *wdb.ToolTask
+	lastPct float64
 }
 
 func newToolProgress(l *Library, t *wdb.ToolTask) *toolProgress {
-	return &toolProgress{l: l, t: t, lastRenew: time.Now()}
+	return &toolProgress{l: l, t: t}
 }
 
 func (tp *toolProgress) report(ctx context.Context, pct float64) {
@@ -1465,13 +1982,6 @@ func (tp *toolProgress) report(ctx context.Context, pct float64) {
 			tp.l.log.Warn("recording tool task progress", "task", tp.t.ID, "err", err)
 		} else {
 			tp.l.notifyToolTaskProgress(ctx, tp.t.ID)
-		}
-	}
-	if time.Since(tp.lastRenew) >= toolLeaseRenew {
-		tp.lastRenew = time.Now()
-		until := time.Now().Add(toolTaskLease).UnixNano()
-		if err := tp.l.db.RenewToolTaskLease(ctx, tp.t.ID, until); err != nil {
-			tp.l.log.Warn("renewing tool task lease", "task", tp.t.ID, "err", err)
 		}
 	}
 }
@@ -1511,12 +2021,28 @@ func toolTaskDTO(t wdb.ToolTask) ToolTaskDTO {
 	if t.Summary != "" {
 		_ = json.Unmarshal([]byte(t.Summary), &summary)
 	}
-	return ToolTaskDTO{
-		ID: t.ID, Type: t.Type, State: t.State, ItemPID: t.ItemPID,
+	dto := ToolTaskDTO{
+		ID: t.ID, Type: t.Type, State: t.State, ItemPID: t.ItemPID, ItemTitle: t.ItemTitle,
 		ProgressPct: t.ProgressPct, Error: t.Error, ResultPIDs: results,
 		Summary:     summary,
 		CreatedAtNS: t.CreatedAtNS, FinishedAtNS: t.FinishedAtNS,
 	}
+	if t.State == taskStateRunning && t.WaitReason != "" {
+		dto.WaitReason, dto.RetryAtNS = t.WaitReason, t.LeaseUntilNS
+	}
+	if (t.Type == taskTypeBookMerge || t.Type == taskTypeBookSplit) && (t.State == taskStateRunning || t.State == taskStateParked) {
+		// While the run's trash holds the book: from its trash to its new
+		// files cataloged, or put back. Kept originals never went, and
+		// sources gone from the trash for good are in it no longer.
+		var p toolTaskParams
+		if json.Unmarshal([]byte(t.Params), &p) == nil && !p.KeepOriginals && p.TrashFromNS != 0 && !p.Forward {
+			switch p.Step {
+			case toolStepTrashing, toolStepPlacing, toolStepUndoing:
+				dto.BookInTrash = true
+			}
+		}
+	}
+	return dto
 }
 
 // chapterTitle falls back to a generated name for an unnamed chapter.
@@ -1564,27 +2090,12 @@ func toolSplitExt(format string, mp4AsBook bool) string {
 	}
 }
 
-// findCueSheet locates the sheet describing a rip: the same-basename
-// .cue first, else the directory's single .cue.
-func findCueSheet(srcPath string) (string, error) {
-	base := strings.TrimSuffix(srcPath, filepath.Ext(srcPath)) + ".cue"
-	if _, err := os.Stat(base); err == nil {
-		return base, nil
-	}
-	entries, err := os.ReadDir(filepath.Dir(srcPath))
-	if err != nil {
-		return "", fmt.Errorf("no cue sheet found beside the rip")
-	}
-	var found []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.EqualFold(filepath.Ext(e.Name()), ".cue") {
-			found = append(found, filepath.Join(filepath.Dir(srcPath), e.Name()))
-		}
-	}
-	if len(found) != 1 {
-		return "", fmt.Errorf("no single cue sheet found beside the rip")
-	}
-	return found[0], nil
+// ownCueSheet is the sheet of a rip's own name beside it, the only one
+// the catalog carves the rip by, and whether it is there.
+func ownCueSheet(rip string) (string, bool) {
+	cue := strings.TrimSuffix(rip, filepath.Ext(rip)) + ".cue"
+	_, err := os.Stat(cue)
+	return cue, err == nil
 }
 
 // safeFileName keeps a display title usable as a file name.

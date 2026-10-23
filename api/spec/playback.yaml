@@ -17,7 +17,18 @@ paths:
         byte-identity pin; expiry is
         enforced per request, so an in-flight fetch completes but a
         later range request after `expiresAt` answers
-        `unauthenticated` and the client re-requests play-info. The url
+        `unauthenticated` and the client re-requests play-info. A
+        server whose engine is configured but not reachable right now
+        mints that same direct url, exactly as an engine-less server
+        does, and the url keeps working once the engine answers again
+        (a carved track's direct url, whose window only the engine
+        cuts, then answers `unauthenticated` and the client
+        re-requests play-info). A stream url minted before the engine went away
+        keeps playing an original through the download endpoint, and
+        answers `feature-unavailable` (`params.feature`
+        `streaming-engine`, with `Retry-After`) only for a stream the
+        engine alone makes: a carved window, voice boost, a format or a
+        bitrate, which a re-request mints as the original. The url
         dies with the session that asked for it. A capped account's
         transcoded stream is never wider than its ceiling, whether or
         not the request carries `maxBitrateKbps` (an original played
@@ -628,9 +639,12 @@ paths:
         exists yet the server queues analysis and answers `pending`;
         poll again later (analysis runs in the background at low
         priority, and repeated polls coalesce onto the single queued
-        analysis). Downloads for offline playback should fetch and
-        store this map alongside the audio, or trimming silently stops
-        working in airplane mode.
+        analysis). While the server's streaming engine is away, an
+        episode, book or book part with no map yet answers the
+        engine-away 503 instead: its analysis is queued all the same
+        and runs once the engine answers. Downloads for offline
+        playback should fetch and store this map alongside the audio,
+        or trimming silently stops working in airplane mode.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -654,7 +668,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "503":
-          $ref: "#/components/responses/CatalogMaintenance"
+          $ref: "#/components/responses/EngineAwayOrMaintenance"
 
   /items/{pid}/waveform:
     get:
@@ -1472,7 +1486,8 @@ components:
             `ready` (spans present), `pending` (analysis queued or
             running; poll again later), or `unavailable` (this item is
             not mapped: not spoken-word content, audio not fetched to
-            the server yet, or the streaming engine cannot analyze).
+            the server yet, or a server whose streaming engine, if it
+            has one, runs no analysis).
             Open set; treat unknown values as `unavailable`.
           example: ready
         essenceHash:

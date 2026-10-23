@@ -6,6 +6,9 @@
     "taskDismiss": "task-dismiss-{id}",
     "taskRow": "task-row-{id}",
     "tasksClearFinished": "tasks-clear-finished",
+    "tasksClearFinishedAll": "tasks-clear-finished-all",
+    "tasksClearFinishedConfirm": "tasks-clear-finished-confirm",
+    "tasksClearFinishedMine": "tasks-clear-finished-mine",
     "tasksScreen": "tasks-screen"
   }
 }

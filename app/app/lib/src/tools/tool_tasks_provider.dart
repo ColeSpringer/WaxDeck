@@ -105,14 +105,16 @@ class ToolTasksController extends AsyncNotifier<ToolTasksState> {
     );
   }
 
-  /// Sweeps the finished rows the caller can see (everyone's for an
-  /// administrator, whose list shows everyone's) and answers how many
-  /// went, for the toolbar's toast. Refetched rather than filtered
+  /// Sweeps the caller's own finished rows, or with [all] everyone's
+  /// (an administrator's choice), and answers how many went and how many
+  /// stayed, for the toolbar's toast. Refetched rather than filtered
   /// locally: the server's answer is the truth about what it deleted.
-  Future<int> clearFinished() async {
-    final deleted = await ref.read(repositoryProvider).clearFinishedToolTasks();
+  Future<ToolTasksCleared> clearFinished({bool all = false}) async {
+    final cleared = await ref
+        .read(repositoryProvider)
+        .clearFinishedToolTasks(all: all);
     if (ref.mounted) ref.invalidateSelf();
-    return deleted;
+    return cleared;
   }
 }
 

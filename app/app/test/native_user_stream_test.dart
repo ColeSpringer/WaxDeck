@@ -7,9 +7,11 @@ import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
+import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/player/entity_play_state_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
+import 'package:waxdeck/src/shell/server_health.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
@@ -137,12 +139,28 @@ class _CountingRepository extends FakeRepository {
     return super.getLibraryHealth();
   }
 
+  int serverHealthReads = 0;
+
+  @override
+  Future<ServerHealth> health() {
+    serverHealthReads++;
+    return super.health();
+  }
+
   int libraryReads = 0;
 
   @override
   Future<List<LibraryInfo>> listLibraries({bool counts = false}) {
     libraryReads++;
     return super.listLibraries(counts: counts);
+  }
+
+  int organizeProfileReads = 0;
+
+  @override
+  Future<OrganizeProfiles> listOrganizeProfiles() {
+    organizeProfileReads++;
+    return super.listOrganizeProfiles();
   }
 
   int entityReads = 0;
@@ -330,17 +348,22 @@ void main() {
     () async {
       // What fell between the lost cursor and the fresh one is gone, so
       // nothing per-kind can say what to refresh.
+      // That includes what the server says of itself: an engine that
+      // went away or came back in the gap left its marker there too.
       final b = await _bind();
       b.container
         ..listen(adminJobsProvider, (_, _) {})
-        ..listen(healthProvider, (_, _) {});
+        ..listen(healthProvider, (_, _) {})
+        ..listen(serverHealthProvider, (_, _) {});
       await b.container.read(adminJobsProvider.future);
       await b.container.read(healthProvider.future);
+      await b.container.read(serverHealthProvider.future);
       final repo = b.repo as _CountingRepository;
-      final (prefs, jobs, health) = (
+      final (prefs, jobs, health, server) = (
         repo.prefsReads,
         repo.jobReads,
         repo.healthReads,
+        repo.serverHealthReads,
       );
 
       b.container.read(serverEventBusProvider).reset();
@@ -349,6 +372,7 @@ void main() {
       expect(repo.prefsReads, prefs + 1);
       expect(repo.jobReads, jobs + 1);
       expect(repo.healthReads, health + 1);
+      expect(repo.serverHealthReads, server + 1);
     },
   );
 
@@ -410,6 +434,46 @@ void main() {
     },
   );
 
+  test('a server marker re-reads what the server says of itself and none of '
+      'the user surfaces', () async {
+    final b = await _bind(
+      serverPages: [
+        const ServerSyncPage(nextSince: 'scur-1'),
+        const ServerSyncPage(
+          events: [ServerSyncEvent(kind: 'server')],
+          nextSince: 'scur-2',
+        ),
+      ],
+    );
+    final repo = b.repo as _CountingRepository
+      ..serverStreaming = const ServerStreaming(
+        configured: true,
+        connected: true,
+      );
+    b.container.listen(serverHealthProvider, (_, _) {});
+    await b.container.read(serverHealthProvider.future);
+    await b.engine.pullServer();
+    final prefs = repo.prefsReads;
+    final server = repo.serverHealthReads;
+
+    // The engine went away.
+    repo.serverStreaming = const ServerStreaming(
+      configured: true,
+      connected: false,
+    );
+    await b.engine.pullServer();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(repo.serverHealthReads, server + 1);
+    expect(
+      (await b.container.read(
+        serverHealthProvider.future,
+      )).streaming?.connected,
+      isFalse,
+    );
+    expect(repo.prefsReads, prefs);
+  });
+
   test(
     'a libraries marker refreshes the libraries and none of the user surfaces',
     () async {
@@ -436,6 +500,29 @@ void main() {
       expect(repo.prefsReads, prefs);
     },
   );
+
+  test('a libraries marker reads the organize profiles again, which count '
+      'the managed libraries', () async {
+    final b = await _bind(
+      serverPages: [
+        const ServerSyncPage(nextSince: 'scur-1'),
+        const ServerSyncPage(
+          events: [ServerSyncEvent(kind: 'libraries')],
+          nextSince: 'scur-2',
+        ),
+      ],
+    );
+    b.container.listen(organizeProfilesProvider, (_, _) {});
+    await b.container.read(organizeProfilesProvider.future);
+    await b.engine.pullServer();
+    final repo = b.repo as _CountingRepository;
+    final reads = repo.organizeProfileReads;
+
+    await b.engine.pullServer();
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+    expect(repo.organizeProfileReads, reads + 1);
+  });
 
   group('home\'s library probe', () {
     const item = 'tr-01JZX5N8QW3F4V9T2B7KDHOME01';

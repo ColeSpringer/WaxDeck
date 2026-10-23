@@ -62,11 +62,17 @@ class StreamRefusal {
 
   /// The server could not reach its streaming engine: the 502 `internal`
   /// it answers a stream, a joined stream, or a rendering's playlist or
-  /// segment with while the engine is away. A fresh mint may route around
-  /// it (play-info hands out the original's bytes while the engine is
-  /// down). A 502 in other words is a host behind the server, a podcast's
-  /// or a station's, which another mint reaches no better.
-  bool get engineDown => status == 502 && code == 'internal';
+  /// segment with when it finds the engine gone, and the 503 naming the
+  /// `streaming-engine` it answers a stream only the engine makes once it
+  /// knows. A fresh mint routes around it (play-info hands out the
+  /// original's bytes while the engine is away). A 502 in other words is a
+  /// host behind the server, a podcast's or a station's, which another
+  /// mint reaches no better.
+  bool get engineDown =>
+      (status == 502 && code == 'internal') ||
+      (status == 503 &&
+          code == 'feature-unavailable' &&
+          params?['feature'] == 'streaming-engine');
 
   @override
   String toString() =>

@@ -10,6 +10,7 @@ import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_delete.dart';
 import '../library/item_kind.dart';
 import '../metadata/metadata_controller.dart';
 import '../player/download_action.dart';
@@ -26,6 +27,7 @@ import '../sharing/share_dialog.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/server_health.dart';
 import '../shell/shell_messages.dart';
 import '../tools/tool_tasks_provider.dart';
 import 'books_controller.dart';
@@ -42,18 +44,65 @@ enum _BookAction {
   split,
   mergeSeries,
   treatAsMusic,
+  delete,
 }
 
 /// One audiobook: its cover, who made it, where the listener is in it,
 /// and its chapters.
-class BookScreen extends ConsumerWidget {
+class BookScreen extends ConsumerStatefulWidget {
   const BookScreen({required this.pid, super.key});
 
   final String pid;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final detail = ref.watch(bookDetailProvider(pid));
+  ConsumerState<BookScreen> createState() => _BookScreenState();
+}
+
+class _BookScreenState extends ConsumerState<BookScreen> {
+  /// The merges and splits queued from this screen that have not ended,
+  /// each with whether the task list has shown it yet.
+  final _queued = <String, bool>{};
+  ProviderSubscription<AsyncValue<ToolTasksState>>? _tasks;
+
+  /// Reads the book again once a task queued from here ends, its parts
+  /// and chapters being what the task changed, for as long as the screen
+  /// is up (the subscription closes with it). A task that leaves the list
+  /// unfinished (cleared, pruned, pushed past the first page) counts as
+  /// ended: nothing else will say it did.
+  void _watchTask(String taskId) {
+    if (!mounted) return;
+    _queued[taskId] = false;
+    _tasks ??= ref.listenManual(toolTasksProvider, (_, next) {
+      final listing = next.value;
+      if (listing == null) return;
+      final reread = <String>{};
+      for (final id in _queued.keys.toList()) {
+        final task = listing.tasks.where((t) => t.id == id).firstOrNull;
+        // Parked is finished too: the task will not move again.
+        if (task != null && !task.finished) {
+          _queued[id] = true;
+          continue;
+        }
+        // Not listed yet: the list was read before the task was queued.
+        if (task == null && !_queued[id]!) continue;
+        _queued.remove(id);
+        reread
+          ..add(widget.pid)
+          ..addAll(task?.resultPids ?? const <String>[]);
+      }
+      for (final pid in reread) {
+        ref.invalidate(bookDetailProvider(pid));
+      }
+      if (_queued.isEmpty) {
+        _tasks?.close();
+        _tasks = null;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = ref.watch(bookDetailProvider(widget.pid));
     final book = detail.value;
     final l10n = context.l10n;
 
@@ -65,7 +114,7 @@ class BookScreen extends ConsumerWidget {
       // the system gesture agree from either entry point.
       onBack: () => context.leave(fallback: WaxRoute.books),
       actions: <Widget>[
-        if (book != null) _BookOverflow(book: book),
+        if (book != null) _BookOverflow(book: book, onToolQueued: _watchTask),
         const SearchAction(),
       ],
       slivers: <Widget>[
@@ -77,7 +126,7 @@ class BookScreen extends ConsumerWidget {
           state: detail,
           skeletonFills: true,
           errorTitle: l10n.bookLoadError,
-          onRetry: () => ref.invalidate(bookDetailProvider(pid)),
+          onRetry: () => ref.invalidate(bookDetailProvider(widget.pid)),
           builder: (context, value) => SliverList.list(
             children: <Widget>[
               _Header(book: value),
@@ -493,12 +542,18 @@ class _Edition extends StatelessWidget {
 
 /// Mark finished, start over, share, edit, and the admin file tools.
 class _BookOverflow extends ConsumerWidget {
-  const _BookOverflow({required this.book});
+  const _BookOverflow({required this.book, required this.onToolQueued});
 
   final BookDetail book;
 
+  /// Hears of each merge or split queued from here, by its task id.
+  final void Function(String taskId) onToolQueued;
+
   bool get _canMerge => book.parts.length > 1;
-  bool get _canSplit => book.parts.length <= 1 && book.chapters.isNotEmpty;
+
+  /// A split cuts at the marks inside the book, so one chapter is
+  /// nothing to cut.
+  bool get _canSplit => book.parts.length <= 1 && book.chapters.length >= 2;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -511,6 +566,10 @@ class _BookOverflow extends ConsumerWidget {
             .contains('admin') ??
         false;
     final l10n = context.l10n;
+    // A merge and a split are the engine's work: not offered while the
+    // server says its file tools are unavailable, whether it runs without
+    // an engine or cannot reach the one it has.
+    final fileTools = ref.watch(serverStreamingProvider)?.fileTools ?? true;
     return WaxMenuButton<_BookAction>(
       glyph: WaxIcons.more,
       label: l10n.bookMore,
@@ -555,17 +614,19 @@ class _BookOverflow extends ConsumerWidget {
             label: l10n.bookEditMetadata,
             glyph: WaxIcons.edit,
           ),
-          if (_canMerge)
+          if (fileTools && _canMerge)
             WaxMenuItem<_BookAction>(
               value: _BookAction.merge,
               label: l10n.bookMerge,
               glyph: WaxIcons.sort,
+              semanticsId: SemanticsIds.bookMerge,
             ),
-          if (_canSplit)
+          if (fileTools && _canSplit)
             WaxMenuItem<_BookAction>(
               value: _BookAction.split,
               label: l10n.bookSplit,
               glyph: WaxIcons.sort,
+              semanticsId: SemanticsIds.bookSplit,
             ),
           // A series is a name the books' tags carry rather than a
           // curated entity, so a split spelling never reaches the
@@ -578,6 +639,13 @@ class _BookOverflow extends ConsumerWidget {
               semanticsId: SemanticsIds.seriesMerge,
             ),
         ],
+        if (canDeleteItems(ref))
+          WaxMenuItem<_BookAction>(
+            value: _BookAction.delete,
+            label: l10n.libraryDeleteFilesMenu,
+            glyph: WaxIcons.delete,
+            semanticsId: SemanticsIds.itemMenuDelete,
+          ),
       ],
       onSelected: (action) => _run(context, ref, action),
     );
@@ -604,26 +672,49 @@ class _BookOverflow extends ConsumerWidget {
       case _BookAction.editMetadata:
         context.push(WaxRoute.metadata(book.pid));
       case _BookAction.merge:
-        unawaited(
-          _runTool(
-            context,
-            ref,
-            () => ref.read(repositoryProvider).mergeBook(book.pid),
-          ),
-        );
+        unawaited(_confirmTool(context, ref, merge: true));
       case _BookAction.split:
-        unawaited(
-          _runTool(
-            context,
-            ref,
-            () => ref.read(repositoryProvider).splitBook(book.pid),
-          ),
-        );
+        unawaited(_confirmTool(context, ref, merge: false));
       case _BookAction.mergeSeries:
         unawaited(showSeriesMergeSheet(context, book: book));
       case _BookAction.treatAsMusic:
         unawaited(confirmSetKind(context, pids: [book.pid], to: 'music'));
+      case _BookAction.delete:
+        unawaited(
+          confirmDeleteItem(
+            context,
+            pid: book.pid,
+            onDeleted: () {
+              if (context.mounted) context.leave(fallback: WaxRoute.books);
+            },
+          ),
+        );
     }
+  }
+
+  /// Asks before a merge or a split, with the choice to keep the
+  /// originals, then queues it.
+  Future<void> _confirmTool(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool merge,
+  }) async {
+    final repository = ref.read(repositoryProvider);
+    final keep = await showDialog<bool>(
+      context: context,
+      builder: (_) => _BookToolDialog(
+        merge: merge,
+        count: merge ? book.parts.length : book.chapters.length,
+      ),
+    );
+    if (keep == null || !context.mounted) return;
+    await _runTool(
+      context,
+      ref,
+      () => merge
+          ? repository.mergeBook(book.pid, keepOriginals: keep)
+          : repository.splitBook(book.pid, keepOriginals: keep),
+    );
   }
 
   /// Both position verbs are one write, with the previous position in
@@ -767,8 +858,9 @@ class _BookOverflow extends ConsumerWidget {
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = container.read(shellMessengerProvider.notifier);
     try {
-      await start();
+      final task = await start();
       container.invalidate(toolTasksProvider);
+      onToolQueued(task.id);
       messenger.show(
         l10n.bookToolQueued,
         actionLabel: l10n.bookToolTasks,
@@ -778,11 +870,96 @@ class _BookOverflow extends ConsumerWidget {
         persist: true,
       );
     } on WaxDeckApiException catch (e) {
-      // The server's words: these refuse on what the book is, and the
-      // table's `conflict` sentence would invite a retry that can never
-      // succeed.
-      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.bookTools);
+      // A refusal of what the book is carries its reason, which the table
+      // words: the plain `conflict` sentence would invite a retry that can
+      // never succeed. One refused for a task still at work, or parked
+      // until it is cleared, leads to it.
+      final running =
+          e.code == 'conflict' &&
+          const {'task-running', 'task-parked'}.contains(e.params?['reason']);
+      messenger.show(
+        explainError(l10n, e),
+        actionLabel: running ? l10n.bookToolTasks : null,
+        onAction: running
+            ? () => router.pushInShell<void>(WaxRoute.tasks)
+            : null,
+        actionSemanticsId: running ? SemanticsIds.openTasks : null,
+        channel: ShellChannel.bookTools,
+      );
     }
+  }
+}
+
+/// Asks before a merge or a split, with a switch that keeps the original
+/// files; answers that choice, or null when cancelled.
+class _BookToolDialog extends StatefulWidget {
+  const _BookToolDialog({required this.merge, required this.count});
+
+  final bool merge;
+
+  /// The parts a merge joins, or the chapters a split cuts at.
+  final int count;
+
+  @override
+  State<_BookToolDialog> createState() => _BookToolDialogState();
+}
+
+class _BookToolDialogState extends State<_BookToolDialog> {
+  var _keep = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final merge = widget.merge;
+    final keepLabel = merge ? l10n.bookMergeKeep : l10n.bookSplitKeep;
+    final confirmId = merge
+        ? SemanticsIds.bookMergeConfirm
+        : SemanticsIds.bookSplitConfirm;
+    // Scrolls rather than overflows on a short window.
+    return AlertDialog(
+      scrollable: true,
+      title: Text(
+        merge
+            ? l10n.bookMergeTitle(widget.count)
+            : l10n.bookSplitTitle(widget.count),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          WaxProse(merge ? l10n.bookMergeBody : l10n.bookSplitBody),
+          const SizedBox(height: WaxSpace.s12),
+          WaxSettingRow(
+            title: keepLabel,
+            help: merge ? l10n.bookMergeKeepHelp : l10n.bookSplitKeepHelp,
+            control: WaxSwitch(
+              label: keepLabel,
+              value: _keep,
+              semanticsId: merge
+                  ? SemanticsIds.bookMergeKeep
+                  : SemanticsIds.bookSplitKeep,
+              onChanged: (v) => setState(() => _keep = v),
+            ),
+          ),
+        ],
+      ),
+      // The delete dialogs' buttons, whose labels wrap where the design
+      // system's would clip at large type on a narrow window.
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.commonCancel),
+        ),
+        Semantics(
+          identifier: confirmId,
+          child: FilledButton(
+            key: Key(confirmId),
+            onPressed: () => Navigator.of(context).pop(_keep),
+            child: Text(merge ? l10n.bookMergeAction : l10n.bookSplitAction),
+          ),
+        ),
+      ],
+    );
   }
 }
 

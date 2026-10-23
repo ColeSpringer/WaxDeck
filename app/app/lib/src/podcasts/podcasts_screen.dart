@@ -17,6 +17,7 @@ import '../shell/async_sliver_face.dart';
 import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/server_health.dart';
 import '../shell/shell_messages.dart';
 import '../sync/streamed_play_states.dart';
 import '../uploads/file_picker_port.dart';
@@ -35,20 +36,24 @@ class PodcastsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final subscriptions = ref.watch(subscriptionsProvider);
     final sort = ref.watch(subscriptionSortProvider);
+    // A server whose podcasts are off refuses every subscribe, so none of
+    // the doors to one is offered.
+    final podcastsOn = ref.watch(podcastsOnProvider);
     final l10n = context.l10n;
 
     return WaxScaffold(
       title: l10n.podcastsTitle,
       actions: <Widget>[
-        WaxIconButton(
-          glyph: WaxIcons.add,
-          label: l10n.podcastAddSubscription,
-          semanticsId: SemanticsIds.podcastAdd,
-          onPressed: () => showDialog<void>(
-            context: context,
-            builder: (_) => const SubscribeDialog(),
+        if (podcastsOn)
+          WaxIconButton(
+            glyph: WaxIcons.add,
+            label: l10n.podcastAddSubscription,
+            semanticsId: SemanticsIds.podcastAdd,
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => const SubscribeDialog(),
+            ),
           ),
-        ),
         const _HubOverflow(),
         const SearchAction(),
         const AccountAction(),
@@ -67,11 +72,13 @@ class PodcastsScreen extends ConsumerWidget {
               title: l10n.podcastsEmptyTitle,
               message: l10n.podcastsEmptyMessage,
               glyph: WaxIcons.podcasts,
-              actionLabel: l10n.podcastsEmptyAction,
-              onAction: () => showDialog<void>(
-                context: context,
-                builder: (_) => const SubscribeDialog(),
-              ),
+              actionLabel: podcastsOn ? l10n.podcastsEmptyAction : null,
+              onAction: podcastsOn
+                  ? () => showDialog<void>(
+                      context: context,
+                      builder: (_) => const SubscribeDialog(),
+                    )
+                  : null,
             ),
           ),
           builder: (context, value) =>
@@ -93,6 +100,7 @@ class _HubOverflow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sort = ref.watch(subscriptionSortProvider);
     final picker = ref.watch(filePickerProvider);
+    final podcastsOn = ref.watch(podcastsOnProvider);
     final l10n = context.l10n;
     return WaxMenuButton<String>(
       glyph: WaxIcons.more,
@@ -115,8 +123,9 @@ class _HubOverflow extends ConsumerWidget {
         ),
         // Hidden without a picker, the contract every pick affordance in
         // this app follows: a platform with no file dialog would
-        // otherwise offer an import that cannot open one.
-        if (picker != null)
+        // otherwise offer an import that cannot open one. Nor on a server
+        // with podcasts off, which refuses every subscribe it would make.
+        if (picker != null && podcastsOn)
           WaxMenuItem<String>(
             value: 'import',
             label: l10n.podcastOpmlImport,
@@ -410,7 +419,7 @@ class _FolderGroupState extends State<_FolderGroup> {
                   child: Row(
                     children: <Widget>[
                       WaxIcon(
-                        _open ? WaxIcons.collapse : WaxIcons.expand,
+                        _open ? WaxIcons.collapse : WaxIcons.forward,
                         size: 16,
                         color: WaxColors.of(context).textSecondary,
                       ),

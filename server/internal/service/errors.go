@@ -49,6 +49,10 @@ const (
 	// server's own disk rather than the caller's allowance, so the
 	// caller has nothing to clear.
 	KindStorageFull ErrorKind = "storage-full"
+	// KindStorageUnwritable marks a write a library folder refused, for
+	// its permissions or a read-only mount (409 storage-unwritable at the
+	// API). Unlike KindReadOnly it is the filesystem, not WaxDeck's flag.
+	KindStorageUnwritable ErrorKind = "storage-unwritable"
 	// KindLocked marks an edit against a locked metadata field made
 	// without force (409 field-locked at the API).
 	KindLocked ErrorKind = "field-locked"
@@ -100,6 +104,18 @@ type Error struct {
 	Kind ErrorKind
 	Msg  string
 	Err  error
+	// Params is the machine-readable detail a refusal carries for a client
+	// to word it (its `reason`, and what the reason names); nil for none.
+	Params map[string]string
+}
+
+// RefusalParams answers the params a refusal carries, or nil.
+func RefusalParams(err error) map[string]string {
+	var se *Error
+	if errors.As(err, &se) {
+		return se.Params
+	}
+	return nil
 }
 
 func (e *Error) Error() string {
@@ -205,6 +221,35 @@ func waxDetail(err error) string {
 		e = w.Err
 	}
 	return strings.Join(parts, ": ")
+}
+
+// storageRefusal is the refusal a failure's text reports when a folder
+// would not take a write - its permissions or a read-only mount - in a
+// person's words, or "" for any other failure. The text is all a
+// recorded failure keeps of its cause.
+func storageRefusal(msg string) string {
+	lower := strings.ToLower(msg)
+	switch {
+	case strings.Contains(lower, "read-only file system"):
+		return "read-only file system"
+	case strings.Contains(lower, "permission denied"), strings.Contains(lower, "access is denied"):
+		return "permission denied"
+	case strings.Contains(lower, "operation not permitted"):
+		return "operation not permitted"
+	}
+	return ""
+}
+
+// errStorageUnwritable refuses a write a library folder would not take.
+func errStorageUnwritable(cause string) *Error {
+	return &Error{Kind: KindStorageUnwritable, Msg: "the library folder refused the write: " + cause}
+}
+
+// errStorageUnwritableFor is errStorageUnwritable for one named file.
+func errStorageUnwritableFor(name, cause string) *Error {
+	e := errStorageUnwritable(cause)
+	e.Msg = name + ": " + e.Msg
+	return e
 }
 
 // errNotFound builds a caller-facing not-found error.

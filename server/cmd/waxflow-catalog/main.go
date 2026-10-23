@@ -10,10 +10,14 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/pidpath"
@@ -45,13 +49,53 @@ func openResolver(ctx context.Context, opts cli.ResolverOptions) (source.Resolve
 		// One-shot commands must not start background goroutines.
 		popts.PollInterval = -1
 	}
-	cache, err := pidpath.Open(ctx, popts)
+	cache, err := openCatalog(ctx, opts, popts)
 	if err != nil {
 		return nil, nil, waxerr.Wrap(waxerr.CodeCatalogUnavailable, "opening catalog", err)
 	}
 	cat := &catalog{cache: cache, next: opts.Next}
 	cat.ReloadSourceMaxBytes(opts.MaxBytes)
 	return cat, cache, nil
+}
+
+// catalogWait is how long a daemon waits for a catalog WaxDeck has not
+// created yet, and how often it looks.
+var catalogWait = struct{ every, limit time.Duration }{time.Second, 10 * time.Minute}
+
+// openCatalog opens the catalog. A daemon started before WaxDeck has
+// created it waits for it rather than exiting, which under a supervisor
+// only restarts it into the same absence; it says so once. A catalog that
+// appears while it waits may still be being written, so its open is
+// tried again until the wait runs out. One that was there from the start
+// opens or fails at once, as does one it cannot even look at (a
+// permission, say: nothing WaxDeck does next would cure it), and a
+// one-shot command never waits.
+func openCatalog(ctx context.Context, opts cli.ResolverOptions, popts pidpath.Options) (*pidpath.Cache, error) {
+	if _, err := os.Stat(opts.CatalogDB); !errors.Is(err, fs.ErrNotExist) || !opts.Daemon {
+		return pidpath.Open(ctx, popts)
+	}
+	opts.Logger.Info("waiting for the catalog; start WaxDeck to create it", "path", opts.CatalogDB)
+	deadline := time.Now().Add(catalogWait.limit)
+	failed := fmt.Errorf("no catalog at %s after %s", opts.CatalogDB, catalogWait.limit)
+	for {
+		if _, err := os.Stat(opts.CatalogDB); err == nil {
+			cache, err := pidpath.Open(ctx, popts)
+			if err == nil {
+				return cache, nil
+			}
+			failed = err
+		}
+		if time.Now().After(deadline) {
+			return nil, failed
+		}
+		timer := time.NewTimer(catalogWait.every)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 // catalog resolves pid: references through the pidpath cache and

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
 import 'package:waxdeck/src/health/health_screen.dart';
+import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -13,6 +14,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'row_nodes.dart';
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -266,7 +268,7 @@ void main() {
 
     expect(
       shellMessageText(container.read(shellMessengerProvider)),
-      'The library is read-only right now, so nothing can be changed.',
+      'The server or this library is read-only right now, so nothing can be changed.',
     );
     expect(_fixButton(tester, 'missing-art').busy, isFalse);
   });
@@ -918,4 +920,364 @@ void main() {
     expect(repo.listUpgradesCalls, asked + 1);
     expect(retry, findsNothing);
   });
+
+  testWidgets('the path rule previews its moves instead of fixing', (
+    tester,
+  ) async {
+    final repo = _repo()..healthSummary = _pathSummary();
+    await _pump(tester, _host(_container(repo)));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthFix('path-mismatch')),
+      findsNothing,
+      reason: 'the whole library moves from Organize, after a preview',
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(
+        SemanticsIds.healthFixPreview('path-mismatch'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(OrganizeScreen), findsOneWidget);
+    expect(repo.previewOrganizeCalls, hasLength(1));
+    expect(repo.previewOrganizeCalls.single.itemPids, isNull);
+    expect(repo.fixHealthCalls, isEmpty);
+  });
+
+  testWidgets('no row offers a move where the install cannot fix the rule', (
+    tester,
+  ) async {
+    _reducedMotion(tester);
+    final repo = _repo()
+      ..healthSummary = const HealthSummary(
+        score: 90,
+        totalItems: 10,
+        evaluatedItems: 10,
+        rules: [
+          HealthRuleCount(
+            rule: 'path-mismatch',
+            label: 'File path does not match the organize profile',
+            failing: 3,
+            fixable: false,
+            fixBlocked: 'no-managed-library',
+          ),
+        ],
+      )
+      ..healthIssues = const [
+        HealthIssue(
+          pid: 'tr-5',
+          title: 'Stray',
+          mediaType: MediaType.music,
+          rules: ['path-mismatch'],
+        ),
+      ];
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
+      ),
+    );
+    expect(find.text('Stray'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthIssueFix('tr-5')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an issue row moves one item behind a confirmation', (
+    tester,
+  ) async {
+    _reducedMotion(tester);
+    final repo = _repo()
+      ..healthSummary = _pathSummary()
+      ..healthIssues = const [
+        HealthIssue(
+          pid: 'tr-5',
+          title: 'Stray',
+          mediaType: MediaType.music,
+          rules: ['path-mismatch'],
+        ),
+      ]
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'waxbin-native',
+        totalActions: 1,
+        actions: [
+          OrganizeAction(
+            itemPid: 'tr-5',
+            from: 'stray.flac',
+            to: 'Nomad/Wander/01 Stray.flac',
+          ),
+        ],
+      );
+    final container = _container(repo);
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
+      ),
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.healthIssueFix('tr-5')),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.previewOrganizeCalls.single.itemPids, ['tr-5']);
+    expect(
+      find.text('Move this file where the profile puts it?'),
+      findsOneWidget,
+    );
+    expect(find.text('stray.flac'), findsOneWidget);
+    expect(find.text('Nomad/Wander/01 Stray.flac'), findsOneWidget);
+    expect(repo.fixHealthCalls, isEmpty, reason: 'nothing moves unconfirmed');
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.healthIssueFixConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.fixHealthCalls, hasLength(1));
+    expect(repo.fixHealthCalls.single.rule, 'path-mismatch');
+    expect(repo.fixHealthCalls.single.itemPids, ['tr-5']);
+  });
+
+  testWidgets(
+    'a move under way takes no second tap, and a cancel moves nothing',
+    (tester) async {
+      _reducedMotion(tester);
+      final repo = _repo()
+        ..healthSummary = _pathSummary()
+        ..healthIssues = const [
+          HealthIssue(
+            pid: 'tr-5',
+            title: 'Stray',
+            mediaType: MediaType.music,
+            rules: ['path-mismatch'],
+          ),
+        ]
+        ..previewOrganizeGate = Completer<void>()
+        ..organizePlanResult = const OrganizePlan(
+          profile: 'waxbin-native',
+          totalActions: 1,
+          actions: [
+            OrganizeAction(
+              itemPid: 'tr-5',
+              from: 'stray.flac',
+              to: 'Nomad/Wander/01 Stray.flac',
+            ),
+          ],
+        );
+      await _pump(
+        tester,
+        UncontrolledProviderScope(
+          container: _container(repo),
+          child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
+        ),
+      );
+      final move = find.bySemanticsIdentifier(
+        SemanticsIds.healthIssueFix('tr-5'),
+      );
+      await tester.tap(move);
+      await tester.pump();
+      await tester.tap(move, warnIfMissed: false);
+      await tester.pump();
+      expect(repo.previewOrganizeCalls, hasLength(1));
+
+      repo.previewOrganizeGate!.complete();
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmCancel));
+      await tester.pumpAndSettle();
+      expect(repo.fixHealthCalls, isEmpty);
+      expect(
+        find.text('Move this file where the profile puts it?'),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('an issue whose dry run has nothing to move says why', (
+    tester,
+  ) async {
+    _reducedMotion(tester);
+    final repo = _repo()
+      ..healthSummary = _pathSummary()
+      ..healthIssues = const [
+        HealthIssue(
+          pid: 'tr-5',
+          title: 'Stray',
+          mediaType: MediaType.music,
+          rules: ['path-mismatch'],
+        ),
+      ]
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'waxbin-native',
+        totalActions: 0,
+      );
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
+      ),
+    );
+    final move = find.bySemanticsIdentifier(
+      SemanticsIds.healthIssueFix('tr-5'),
+    );
+    await tester.tap(move);
+    await tester.pumpAndSettle();
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'This file is already where the profile puts it.',
+    );
+    // Left out of the plan because its library went read-only since the
+    // sweep, the file is not in place at all.
+    repo.organizePlanResult = const OrganizePlan(
+      profile: 'waxbin-native',
+      totalActions: 0,
+      readOnlyLibraries: 1,
+    );
+    await tester.tap(move);
+    await tester.pumpAndSettle();
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'This file cannot move: The library is read-only',
+    );
+    expect(repo.fixHealthCalls, isEmpty);
+  });
+
+  testWidgets('an issue whose file cannot move says why and moves nothing', (
+    tester,
+  ) async {
+    _reducedMotion(tester);
+    final repo = _repo()
+      ..healthSummary = _pathSummary()
+      ..healthIssues = const [
+        HealthIssue(
+          pid: 'tr-6',
+          title: 'Twin',
+          mediaType: MediaType.music,
+          rules: ['path-mismatch'],
+        ),
+      ]
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'waxbin-native',
+        totalActions: 0,
+        held: 1,
+        holds: [
+          OrganizeHold(
+            itemPid: 'tr-6',
+            from: 'twin.flac',
+            to: 'Pair/Doubles/01 Twin.flac',
+            code: 'occupied',
+            reason: 'Pair/Doubles/01 Twin.flac is taken',
+          ),
+        ],
+      );
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
+      ),
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.healthIssueFix('tr-6')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'This file cannot move: The destination is already taken',
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthIssueFixConfirm),
+      findsNothing,
+    );
+    expect(repo.fixHealthCalls, isEmpty);
+  });
+
+  testWidgets('an issue row keeps its node when the rows above it go', (
+    tester,
+  ) async {
+    HealthIssue issue(String name) => HealthIssue(
+      pid: 'tr-$name',
+      title: name,
+      mediaType: MediaType.music,
+      rules: const ['path-mismatch'],
+    );
+    final repo = _repo()
+      ..healthSummary = _pathSummary()
+      ..healthIssues = [issue('A'), issue('B'), issue('C')];
+    final container = _container(repo);
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
+      ),
+    );
+    await expectRowsKeepTheirNodes(
+      tester,
+      [
+        for (final pid in ['tr-B', 'tr-C']) ...[
+          SemanticsIds.healthIssue(pid),
+          SemanticsIds.healthIssueFix(pid),
+        ],
+      ],
+      () async {
+        // The first row's file moved into place, so a refetch leaves it out.
+        repo.healthIssues = [issue('B'), issue('C')];
+        container.invalidate(healthIssuesProvider('path-mismatch'));
+        await tester.pumpAndSettle();
+      },
+    );
+  });
+
+  testWidgets('a listener sees no move on an issue row', (tester) async {
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(
+              authenticated: true,
+              user: WaxDeckUser(id: 'us-2', username: 'sam', roles: ['user']),
+            ),
+          )
+          ..healthSummary = _pathSummary()
+          ..healthIssues = const [
+            HealthIssue(
+              pid: 'tr-5',
+              title: 'Stray',
+              mediaType: MediaType.music,
+              rules: ['path-mismatch'],
+            ),
+          ];
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
+      ),
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthIssue('tr-5')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthIssueFix('tr-5')),
+      findsNothing,
+    );
+  });
 }
+
+/// A summary whose path rule fails and is fixable.
+HealthSummary _pathSummary() => const HealthSummary(
+  score: 90,
+  totalItems: 10,
+  evaluatedItems: 10,
+  rules: [
+    HealthRuleCount(
+      rule: 'path-mismatch',
+      label: 'File path does not match the organize profile',
+      failing: 3,
+      fixable: true,
+    ),
+  ],
+);

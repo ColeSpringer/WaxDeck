@@ -459,10 +459,12 @@ class UsersApi {
   }
 
   /// Delete an account
-  /// Deletes the account and revokes all its sessions. Administrators only, and never the calling account or the last enabled administrator (&#x60;conflict&#x60;). The user&#39;s listening history in the catalog is orphaned, not destroyed. 
+  /// Deletes the account and revokes all its sessions. Administrators only, and never the calling account or the last enabled administrator (&#x60;conflict&#x60;). The user&#39;s listening history in the catalog is orphaned, not destroyed. The account is disabled first, which is the step that refuses the last enabled administrator, then the playlists it owns are settled as &#x60;playlists&#x60; says, then the account goes. A deletion that stops part-way leaves the account disabled and what was already settled as it is; repeating the request finishes it, taking up or, when the answer is to delete the playlists, removing any fixed copy of a playlist the stopped request left, and a second request while one is running is a &#x60;conflict&#x60;. The account&#39;s public share links end with it, on its playlists as on anything else it shared: a link is served under the reach of the account that made it, so it is handed to no one. The audit entry &#x60;user.delete&#x60; records how many playlists were handed over, how many of those went as fixed lists, how many were deleted, and how many links ended, and a deletion that stopped is recorded as failed with the counts so far, naming the fixed copy of a playlist it could not take back, if it left one. A request that finds such a copy left by an earlier one names what became of it, by pid: removed with the rest of the playlists, or kept for the account that took them when the playlist it was made from has been deleted since (&#x60;fixedCopiesRemoved&#x60;, &#x60;fixedCopiesKept&#x60;). 
   ///
   /// Parameters:
   /// * [userId] - User PID (e.g. `us-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [playlists] - What becomes of the playlists the account owns. `transfer` (the default) hands its shared playlists to `transferTo` and deletes its private ones, which nobody else could see. A static playlist keeps its pid and entries, and a smart playlist whose rule reads only the catalog keeps its pid and its rule. A smart playlist whose rule reads the account's own state (stars, ratings, plays, played), or names one of its private playlists, is handed over as a static playlist of the tracks it held for the account, under the same name and visibility and a new pid, because its new owner's state would otherwise replace the account's, and every account's home pin of it follows to the new pid. `delete` deletes them all. 
+  /// * [transferTo] - The account that takes the shared playlists when `playlists` is `transfer`; the calling administrator when omitted. An unknown, disabled or pending account, the deleted account itself, and any value alongside `playlists=delete` are `invalid-request`. 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -474,6 +476,8 @@ class UsersApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<void>> deleteUser({ 
     required String userId,
+    String? playlists = 'transfer',
+    String? transferTo,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -505,9 +509,15 @@ class UsersApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (playlists != null) r'playlists': encodeQueryParameter(_serializers, playlists, const FullType(String)),
+      if (transferTo != null) r'transferTo': encodeQueryParameter(_serializers, transferTo, const FullType(String)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,

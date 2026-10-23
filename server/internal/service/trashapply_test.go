@@ -203,8 +203,9 @@ func TestAPartlyAppliedDeleteReportsTheSizesItMeasuredFirst(t *testing.T) {
 }
 
 // A file the catalog skips as the delete runs, its library flagged
-// read-only after the plan, stayed: neither verb reports it gone, and
-// both say it stayed.
+// read-only after the plan, stayed: neither verb reports it gone. A
+// delete that moved the item's own file says the copy stayed; one that
+// named the copy alone moved nothing, and is refused as read-only.
 func TestAFileSkippedAsTheDeleteRunsStayed(t *testing.T) {
 	t.Parallel()
 	for _, whole := range []bool{false, true} {
@@ -219,7 +220,12 @@ func TestAFileSkippedAsTheDeleteRunsStayed(t *testing.T) {
 		if whole {
 			res, err = f.svc.DeleteItems(f.ctx, f.admin, []string{f.pid}, "trash", false)
 		} else {
-			res, err = f.svc.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID)}, "trash", false)
+			_, err = f.svc.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID)}, "trash", false)
+			if KindOf(err) != KindReadOnly {
+				t.Errorf("the copy alone, skipped as it ran = %v (kind %q), want read-only", err, KindOf(err))
+			}
+			trashFileStillThere(t, f.copy.DisplayPath, "the skipped copy")
+			continue
 		}
 		if err != nil {
 			t.Fatal(err)

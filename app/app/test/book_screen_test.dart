@@ -7,6 +7,8 @@ import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/tools/tasks_screen.dart';
+import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -35,6 +37,15 @@ FakeRepository _repo() => FakeRepository()
     ],
   );
 
+/// A single-file book with a chapter mark inside it: one a split can cut.
+BookDetail _splittableBook() => testBook(
+  bookPid,
+  chapters: const [
+    ChapterMark(index: 0, title: 'One', startMs: 0),
+    ChapterMark(index: 1, title: 'Two', startMs: 600000),
+  ],
+);
+
 /// Taps the row or control carrying [id], scrolling to it first: the
 /// book screen is one long list and its chapters sit below the fold.
 Future<void> _tap(WidgetTester tester, String id) async {
@@ -53,6 +64,21 @@ class _UnreachableBooks extends FakeRepository {
         code: 'transport',
         message: 'connection refused',
       );
+}
+
+/// An administrator's repository that counts the task list's reads.
+class _TaskListings extends FakeRepository {
+  _TaskListings(BookDetail book) : super(sessionState: _adminSession) {
+    books[bookPid] = book;
+  }
+
+  var listings = 0;
+
+  @override
+  Future<ToolTaskPage> listToolTasks({String? cursor, int? limit}) {
+    listings++;
+    return super.listToolTasks(cursor: cursor, limit: limit);
+  }
 }
 
 Finder _byId(String id) => find.byWidgetPredicate(
@@ -443,19 +469,169 @@ void main() {
       expect(shellMessageText(raisedMessage(tester)), 'Back to the beginning');
     });
 
-    testWidgets('an admin merges a multi-file book', (tester) async {
+    testWidgets('an admin merges a multi-file book, asked first', (
+      tester,
+    ) async {
       final repo = _adminRepo(testBook(bookPid, partCount: 3));
       await tester.pumpWidget(_host(repo, FakeEngine()));
       await tester.pumpAndSettle();
 
       await openOverflow(tester);
-      expect(find.text('Split at chapters'), findsNothing);
-      await tester.tap(find.text('Merge into one chaptered file'));
-      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.bookSplit), findsNothing);
+      await _tap(tester, SemanticsIds.bookMerge);
 
-      expect(repo.mergeBookCalls.map((c) => c.pid), [bookPid]);
+      // Nothing is queued until the dialog is answered.
+      expect(find.text('Merge 3 files into one?'), findsOneWidget);
+      expect(repo.mergeBookCalls, isEmpty);
+      await _tap(tester, SemanticsIds.bookMergeKeep);
+      await _tap(tester, SemanticsIds.bookMergeConfirm);
+
+      expect(repo.mergeBookCalls.single.pid, bookPid);
+      expect(repo.mergeBookCalls.single.keepOriginals, isTrue);
       expect(raisedMessage(tester)!.actionLabel, 'Tasks');
       expect(raisedMessage(tester)!.persist, isTrue);
+    });
+
+    testWidgets('a merge left alone trashes the parts', (tester) async {
+      final repo = _adminRepo(testBook(bookPid, partCount: 2));
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMerge);
+      await _tap(tester, SemanticsIds.bookMergeConfirm);
+
+      expect(repo.mergeBookCalls.single.keepOriginals, isFalse);
+    });
+
+    for (final (name, refusal, sentence) in [
+      (
+        'a copy elsewhere',
+        const WaxDeckApiException(
+          code: 'conflict',
+          message:
+              'the book has a copy, Ada/Book/part 1.m4b in the Spare library',
+          statusCode: 409,
+          params: {
+            'reason': 'copy-elsewhere',
+            'copy': 'Ada/Book/part 1.m4b',
+            'library': 'Spare',
+          },
+        ),
+        'This book has a copy at Ada/Book/part 1.m4b in the Spare library, '
+            'which would be left as the book. Delete the copy, or keep the '
+            'originals.',
+      ),
+      (
+        'a merge still at work',
+        const WaxDeckApiException(
+          code: 'conflict',
+          message: 'a merge or split of this book has not finished yet',
+          statusCode: 409,
+          params: {'reason': 'task-running', 'task': 'tk-1'},
+        ),
+        'A merge or split of this is still at work. Try again once it has '
+            'finished.',
+      ),
+      (
+        'a merge or split that stopped and waits in Tasks',
+        const WaxDeckApiException(
+          code: 'conflict',
+          message:
+              'a merge or split of this book stopped and needs attention: '
+              'clear it in Tasks, then try again',
+          statusCode: 409,
+          params: {'reason': 'task-parked', 'task': 'tk-1'},
+        ),
+        'An earlier merge or split of this stopped and needs attention. '
+            'Clear it in Tasks, then try again.',
+      ),
+      (
+        'a folder the server cannot write',
+        const WaxDeckApiException(
+          code: 'storage-unwritable',
+          message: 'the library folder refused the write: permission denied',
+          statusCode: 409,
+        ),
+        "The server cannot write to that library's folder, so nothing was "
+            "changed. Check the folder's ownership and permissions.",
+      ),
+    ]) {
+      testWidgets('a merge refused for $name says why in the app\'s words', (
+        tester,
+      ) async {
+        final repo = _adminRepo(testBook(bookPid, partCount: 2));
+        await tester.pumpWidget(_host(repo, FakeEngine()));
+        await tester.pumpAndSettle();
+
+        await openOverflow(tester);
+        await _tap(tester, SemanticsIds.bookMerge);
+        repo.toolError = refusal;
+        await _tap(tester, SemanticsIds.bookMergeConfirm);
+        repo.toolError = null;
+
+        expect(shellMessageText(raisedMessage(tester)), sentence);
+        expect(repo.mergeBookCalls, isEmpty);
+      });
+    }
+
+    testWidgets('a merge refused while another is at work leads to the '
+        'Tasks screen; other refusals offer nothing', (tester) async {
+      final repo = _adminRepo(testBook(bookPid, partCount: 2));
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMerge);
+      repo.toolError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'the book has a copy, Ada/Book/part 1.m4b',
+        statusCode: 409,
+        params: {'reason': 'copy-elsewhere', 'copy': 'Ada/Book/part 1.m4b'},
+      );
+      await _tap(tester, SemanticsIds.bookMergeConfirm);
+      expect(raisedMessage(tester)!.actionLabel, isNull);
+      expect(raisedMessage(tester)!.onAction, isNull);
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMerge);
+      repo.toolError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'a merge or split of this book has not finished yet',
+        statusCode: 409,
+        params: {'reason': 'task-running', 'task': 'tk-1'},
+      );
+      await _tap(tester, SemanticsIds.bookMergeConfirm);
+      repo.toolError = null;
+
+      final message = raisedMessage(tester)!;
+      expect(message.actionLabel, 'Tasks');
+      expect(message.actionSemanticsId, SemanticsIds.openTasks);
+      await pressRaisedAction(tester);
+      expect(find.byType(TasksScreen), findsOneWidget);
+    });
+
+    testWidgets('a merge refused for a parked task leads to Tasks too', (
+      tester,
+    ) async {
+      final repo = _adminRepo(testBook(bookPid, partCount: 2));
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMerge);
+      repo.toolError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'a merge or split of this book stopped and needs attention',
+        statusCode: 409,
+        params: {'reason': 'task-parked', 'task': 'tk-1'},
+      );
+      await _tap(tester, SemanticsIds.bookMergeConfirm);
+      repo.toolError = null;
+
+      final message = raisedMessage(tester)!;
+      expect(message.actionLabel, 'Tasks');
+      expect(message.actionSemanticsId, SemanticsIds.openTasks);
     });
 
     testWidgets('an admin splits a single-file book with chapters', (
@@ -474,11 +650,185 @@ void main() {
       await tester.pumpAndSettle();
 
       await openOverflow(tester);
-      expect(find.text('Merge into one chaptered file'), findsNothing);
-      await tester.tap(find.text('Split at chapters'));
+      expect(_byId(SemanticsIds.bookMerge), findsNothing);
+      await _tap(tester, SemanticsIds.bookSplit);
+
+      expect(find.text('Split at 2 chapters?'), findsOneWidget);
+      expect(repo.splitBookCalls, isEmpty);
+      await _tap(tester, SemanticsIds.bookSplitKeep);
+      await _tap(tester, SemanticsIds.bookSplitConfirm);
+
+      expect(repo.splitBookCalls.single.pid, bookPid);
+      expect(repo.splitBookCalls.single.keepOriginals, isTrue);
+    });
+
+    testWidgets('split is hidden for a one-chapter book', (tester) async {
+      final repo = _adminRepo(
+        testBook(
+          bookPid,
+          chapters: const [ChapterMark(index: 0, title: 'One', startMs: 0)],
+        ),
+      );
+      await tester.pumpWidget(_host(repo, FakeEngine()));
       await tester.pumpAndSettle();
 
-      expect(repo.splitBookCalls.map((c) => c.pid), [bookPid]);
+      await openOverflow(tester);
+      // A split needs a mark inside the book to cut at.
+      expect(find.text('Split at chapters'), findsNothing);
+      expect(_byId(SemanticsIds.bookSplit), findsNothing);
+    });
+
+    // Parked is an end too: the task will not move again, so what it left
+    // of the book is read as it stands.
+    for (final ending in ['done', 'parked']) {
+      testWidgets('the book is read again when its merge ends $ending', (
+        tester,
+      ) async {
+        final repo = _adminRepo(testBook(bookPid, partCount: 3));
+        await tester.pumpWidget(_host(repo, FakeEngine()));
+        await tester.pumpAndSettle();
+        expect(_byId(SemanticsIds.bookPartsNote), findsOneWidget);
+
+        await openOverflow(tester);
+        await _tap(tester, SemanticsIds.bookMerge);
+        await _tap(tester, SemanticsIds.bookMergeConfirm);
+
+        // The task ends on the server, the book is one file now, and the
+        // task list hears of it.
+        final queued = repo.toolTasksById.values.single;
+        repo.books[bookPid] = testBook(bookPid, partCount: 1);
+        repo.toolTasksById[queued.id] = ToolTask(
+          id: queued.id,
+          type: queued.type,
+          state: ending,
+          itemPid: bookPid,
+          resultPids: ending == 'done' ? const [bookPid] : const [],
+          createdAt: queued.createdAt,
+        );
+        ProviderScope.containerOf(
+          tester.element(find.byType(BookScreen)),
+        ).invalidate(toolTasksProvider);
+        await tester.pumpAndSettle();
+
+        expect(_byId(SemanticsIds.bookPartsNote), findsNothing);
+      });
+    }
+
+    // Cleared by another administrator, pruned, or pushed past the first
+    // page: nothing more will say the task ended, so its leaving is the
+    // end the book is read again for.
+    testWidgets('the book is read again when its merge leaves the task list '
+        'unfinished', (tester) async {
+      final repo = _adminRepo(testBook(bookPid, partCount: 3));
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.bookPartsNote), findsOneWidget);
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMerge);
+      await _tap(tester, SemanticsIds.bookMergeConfirm);
+
+      final queued = repo.toolTasksById.values.single;
+      repo.books[bookPid] = testBook(bookPid, partCount: 1);
+      repo.toolTasksById.remove(queued.id);
+      ProviderScope.containerOf(
+        tester.element(find.byType(BookScreen)),
+      ).invalidate(toolTasksProvider);
+      await tester.pumpAndSettle();
+
+      expect(_byId(SemanticsIds.bookPartsNote), findsNothing);
+    });
+
+    testWidgets('the task list is not kept live once the book screen is '
+        'gone', (tester) async {
+      final repo = _TaskListings(testBook(bookPid, partCount: 3));
+      final showing = ValueNotifier(true);
+      addTearDown(showing.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            repositoryProvider.overrideWithValue(repo),
+            audioEngineProvider.overrideWithValue(FakeEngine()),
+            credentialStoreProvider.overrideWithValue(
+              InMemoryCredentialStore(),
+            ),
+          ],
+          child: routedHost(
+            ValueListenableBuilder<bool>(
+              valueListenable: showing,
+              builder: (context, show, _) => show
+                  ? const BookScreen(pid: bookPid)
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMerge);
+      await _tap(tester, SemanticsIds.bookMergeConfirm);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(BookScreen)),
+      );
+      // Live while the screen waits on the merge.
+      final whileUp = repo.listings;
+      container.invalidate(toolTasksProvider);
+      await tester.pumpAndSettle();
+      expect(repo.listings, whileUp + 1);
+
+      // The merge is still at work as the reader leaves the book.
+      showing.value = false;
+      await tester.pumpAndSettle();
+      final before = repo.listings;
+      container.invalidate(toolTasksProvider);
+      await tester.pumpAndSettle();
+
+      expect(repo.listings, before);
+    });
+
+    testWidgets('a holder of the delete right deletes the book', (
+      tester,
+    ) async {
+      final repo = _adminRepo(testBook(bookPid, partCount: 2))
+        ..libraryItems.add(testItem(bookPid));
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.itemMenuDelete);
+      expect(repo.deleteItemsCalls.single.pids, [bookPid]);
+      expect(repo.deleteItemsCalls.single.dryRun, isTrue);
+      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.pumpAndSettle();
+
+      expect(repo.deleteItemsCalls.last.dryRun, isFalse);
+      expect(
+        find.byType(BookScreen),
+        findsNothing,
+        reason: 'the book is gone; the screen leaves for the hub',
+      );
+    });
+
+    testWidgets('a book a file of which stayed keeps its screen', (
+      tester,
+    ) async {
+      final repo = _adminRepo(testBook(bookPid, partCount: 2))
+        ..libraryItems.add(testItem(bookPid))
+        ..deleteItemsFailed = 1;
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.itemMenuDelete);
+      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.pumpAndSettle();
+
+      expect(repo.deleteItemsCalls.last.dryRun, isFalse);
+      expect(
+        find.byType(BookScreen),
+        findsOneWidget,
+        reason: 'a part stayed, so the book did',
+      );
     });
 
     testWidgets('an admin folds a split series into another spelling', (
@@ -551,6 +901,96 @@ void main() {
       expect(find.text('Treat as music'), findsNothing);
     });
 
+    for (final (name, streaming) in [
+      (
+        'runs without one',
+        const ServerStreaming(configured: false, connected: false),
+      ),
+      (
+        'cannot reach it',
+        const ServerStreaming(configured: true, connected: false),
+      ),
+    ]) {
+      testWidgets('merge is hidden while the server $name', (tester) async {
+        final repo = _adminRepo(testBook(bookPid, partCount: 3))
+          ..serverStreaming = streaming;
+        await tester.pumpWidget(_host(repo, FakeEngine()));
+        await tester.pumpAndSettle();
+
+        await openOverflow(tester);
+        expect(_byId(SemanticsIds.bookMerge), findsNothing);
+        expect(find.text('Edit metadata'), findsOneWidget);
+      });
+
+      testWidgets('split is hidden while the server $name', (tester) async {
+        final repo = _adminRepo(_splittableBook())..serverStreaming = streaming;
+        await tester.pumpWidget(_host(repo, FakeEngine()));
+        await tester.pumpAndSettle();
+
+        await openOverflow(tester);
+        expect(_byId(SemanticsIds.bookSplit), findsNothing);
+        expect(find.text('Edit metadata'), findsOneWidget);
+      });
+    }
+
+    const runsFileTools = ServerStreaming(
+      configured: true,
+      connected: true,
+      fileTools: true,
+    );
+
+    testWidgets('merge is offered while the engine runs the file tools', (
+      tester,
+    ) async {
+      final repo = _adminRepo(testBook(bookPid, partCount: 3))
+        ..serverStreaming = runsFileTools;
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      expect(_byId(SemanticsIds.bookMerge), findsOneWidget);
+    });
+
+    testWidgets('split is offered while the engine runs the file tools', (
+      tester,
+    ) async {
+      final repo = _adminRepo(_splittableBook())
+        ..serverStreaming = runsFileTools;
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      expect(_byId(SemanticsIds.bookSplit), findsOneWidget);
+    });
+
+    testWidgets('a merge refused while the engine is away says so', (
+      tester,
+    ) async {
+      final repo = _adminRepo(testBook(bookPid, partCount: 2));
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMerge);
+      repo.toolError = const WaxDeckApiException(
+        code: 'feature-unavailable',
+        message:
+            'book merging needs the streaming engine, which is not '
+            'reachable right now',
+        statusCode: 503,
+        params: {'feature': 'streaming-engine'},
+      );
+      await _tap(tester, SemanticsIds.bookMergeConfirm);
+      repo.toolError = null;
+
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'The streaming engine is not reachable right now. Originals still '
+        'play; transcoding, gapless playback, voice boost and merging or '
+        'splitting files wait for it.',
+      );
+    });
+
     testWidgets('the file tools are hidden from a listener', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -563,19 +1003,21 @@ void main() {
       await openOverflow(tester);
       expect(find.text('Merge into one chaptered file'), findsNothing);
       expect(find.text('Edit metadata'), findsNothing);
+      expect(_byId(SemanticsIds.itemMenuDelete), findsNothing);
       // The position verbs are everyone's.
       expect(find.text('Mark finished'), findsOneWidget);
     });
   });
 }
 
-FakeRepository _adminRepo(BookDetail book) => FakeRepository(
-  sessionState: const SessionState(
-    authenticated: true,
-    user: WaxDeckUser(
-      id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
-      username: 'admin',
-      roles: ['admin'],
-    ),
+const _adminSession = SessionState(
+  authenticated: true,
+  user: WaxDeckUser(
+    id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
+    username: 'admin',
+    roles: ['admin'],
   ),
-)..books[bookPid] = book;
+);
+
+FakeRepository _adminRepo(BookDetail book) =>
+    FakeRepository(sessionState: _adminSession)..books[bookPid] = book;

@@ -276,7 +276,7 @@ class _Table extends ConsumerWidget {
           WaxButton(
             label: state.loadingMore ? l10n.commonLoading : l10n.healthLoadMore,
             kind: WaxButtonKind.tonal,
-            icon: WaxIcons.expand,
+            icon: WaxIcons.caretDown,
             semanticsId: SemanticsIds.diagnosticsMore,
             onPressed: state.loadingMore
                 ? null

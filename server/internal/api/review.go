@@ -236,7 +236,7 @@ func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryReq
 			return DecideReviewEntry403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
 			return DecideReviewEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such review entry"))}, nil
-		case service.KindConflict, service.KindCatalogBusy, service.KindReadOnly:
+		case service.KindConflict, service.KindCatalogBusy, service.KindReadOnly, service.KindStorageUnwritable:
 			return DecideReviewEntry409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
 		}
 		return nil, err

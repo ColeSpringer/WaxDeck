@@ -1049,13 +1049,19 @@ abstract interface class WaxDeckRepository {
   /// `POST /libraries`: registers a new library root at runtime,
   /// returning the created library. Its `streamingWarning` is set when
   /// the root exists but the streaming sidecar did not take it.
-  /// Administrators only.
+  /// [allowAbsent] registers a folder mounted later. Administrators only.
   Future<LibraryInfo> createLibrary({
     required String name,
     required String path,
     String? media,
     bool? managed,
+    bool? allowAbsent,
   });
+
+  /// `DELETE /libraries/{pid}`: takes a library out of the catalog, its
+  /// files staying on disk, returning the job doing it. Administrators
+  /// only.
+  Future<Job> removeLibrary(String libraryPid);
 
   /// `POST /library/rescan`: starts a scan of every library root,
   /// returning the job tracking it. [force] re-reads files whose size
@@ -1562,6 +1568,15 @@ abstract interface class WaxDeckRepository {
     List<String>? itemPids,
   });
 
+  /// `GET /organize/history`: a page of the organize runs, and undos of
+  /// them, the catalog's journal still holds, newest first, after
+  /// [cursor].
+  Future<OrganizeHistoryPage> listOrganizeHistory({String? cursor, int? limit});
+
+  /// `POST /organize/undo`: moves back what the run [jobPid] moved,
+  /// reported as an applied pass.
+  Future<OrganizeReport> undoOrganize(String jobPid);
+
   /// `POST /books/{pid}/merge`: joins a multi-file audiobook into one
   /// file, returning the queued task. [titles] overrides the derived
   /// chapter titles.
@@ -1589,9 +1604,11 @@ abstract interface class WaxDeckRepository {
   /// still queued or running answers `conflict`.
   Future<void> deleteToolTask(String taskId);
 
-  /// `POST /tools/tasks/clear-finished`: deletes every finished task
-  /// the caller owns and answers how many went.
-  Future<int> clearFinishedToolTasks();
+  /// `POST /tools/tasks/clear-finished`: deletes the caller's finished
+  /// tasks, or with [all] every account's (administrators only, else
+  /// `forbidden`), and answers how many went, and how many stayed for
+  /// files they left that could not be moved.
+  Future<ToolTasksCleared> clearFinishedToolTasks({bool all = false});
 
   /// `GET /library/enrichment`: provider roster and coverage.
   Future<EnrichmentStatus> getEnrichmentStatus();
@@ -1650,8 +1667,11 @@ abstract interface class WaxDeckRepository {
   /// `GET /users/{userId}`: one account (administrators).
   Future<UserAccount> getUser(String userId);
 
-  /// `DELETE /users/{userId}`: deletes an account (administrators).
-  Future<void> deleteUser(String userId);
+  /// `DELETE /users/{userId}`: deletes an account (administrators). Its
+  /// shared playlists go to the caller with their entries and its private
+  /// ones are deleted (`transfer`, the default); [playlists] `delete`
+  /// deletes them all.
+  Future<void> deleteUser(String userId, {String playlists = 'transfer'});
 
   /// `PUT /users/{userId}/password`: sets an account's password.
   ///
@@ -2053,6 +2073,11 @@ class WaxDeckClient implements WaxDeckRepository {
   String? _authToken;
   String? _csrfToken;
 
+  /// Moves at every sign-in and sign-out, so a session probe that was out
+  /// across one keeps its answer's CSRF token, the old session's, to
+  /// itself.
+  var _credentials = 0;
+
   /// Bearer token applied to every request as an Authorization header.
   ///
   /// [login] sets it automatically on native platforms; clients that
@@ -2074,6 +2099,7 @@ class WaxDeckClient implements WaxDeckRepository {
   /// a bearer, the interceptor rides the cookie and sends the CSRF
   /// header on mutations.
   LoginResult _adoptLogin(gen.LoginResponse body) {
+    _credentials++;
     _csrfToken = body.csrfToken;
     final result = loginResultFromGen(body);
     if (!_isWebBuild) {
@@ -2089,12 +2115,23 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<ServerHealth> health() => _guard(() async {
     final body = _require((await _gen.getSystemApi().getHealth()).data);
+    final streaming = body.streaming;
     return ServerHealth(
       status: body.status,
       version: body.version,
       apiVersion: body.apiVersion,
       uploadFormats: body.uploadFormats?.toList(),
       rejectedFormats: body.rejectedFormats?.toList(),
+      streaming: streaming == null
+          ? null
+          : ServerStreaming(
+              configured: streaming.configured,
+              connected: streaming.connected,
+              timelines: streaming.timelines,
+              voiceBoost: streaming.voiceBoost,
+              fileTools: streaming.fileTools,
+            ),
+      podcasts: body.podcasts,
     );
   });
 
@@ -2143,10 +2180,11 @@ class WaxDeckClient implements WaxDeckRepository {
 
   @override
   Future<SessionState> getSession() => _guard(() async {
+    final asked = _credentials;
     final body = _require((await _gen.getAuthApi().getSession()).data);
     // Unauthenticated probes carry no CSRF token; dropping a stale one is
     // correct because the session it belonged to is gone.
-    _csrfToken = body.csrfToken;
+    if (asked == _credentials) _csrfToken = body.csrfToken;
     return sessionStateFromGen(body);
   });
 
@@ -2159,6 +2197,7 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<void> logout() => _guard(() async {
     await _gen.getAuthApi().logout();
+    _credentials++;
     _authToken = null;
     _csrfToken = null;
   });
@@ -4001,6 +4040,7 @@ class WaxDeckClient implements WaxDeckRepository {
     required String path,
     String? media,
     bool? managed,
+    bool? allowAbsent,
   }) => _guard(() async {
     final response = await _gen.getAdminApi().createLibrary(
       libraryCreate: gen.LibraryCreate(
@@ -4008,10 +4048,17 @@ class WaxDeckClient implements WaxDeckRepository {
           ..name = name
           ..path = path
           ..media = gen.LibraryCreateMediaEnum.valueOf(media ?? 'mixed')
-          ..managed = managed ?? false,
+          ..managed = managed ?? false
+          ..allowAbsent = allowAbsent ?? false,
       ),
     );
     return libraryCreatedFromGen(_require(response.data));
+  });
+
+  @override
+  Future<Job> removeLibrary(String libraryPid) => _guard(() async {
+    final response = await _gen.getAdminApi().removeLibrary(pid: libraryPid);
+    return jobFromGen(_require(response.data));
   });
 
   @override
@@ -4901,6 +4948,11 @@ class WaxDeckClient implements WaxDeckRepository {
     List<String>? itemPids,
   }) => _guard(() async {
     final response = await _gen.getOrganizeApi().previewOrganize(
+      // A library-wide plan looks at every file, which on a network share
+      // takes minutes, as the apply's own planning does; one over a few
+      // items answers at once, so a hung mount fails it on the ordinary
+      // budget.
+      extra: itemPids == null ? const {_longOperation: true} : null,
       organizeRequest: gen.OrganizeRequest(
         (b) => b
           ..profile = profile
@@ -4916,11 +4968,39 @@ class WaxDeckClient implements WaxDeckRepository {
     List<String>? itemPids,
   }) => _guard(() async {
     final response = await _gen.getOrganizeApi().applyOrganize(
+      // It answers once its run has moved every file.
+      extra: const {_longOperation: true},
       organizeRequest: gen.OrganizeRequest(
         (b) => b
           ..profile = profile
           ..itemPids = itemPids == null ? null : ListBuilder<String>(itemPids),
       ),
+    );
+    return organizeReportFromGen(_require(response.data));
+  });
+
+  @override
+  Future<OrganizeHistoryPage> listOrganizeHistory({
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getOrganizeApi().listOrganizeHistory(
+      cursor: cursor,
+      limit: limit,
+    );
+    final page = _require(response.data);
+    return OrganizeHistoryPage(
+      runs: page.batches.map(organizeBatchFromGen).toList(growable: false),
+      nextCursor: page.nextCursor,
+    );
+  });
+
+  @override
+  Future<OrganizeReport> undoOrganize(String jobPid) => _guard(() async {
+    final response = await _gen.getOrganizeApi().undoOrganize(
+      // It answers once its run has moved every file back.
+      extra: const {_longOperation: true},
+      organizeUndoRequest: gen.OrganizeUndoRequest((b) => b..jobPid = jobPid),
     );
     return organizeReportFromGen(_require(response.data));
   });
@@ -4988,10 +5068,19 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<int> clearFinishedToolTasks() => _guard(() async {
-    final response = await _gen.getToolsApi().clearFinishedToolTasks();
-    return _require(response.data).deleted;
-  });
+  Future<ToolTasksCleared> clearFinishedToolTasks({bool all = false}) =>
+      _guard(() async {
+        final response = await _gen.getToolsApi().clearFinishedToolTasks(
+          clearFinishedTasksRequest: gen.ClearFinishedTasksRequest(
+            (b) => b
+              ..scope = all
+                  ? gen.ClearFinishedTasksRequestScopeEnum.all
+                  : gen.ClearFinishedTasksRequestScopeEnum.mine,
+          ),
+        );
+        final data = _require(response.data);
+        return ToolTasksCleared(deleted: data.deleted, kept: data.kept);
+      });
 
   @override
   Future<EnrichmentStatus> getEnrichmentStatus() => _guard(() async {
@@ -5132,9 +5221,13 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<void> deleteUser(String userId) => _guard(() async {
-    await _gen.getUsersApi().deleteUser(userId: userId);
-  });
+  Future<void> deleteUser(String userId, {String playlists = 'transfer'}) =>
+      _guard(() async {
+        await _gen.getUsersApi().deleteUser(
+          userId: userId,
+          playlists: playlists,
+        );
+      });
 
   @override
   Future<void> setUserPassword(

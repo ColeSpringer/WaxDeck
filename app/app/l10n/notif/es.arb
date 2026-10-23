@@ -31,5 +31,7 @@
   "notifSignupRequestedHelp": "Una solicitud de cuenta nueva espera aprobación.",
   "notifSignupRequestedTitle": "Solicitud de cuenta",
   "notifSubscriptionFailedHelp": "Una aplicación de podcasts que sincroniza por gpodder pidió añadir un feed al que no se ha podido suscribir, o cambiar suscripciones que esta cuenta no puede cambiar.",
-  "notifSubscriptionFailedTitle": "Suscripciones de podcasts sin modificar"
+  "notifSubscriptionFailedTitle": "Suscripciones de podcasts sin modificar",
+  "notifToolTaskFailedHelp": "Ha fallado una fusión o división de libro, o una división CUE, que iniciaste, o se ha detenido porque sus ejecuciones terminaban con el servidor.",
+  "notifToolTaskFailedTitle": "Tarea de herramientas fallida"
 }

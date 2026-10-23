@@ -57,7 +57,10 @@ by file until the book leaves it.
 
 Two settings shape that stream, both under Settings, Playback, and both
 on your account rather than on one device - the server re-renders a cast
-queue whenever you edit it, and it does that from what it holds.
+queue whenever you edit it, and it does that from what it holds. On a
+server without the streaming engine there is no such stream, so neither
+is offered and their rows say why; while the engine is unreachable they
+stay, and apply once it answers.
 
 - **Crossfade** fades each seam instead of butting the tracks
   together. Zero is the gapless default.

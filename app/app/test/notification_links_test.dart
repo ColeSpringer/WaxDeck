@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 
 /// The server builds a link into this app for every notification it
@@ -49,8 +50,19 @@ void main() {
     'playlist-synced': WaxRoute.playlists,
     'job-finished': WaxRoute.tasks,
     'job-failed': WaxRoute.tasks,
+    'tool-task-failed': WaxRoute.tasks,
     'health-fix-finished': WaxRoute.health,
   };
+
+  test('each event opens, in this app, where the server links it', () {
+    for (final entry in expected.entries) {
+      expect(
+        NotificationKind.forEvent(entry.key)?.location,
+        entry.value,
+        reason: '${entry.key} should open ${entry.value} here too',
+      );
+    }
+  });
 
   test('the server links to locations this app answers', () {
     for (final entry in expected.entries) {

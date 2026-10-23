@@ -14,7 +14,7 @@ part 'trash_entry.g.dart';
 /// * [id] - Trash entry PID.
 /// * [itemPid] - The item the file belonged to.
 /// * [name] - The file's original library-relative path.
-/// * [reason] - Why it was deleted: `user`, `prune`, or `permanent`. An open string. 
+/// * [reason] - Why it was deleted: `user`, `prune` or `permanent`, or the file tool whose run took it (`book-merge`, `book-split`, `cue-split`). An open string. 
 /// * [sizeBytes] - File size.
 /// * [trashedAt] - When it was deleted.
 /// * [restoredAt] - When it was restored; absent while trashed.
@@ -34,7 +34,7 @@ abstract class TrashEntry implements Built<TrashEntry, TrashEntryBuilder> {
   @BuiltValueField(wireName: r'name')
   String get name;
 
-  /// Why it was deleted: `user`, `prune`, or `permanent`. An open string. 
+  /// Why it was deleted: `user`, `prune` or `permanent`, or the file tool whose run took it (`book-merge`, `book-split`, `cue-split`). An open string. 
   @BuiltValueField(wireName: r'reason')
   String get reason;
 

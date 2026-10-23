@@ -414,7 +414,7 @@ func ShapeFor(src Source, caps *client.Caps, voiceBoost bool) Shape {
 	if !src.Virtual {
 		return Shape{Format: "auto", MimeType: ContainerMime(src.Container), Seekable: true}
 	}
-	if slices.Contains(caps.Delivery.CutFormats, src.Codec) {
+	if caps != nil && slices.Contains(caps.Delivery.CutFormats, src.Codec) {
 		return pick(src.Codec)
 	}
 	if lossless(src.Codec) {
@@ -433,6 +433,9 @@ func encodeShape(format string) Shape {
 }
 
 func hasOutput(caps *client.Caps, name string) bool {
+	if caps == nil {
+		return false
+	}
 	for _, o := range caps.Outputs {
 		if o.Name == name {
 			return true

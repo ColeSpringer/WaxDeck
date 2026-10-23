@@ -16,6 +16,7 @@ import '../downloads/downloads_controller.dart';
 import '../health/health_controller.dart';
 import '../home/home_shelves.dart';
 import '../metadata/metadata_controller.dart';
+import '../organize/organize_screen.dart';
 import '../player/entity_play_state_controller.dart';
 import '../player/play_progress.dart';
 import '../player/play_state_controller.dart';
@@ -28,6 +29,7 @@ import '../review/review_controller.dart';
 import '../settings/prefs_controller.dart';
 import '../shell/adaptive_shell.dart';
 import '../shell/lifecycle_banners.dart';
+import '../shell/server_health.dart';
 import '../tools/tool_tasks_provider.dart';
 import '../uploads/uploads_controller.dart';
 import 'live_invalidations.dart';
@@ -213,7 +215,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   );
   // A library added, restored or flagged anywhere, the CLI included. Home's
   // probe rides it: a library coming or going can change its answer
-  // either way.
+  // either way. So do the organize profiles, which count the libraries
+  // they can lay out.
   final librariesFanOut = InvalidationFanOut(
     container: ref.container,
     firstBuilds: firstBuilds,
@@ -221,6 +224,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       librariesProvider,
       libraryCountsProvider,
       libraryHasAnythingProvider,
+      organizeProfilesProvider,
     ],
   );
   // Home's probe is out of the catalog fan-out, where it was one of the
@@ -321,13 +325,14 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   });
 
   // A walk that lost its place, or a catch-up that may have lost changes,
-  // cannot say by kind what changed.
+  // cannot say by kind what changed, a `server` marker included.
   void everyStateTopic() {
     user.hint();
     entities.hint();
     jobs.hint();
     health.hint();
     libraries.hint();
+    container.invalidate(serverHealthProvider);
   }
 
   // Held for the session: what the stream last said about each item is
@@ -371,6 +376,10 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         tasks.hint();
       case 'libraries':
         libraries.hint();
+      case 'server':
+        // What /health reports moved: the streaming engine went away or
+        // came back. Rare, and read whole, so not paced.
+        container.invalidate(serverHealthProvider);
       case 'play-state' || 'entity-state' || 'bookmarks' when engine != null:
         break;
       case 'play-state':

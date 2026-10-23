@@ -208,3 +208,38 @@ func GenerateSeriesBooks(dir, series string, n int) ([]string, error) {
 	}
 	return paths, nil
 }
+
+// GenerateToolBooks writes the books the file tools and deletes are
+// driven on, each alone in a folder named for it under "Tool Shelf":
+// "The Merge Book" as two parts ("01 - Part One.m4b", "02 - Part
+// Two.m4b") and "The Locked Book" as one file, both by Bea Binder. A
+// folder no other fixture shares is what a test may lock or merge in
+// without reaching anybody else's files. It returns the two folders.
+func GenerateToolBooks(dir string) ([]string, error) {
+	shelf := filepath.Join(dir, "Tool Shelf")
+	mergeDir := filepath.Join(shelf, "The Merge Book")
+	for i, part := range []string{"Part One", "Part Two"} {
+		if _, err := GenerateM4B(mergeDir, Spec{
+			Name:     fmt.Sprintf("%02d - %s", i+1, part),
+			Duration: time.Duration(3300+1100*i) * time.Millisecond,
+			Tags: map[string]string{
+				"TITLE": part, "ALBUM": "The Merge Book", "ARTIST": "Bea Binder",
+				"ALBUMARTIST": "Bea Binder", "TRACKNUMBER": fmt.Sprint(i + 1),
+			},
+		}); err != nil {
+			return nil, fmt.Errorf("fixtures: merge book part %d: %w", i+1, err)
+		}
+	}
+	lockedDir := filepath.Join(shelf, "The Locked Book")
+	if _, err := GenerateM4B(lockedDir, Spec{
+		Name:     "The Locked Book",
+		Duration: 5700 * time.Millisecond,
+		Tags: map[string]string{
+			"TITLE": "The Locked Book", "ALBUM": "The Locked Book", "ARTIST": "Bea Binder",
+			"ALBUMARTIST": "Bea Binder",
+		},
+	}); err != nil {
+		return nil, fmt.Errorf("fixtures: locked book: %w", err)
+	}
+	return []string{mergeDir, lockedDir}, nil
+}

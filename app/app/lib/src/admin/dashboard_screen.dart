@@ -11,6 +11,7 @@ import '../review/review_controller.dart';
 import '../shell/routes.dart';
 import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/server_health.dart';
 import '../settings/listening_sections.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
@@ -44,10 +45,7 @@ class AdminDashboardScreen extends ConsumerWidget {
         child: wizard != null
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const _ReadOnlyBanner(),
-                  FirstRunCard(step: wizard),
-                ],
+                children: <Widget>[FirstRunCard(step: wizard)],
               )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -57,7 +55,6 @@ class AdminDashboardScreen extends ConsumerWidget {
                   // moved reaches whatever took its place.
                   const _QuickActions(),
                   const SizedBox(height: WaxSpace.s24),
-                  const _ReadOnlyBanner(),
                   const _WarmingUp(),
                   const _StatusTiles(),
                   if (!sizeClass.hasSidebar) ...<Widget>[
@@ -66,29 +63,6 @@ class AdminDashboardScreen extends ConsumerWidget {
                   ],
                 ],
               ),
-      ),
-    );
-  }
-}
-
-/// Read-only mode is server-wide and silent everywhere else in the
-/// console: every write refuses with the same message and no screen
-/// explains why. The switch that causes it is two taps away.
-class _ReadOnlyBanner extends ConsumerWidget {
-  const _ReadOnlyBanner();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final readOnly = ref.watch(adminSettingsProvider).value?.readOnly ?? false;
-    if (!readOnly) return const SizedBox.shrink();
-    final l10n = context.l10n;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: WaxSpace.s16),
-      child: WaxBanner(
-        message: l10n.adminReadOnlyBanner,
-        glyph: WaxIcons.warning,
-        actionLabel: l10n.adminServerTitle,
-        onAction: () => context.go(WaxRoute.adminSettings),
       ),
     );
   }
@@ -175,6 +149,8 @@ class _StatusTiles extends ConsumerWidget {
     final similarity = similarityStatus.value;
     final sessions = ref.watch(playbackSessionsProvider).value;
     final thumbs = ref.watch(thumbnailCacheProvider).value;
+    final server = ref.watch(serverHealthProvider);
+    final streaming = server.value?.streaming;
 
     final running = jobs.where((j) => j.state == 'running').length;
     final lastBackup = backups.where((b) => b.state == 'done').firstOrNull;
@@ -312,6 +288,37 @@ class _StatusTiles extends ConsumerWidget {
             semanticsId: SemanticsIds.adminTile('sessions'),
           ),
         ),
+        // Held while health loads, like the rest; a server too old to say
+        // loses the slot.
+        if (!server.hasValue || streaming != null)
+          _tile(
+            width: 220,
+            child: StatTile(
+              label: l10n.adminTileStreaming,
+              value: switch (streaming) {
+                null => '--',
+                ServerStreaming(configured: false) =>
+                  l10n.adminStreamingNotConfigured,
+                ServerStreaming(connected: false) =>
+                  l10n.adminStreamingUnreachable,
+                _ => l10n.adminStreamingConnected,
+              },
+              caption: switch (streaming) {
+                null => l10n.adminTileLoading,
+                ServerStreaming(configured: true, connected: false) =>
+                  l10n.adminStreamingDirect,
+                _ => null,
+              },
+              glyph: WaxIcons.waveform,
+              tone:
+                  streaming != null &&
+                      streaming.configured &&
+                      !streaming.connected
+                  ? colors.error
+                  : null,
+              semanticsId: SemanticsIds.adminTile('streaming'),
+            ),
+          ),
       ],
     );
   }

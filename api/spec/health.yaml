@@ -122,7 +122,14 @@ paths:
       description: >
         Fixes one `fixable` rule across `itemPids` or every failing item. An
         unscoped metadata fix is an enrichment job (`jobPid`) over its rule's
-        phases; the rest is a `health-fix` task (`taskId`). Administrators only.
+        phases; the rest is a `health-fix` task (`taskId`). `path-mismatch`
+        needs `itemPids`: moving every mismatched file is an organize pass,
+        previewed and applied through `/organize/preview` and
+        `/organize/apply`. A path fix moves its items as organize jobs,
+        each undoable through `/organize/undo`, and its summary counts
+        `moved` (the items it moved) and `held` (by hold code, as
+        `/organize/preview` names them) beside `skipped` and `failed`, and
+        lists the jobs as `jobPids`. Administrators only.
       tags: [health]
       requestBody:
         required: true
@@ -138,7 +145,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthFixResult"
         "400":
-          $ref: "#/components/responses/InvalidRequest"
+          description: >
+            `invalid-request`: the rule has no fix on this server, an item
+            pid is malformed, a fix names more than 1000 `itemPids`, or a
+            `path-mismatch` fix names none.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -381,8 +395,11 @@ paths:
             The resolution was refused. `read-only`: a named encoding's
             library, or the whole server, is read-only. `catalog-busy`:
             another catalog job holds the file-mutation scope the move
-            to the trash needs; retry when it ends. `conflict`: a move
-            to the trash failed, and the message says how many.
+            to the trash needs; retry when it ends. `storage-unwritable`:
+            the library's folder refused every move to the trash (its
+            permissions, or a read-only mount), so nothing moved.
+            `conflict`: some moves to the trash failed after others went,
+            and the message says how many.
           content:
             application/json:
               schema:
@@ -495,8 +512,8 @@ components:
         fixable:
           type: boolean
           description: >
-            Whether the bulk-fix endpoint can fix this rule on this
-            install.
+            Whether the fix endpoint can fix this rule on this install;
+            a `path-mismatch` fix takes `itemPids`.
         fixing:
           type: boolean
           description: >
@@ -604,8 +621,8 @@ components:
           type: array
           maxItems: 1000
           description: >
-            Restrict to these items; absent fixes everything
-            currently failing the rule.
+            Restrict to these items; absent fixes everything currently
+            failing the rule, which `path-mismatch` refuses.
           items:
             type: string
 

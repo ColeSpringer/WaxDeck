@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -25,6 +27,10 @@ Widget _host(FakeRepository repo) => ProviderScope(
 );
 
 Finder _row(String id) => find.bySemanticsIdentifier(SemanticsIds.taskRow(id));
+
+/// When a waiting task in these tests tries next: ahead of the clock, so
+/// the row says when.
+final _retryAt = DateTime.now().toUtc().add(const Duration(hours: 2));
 
 Finder _job(String pid) => find.bySemanticsIdentifier(SemanticsIds.jobRow(pid));
 
@@ -146,6 +152,408 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.taskDismiss('tt-2')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a book task waiting on a passing failure says so, why, when '
+      'it tries next, and that the book is in the trash', (tester) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-w'] = ToolTask(
+      id: 'tt-w',
+      type: 'book-merge',
+      state: 'running',
+      itemPid: 'bk-1',
+      itemTitle: 'The Merge Book',
+      progressPct: 100,
+      error:
+          'the library folder refused the write: permission denied (the '
+          'task tries again on its own)',
+      waitReason: 'storage-unwritable',
+      retryAt: _retryAt,
+      bookInTrash: true,
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    final row = _row('tt-w');
+    Finder inRow(String text) =>
+        find.descendant(of: row, matching: find.text(text));
+    expect(inRow('Waiting'), findsOneWidget);
+    expect(find.textContaining('Running'), findsNothing);
+    expect(find.textContaining('100%'), findsNothing);
+    expect(
+      find.descendant(of: row, matching: find.byType(LinearProgressIndicator)),
+      findsNothing,
+      reason: 'a finished bar over a task that waits reads as done',
+    );
+    expect(
+      inRow(
+        "A folder this writes to refuses the server. Fix the folder's "
+        'ownership and permissions and this carries on.',
+      ),
+      findsOneWidget,
+    );
+    // The time of the next try, not a countdown, which would be wrong as
+    // soon as the row stood still.
+    expect(
+      inRow('Next try at ${DateFormat.jm('en').format(_retryAt.toLocal())}'),
+      findsOneWidget,
+    );
+    expect(
+      inRow("The book's files are in the trash until this finishes."),
+      findsOneWidget,
+    );
+    // The server's words stay, as detail rather than as a failure.
+    final detail = inRow(
+      'the library folder refused the write: permission denied (the task '
+      'tries again on its own)',
+    );
+    expect(detail, findsOneWidget);
+    final colors = WaxColors.of(tester.element(row));
+    for (final text in tester.widgetList<Text>(
+      find.descendant(of: row, matching: find.byType(Text)),
+    )) {
+      expect(text.style?.color, isNot(colors.error), reason: text.data);
+    }
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.taskDismiss('tt-w')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a next try that has come says it is trying now, and the row '
+      'says so when the time comes', (tester) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-past'] = ToolTask(
+      id: 'tt-past',
+      type: 'book-merge',
+      state: 'running',
+      waitReason: 'catalog-busy',
+      retryAt: DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
+      createdAt: DateTime.utc(2026, 7, 1, 2),
+    );
+    final soon = DateTime.now().toUtc().add(const Duration(minutes: 1));
+    repo.toolTasksById['tt-soon'] = ToolTask(
+      id: 'tt-soon',
+      type: 'book-split',
+      state: 'running',
+      waitReason: 'catalog-busy',
+      retryAt: soon,
+      createdAt: DateTime.utc(2026, 7, 1, 1),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    Finder inRow(String id, String text) =>
+        find.descendant(of: _row(id), matching: find.text(text));
+    expect(inRow('tt-past', 'Trying again now'), findsOneWidget);
+    expect(
+      inRow(
+        'tt-soon',
+        'Next try at ${DateFormat.jm('en').format(soon.toLocal())}',
+      ),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(minutes: 1, seconds: 1));
+    expect(inRow('tt-soon', 'Trying again now'), findsOneWidget);
+  });
+
+  testWidgets('every wait reason has its sentence, and one this app does not '
+      'know reads as passing', (tester) async {
+    final repo = FakeRepository();
+    const reasons = {
+      'catalog-busy':
+          'Another job holds the catalog; this carries on once it is free.',
+      'catalog-maintenance':
+          'The catalog is under maintenance; this carries on once that is '
+          'done.',
+      'read-only':
+          'A library this works in is read-only. Turn read-only off for it, '
+          'or for the server, and this carries on.',
+      'storage-unwritable':
+          "A folder this writes to refuses the server. Fix the folder's "
+          'ownership and permissions and this carries on.',
+      'engine-unavailable':
+          'The audio engine is not available; this carries on once it is '
+          'back.',
+      'part-missing':
+          'A file of the book is not where the catalog has it. If it does '
+          'not come back, this puts back what it moved and stops.',
+      'put-back-blocked':
+          'A file cannot go back from the trash: its place is taken or its '
+          'folder refuses the server. Clear the place or fix the folder and '
+          'this carries on.',
+      'stopped':
+          'This was cut short, by the server stopping or by running out of '
+          'time; it carries on where it was.',
+      'other':
+          'Something passing got in the way; this tries again on its '
+          'own.',
+      'a-reason-from-later':
+          'Something passing got in the way; this tries '
+          'again on its own.',
+    };
+    var i = 0;
+    for (final reason in reasons.keys) {
+      repo.toolTasksById['tt-$i'] = ToolTask(
+        id: 'tt-$i',
+        type: 'cue-split',
+        state: 'running',
+        waitReason: reason,
+        retryAt: DateTime.now().add(const Duration(minutes: 5)),
+        createdAt: DateTime.utc(2026, 7, 1, 0, i),
+      );
+      i++;
+    }
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    i = 0;
+    for (final sentence in reasons.values) {
+      final row = _row('tt-$i');
+      await tester.scrollUntilVisible(row, 200);
+      expect(
+        find.descendant(of: row, matching: find.text(sentence)),
+        findsOneWidget,
+        reason: reasons.keys.elementAt(i),
+      );
+      // A CUE split has no book to put in the trash.
+      expect(
+        find.descendant(
+          of: row,
+          matching: find.textContaining('in the trash until'),
+        ),
+        findsNothing,
+      );
+      i++;
+    }
+  });
+
+  testWidgets('a waiting task reads in Spanish too', (tester) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-w'] = ToolTask(
+      id: 'tt-w',
+      type: 'book-split',
+      state: 'running',
+      waitReason: 'read-only',
+      retryAt: _retryAt,
+      bookInTrash: true,
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        ],
+        child: routedHost(const TasksScreen(), locale: const Locale('es')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final row = _row('tt-w');
+    Finder inRow(String text) =>
+        find.descendant(of: row, matching: find.text(text));
+    expect(inRow('En espera'), findsOneWidget);
+    expect(
+      inRow(
+        'Una biblioteca en la que trabaja es de solo lectura. Quita la solo '
+        'lectura de la biblioteca o del servidor y esto seguirá.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      inRow(
+        'Próximo intento: ${DateFormat.jm('es').format(_retryAt.toLocal())}',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      inRow(
+        'Los archivos del libro están en la papelera hasta que esto '
+        'termine.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a book task at work in its trash step says where the book '
+      'is', (tester) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-r'] = ToolTask(
+      id: 'tt-r',
+      type: 'book-split',
+      state: 'running',
+      progressPct: 60,
+      bookInTrash: true,
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pump();
+    await tester.pump();
+
+    final row = _row('tt-r');
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.text(AppLocalizationsEn().toolsStateRunningPct(60)),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.text(
+          "The book's files are in the trash until this finishes.",
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  ToolTask parkedMerge() => ToolTask(
+    id: 'tt-p',
+    type: 'book-merge',
+    state: 'parked',
+    itemPid: 'bk-1',
+    progressPct: 100,
+    error:
+        'stopped: its last 3 runs ended with the server and never came '
+        "back; the trash holds 2 of the book's files under book-merge: "
+        'Ada/Book/part 1.m4b, Ada/Book/part 2.m4b',
+    bookInTrash: true,
+    createdAt: DateTime.utc(2026, 7, 1),
+    finishedAt: DateTime.utc(2026, 7, 1, 1),
+  );
+
+  testWidgets('a parked task asks for attention, says where its files are, '
+      'and is dismissed like a failed one', (tester) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-p'] = parkedMerge();
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    final row = _row('tt-p');
+    final status = find.descendant(
+      of: row,
+      matching: find.text('Needs attention'),
+    );
+    expect(status, findsOneWidget);
+    expect(find.text('parked'), findsNothing, reason: 'no raw wire strings');
+    expect(
+      tester.widget<Text>(status).style?.color,
+      WaxColors.of(tester.element(row)).error,
+    );
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.text(
+          'stopped: its last 3 runs ended with the server and never came '
+          "back; the trash holds 2 of the book's files under book-merge: "
+          'Ada/Book/part 1.m4b, Ada/Book/part 2.m4b',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row, matching: find.byType(LinearProgressIndicator)),
+      findsNothing,
+    );
+    // Finished, so it says nothing of a trash it is no longer working
+    // through: the line above says where each file is.
+    expect(find.textContaining('until this finishes'), findsNothing);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.taskDismiss('tt-p')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.deleteToolTaskCalls, ['tt-p']);
+    expect(row, findsNothing);
+  });
+
+  testWidgets('a long account folds to its first lines, opens whole, and '
+      'can be selected', (tester) async {
+    final repo = FakeRepository();
+    final names = [for (var i = 1; i <= 60; i++) 'Ada/Book/part $i.m4b'];
+    final account =
+        'stopped: its last 3 runs ended with the server and never came '
+        "back; the trash holds 60 of the book's files under book-merge: "
+        '${names.join(', ')}';
+    repo.toolTasksById['tt-p'] = ToolTask(
+      id: 'tt-p',
+      type: 'book-merge',
+      state: 'parked',
+      error: account,
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: DateTime.utc(2026, 7, 1, 1),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    final row = _row('tt-p');
+    final text = find.descendant(of: row, matching: find.text(account));
+    expect(text, findsOneWidget);
+    // Selectable, so the paths can be copied out to put things right.
+    expect(
+      find.ancestor(of: text, matching: find.byType(WaxProse)),
+      findsOneWidget,
+    );
+    final folded = tester.getSize(row).height;
+    final whole = tester.getSize(text).height;
+    expect(folded, lessThan(whole / 2), reason: 'folded to its first lines');
+
+    await tester.tap(find.descendant(of: row, matching: find.text('Show all')));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(row).height, greaterThan(whole));
+    await tester.tap(
+      find.descendant(of: row, matching: find.text('Show less')),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(row).height, folded);
+  });
+
+  testWidgets('clear finished sweeps a parked task too', (tester) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-p'] = parkedMerge();
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.clearFinishedToolTaskCalls, 1);
+    expect(shellMessageText(raisedMessage(tester)), 'Cleared 1 task');
+    expect(_row('tt-p'), findsNothing);
+  });
+
+  testWidgets('a book task row names the book it works on', (tester) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-1'] = ToolTask(
+      id: 'tt-1',
+      type: 'book-merge',
+      state: 'done',
+      itemPid: 'bk-1',
+      itemTitle: 'The Fixture Book',
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: DateTime.utc(2026, 7, 1, 1),
+    );
+    repo.toolTasksById['tt-2'] = ToolTask(
+      id: 'tt-2',
+      type: 'book-split',
+      state: 'done',
+      itemPid: 'bk-2',
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: DateTime.utc(2026, 7, 1, 1),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Book merge: The Fixture Book'), findsOneWidget);
+    // A task queued with no title keeps its plain label.
+    expect(find.text('Book split'), findsOneWidget);
   });
 
   testWidgets('an acquire task opens the review queue', (tester) async {
@@ -377,8 +785,113 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.clearFinishedToolTaskCalls, 1);
+    expect(repo.clearFinishedToolTaskScopes, [
+      false,
+    ], reason: 'a member has one sweep, and it is their own');
     expect(shellMessageText(raisedMessage(tester)), 'Cleared 2 tasks');
     expect(find.text('No tool tasks'), findsOneWidget);
+  });
+
+  group('an administrator clearing finished tasks', () {
+    FakeRepository adminRepo() {
+      final repo = FakeRepository(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      );
+      repo.toolTasksById['tt-a'] = ToolTask(
+        id: 'tt-a',
+        type: 'book-merge',
+        state: 'done',
+        createdAt: DateTime.utc(2026, 7, 1),
+        finishedAt: DateTime.utc(2026, 7, 1, 1),
+      );
+      repo.toolTasksById['tt-b'] = ToolTask(
+        id: 'tt-b',
+        type: 'cue-split',
+        state: 'failed',
+        error: 'gave up',
+        createdAt: DateTime.utc(2026, 7, 2),
+        finishedAt: DateTime.utc(2026, 7, 2, 1),
+      );
+      return repo;
+    }
+
+    Future<void> tapId(WidgetTester tester, String id) async {
+      await tester.tap(find.bySemanticsIdentifier(id));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('chooses between their own tasks and everyone\'s', (
+      tester,
+    ) async {
+      final repo = adminRepo();
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      // The control opens a menu rather than sweeping.
+      await tapId(tester, SemanticsIds.tasksClearFinished);
+      expect(repo.clearFinishedToolTaskCalls, 0);
+      expect(find.text('Clear my finished tasks'), findsOneWidget);
+      expect(find.text('Clear everyone\'s finished tasks'), findsOneWidget);
+
+      await tapId(tester, SemanticsIds.tasksClearFinishedMine);
+
+      expect(repo.clearFinishedToolTaskScopes, [false]);
+      expect(shellMessageText(raisedMessage(tester)), 'Cleared 2 tasks');
+    });
+
+    testWidgets('clearing everyone\'s asks first', (tester) async {
+      final repo = adminRepo();
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      await tapId(tester, SemanticsIds.tasksClearFinished);
+      await tapId(tester, SemanticsIds.tasksClearFinishedAll);
+
+      expect(repo.clearFinishedToolTaskCalls, 0, reason: 'nothing before yes');
+      expect(
+        find.text('Clear every member\'s finished tasks?'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('reports they have not read'), findsOneWidget);
+
+      // Declining leaves every row where it was.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(repo.clearFinishedToolTaskCalls, 0);
+      expect(_row('tt-a'), findsOneWidget);
+
+      await tapId(tester, SemanticsIds.tasksClearFinished);
+      await tapId(tester, SemanticsIds.tasksClearFinishedAll);
+      await tapId(tester, SemanticsIds.tasksClearFinishedConfirm);
+
+      expect(repo.clearFinishedToolTaskScopes, [true]);
+      expect(shellMessageText(raisedMessage(tester)), 'Cleared 2 tasks');
+      expect(find.text('No tool tasks'), findsOneWidget);
+    });
+  });
+
+  testWidgets('clear finished says how many it kept, and why', (tester) async {
+    final repo = FakeRepository()..clearFinishedKept = 2;
+    repo.toolTasksById['tt-a'] = ToolTask(
+      id: 'tt-a',
+      type: 'book-merge',
+      state: 'done',
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: DateTime.utc(2026, 7, 1, 1),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'Cleared 1 task\n2 tasks kept: their files could not be moved; see '
+      'each row',
+    );
   });
 
   testWidgets('nothing finished offers no sweep', (tester) async {

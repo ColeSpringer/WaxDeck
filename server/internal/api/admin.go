@@ -328,6 +328,8 @@ func (s *Server) RestoreTrashEntry(ctx context.Context, req RestoreTrashEntryReq
 			return RestoreTrashEntry409JSONResponse(errObj("conflict", err.Error())), nil
 		case service.KindReadOnly:
 			return RestoreTrashEntry409JSONResponse(errObj("read-only", err.Error())), nil
+		case service.KindStorageUnwritable:
+			return RestoreTrashEntry409JSONResponse(errObj("storage-unwritable", err.Error())), nil
 		}
 		return nil, err
 	}
@@ -512,7 +514,7 @@ func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsR
 		case service.KindInvalid:
 			e := errObj("invalid-request", err.Error())
 			if errors.Is(err, service.ErrCueRipPart) {
-				e.Params = &map[string]string{"reason": "cue-rip"}
+				e.Params = cueRipParams(err)
 			}
 			return DeleteLibraryItems400JSONResponse{InvalidRequestJSONResponse(e)}, nil
 		case service.KindForbidden:
@@ -521,8 +523,8 @@ func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsR
 			return DeleteLibraryItems404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
 		case service.KindReadOnly:
 			return DeleteLibraryItems409JSONResponse(errObj("read-only", err.Error())), nil
-		case service.KindCatalogBusy:
-			return DeleteLibraryItems409JSONResponse(errObj(string(service.KindCatalogBusy), err.Error())), nil
+		case service.KindCatalogBusy, service.KindStorageUnwritable:
+			return DeleteLibraryItems409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
 		}
 		return nil, err
 	}
@@ -537,6 +539,12 @@ func deleteResultJSON(res service.DeleteItemsResultDTO) DeleteItemsResult {
 		row := DeletePlanEntry{Pid: e.PID, Files: e.Files, Bytes: e.Bytes, ItemSurvives: ptr(e.ItemSurvives)}
 		if e.Name != "" {
 			row.Name = ptr(e.Name)
+		}
+		if len(e.Paths) > 0 {
+			row.Paths = ptr(append([]string{}, e.Paths...))
+		}
+		if e.Failed > 0 {
+			row.Failed, row.Error = ptr(e.Failed), ptr(e.Error)
 		}
 		if len(e.FileList) > 0 {
 			files := make([]DeletePlanFile, 0, len(e.FileList))
@@ -553,6 +561,10 @@ func deleteResultJSON(res service.DeleteItemsResultDTO) DeleteItemsResult {
 	}
 	if len(res.Warnings) > 0 {
 		out.Warnings = &res.Warnings
+	}
+	if res.Applied {
+		out.Trashed, out.Deleted, out.Failed = ptr(res.Trashed), ptr(res.Deleted), ptr(res.Failed)
+		out.DirsPruned, out.ReclaimedBytes = ptr(res.DirsPruned), ptr(res.ReclaimedBytes)
 	}
 	return out
 }
@@ -688,12 +700,13 @@ func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObje
 		return CreateLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	if req.Body == nil {
-		return CreateLibrary400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return CreateLibrary400JSONResponse(errObj("invalid-request", "a body is required")), nil
 	}
 	in := service.AddLibraryInput{
-		Name:    req.Body.Name,
-		Path:    req.Body.Path,
-		Managed: derefBool(req.Body.Managed),
+		Name:        req.Body.Name,
+		Path:        req.Body.Path,
+		Managed:     derefBool(req.Body.Managed),
+		AllowAbsent: derefBool(req.Body.AllowAbsent),
 	}
 	if req.Body.Media != nil {
 		in.Media = string(*req.Body.Media)
@@ -702,15 +715,40 @@ func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObje
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
-			return CreateLibrary400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+			return CreateLibrary400JSONResponse(errObj("invalid-request", err.Error())), nil
 		case service.KindConflict:
-			return CreateLibrary409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+			return CreateLibrary409JSONResponse(errObj("conflict", err.Error())), nil
 		case service.KindForbidden:
 			return CreateLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		}
 		return nil, err
 	}
 	return CreateLibrary201JSONResponse(libraryCreatedJSON(lib)), nil
+}
+
+func (s *Server) RemoveLibrary(ctx context.Context, req RemoveLibraryRequestObject) (RemoveLibraryResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return RemoveLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	job, err := s.svc.RemoveLibrary(ctx, uc, req.Pid)
+	if err != nil {
+		switch kind := service.KindOf(err); kind {
+		case service.KindInvalid:
+			return RemoveLibrary400JSONResponse(errObj("invalid-request", err.Error())), nil
+		case service.KindForbidden:
+			return RemoveLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindNotFound:
+			return RemoveLibrary404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no library with pid "+req.Pid))}, nil
+		case service.KindConflict, service.KindCatalogBusy, service.KindReadOnly:
+			return RemoveLibrary409JSONResponse(errObj(string(kind), err.Error())), nil
+		}
+		return nil, err
+	}
+	return RemoveLibrary202JSONResponse(jobJSON(job)), nil
 }
 
 // libraryCreatedJSON is Library's fields plus the warning and the scan
@@ -728,6 +766,9 @@ func libraryCreatedJSON(lib service.LibraryInfo) LibraryCreated {
 		MediaDeclared:  base.MediaDeclared,
 		Managed:        base.Managed,
 		Profile:        base.Profile,
+		Configured:     base.Configured,
+		Unreachable:    base.Unreachable,
+		Writable:       base.Writable,
 	}
 	if lib.StreamingWarning != "" {
 		out.StreamingWarning = ptr(lib.StreamingWarning)
@@ -751,6 +792,9 @@ func libraryMediaChangedJSON(lib service.LibraryInfo) LibraryMediaChanged {
 		FolderFallback: base.FolderFallback,
 		Managed:        base.Managed,
 		Profile:        base.Profile,
+		Configured:     base.Configured,
+		Unreachable:    base.Unreachable,
+		Writable:       base.Writable,
 		ScanStarted:    lib.ScanStarted,
 	}
 }
@@ -776,6 +820,13 @@ func libraryDTO(lib service.LibraryInfo) Library {
 	if lib.ItemCount > 0 {
 		out.ItemCount = ptr(lib.ItemCount)
 	}
+	if lib.Configured {
+		out.Configured = ptr(true)
+	}
+	if lib.Unreachable {
+		out.Unreachable = ptr(true)
+	}
+	out.Writable = lib.Writable
 	return out
 }
 
@@ -1089,8 +1140,10 @@ func (t *taskEventStream) stage(task service.ToolTaskDTO) {
 	t.buf = append(t.buf, fmt.Sprintf("event: task\ndata: %s\n\n", payload)...)
 }
 
+// terminalTaskState is service.ToolTaskFinished: a parked task ends its
+// stream as a failed one does.
 func terminalTaskState(state string) bool {
-	return state == "done" || state == "failed"
+	return service.ToolTaskFinished(state)
 }
 
 func taskChanged(a, b service.ToolTaskDTO) bool {

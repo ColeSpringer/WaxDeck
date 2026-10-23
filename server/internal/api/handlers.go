@@ -39,7 +39,10 @@ type Server struct {
 	// download endpoint uses (the streaming bridge holds its own
 	// reference to the same instance).
 	media *auth.MediaTokens
-	log   logger
+	// sources is what the download route looks its files up through: the
+	// service, save in a test that counts the lookups.
+	sources downloadSources
+	log     logger
 	// connect is the multi-device control core; nil only in tests
 	// that exercise surfaces away from the player.
 	connect *connect.Service
@@ -177,6 +180,7 @@ func NewServer(version string, opts Options) *Server {
 		oidc:         opts.OIDC,
 		limiter:      opts.Limiter,
 		media:        opts.Media,
+		sources:      opts.Service,
 		connect:      opts.Connect,
 		group:        opts.Group,
 		bases:        opts.Bases,
@@ -214,12 +218,24 @@ func (discardLogger) Warn(string, ...any) {}
 // --- system ------------------------------------------------------------------
 
 func (s *Server) GetHealth(ctx context.Context, _ GetHealthRequestObject) (GetHealthResponseObject, error) {
+	// Read off the bridge rather than the service's record of it: a
+	// request that found the engine gone has taken it down already, and
+	// the probe's verdict reaches the service a moment later.
+	engine := s.bridge.Status()
 	return GetHealth200JSONResponse{
 		Status:          "ok",
 		Version:         s.Version,
 		ApiVersion:      1,
 		UploadFormats:   ptr(s.svc.UploadFormats()),
 		RejectedFormats: ptr(s.svc.RejectedFormats()),
+		Streaming: &StreamingEngineState{
+			Configured: s.bridge != nil,
+			Connected:  engine.Connected,
+			Timelines:  engine.Timelines,
+			VoiceBoost: engine.VoiceBoost,
+			FileTools:  engine.FileTools,
+		},
+		Podcasts: ptr(s.svc.PodcastsOn()),
 	}, nil
 }
 
@@ -292,7 +308,10 @@ func (s *Server) Logout(ctx context.Context, _ LogoutRequestObject) (LogoutRespo
 func (s *Server) GetSession(ctx context.Context, _ GetSessionRequestObject) (GetSessionResponseObject, error) {
 	if p, ok := principalFromContext(ctx); ok {
 		u := userJSON(p.User)
-		return GetSession200JSONResponse{Authenticated: true, User: &u, CsrfToken: &p.Session.CSRFToken}, nil
+		return GetSession200JSONResponse{
+			Authenticated: true, User: &u, CsrfToken: &p.Session.CSRFToken,
+			Server: &SessionServer{ReadOnly: s.svc.ServerReadOnly()},
+		}, nil
 	}
 	return GetSession200JSONResponse{Authenticated: false}, nil
 }
@@ -1001,53 +1020,8 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 		}
 	}
 
-	// Without the streaming engine the original bytes serve directly:
-	// ranged, untranscoded, through the same token-authenticated
-	// endpoint downloads use. Span items ride whole with the window in
-	// the response; DSP (voice boost) is simply unavailable.
 	if !s.bridge.Up() {
-		if s.media == nil {
-			return nil, errStreamingUnavailable
-		}
-		res, err := s.svc.DirectPlayInfo(ctx, uc, req.Pid, part.FilePID)
-		if err != nil {
-			if out, ok := s.enclosurePlayInfo(ctx, uc.ID, sessionCred(p), req.Pid, err); ok {
-				return out, nil
-			}
-			switch service.KindOf(err) {
-			case service.KindNotFound:
-				return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-			case service.KindConflict:
-				return GetPlayInfo409JSONResponse(errObj("conflict", err.Error())), nil
-			}
-			return nil, err
-		}
-		token, exp := s.media.MintFor(auth.MediaClaims{
-			User: p.User.ID, Cred: sessionCred(p), Purpose: auth.PurposeStream, PID: req.Pid,
-		}, 0)
-		u := "/media/download?pid=" + url.QueryEscape(req.Pid) +
-			"&mt=" + url.QueryEscape(token) + "&id=" + url.QueryEscape(res.File.ETag)
-		if part.FilePID != "" {
-			u += "&f=" + url.QueryEscape(part.FilePID)
-		}
-		out := GetPlayInfo200JSONResponse{
-			Pid:        req.Pid,
-			Url:        u,
-			MimeType:   res.File.MimeType,
-			DurationMs: res.DurationMS,
-			Seekable:   true,
-			ExpiresAt:  exp,
-		}
-		if res.HasSpan {
-			out.SpanStartMs = &res.SpanStartMS
-			out.SpanEndMs = &res.SpanEndMS
-		}
-		if part.MultiPart {
-			out.PartIndex = &part.Index
-			out.PartCount = &part.Count
-			out.PartStartMs = &part.StartMS
-		}
-		return out, nil
+		return s.directPlayInfo(ctx, uc, p, req.Pid, part)
 	}
 
 	// Voice boost precedence is resolved here, at mint time: an explicit
@@ -1072,6 +1046,9 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 		StartMS:        max(positionMS-part.StartMS, 0),
 		HLS:            derefBool(req.Params.Hls),
 	})
+	if errors.Is(err, flow.ErrEngineDown) {
+		return s.directPlayInfo(ctx, uc, p, req.Pid, part)
+	}
 	if err != nil {
 		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, sessionCred(p), req.Pid, err); ok {
 			return out, nil
@@ -1101,6 +1078,56 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	}
 	if info.StartOffsetMS > 0 {
 		out.StartOffsetMs = &info.StartOffsetMS
+	}
+	if part.MultiPart {
+		out.PartIndex = &part.Index
+		out.PartCount = &part.Count
+		out.PartStartMs = &part.StartMS
+	}
+	return out, nil
+}
+
+// directPlayInfo mints the original bytes, ranged and untranscoded,
+// through the same token-authenticated endpoint downloads use: what a
+// server without the streaming engine always serves, and one whose
+// engine is away serves until it answers. Span items ride whole with the
+// window in the response; DSP (voice boost) is simply unavailable.
+func (s *Server) directPlayInfo(ctx context.Context, uc *service.UserCtx, p *auth.Principal, pid string, part service.PlayPart) (GetPlayInfoResponseObject, error) {
+	if s.media == nil {
+		return nil, errStreamingUnavailable
+	}
+	res, err := s.svc.DirectPlayInfo(ctx, uc, pid, part.FilePID)
+	if err != nil {
+		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, sessionCred(p), pid, err); ok {
+			return out, nil
+		}
+		switch service.KindOf(err) {
+		case service.KindNotFound:
+			return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+pid))}, nil
+		case service.KindConflict:
+			return GetPlayInfo409JSONResponse(errObj("conflict", err.Error())), nil
+		}
+		return nil, err
+	}
+	token, exp := s.media.MintFor(auth.MediaClaims{
+		User: p.User.ID, Cred: sessionCred(p), Purpose: auth.PurposeStream, PID: pid,
+	}, 0)
+	u := "/media/download?pid=" + url.QueryEscape(pid) +
+		"&mt=" + url.QueryEscape(token) + "&id=" + url.QueryEscape(res.File.ETag)
+	if part.FilePID != "" {
+		u += "&f=" + url.QueryEscape(part.FilePID)
+	}
+	out := GetPlayInfo200JSONResponse{
+		Pid:        pid,
+		Url:        u,
+		MimeType:   res.File.MimeType,
+		DurationMs: res.DurationMS,
+		Seekable:   true,
+		ExpiresAt:  exp,
+	}
+	if res.HasSpan {
+		out.SpanStartMs = &res.SpanStartMS
+		out.SpanEndMs = &res.SpanEndMS
 	}
 	if part.MultiPart {
 		out.PartIndex = &part.Index
@@ -1375,6 +1402,9 @@ func jobResultJSON(j service.Job) map[string]any {
 			}
 			out["runs"] = runs
 		}
+		if len(j.Scan.RootsUnreachable) > 0 {
+			out["rootsUnreachable"] = j.Scan.RootsUnreachable
+		}
 		return out
 	case j.Analyze != nil:
 		r := j.Analyze
@@ -1385,10 +1415,16 @@ func jobResultJSON(j service.Job) map[string]any {
 		}
 	case j.Organize != nil:
 		r := j.Organize
-		return map[string]any{
-			"profile": r.Profile, "moved": r.Moved, "skipped": r.Skipped,
-			"errored": r.Errored, "sidecarsMoved": r.SidecarsMoved,
+		out := map[string]any{
+			"moved": r.Moved, "skipped": r.Skipped, "held": r.Held,
+			"errored": r.Errored, "sidecarsMoved": r.SidecarsMoved, "dirsPruned": r.DirsPruned,
 		}
+		// An undo lays out by no profile, nor a run over several libraries
+		// each laid out by its own.
+		if r.Profile != "" {
+			out["profile"] = r.Profile
+		}
+		return out
 	case j.Enrich != nil:
 		raw, err := json.Marshal(enrichmentLastRun(j.Enrich))
 		if err != nil {
@@ -1404,6 +1440,11 @@ func jobResultJSON(j service.Job) map[string]any {
 		return map[string]any{
 			"converted": nonNil(r.Converted), "absorbed": nonNilMap(r.Absorbed),
 			"created": nonNil(r.Created), "writeBackFailures": narrowedWriteBackFailuresJSON(r.WriteBackFailures),
+		}
+	case j.RemoveRoot != nil:
+		r := j.RemoveRoot
+		return map[string]any{
+			"filesDetached": r.FilesDetached, "itemsArchived": r.ItemsArchived, "trashRowsDropped": r.TrashRowsDropped,
 		}
 	}
 	return nil
@@ -1801,7 +1842,9 @@ func responseError(w http.ResponseWriter, err error) {
 	case service.KindFeature:
 		writeError(w, http.StatusNotImplemented, "feature-unavailable", kindMessage(err, "this server is not running the needed capability"))
 	case service.KindReadOnly:
-		writeError(w, http.StatusConflict, "read-only", kindMessage(err, "the target library is read-only"))
+		writeError(w, http.StatusConflict, "read-only", kindMessage(err, "the server or the target library is read-only"))
+	case service.KindStorageUnwritable:
+		writeError(w, http.StatusConflict, "storage-unwritable", kindMessage(err, "a library folder refused the write"))
 	case service.KindTranscodeLimit:
 		writeError(w, http.StatusTooManyRequests, "transcode-limited", kindMessage(err, "the transcode session limit is reached"))
 	default:

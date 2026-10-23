@@ -7,20 +7,22 @@ import (
 	"fmt"
 )
 
-// JobOrigin is who started a catalog job; Rule is set for a health fix.
+// JobOrigin is who started a catalog job; Rule is set for a health fix,
+// Detail is what settling its end needs that the job does not keep.
 type JobOrigin struct {
 	PID         string
 	UserID      string
 	Rule        string
+	Detail      string
 	CreatedAtNS int64
 }
 
 // InsertJobOrigin records who started a job.
 func (d *DB) InsertJobOrigin(ctx context.Context, o JobOrigin) error {
 	_, err := d.w.ExecContext(ctx, `
-		INSERT INTO job_origins (pid, user_id, rule, created_at_ns) VALUES (?, ?, ?, ?)
+		INSERT INTO job_origins (pid, user_id, rule, detail, created_at_ns) VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT (pid) DO NOTHING`,
-		o.PID, o.UserID, o.Rule, o.CreatedAtNS)
+		o.PID, o.UserID, o.Rule, o.Detail, o.CreatedAtNS)
 	if err != nil {
 		return fmt.Errorf("db: recording job origin: %w", err)
 	}
@@ -35,8 +37,8 @@ func (d *DB) ClaimJobOrigin(ctx context.Context, pid string, nowNS, heldBeforeNS
 	var o JobOrigin
 	err := d.w.QueryRowContext(ctx, `
 		UPDATE job_origins SET settling_at_ns = ? WHERE pid = ? AND settling_at_ns < ?
-		RETURNING pid, user_id, rule, created_at_ns`, nowNS, pid, heldBeforeNS).Scan(
-		&o.PID, &o.UserID, &o.Rule, &o.CreatedAtNS)
+		RETURNING pid, user_id, rule, detail, created_at_ns`, nowNS, pid, heldBeforeNS).Scan(
+		&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return JobOrigin{}, ErrNotFound
 	}
@@ -61,13 +63,47 @@ func (d *DB) DeleteJobOrigin(ctx context.Context, pid string) (string, error) {
 	return rule, nil
 }
 
+// SettleJobOrigin drops a settled job's origin and, when audit is given,
+// records it in the same transaction. An origin already gone writes
+// nothing and answers ErrNotFound, so a settle repeated after one landed,
+// across a stop or a crash, never records the job twice.
+func (d *DB) SettleJobOrigin(ctx context.Context, pid string, audit *AuditEvent) error {
+	tx, err := d.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db: settling job origin: %w", err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `DELETE FROM job_origins WHERE pid = ?`, pid)
+	if err != nil {
+		return fmt.Errorf("db: settling job origin: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("db: settling job origin: %w", err)
+	} else if n == 0 {
+		return ErrNotFound
+	}
+	if audit != nil {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO audit_log (actor_id, actor_name, action, target_kind, target_pid, target_name, detail, created_at_ns)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			audit.ActorID, audit.ActorName, audit.Action, audit.TargetKind, audit.TargetPID, audit.TargetName,
+			audit.Detail, audit.CreatedAtNS); err != nil {
+			return fmt.Errorf("db: auditing a settled job: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db: settling job origin: %w", err)
+	}
+	return nil
+}
+
 // JobOriginGet reads a job's origin without claiming it; ErrNotFound
 // when there is none.
 func (d *DB) JobOriginGet(ctx context.Context, pid string) (JobOrigin, error) {
 	var o JobOrigin
 	err := d.r.QueryRowContext(ctx, `
-		SELECT pid, user_id, rule, created_at_ns FROM job_origins WHERE pid = ?`, pid).Scan(
-		&o.PID, &o.UserID, &o.Rule, &o.CreatedAtNS)
+		SELECT pid, user_id, rule, detail, created_at_ns FROM job_origins WHERE pid = ?`, pid).Scan(
+		&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return JobOrigin{}, ErrNotFound
 	}
@@ -109,7 +145,7 @@ func (d *DB) JobOriginRules(ctx context.Context) ([]string, error) {
 // JobOrigins lists every origin whose job's end is still to be told.
 func (d *DB) JobOrigins(ctx context.Context) ([]JobOrigin, error) {
 	rows, err := d.r.QueryContext(ctx, `
-		SELECT pid, user_id, rule, created_at_ns FROM job_origins ORDER BY created_at_ns, pid`)
+		SELECT pid, user_id, rule, detail, created_at_ns FROM job_origins ORDER BY created_at_ns, pid`)
 	if err != nil {
 		return nil, fmt.Errorf("db: listing job origins: %w", err)
 	}
@@ -117,7 +153,7 @@ func (d *DB) JobOrigins(ctx context.Context) ([]JobOrigin, error) {
 	var out []JobOrigin
 	for rows.Next() {
 		var o JobOrigin
-		if err := rows.Scan(&o.PID, &o.UserID, &o.Rule, &o.CreatedAtNS); err != nil {
+		if err := rows.Scan(&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS); err != nil {
 			return nil, fmt.Errorf("db: scanning job origin: %w", err)
 		}
 		out = append(out, o)

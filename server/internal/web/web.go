@@ -13,11 +13,13 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -28,19 +30,29 @@ var placeholderFS embed.FS
 // distFS is populated by web_dist.go when built with -tags withweb.
 var distFS fs.FS
 
-// Handler returns the SPA handler. devDir, when non-empty, overrides any
-// embedded build.
-func Handler(devDir string) http.Handler {
-	var files fs.FS
+// Where the web UI is served from, as Handler reports it.
+const (
+	SourceDir         = "dir"
+	SourceEmbedded    = "embedded"
+	SourcePlaceholder = "placeholder"
+)
+
+// Handler returns the SPA handler and the source it serves from. devDir,
+// when non-empty, overrides any embedded build and has to hold the app's
+// index.html: without it every navigation would answer a 404.
+func Handler(devDir string) (http.Handler, string, error) {
 	switch {
 	case devDir != "":
-		files = os.DirFS(devDir)
+		if st, err := os.Stat(filepath.Join(devDir, "index.html")); err != nil || st.IsDir() {
+			return nil, "", fmt.Errorf("web dir %s has no index.html", devDir)
+		}
+		return &spaHandler{files: os.DirFS(devDir)}, SourceDir, nil
 	case distFS != nil:
-		files = distFS
+		return &spaHandler{files: distFS}, SourceEmbedded, nil
 	default:
-		files, _ = fs.Sub(placeholderFS, "placeholder")
+		files, _ := fs.Sub(placeholderFS, "placeholder")
+		return &spaHandler{files: files}, SourcePlaceholder, nil
 	}
-	return &spaHandler{files: files}
 }
 
 type spaHandler struct {

@@ -15,6 +15,16 @@ class _$DeleteItemsResult extends DeleteItemsResult {
   final BuiltList<DeletePlanEntry> entries;
   @override
   final BuiltList<String>? warnings;
+  @override
+  final int? trashed;
+  @override
+  final int? deleted;
+  @override
+  final int? failed;
+  @override
+  final int? dirsPruned;
+  @override
+  final int? reclaimedBytes;
 
   factory _$DeleteItemsResult([
     void Function(DeleteItemsResultBuilder)? updates,
@@ -25,6 +35,11 @@ class _$DeleteItemsResult extends DeleteItemsResult {
     required this.mode,
     required this.entries,
     this.warnings,
+    this.trashed,
+    this.deleted,
+    this.failed,
+    this.dirsPruned,
+    this.reclaimedBytes,
   }) : super._();
   @override
   DeleteItemsResult rebuild(void Function(DeleteItemsResultBuilder) updates) =>
@@ -41,7 +56,12 @@ class _$DeleteItemsResult extends DeleteItemsResult {
         applied == other.applied &&
         mode == other.mode &&
         entries == other.entries &&
-        warnings == other.warnings;
+        warnings == other.warnings &&
+        trashed == other.trashed &&
+        deleted == other.deleted &&
+        failed == other.failed &&
+        dirsPruned == other.dirsPruned &&
+        reclaimedBytes == other.reclaimedBytes;
   }
 
   @override
@@ -51,6 +71,11 @@ class _$DeleteItemsResult extends DeleteItemsResult {
     _$hash = $jc(_$hash, mode.hashCode);
     _$hash = $jc(_$hash, entries.hashCode);
     _$hash = $jc(_$hash, warnings.hashCode);
+    _$hash = $jc(_$hash, trashed.hashCode);
+    _$hash = $jc(_$hash, deleted.hashCode);
+    _$hash = $jc(_$hash, failed.hashCode);
+    _$hash = $jc(_$hash, dirsPruned.hashCode);
+    _$hash = $jc(_$hash, reclaimedBytes.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -61,7 +86,12 @@ class _$DeleteItemsResult extends DeleteItemsResult {
           ..add('applied', applied)
           ..add('mode', mode)
           ..add('entries', entries)
-          ..add('warnings', warnings))
+          ..add('warnings', warnings)
+          ..add('trashed', trashed)
+          ..add('deleted', deleted)
+          ..add('failed', failed)
+          ..add('dirsPruned', dirsPruned)
+          ..add('reclaimedBytes', reclaimedBytes))
         .toString();
   }
 }
@@ -89,6 +119,27 @@ class DeleteItemsResultBuilder
       _$this._warnings ??= ListBuilder<String>();
   set warnings(ListBuilder<String>? warnings) => _$this._warnings = warnings;
 
+  int? _trashed;
+  int? get trashed => _$this._trashed;
+  set trashed(int? trashed) => _$this._trashed = trashed;
+
+  int? _deleted;
+  int? get deleted => _$this._deleted;
+  set deleted(int? deleted) => _$this._deleted = deleted;
+
+  int? _failed;
+  int? get failed => _$this._failed;
+  set failed(int? failed) => _$this._failed = failed;
+
+  int? _dirsPruned;
+  int? get dirsPruned => _$this._dirsPruned;
+  set dirsPruned(int? dirsPruned) => _$this._dirsPruned = dirsPruned;
+
+  int? _reclaimedBytes;
+  int? get reclaimedBytes => _$this._reclaimedBytes;
+  set reclaimedBytes(int? reclaimedBytes) =>
+      _$this._reclaimedBytes = reclaimedBytes;
+
   DeleteItemsResultBuilder() {
     DeleteItemsResult._defaults(this);
   }
@@ -100,6 +151,11 @@ class DeleteItemsResultBuilder
       _mode = $v.mode;
       _entries = $v.entries.toBuilder();
       _warnings = $v.warnings?.toBuilder();
+      _trashed = $v.trashed;
+      _deleted = $v.deleted;
+      _failed = $v.failed;
+      _dirsPruned = $v.dirsPruned;
+      _reclaimedBytes = $v.reclaimedBytes;
       _$v = null;
     }
     return this;
@@ -136,6 +192,11 @@ class DeleteItemsResultBuilder
             ),
             entries: entries.build(),
             warnings: _warnings?.build(),
+            trashed: trashed,
+            deleted: deleted,
+            failed: failed,
+            dirsPruned: dirsPruned,
+            reclaimedBytes: reclaimedBytes,
           );
     } catch (_) {
       late String _$failedField;

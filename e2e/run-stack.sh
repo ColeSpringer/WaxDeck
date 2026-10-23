@@ -18,6 +18,9 @@ mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,fe
 # A book the library catalogs as music, for the kind change to make one
 # audiobook of.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/library" -preset misfiled-book >/dev/null)
+# Books in folders of their own, for a merge and a refused delete to act
+# on without reaching any other fixture's files.
+(cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/library" -preset tool-books >/dev/null)
 # A track long enough that a stream of it still arriving holds seconds of
 # play: the playback specs that hold or slow one.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/library" -preset long >/dev/null)
@@ -65,13 +68,22 @@ cat >"$RUN_DIR/waxflow.json" <<JSON
 }
 JSON
 
+# The catalog is the server's to create, and the sidecar starts first:
+# it waits for the file, so every run exercises that wait and the catalog
+# resolver behind it.
 WAXFLOW_ADDR=127.0.0.1:4418 \
 WAXFLOW_CONFIG="$RUN_DIR_NATIVE/waxflow.json" \
 WAXFLOW_DATA_DIR="$RUN_DIR_NATIVE/waxflow-data" \
 WAXFLOW_CACHE_DIR="$RUN_DIR_NATIVE/waxflow-cache" \
 WAXFLOW_API_KEYS=e2e-test-key \
+WAXFLOW_CATALOG_DB="$RUN_DIR_NATIVE/waxdeck-data/waxbin.db" \
 	"$RUN_DIR/waxflow-catalog" server &
 SIDECAR=$!
+# The engine-outage spec stops and continues the sidecar by this pid,
+# which cleanup removes with the sidecar (Playwright stops the stack with
+# SIGTERM, which the trap below catches), so no later run signals a pid
+# it no longer names.
+echo "$SIDECAR" >"$RUN_DIR/sidecar.pid"
 
 # The fixture podcast host the podcast scenarios subscribe to.
 "$RUN_DIR/feedserv" -addr 127.0.0.1:4421 -dir "$RUN_DIR_NATIVE/feed" -generate &
@@ -118,6 +130,12 @@ SERVER=$!
 
 # Not exec: the script stays alive to forward its death to the children,
 # so killing it cannot orphan the sidecar, the IdP, or the server.
-cleanup() { kill "$SERVER" "$SIDECAR" "$IDP" "$FEEDSERV" "$SOURCESERV" 2>/dev/null || true; }
+cleanup() {
+	rm -f "$RUN_DIR/sidecar.pid"
+	# The outage spec stops the sidecar; a stopped process holds a TERM
+	# until it is continued, and would keep its port past this script.
+	kill -CONT "$SIDECAR" 2>/dev/null || true
+	kill "$SERVER" "$SIDECAR" "$IDP" "$FEEDSERV" "$SOURCESERV" 2>/dev/null || true
+}
 trap cleanup EXIT INT TERM HUP
 wait "$SERVER"

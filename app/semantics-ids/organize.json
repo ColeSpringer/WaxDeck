@@ -5,6 +5,11 @@
     "organizeApply": "organize-apply",
     "organizeConfirm": "organize-confirm",
     "organizeDiscard": "organize-discard",
+    "organizeHistory": "organize-history",
+    "organizeHistoryMore": "organize-history-more",
+    "organizeHistoryRow": "organize-history-row-{jobPid}",
+    "organizeHold": "organize-hold-{from}",
+    "organizeHolds": "organize-holds",
     "organizePlan": "organize-plan",
     "organizePreview": "organize-preview",
     "organizeProfileAudiobook": "organize-profile-audiobook",
@@ -23,6 +28,8 @@
     "organizeProfileTagWrite": "organize-profile-tag-write",
     "organizeReport": "organize-report",
     "organizeRow": "organize-row-{from}",
-    "organizeRowDetail": "organize-row-detail-{from}"
+    "organizeRowDetail": "organize-row-detail-{from}",
+    "organizeUndo": "organize-undo-{jobPid}",
+    "organizeUndoConfirm": "organize-undo-confirm"
   }
 }

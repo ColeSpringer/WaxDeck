@@ -476,15 +476,21 @@ re-asks MusicBrainz about every album). Fixing one item asks only the
 phases its missing pieces need, and theirs. A read-only library is left
 out of the path rule, as an in-place one is: nothing lays it out. A file
 whose move is held back (its destination taken, or its folder out of
-reach) still counts as misplaced. Fixing
-named items, paths that disagree with the
-template, or tags that lag the catalog runs a health-fix task that
-works item by item, on a worker of its own so a long fix holds up no
-other task. Either is listed in Tasks while it runs. When it ends, the
-items it reached are re-checked (for a pass, every item failing the
-rule), and whoever started it gets a notification saying what it
-filled, counting an item only where the rule now passes, or why it
-failed; the score itself refreshes at the next full sweep.
+reach) still counts as misplaced. The path rule is fixed in bulk on the
+Organize screen: **Preview moves** on its row opens Organize with every
+library's dry run under way, and nothing moves until Apply is confirmed
+there. One misplaced file moves from its row in the rule's list with
+**Move into place**, which shows where the file is and where it goes
+before anything moves. Fixing named items, or tags that lag the
+catalog, runs a health-fix task that works item by item, on a worker of
+its own so a long fix holds up no other task; a path fix moves its
+items as organize runs, which the Organizer's history lists and can
+undo. Either is listed in Tasks while it runs. When it ends, the items
+it reached are re-checked (for a pass, every item failing the rule),
+and whoever started it gets a notification saying what it filled (for
+a path fix, what it moved and what it held back), counting an item
+only where the rule now passes, or why it failed; the score itself
+refreshes at the next full sweep.
 The rule reads as being fixed, on every administrator's screen, from
 the start until that re-check lands, and a second fix is refused
 meanwhile. A sweep asked for by hand shows as running until it lands;
@@ -531,12 +537,35 @@ how many were; while the server is read-only every move is held back.
 Moves the catalog cannot make are held back too, and counted: a
 destination another file holds, an item with nothing to file it under,
 a file missing from disk, a cue rip's shared file, a part of a book
-whose other parts cannot move. Discard preview drops the plan, and nothing
-moves until Apply is confirmed by typing the profile's name, or
-ORGANIZE for each library's own. Sidecars (covers, lyrics, cue sheets) ride along with
-their files, moves are crash safe, and templates are sandboxed per path
-segment so they cannot escape the library root. WaxDeck never fights an
-externally managed library: organizing is always explicit.
+whose other parts cannot move. The preview lists them under the moves,
+each with why. Discard preview drops the plan, and nothing moves until
+Apply is confirmed by typing the profile's name, or ORGANIZE for each
+library's own. Apply runs as a catalog job, listed in Tasks, and the
+result says what moved, what failed and how many folders the moves
+emptied and removed, and lists each file held back with why; the moved
+files leave the path rule when the run ends. Sidecars (covers, lyrics,
+cue sheets) ride along with their files, moves are crash safe, and
+templates are sandboxed per path segment so they cannot escape the
+library root. WaxDeck never fights an externally managed library:
+organizing is always explicit.
+
+Every run is journaled. **History** lists the runs the server still
+keeps a journal for, newest first, fifty at a time: **Show older runs**
+lists the next fifty, back to the oldest run the journal holds. **Undo
+moves**, confirmed by typing UNDO, moves a run's files back where it
+found them, with their sidecars and the covers it carried; tags it wrote
+stay. A file moved again since, one the catalog no longer holds, one
+whose old place another file now holds, one gone from disk and one in a
+read-only library stay where they are, and the result lists them with
+why. An undo is a run of its own, listed and undoable in turn, and the
+health counts catch up at the sweep it asks for. A run applied here, and
+every undo, is in the audit log as `organize.apply` or `organize.undo`
+when it ends, with what it moved, even one whose request was gone before
+it did; a path fix's runs are in it as the fix's `health.fix`, with one
+entry when the fix ends, however it ends, naming every job it ran and
+what they moved. The scheduled prune drops a run's journal, and with it
+the undo, once the run is older than the task retention window
+(`taskRetentionDays`, 30 days by default).
 
 ## Audiobook and CUE tooling
 
@@ -545,12 +574,88 @@ With the streaming engine configured:
 - **Merge** a multi-file audiobook into one chaptered file: parts
   join gaplessly, chapter marks land at the part boundaries with
   sensible titles, tags and cover carry over, and everyone's resume
-  position survives the merge. The parts go to the trash unless kept.
+  position survives the merge. The merged file is written beside the
+  parts in the book's own library, so who can see the book does not
+  change. The parts it was queued with go to the trash first, and only
+  those: a book that changed since stops the merge with nothing moved,
+  and a part the trash cannot take puts back the parts that went and
+  stops it with nothing written. Kept parts stay whole, and the merged
+  copy, titled "(Merged)", gets a folder of its own beside the book.
 - **Split** a single-file audiobook at its chapters, or a CUE rip
   into real per-track files (sample exact, lossless for lossless
-  sources). CUE albums already browse and play as native per-track
-  items without splitting; the physical split is for people who want
-  real files with working write-back and fingerprints.
+  sources). A book's pieces go into its folder when the folder is named
+  for it, else a new folder named for the book; with the original
+  kept, they get a "(Split)" folder beside it. CUE albums already
+  browse and play as native per-track items without splitting; the
+  physical split is for people who want real files with working
+  write-back and fingerprints.
+
+Merge and split are offered while the streaming engine can run them: on
+a server without one, or while its engine is unreachable, the book's
+menu leaves them out. They ask first, with a switch that keeps the
+originals, and refuse up front when a folder they would write in, or the
+one their trash is made in, is not writable by the server, when a file
+already holds a name they would give, when another merge or split of the
+book has not finished, when one stopped and waits in Tasks to be cleared
+(Needs attention), when an earlier one that did not finish left some of
+the book's files in the trash and none of its new files holds them (the
+refusal names a few and counts the rest; restored, the book takes a
+merge again), or, unless the originals stay, when the book has a copy
+elsewhere, which would be left as the book.
+
+What you see while one runs: the Tasks row follows it, and reads
+Waiting, with why and the time of its next try, while it waits out
+something that passes on its own (the catalog busy with a scan, a
+library flagged read-only, the streaming engine unreachable), and that
+it is trying again once that time comes; while the originals are in the
+trash it says the book's files are there until it finishes. A task waits
+six hours in a row at most. One that fails, or whose runs kept ending
+with the server and is parked (Needs attention), tells whoever started
+it in their notifications, and its row says why and where each file it
+made or moved is; dismissing it, or Clear finished, frees the book for
+another merge or split, and the row says beforehand what that does with
+new files still hidden beside the book.
+
+What a run guarantees:
+
+- A restart or a shutdown part way loses nothing: the finished files
+  wait beside the book under hidden names until the originals are in
+  the trash, and the engine is not asked twice.
+- It does not give up with the book in the trash unless it cannot put
+  the originals back, and then it says where every file is. Past the
+  six hours it ends by how far it went: before the trash it removes its
+  new files and frees the book; after it, it puts the originals back,
+  or, where that is blocked, keeps every file; with its new files in
+  place, it finishes.
+- Putting back never removes the new files until every original is
+  back, a file of the book again where it was or wherever the catalog
+  has moved it since; originals gone from the trash for good (emptied,
+  or past retention) leave nothing to put back, so the merge or split
+  finishes instead.
+- It removes only files it wrote, known by what it recorded of each,
+  catalogs only its own, and follows a file the catalog moved meanwhile
+  (an organize run, a health fix), writing its new files beside where
+  the originals are now.
+- Clearing its task (by hand or by the retention prune) leaves nothing
+  hidden: with every original in place (one put back from the trash
+  counts, wherever the catalog has moved it since) the hidden files go,
+  otherwise they take their names for the next scan, and the audit log
+  says which. Where the folder will not let them be named or removed,
+  the task stays, saying so and holding the book, to be cleared once it
+  does.
+
+A CUE split is held to the same: one at a time per rip, after a restart
+it imports no track twice, and the rip goes to the trash only once
+every piece is a track; a piece that did not land keeps the rip and the
+pieces that did, the task naming it, and the next try imports only what
+is missing. A track it made is never imported again, wherever it was
+moved or whatever became of it since; and pieces the import refuses for
+good (their places taken, as by an earlier split that kept the rip) end
+the split at once, the rip kept, rather than wait. It cuts the rip where
+the catalog has it then, by the sheet of the rip's own name beside it (a
+rip without one is refused), so a rip moved since the split was queued is
+split all the same; the sheet goes to the trash with the rip, unless
+another encoding of the rip still uses it.
 
 Tool tasks run in the background and report progress over the event
 channel; the task log lives under the tools API.

@@ -1,6 +1,86 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "errorBookToolCopyElsewhere": "This book has a copy at {copy}, which would be left as the book. Delete the copy, or keep the originals.",
+  "@errorBookToolCopyElsewhere": {
+    "description": "Error sentence for a book merge or split refused with `conflict` and the params' reason copy-elsewhere, when the copy's library has no name to give.",
+    "placeholders": {
+      "copy": {
+        "type": "String",
+        "example": "Ada Author/The Book/part 1.m4b"
+      }
+    }
+  },
+  "errorBookToolCopyElsewhereIn": "This book has a copy at {copy} in the {library} library, which would be left as the book. Delete the copy, or keep the originals.",
+  "@errorBookToolCopyElsewhereIn": {
+    "description": "Error sentence for a book merge or split refused with `conflict` and the params' reason copy-elsewhere: the copy's place and its library.",
+    "placeholders": {
+      "copy": {
+        "type": "String",
+        "example": "Ada Author/The Book/part 1.m4b"
+      },
+      "library": {
+        "type": "String",
+        "example": "Audiobooks"
+      }
+    }
+  },
+  "errorBookToolMultiFile": "This book is already split into several files. Merge it first to split it again.",
+  "@errorBookToolMultiFile": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason multi-file."
+  },
+  "errorBookToolNameTaken": "{name} is already in {folder}. Move it away, then try again.",
+  "@errorBookToolNameTaken": {
+    "description": "Error sentence for a book merge or split refused with `conflict` and the params' reason name-taken: a file already holds the name the new file would take.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "The Book (Merged).m4b"
+      },
+      "folder": {
+        "type": "String",
+        "example": "Ada Author/The Book (Merged)"
+      }
+    }
+  },
+  "errorBookToolNoChapters": "This book has no chapters to split at.",
+  "@errorBookToolNoChapters": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason no-chapters."
+  },
+  "errorBookToolNoCuts": "This book's chapter marks leave nowhere to cut it.",
+  "@errorBookToolNoCuts": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason no-cuts: every chapter mark falls at the start, or on another."
+  },
+  "errorBookToolNoFile": "This book has no file to split.",
+  "@errorBookToolNoFile": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason no-file."
+  },
+  "errorBookToolNoSampleRate": "This book's file does not say its sample rate, so its chapters cannot be cut exactly.",
+  "@errorBookToolNoSampleRate": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason no-sample-rate."
+  },
+  "errorBookToolPartsInTrash": "{count, plural, =1{1 of this book's files went} other{{count} of this book's files went}} to the trash with a merge or split that did not finish: {files}{more, plural, =0{} other{, and {more} more}}. Restore {count, plural, =1{it} other{them}} from the trash, then merge or split the book again.",
+  "@errorBookToolPartsInTrash": {
+    "description": "A merge or split refused because an earlier one that did not finish left some of the book's files in the trash, which none of its new files holds: a merge of what remains would leave them out. {files} names the first few by their place in their library, and {more} counts the rest (zero when all are named).",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "60"
+      },
+      "files": {
+        "type": "String",
+        "example": "Ada/Book/part 1.m4b, Ada/Book/part 2.m4b"
+      },
+      "more": {
+        "type": "int",
+        "example": "55"
+      }
+    }
+  },
+  "errorBookToolSingleFile": "This book is already one file, so there is nothing to merge.",
+  "@errorBookToolSingleFile": {
+    "description": "Error sentence for a book merge refused with `conflict` and the params' reason single-file: the book is one file already."
+  },
   "errorCatalogBusy": "Another job is holding the library's files. Try again shortly.",
   "@errorCatalogBusy": {
     "description": "Error sentence for the spec code `catalog-busy`: a file-moving request cannot start yet, and this one clears on its own."
@@ -16,6 +96,10 @@
   "errorCueRipDelete": "This track is part of a larger file that holds other tracks too, so it can only be deleted together with them.",
   "@errorCueRipDelete": {
     "description": "Error sentence for `invalid-request` when the params' reason is cue-rip: a delete named one of the tracks a cue sheet cuts from one file, without the rest."
+  },
+  "errorCueSplitNoSheet": "The file this track is cut from has no CUE sheet of its own name beside it, so there is nothing to split it by.",
+  "@errorCueSplitNoSheet": {
+    "description": "Error sentence for a CUE split refused with `conflict` and the params' reason no-sheet: the album file has no .cue of the same name next to it. CUE is the sheet format's name, so it keeps its capitals."
   },
   "errorDirectoryUnavailable": "The directory service did not answer. Try again later.",
   "@errorDirectoryUnavailable": {
@@ -121,7 +205,7 @@
   "@errorRateLimited": {
     "description": "Error sentence for the spec code `rate-limited`."
   },
-  "errorReadOnly": "The library is read-only right now, so nothing can be changed.",
+  "errorReadOnly": "The server or this library is read-only right now, so nothing can be changed.",
   "@errorReadOnly": {
     "description": "Error sentence for the spec code `read-only`: reads and playback keep working."
   },
@@ -137,9 +221,17 @@
   "@errorStorageFull": {
     "description": "Error sentence for the spec code `storage-full`: the server's own disk, not the reader's allowance, so there is nothing they can clear."
   },
+  "errorStorageUnwritable": "The server cannot write to that library's folder, so nothing was changed. Check the folder's ownership and permissions.",
+  "@errorStorageUnwritable": {
+    "description": "Error sentence for the spec code `storage-unwritable`: a library folder refused the server's write, for its permissions or a read-only mount, so nothing changed."
+  },
   "errorStreamStale": "This file changed on the server. Open it again to play it.",
   "@errorStreamStale": {
     "description": "Error sentence for the spec code `stream-stale`: a minted media URL no longer matches the file it points at."
+  },
+  "errorStreamingEngine": "The streaming engine is not reachable right now. Originals still play; transcoding, gapless playback, voice boost and merging or splitting files wait for it.",
+  "@errorStreamingEngine": {
+    "description": "Error sentence for `feature-unavailable` when the params name the feature streaming-engine: a request only the streaming engine serves (a queue rendered as one stream, a stream with voice boost, a format or a bitrate, a book merge or split, a CUE split) while the server cannot reach its engine. Temporary: the server retries the engine in the background."
   },
   "errorSyncReset": "This device is too far behind to catch up, so it will sync again from scratch.",
   "@errorSyncReset": {
@@ -148,6 +240,28 @@
   "errorTimeout": "The device did not answer in time. Try again.",
   "@errorTimeout": {
     "description": "Error sentence for the spec code `timeout`: a command sent to a player that is still connected but did not reply."
+  },
+  "errorToolOutputsHidden": "This task's new files in {folder} could not be named or removed ({cause}), so the task stays. Fix the folder, then clear it again.",
+  "@errorToolOutputsHidden": {
+    "description": "Clearing a finished book merge or split was refused: its new files, still hidden, could not take their names or be removed in their folder, so the task stays (holding its book) until they can. {cause} is the system's reason, as the server gives it.",
+    "placeholders": {
+      "folder": {
+        "type": "String",
+        "example": "Ada/Book"
+      },
+      "cause": {
+        "type": "String",
+        "example": "permission denied"
+      }
+    }
+  },
+  "errorToolTaskParked": "An earlier merge or split of this stopped and needs attention. Clear it in Tasks, then try again.",
+  "@errorToolTaskParked": {
+    "description": "Error sentence for a file tool refused with `conflict` and the params' reason task-parked: an earlier merge or split of the same book, or split of the same rip, stopped part way and is parked, holding it until it is cleared in Tasks. Waiting does not help."
+  },
+  "errorToolTaskRunning": "A merge or split of this is still at work. Try again once it has finished.",
+  "@errorToolTaskRunning": {
+    "description": "Error sentence for a file tool refused with `conflict` and the params' reason task-running: another merge or split of the same book, or split of the same rip, has not finished."
   },
   "errorTranscodeLimited": "Too many streams are being converted at once. Try again in a moment.",
   "@errorTranscodeLimited": {

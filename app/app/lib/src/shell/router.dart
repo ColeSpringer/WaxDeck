@@ -784,7 +784,14 @@ List<RouteBase> shellRoutes() => <RouteBase>[
               ),
               GoRoute(
                 path: WaxRoute.organize,
-                builder: (context, state) => const OrganizeScreen(),
+                // User input in a URL: a value it does not name opens the
+                // screen without a dry run.
+                builder: (context, state) => OrganizeScreen(
+                  previewOnOpen:
+                      state.uri.queryParameters[WaxRoute
+                          .organizePreviewParam] ==
+                      WaxRoute.organizeOwnProfiles,
+                ),
               ),
               GoRoute(
                 path: WaxRoute.adminEnrichment,

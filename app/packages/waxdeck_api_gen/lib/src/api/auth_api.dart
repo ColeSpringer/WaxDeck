@@ -295,7 +295,7 @@ class AuthApi {
   }
 
   /// Inspect the current session
-  /// Returns whether the caller is authenticated and, if so, the session&#39;s user and CSRF token. Unauthenticated callers get &#x60;authenticated: false&#x60;, not a 401. Clients use this at startup to decide whether to show the login screen. 
+  /// Returns whether the caller is authenticated and, if so, the session&#39;s user, CSRF token and the server&#39;s read-only state. Unauthenticated callers get &#x60;authenticated: false&#x60;, not a 401. Clients use this at startup to decide whether to show the login screen, and again when an &#x60;account&#x60; event arrives. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation

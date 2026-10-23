@@ -741,7 +741,7 @@ func TestRefusedLoginsLeaveTheDevicesSignedIn(t *testing.T) {
 func TestCookieDoesNotRebindToARecreatedUsername(t *testing.T) {
 	e := newEnv(t)
 	c := e.login("alice", e.secret)
-	if err := e.svc.DeleteAccount(e.ctx, e.uc.ID); err != nil {
+	if _, err := e.svc.DeleteAccount(e.ctx, nil, e.uc.ID, service.AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
 	acct, err := e.svc.CreateAccount(e.ctx, service.AccountCreate{Username: "alice", Password: "another-password-1"})

@@ -19,7 +19,7 @@ part 'admin_settings.g.dart';
 /// * [backupKeepCount] - How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. 
 /// * [backupKeepBytes] - Total archive bytes to keep, oldest deleted first when exceeded. 0 is unlimited. Imported archives are exempt. 
 /// * [trashRetentionDays] - Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention (the trash keeps entries until an administrator empties it). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
-/// * [taskRetentionDays] - Clear finished tool tasks older than this many days on the scheduled prune; terminal rows only. 0 keeps them, and an unconfigured server answers 30 - so unlike `trashRetentionDays`, 0 here is a choice rather than the default. Optional on PUT (absent keeps the current value), always present in responses. 
+/// * [taskRetentionDays] - Clear finished tool tasks older than this many days on the scheduled prune; terminal rows only. The same prune drops the Organizer's journal of runs older than this, after which a run can no longer be undone. 0 keeps both, and an unconfigured server answers 30 - so unlike `trashRetentionDays`, 0 here is a choice rather than the default. Optional on PUT (absent keeps the current value), always present in responses. 
 @BuiltValue()
 abstract class AdminSettings implements Built<AdminSettings, AdminSettingsBuilder> {
   /// Whether open self-serve signup is accepted (registrations land pending). Invite links work regardless. 
@@ -54,7 +54,7 @@ abstract class AdminSettings implements Built<AdminSettings, AdminSettingsBuilde
   @BuiltValueField(wireName: r'trashRetentionDays')
   int? get trashRetentionDays;
 
-  /// Clear finished tool tasks older than this many days on the scheduled prune; terminal rows only. 0 keeps them, and an unconfigured server answers 30 - so unlike `trashRetentionDays`, 0 here is a choice rather than the default. Optional on PUT (absent keeps the current value), always present in responses. 
+  /// Clear finished tool tasks older than this many days on the scheduled prune; terminal rows only. The same prune drops the Organizer's journal of runs older than this, after which a run can no longer be undone. 0 keeps both, and an unconfigured server answers 30 - so unlike `trashRetentionDays`, 0 here is a choice rather than the default. Optional on PUT (absent keeps the current value), always present in responses. 
   @BuiltValueField(wireName: r'taskRetentionDays')
   int? get taskRetentionDays;
 

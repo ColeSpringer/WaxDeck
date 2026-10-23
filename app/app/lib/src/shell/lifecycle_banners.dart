@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../sync/sync_providers.dart';
 import 'page_reload/page_reload.dart';
+import 'routes.dart';
 import 'semantics_ids.dart';
 
 /// Whether the live event channel is up, as the web build sees it.
@@ -100,15 +103,33 @@ final serverUpdatedProvider = NotifierProvider<ServerBuildWatcher, bool>(
 /// The shell's standing messages about the app's own state.
 ///
 /// Self-hosters restart and upgrade servers constantly and the web
-/// client is embedded in the binary, so both events are visible here
+/// client is embedded in the binary, so these events are visible here
 /// rather than mysterious: a dropped socket says it is reconnecting
-/// instead of leaving actions to fail one at a time, and a server that
-/// came back as a different build says so before a stale bundle meets a
-/// changed API.
-List<Widget> lifecycleBanners(AppLocalizations l10n, WidgetRef ref) {
+/// instead of leaving actions to fail one at a time, a server that came
+/// back as a different build says so before a stale bundle meets a
+/// changed API, and a server in read-only mode says so rather than
+/// leaving each refused write to explain it.
+List<Widget> lifecycleBanners(BuildContext context, WidgetRef ref) {
+  final l10n = context.l10n;
   final connected = ref.watch(liveConnectionProvider);
   final updated = ref.watch(serverUpdatedProvider);
+  final readOnly = ref.watch(serverReadOnlyProvider);
+  // An administrator can turn the switch off, from Server settings.
+  final admin =
+      ref.watch(authControllerProvider).value?.user?.roles.contains('admin') ??
+      false;
   return <Widget>[
+    // Standing for as long as the switch is on: every refusal elsewhere
+    // says only that something was refused, and this says why.
+    if (readOnly)
+      WaxBanner(
+        tone: WaxBannerTone.caution,
+        message: l10n.shellReadOnlyBanner,
+        semanticsId: SemanticsIds.readOnlyBanner,
+        actionLabel: admin ? l10n.adminServerTitle : null,
+        onAction: admin ? () => context.go(WaxRoute.adminSettings) : null,
+        actionSemanticsId: admin ? SemanticsIds.readOnlyBannerSettings : null,
+      ),
     if (connected == false)
       WaxBanner(
         message: l10n.shellReconnecting,

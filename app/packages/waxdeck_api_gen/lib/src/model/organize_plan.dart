@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/organize_hold.dart';
 import 'package:waxdeck_api_gen/src/model/organize_action.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -15,8 +16,9 @@ part 'organize_plan.g.dart';
 /// Properties:
 /// * [profile] - The profile planned with.
 /// * [totalActions] - Moves the pass would make in total.
-/// * [held] - Moves held back, whatever the cause (`heldByCode` says which). Not in `actions` or `totalActions`. 
-/// * [heldByCode] - `held` by hold code: `collision` (another move of the pass claims the destination), `occupied` (a file the pass does not move holds it), `occupied-case` (one named apart from it only by case or Unicode form stands beside it), `untagged`, `missing`, `virtual` (a cue rip's shared file), `book-held` (another part of the book is held) and `read-only` (the server or the library). A code with nothing held is absent. 
+/// * [held] - Moves held back, by any cause: a read-only server, an occupied destination, a missing file, a cue rip, an untagged item (`heldByCode` says which). Not in `actions` or `totalActions`; a read-only library's files are left out instead, counted in `readOnlyLibraries`. 
+/// * [heldByCode] - `held` by hold code: `collision` (another move of the pass claims the destination), `occupied` (a file the pass does not move holds it), `occupied-case` (one named apart from it only by case or Unicode form stands beside it), `untagged`, `missing`, `virtual` (a cue rip's shared file), `book-held` (another part of the book is held) and `read-only` (the server is read-only). A code with nothing held is absent. 
+/// * [holds] - The first five hundred moves held back.
 /// * [readOnlyLibraries] - Managed libraries left out because they are read-only.
 /// * [actions] - The first five hundred actions.
 /// * [tagWrite] - Whether applying would also write tags.
@@ -30,13 +32,17 @@ abstract class OrganizePlan implements Built<OrganizePlan, OrganizePlanBuilder> 
   @BuiltValueField(wireName: r'totalActions')
   int get totalActions;
 
-  /// Moves held back, whatever the cause (`heldByCode` says which). Not in `actions` or `totalActions`. 
+  /// Moves held back, by any cause: a read-only server, an occupied destination, a missing file, a cue rip, an untagged item (`heldByCode` says which). Not in `actions` or `totalActions`; a read-only library's files are left out instead, counted in `readOnlyLibraries`. 
   @BuiltValueField(wireName: r'held')
   int get held;
 
-  /// `held` by hold code: `collision` (another move of the pass claims the destination), `occupied` (a file the pass does not move holds it), `occupied-case` (one named apart from it only by case or Unicode form stands beside it), `untagged`, `missing`, `virtual` (a cue rip's shared file), `book-held` (another part of the book is held) and `read-only` (the server or the library). A code with nothing held is absent. 
+  /// `held` by hold code: `collision` (another move of the pass claims the destination), `occupied` (a file the pass does not move holds it), `occupied-case` (one named apart from it only by case or Unicode form stands beside it), `untagged`, `missing`, `virtual` (a cue rip's shared file), `book-held` (another part of the book is held) and `read-only` (the server is read-only). A code with nothing held is absent. 
   @BuiltValueField(wireName: r'heldByCode')
   BuiltMap<String, int>? get heldByCode;
+
+  /// The first five hundred moves held back.
+  @BuiltValueField(wireName: r'holds')
+  BuiltList<OrganizeHold>? get holds;
 
   /// Managed libraries left out because they are read-only.
   @BuiltValueField(wireName: r'readOnlyLibraries')
@@ -93,6 +99,13 @@ class _$OrganizePlanSerializer implements PrimitiveSerializer<OrganizePlan> {
       yield serializers.serialize(
         object.heldByCode,
         specifiedType: const FullType(BuiltMap, [FullType(String), FullType(int)]),
+      );
+    }
+    if (object.holds != null) {
+      yield r'holds';
+      yield serializers.serialize(
+        object.holds,
+        specifiedType: const FullType(BuiltList, [FullType(OrganizeHold)]),
       );
     }
     yield r'readOnlyLibraries';
@@ -163,6 +176,14 @@ class _$OrganizePlanSerializer implements PrimitiveSerializer<OrganizePlan> {
           ) as BuiltMap<String, int>?;
           if (valueDes == null) continue;
           result.heldByCode.replace(valueDes);
+          break;
+        case r'holds':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(OrganizeHold)]),
+          ) as BuiltList<OrganizeHold>?;
+          if (valueDes == null) continue;
+          result.holds.replace(valueDes);
           break;
         case r'readOnlyLibraries':
           final valueDes = serializers.deserialize(

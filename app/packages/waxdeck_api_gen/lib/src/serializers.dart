@@ -59,6 +59,7 @@ import 'package:waxdeck_api_gen/src/model/catalog_sync_entry.dart';
 import 'package:waxdeck_api_gen/src/model/catalog_sync_page.dart';
 import 'package:waxdeck_api_gen/src/model/chapter_mark.dart';
 import 'package:waxdeck_api_gen/src/model/chapters_edit.dart';
+import 'package:waxdeck_api_gen/src/model/clear_finished_tasks_request.dart';
 import 'package:waxdeck_api_gen/src/model/commit_credits.dart';
 import 'package:waxdeck_api_gen/src/model/commit_lyrics.dart';
 import 'package:waxdeck_api_gen/src/model/coverage_count.dart';
@@ -226,7 +227,10 @@ import 'package:waxdeck_api_gen/src/model/opml_import.dart';
 import 'package:waxdeck_api_gen/src/model/opml_import_entry.dart';
 import 'package:waxdeck_api_gen/src/model/opml_import_result.dart';
 import 'package:waxdeck_api_gen/src/model/organize_action.dart';
+import 'package:waxdeck_api_gen/src/model/organize_batch.dart';
 import 'package:waxdeck_api_gen/src/model/organize_failure.dart';
+import 'package:waxdeck_api_gen/src/model/organize_history.dart';
+import 'package:waxdeck_api_gen/src/model/organize_hold.dart';
 import 'package:waxdeck_api_gen/src/model/organize_plan.dart';
 import 'package:waxdeck_api_gen/src/model/organize_profile.dart';
 import 'package:waxdeck_api_gen/src/model/organize_profile_input.dart';
@@ -236,6 +240,7 @@ import 'package:waxdeck_api_gen/src/model/organize_report.dart';
 import 'package:waxdeck_api_gen/src/model/organize_request.dart';
 import 'package:waxdeck_api_gen/src/model/organize_sample.dart';
 import 'package:waxdeck_api_gen/src/model/organize_templates.dart';
+import 'package:waxdeck_api_gen/src/model/organize_undo_request.dart';
 import 'package:waxdeck_api_gen/src/model/password_change.dart';
 import 'package:waxdeck_api_gen/src/model/permissions.dart';
 import 'package:waxdeck_api_gen/src/model/play_info.dart';
@@ -332,6 +337,7 @@ import 'package:waxdeck_api_gen/src/model/server_year_in_review.dart';
 import 'package:waxdeck_api_gen/src/model/session_info.dart';
 import 'package:waxdeck_api_gen/src/model/session_list.dart';
 import 'package:waxdeck_api_gen/src/model/session_rename.dart';
+import 'package:waxdeck_api_gen/src/model/session_server.dart';
 import 'package:waxdeck_api_gen/src/model/set_item_kind_request.dart';
 import 'package:waxdeck_api_gen/src/model/share.dart';
 import 'package:waxdeck_api_gen/src/model/share_create.dart';
@@ -351,6 +357,7 @@ import 'package:waxdeck_api_gen/src/model/soundbite.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
 import 'package:waxdeck_api_gen/src/model/starred_entities.dart';
 import 'package:waxdeck_api_gen/src/model/stats_media_type.dart';
+import 'package:waxdeck_api_gen/src/model/streaming_engine_state.dart';
 import 'package:waxdeck_api_gen/src/model/subscribe_request.dart';
 import 'package:waxdeck_api_gen/src/model/subscription.dart';
 import 'package:waxdeck_api_gen/src/model/subscription_page.dart';
@@ -467,6 +474,7 @@ part 'serializers.g.dart';
   CatalogSyncPage,
   ChapterMark,
   ChaptersEdit,
+  ClearFinishedTasksRequest,
   CommitCredits,
   CommitLyrics,
   CoverageCount,
@@ -634,7 +642,10 @@ part 'serializers.g.dart';
   OpmlImportEntry,
   OpmlImportResult,
   OrganizeAction,
+  OrganizeBatch,
   OrganizeFailure,
+  OrganizeHistory,
+  OrganizeHold,
   OrganizePlan,
   OrganizeProfile,
   OrganizeProfileInput,
@@ -644,6 +655,7 @@ part 'serializers.g.dart';
   OrganizeRequest,
   OrganizeSample,
   OrganizeTemplates,
+  OrganizeUndoRequest,
   PasswordChange,
   Permissions,
   PlayInfo,
@@ -740,6 +752,7 @@ part 'serializers.g.dart';
   SessionInfo,
   SessionList,
   SessionRename,
+  SessionServer,
   SetItemKindRequest,
   Share,
   ShareCreate,
@@ -759,6 +772,7 @@ part 'serializers.g.dart';
   StarUpdate,
   StarredEntities,
   StatsMediaType,
+  StreamingEngineState,
   SubscribeRequest,
   Subscription,
   SubscriptionPage,
@@ -985,6 +999,10 @@ Serializers serializers = (_$serializers.toBuilder()
         () => ListBuilder<EnrichFieldProposal>(),
       )
       ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(OrganizeBatch)]),
+        () => ListBuilder<OrganizeBatch>(),
+      )
+      ..addBuilderFactory(
         const FullType(BuiltList, [FullType(PortableRef)]),
         () => ListBuilder<PortableRef>(),
       )
@@ -1079,6 +1097,10 @@ Serializers serializers = (_$serializers.toBuilder()
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(EnrichmentPhase)]),
         () => ListBuilder<EnrichmentPhase>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(OrganizeHold)]),
+        () => ListBuilder<OrganizeHold>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(KindFields)]),

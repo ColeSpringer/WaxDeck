@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/player/playback_session.dart';
 import 'package:waxdeck/src/player/smart_rewind.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -12,6 +14,13 @@ import 'fakes.dart';
 const _trackPid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
 const _episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
+
+/// What a stream only the engine makes answers while the engine is away.
+const _engineAway = StreamRefusal(
+  status: 503,
+  code: 'feature-unavailable',
+  params: <String, String>{'feature': 'streaming-engine'},
+);
 
 /// A clock a test can move without waiting.
 class _Clock {
@@ -288,6 +297,42 @@ void main() {
       await started();
       expect(engine.loadedUrls, hasLength(2));
       expect(engine.playing, isTrue);
+    });
+
+    test('a stream only the engine makes, refused while it is away, is '
+        'minted again', () async {
+      engine
+        ..failNextLoad = true
+        ..loadFault = MediaFault.transport
+        ..loadRefusal = _engineAway;
+      await started();
+      expect(repo.playInfoCalls, hasLength(2));
+      expect(engine.loadedUrls, hasLength(2));
+      expect(engine.playing, isTrue);
+    });
+
+    test('the engine away again after the mint is said in its words', () async {
+      engine
+        ..failEveryLoad = true
+        ..loadFault = MediaFault.transport
+        ..loadRefusal = _engineAway;
+      Object? thrown;
+      try {
+        await started();
+      } on Object catch (error) {
+        thrown = error;
+      }
+      expect(engine.loadedUrls, hasLength(2));
+      expect(
+        thrown,
+        isA<WaxDeckApiException>().having(
+          (e) => e.params?['feature'],
+          'feature',
+          'streaming-engine',
+        ),
+      );
+      final en = AppLocalizationsEn();
+      expect(explainError(en, thrown!), en.errorStreamingEngine);
     });
 
     test('a refusal a mint cannot cure is the server\'s sentence', () async {

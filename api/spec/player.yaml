@@ -67,7 +67,11 @@ paths:
         `feature-unavailable` naming the pid - a windowed track sent to
         a device endpoint on a server running without the streaming
         engine, say - which a controller can turn into an offer to play
-        it somewhere that can, rather than a bare failure. When the
+        it somewhere that can, rather than a bare failure. While a
+        configured engine is not reachable, a queue only it can render
+        for the target (a windowed track, or anything for the jukebox,
+        which plays only what the engine renders) answers 503 with
+        `params.feature` `streaming-engine` instead. When the
         target is a client endpoint, that client's own refusal code and
         message are what arrive here - `endpoint-failed` where it took
         the load and could not carry it out.
@@ -106,6 +110,8 @@ paths:
           $ref: "#/components/responses/PlaybackConflict"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
+        "503":
+          $ref: "#/components/responses/EngineAway"
 
   /player/sessions/history:
     get:
@@ -260,6 +266,8 @@ paths:
           $ref: "#/components/responses/PlaybackConflict"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
+        "503":
+          $ref: "#/components/responses/EngineAway"
 
   /player/timeline:
     post:
@@ -309,7 +317,10 @@ paths:
         join a timeline (unfetched podcast episodes, unsupported
         sources) answer `conflict` naming the pid, and a
         `crossfadeSeconds` longer than the shortest queue member can
-        carry answers `invalid-request` naming it.
+        carry answers `invalid-request` naming it. While a configured
+        engine is not reachable it answers 503 `feature-unavailable`
+        with `params.feature` `streaming-engine`; the queue plays per
+        item meanwhile.
       tags: [player]
       requestBody:
         required: true
@@ -344,6 +355,8 @@ paths:
           $ref: "#/components/responses/TranscodeLimited"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
+        "503":
+          $ref: "#/components/responses/EngineAway"
 
   /player/timeline/{pid}:
     delete:

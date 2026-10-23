@@ -111,8 +111,8 @@ type SearchResults struct {
 }
 
 // Job mirrors a catalog job for the API. A finished one carries what it
-// did, by kind: at most one of Scan, Analyze, Enrich, Organize and
-// SetKind is set.
+// did, by kind: at most one of Scan, Analyze, Enrich, Organize, SetKind
+// and RemoveRoot is set.
 type Job struct {
 	PID        string
 	Kind       string
@@ -127,6 +127,7 @@ type Job struct {
 	Enrich     *EnrichmentLastRunDTO
 	Organize   *OrganizeTallyDTO
 	SetKind    *KindTallyDTO
+	RemoveRoot *RemoveRootTallyDTO
 	// Target is what a targeted job ran on; nil for a whole pass.
 	Target *JobTargetDTO
 }
@@ -150,8 +151,10 @@ type ScanTallyDTO struct {
 	Relinked, Reread, Missing, Promoted, Dropped, Skipped, WalkErrors                    int
 	RootUnreachable, SubPathGone                                                         bool
 	// Runs is each library's own part of the scan, named from the root
-	// table; administrators only.
-	Runs []ScanRunDTO
+	// table, and RootsUnreachable names those whose folder it could not
+	// reach; administrators only.
+	Runs             []ScanRunDTO
+	RootsUnreachable []string
 }
 
 // ScanRunDTO is one library's part of a scan: its prefixed pid, and its
@@ -171,10 +174,21 @@ type AnalyzeTallyDTO struct {
 	FingerprintFallbacks, FingerprintPartialReads               int
 }
 
-// OrganizeTallyDTO is what an organize run did under Profile.
+// RemoveRootTallyDTO is what removing a library did: the files the
+// catalog let go of, which stay on disk, the items left with no file and
+// archived until the folder is added again, and its trash entries
+// dropped, their files staying in its trash folder.
+type RemoveRootTallyDTO struct {
+	FilesDetached, ItemsArchived, TrashRowsDropped int
+}
+
+// OrganizeTallyDTO is what an organize run, or an undo of one, did under
+// Profile: Held counts among Skipped, and DirsPruned the folders its moves
+// emptied and removed.
 type OrganizeTallyDTO struct {
 	Profile                                string
 	Moved, Skipped, Errored, SidecarsMoved int
+	Held, DirsPruned                       int
 }
 
 // ArtBlob is resolved artwork. SourceHash identifies the source image

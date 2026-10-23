@@ -859,6 +859,7 @@ func (s *Server) CreateServerNotificationTarget(ctx context.Context, req CreateS
 	if err != nil {
 		return nil, err
 	}
+	s.auditNotificationTarget(ctx, "notification-target.create", created)
 	return CreateServerNotificationTarget201JSONResponse(notificationTargetJSON(created)), nil
 }
 
@@ -881,6 +882,7 @@ func (s *Server) UpdateServerNotificationTarget(ctx context.Context, req UpdateS
 	if err != nil {
 		return nil, err
 	}
+	s.auditNotificationTarget(ctx, "notification-target.update", updated)
 	return UpdateServerNotificationTarget200JSONResponse(notificationTargetJSON(updated)), nil
 }
 
@@ -892,10 +894,47 @@ func (s *Server) DeleteServerNotificationTarget(ctx context.Context, req DeleteS
 	if !p.IsAdmin() {
 		return DeleteServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
+	// Read first: once it is gone there is nothing left to name.
+	gone, _ := s.serverNotificationTarget(ctx, req.TargetId)
+	if gone == nil {
+		gone = &service.NotificationTarget{PID: req.TargetId}
+	}
 	if err := s.svc.DeleteServerNotificationTarget(ctx, req.TargetId); err != nil {
 		return nil, err
 	}
+	s.auditNotificationTarget(ctx, "notification-target.delete", *gone)
 	return DeleteServerNotificationTarget204Response{}, nil
+}
+
+// serverNotificationTarget reads one server-scope target.
+func (s *Server) serverNotificationTarget(ctx context.Context, pid string) (*service.NotificationTarget, error) {
+	all, err := s.svc.ListServerNotificationTargets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range all {
+		if t.PID == pid {
+			return &t, nil
+		}
+	}
+	return nil, nil
+}
+
+// auditNotificationTarget records a change to a server-scope target by
+// its kind and label. Its configuration is the address and the secrets
+// the destination answers to, and stays out of the log.
+func (s *Server) auditNotificationTarget(ctx context.Context, action string, t service.NotificationTarget) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return
+	}
+	name := t.Label
+	if name == "" {
+		name = t.Kind
+	}
+	s.svc.Audit(ctx, uc, action,
+		service.AuditTarget{Kind: "notification-target", PID: t.PID, Name: name},
+		map[string]any{"kind": t.Kind, "label": t.Label})
 }
 
 func (s *Server) TestServerNotificationTarget(ctx context.Context, req TestServerNotificationTargetRequestObject) (TestServerNotificationTargetResponseObject, error) {

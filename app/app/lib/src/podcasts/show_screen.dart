@@ -16,6 +16,7 @@ import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/server_health.dart';
 import '../shell/shell_messages.dart';
 import 'credits.dart';
 import 'episode_actions.dart';
@@ -599,7 +600,8 @@ class _ShowHeader extends ConsumerWidget {
                 semanticsId: SemanticsIds.podcastUnsubscribe,
                 onPressed: () => unawaited(_unsubscribe(context, ref, guarded)),
               )
-            else
+            // A server whose podcasts are off refuses the follow.
+            else if (ref.watch(podcastsOnProvider))
               WaxButton(
                 label: l10n.podcastFollow,
                 icon: WaxIcons.add,

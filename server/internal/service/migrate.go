@@ -631,6 +631,35 @@ func (l *Library) migrateListens(ctx context.Context, uc *UserCtx, sum *migratio
 	return accepted, nil
 }
 
+// migrationFailureMax bounds the error an audit entry keeps.
+const migrationFailureMax = 500
+
+// migrationFailureText is a failure as the audit log keeps it: the task's
+// recorded words with every web address cut to its host, since an address
+// can carry a credential in its user part, its path or its query.
+func migrationFailureText(msg string) string {
+	return truncateUTF8(hostOnly(msg), migrationFailureMax)
+}
+
+// auditMigrationFailure records an import that failed for good under the
+// account that ordered it, naming the account it was meant to write onto.
+// Attributed by id alone: an account disabled since it ordered the import
+// still ordered it.
+func (l *Library) auditMigrationFailure(ctx context.Context, t wdb.ToolTask) {
+	var p migrationParams
+	// Params that cannot be read still belong to an import that failed.
+	_ = json.Unmarshal([]byte(t.Params), &p)
+	account := p.AccountID
+	if account == "" {
+		account = t.UserID
+	}
+	l.Audit(ctx, &UserCtx{ID: t.UserID}, "migration.run", AuditTarget{Kind: "migration", Name: p.Source}, map[string]any{
+		"source": p.Source, "dryRun": p.DryRun, "failed": true,
+		"account": l.usernameOf(ctx, account),
+		"error":   migrationFailureText(t.Error),
+	})
+}
+
 // settleMigrationExport disposes of the upload an import was reading,
 // once that task's terminal state is on disk.
 //
@@ -646,10 +675,18 @@ func (l *Library) migrateListens(ctx context.Context, uc *UserCtx, sum *migratio
 // The task is re-read rather than taken from the caller for the same
 // reason: what is on disk is what a retry will see, so a completion
 // that did not land must not destroy anything.
+//
+// Every end of a migration comes through here, a returned error and
+// attempts that ran out under the lease alike, on the drain's own
+// context rather than the attempt's deadline. A migration that failed
+// for good is therefore put on the record here, once.
 func (l *Library) settleMigrationExport(ctx context.Context, taskID string) {
 	t, err := l.db.ToolTaskByID(ctx, taskID)
 	if err != nil || !strings.HasPrefix(t.Type, taskTypeMigratePrefix) {
 		return
+	}
+	if t.State == taskStateFailed {
+		l.auditMigrationFailure(ctx, t)
 	}
 	var p migrationParams
 	if err := json.Unmarshal([]byte(t.Params), &p); err != nil || p.ExportID == "" {
@@ -664,7 +701,7 @@ func (l *Library) settleMigrationExport(ctx context.Context, taskID string) {
 		// replaced, so the archive is not ours to settle.
 		return
 	}
-	if t.State != taskStateDone && t.State != taskStateFailed {
+	if !ToolTaskFinished(t.State) {
 		// The completion write did not land, so this task is not over:
 		// it will be re-leased and re-run, and its claim is what keeps
 		// the archive its own until then.

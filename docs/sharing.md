@@ -22,7 +22,10 @@ more. A playlist or album link plays only the members the owner can
 still open, and a link whose whole target has left the owner's reach
 (a library grant withdrawn, a content setting that now denies it), or
 whose owner is disabled, answers as if it did not exist until that
-changes back. A track link to a track that joins a book (**Treat as
+changes back. A link belongs to the account that made it and ends when
+that account is deleted, a playlist handed to another account on the way
+included: the new owner does not publish what the old one did. A track
+link to a track that joins a book (**Treat as
 audiobook** on an album, say) is revoked rather than widened into the
 whole book; a link to a lone track that becomes a book follows it. A
 track that a scan makes a book, as moving its library onto Audiobooks

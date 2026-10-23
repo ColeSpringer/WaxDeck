@@ -18,6 +18,12 @@ class _$DeletePlanEntry extends DeletePlanEntry {
   @override
   final BuiltList<DeletePlanFile>? fileList;
   @override
+  final BuiltList<String>? paths;
+  @override
+  final int? failed;
+  @override
+  final String? error;
+  @override
   final bool? itemSurvives;
 
   factory _$DeletePlanEntry([void Function(DeletePlanEntryBuilder)? updates]) =>
@@ -29,6 +35,9 @@ class _$DeletePlanEntry extends DeletePlanEntry {
     required this.files,
     required this.bytes,
     this.fileList,
+    this.paths,
+    this.failed,
+    this.error,
     this.itemSurvives,
   }) : super._();
   @override
@@ -47,6 +56,9 @@ class _$DeletePlanEntry extends DeletePlanEntry {
         files == other.files &&
         bytes == other.bytes &&
         fileList == other.fileList &&
+        paths == other.paths &&
+        failed == other.failed &&
+        error == other.error &&
         itemSurvives == other.itemSurvives;
   }
 
@@ -58,6 +70,9 @@ class _$DeletePlanEntry extends DeletePlanEntry {
     _$hash = $jc(_$hash, files.hashCode);
     _$hash = $jc(_$hash, bytes.hashCode);
     _$hash = $jc(_$hash, fileList.hashCode);
+    _$hash = $jc(_$hash, paths.hashCode);
+    _$hash = $jc(_$hash, failed.hashCode);
+    _$hash = $jc(_$hash, error.hashCode);
     _$hash = $jc(_$hash, itemSurvives.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -71,6 +86,9 @@ class _$DeletePlanEntry extends DeletePlanEntry {
           ..add('files', files)
           ..add('bytes', bytes)
           ..add('fileList', fileList)
+          ..add('paths', paths)
+          ..add('failed', failed)
+          ..add('error', error)
           ..add('itemSurvives', itemSurvives))
         .toString();
   }
@@ -102,6 +120,18 @@ class DeletePlanEntryBuilder
   set fileList(ListBuilder<DeletePlanFile>? fileList) =>
       _$this._fileList = fileList;
 
+  ListBuilder<String>? _paths;
+  ListBuilder<String> get paths => _$this._paths ??= ListBuilder<String>();
+  set paths(ListBuilder<String>? paths) => _$this._paths = paths;
+
+  int? _failed;
+  int? get failed => _$this._failed;
+  set failed(int? failed) => _$this._failed = failed;
+
+  String? _error;
+  String? get error => _$this._error;
+  set error(String? error) => _$this._error = error;
+
   bool? _itemSurvives;
   bool? get itemSurvives => _$this._itemSurvives;
   set itemSurvives(bool? itemSurvives) => _$this._itemSurvives = itemSurvives;
@@ -118,6 +148,9 @@ class DeletePlanEntryBuilder
       _files = $v.files;
       _bytes = $v.bytes;
       _fileList = $v.fileList?.toBuilder();
+      _paths = $v.paths?.toBuilder();
+      _failed = $v.failed;
+      _error = $v.error;
       _itemSurvives = $v.itemSurvives;
       _$v = null;
     }
@@ -160,6 +193,9 @@ class DeletePlanEntryBuilder
               'bytes',
             ),
             fileList: _fileList?.build(),
+            paths: _paths?.build(),
+            failed: failed,
+            error: error,
             itemSurvives: itemSurvives,
           );
     } catch (_) {
@@ -167,6 +203,8 @@ class DeletePlanEntryBuilder
       try {
         _$failedField = 'fileList';
         _fileList?.build();
+        _$failedField = 'paths';
+        _paths?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'DeletePlanEntry',

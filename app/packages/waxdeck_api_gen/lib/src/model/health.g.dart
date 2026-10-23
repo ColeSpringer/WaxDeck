@@ -17,6 +17,10 @@ class _$Health extends Health {
   final BuiltList<String>? uploadFormats;
   @override
   final BuiltList<String>? rejectedFormats;
+  @override
+  final StreamingEngineState? streaming;
+  @override
+  final bool? podcasts;
 
   factory _$Health([void Function(HealthBuilder)? updates]) =>
       (HealthBuilder()..update(updates))._build();
@@ -27,6 +31,8 @@ class _$Health extends Health {
     required this.apiVersion,
     this.uploadFormats,
     this.rejectedFormats,
+    this.streaming,
+    this.podcasts,
   }) : super._();
   @override
   Health rebuild(void Function(HealthBuilder) updates) =>
@@ -43,7 +49,9 @@ class _$Health extends Health {
         version == other.version &&
         apiVersion == other.apiVersion &&
         uploadFormats == other.uploadFormats &&
-        rejectedFormats == other.rejectedFormats;
+        rejectedFormats == other.rejectedFormats &&
+        streaming == other.streaming &&
+        podcasts == other.podcasts;
   }
 
   @override
@@ -54,6 +62,8 @@ class _$Health extends Health {
     _$hash = $jc(_$hash, apiVersion.hashCode);
     _$hash = $jc(_$hash, uploadFormats.hashCode);
     _$hash = $jc(_$hash, rejectedFormats.hashCode);
+    _$hash = $jc(_$hash, streaming.hashCode);
+    _$hash = $jc(_$hash, podcasts.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -65,7 +75,9 @@ class _$Health extends Health {
           ..add('version', version)
           ..add('apiVersion', apiVersion)
           ..add('uploadFormats', uploadFormats)
-          ..add('rejectedFormats', rejectedFormats))
+          ..add('rejectedFormats', rejectedFormats)
+          ..add('streaming', streaming)
+          ..add('podcasts', podcasts))
         .toString();
   }
 }
@@ -97,6 +109,16 @@ class HealthBuilder implements Builder<Health, HealthBuilder> {
   set rejectedFormats(ListBuilder<String>? rejectedFormats) =>
       _$this._rejectedFormats = rejectedFormats;
 
+  StreamingEngineStateBuilder? _streaming;
+  StreamingEngineStateBuilder get streaming =>
+      _$this._streaming ??= StreamingEngineStateBuilder();
+  set streaming(StreamingEngineStateBuilder? streaming) =>
+      _$this._streaming = streaming;
+
+  bool? _podcasts;
+  bool? get podcasts => _$this._podcasts;
+  set podcasts(bool? podcasts) => _$this._podcasts = podcasts;
+
   HealthBuilder() {
     Health._defaults(this);
   }
@@ -109,6 +131,8 @@ class HealthBuilder implements Builder<Health, HealthBuilder> {
       _apiVersion = $v.apiVersion;
       _uploadFormats = $v.uploadFormats?.toBuilder();
       _rejectedFormats = $v.rejectedFormats?.toBuilder();
+      _streaming = $v.streaming?.toBuilder();
+      _podcasts = $v.podcasts;
       _$v = null;
     }
     return this;
@@ -150,6 +174,8 @@ class HealthBuilder implements Builder<Health, HealthBuilder> {
             ),
             uploadFormats: _uploadFormats?.build(),
             rejectedFormats: _rejectedFormats?.build(),
+            streaming: _streaming?.build(),
+            podcasts: podcasts,
           );
     } catch (_) {
       late String _$failedField;
@@ -158,6 +184,8 @@ class HealthBuilder implements Builder<Health, HealthBuilder> {
         _uploadFormats?.build();
         _$failedField = 'rejectedFormats';
         _rejectedFormats?.build();
+        _$failedField = 'streaming';
+        _streaming?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'Health',

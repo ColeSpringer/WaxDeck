@@ -14,6 +14,7 @@ import 'package:waxdeck/src/uploads/uploads_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'direction_glyph.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'row_nodes.dart';
@@ -85,6 +86,20 @@ String? _message(WidgetTester tester) => shellMessageText(
 );
 
 void main() {
+  testWidgets('load more points down to the sessions it brings in', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..uploadsNextCursor = 'more';
+    repo.uploadsById['up-1'] = testUpload('up-1', fileName: 'one.flac');
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+    expectPointing(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.uploadsMore),
+      up: false,
+    );
+  });
+
   testWidgets('a refresh redraws the sessions it already has', (tester) async {
     // The box-shaped sibling of the sliver face, and for the same
     // reason: a reload carries the value it had, and a switch on the

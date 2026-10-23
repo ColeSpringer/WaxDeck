@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/book_merge_request.dart';
 import 'package:waxdeck_api_gen/src/model/book_split_request.dart';
+import 'package:waxdeck_api_gen/src/model/clear_finished_tasks_request.dart';
 import 'package:waxdeck_api_gen/src/model/cue_split_request.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task.dart';
@@ -26,9 +27,10 @@ class ToolsApi {
   const ToolsApi(this._dio, this._serializers);
 
   /// Clear finished tasks
-  /// Deletes every finished or failed task the caller can see and answers how many went: an administrator&#39;s sweep clears everyone&#39;s rows, the same scope the listing shows and the per-row delete grants. Running and queued tasks are untouched. A POST action rather than a filtered DELETE, matching the library&#39;s bulk-delete idiom. 
+  /// Deletes finished tasks (&#x60;done&#x60;, &#x60;failed&#x60; or &#x60;parked&#x60;) and answers how many went. &#x60;scope&#x60; &#x60;mine&#x60; (the default, administrators included) clears the caller&#39;s own; &#x60;all&#x60; clears every account&#39;s, reports nobody has read included, and is for administrators only (&#x60;forbidden&#x60; otherwise). Running and queued tasks are untouched. A parked task cleared frees the book or rip it held for another merge or split. Clearing a book merge or split whose new files still wait under hidden names settles them first, as deleting the task does, and one whose hidden files could not be named or removed stays, counted in &#x60;kept&#x60;. A POST action rather than a filtered DELETE, matching the library&#39;s bulk-delete idiom. 
   ///
   /// Parameters:
+  /// * [clearFinishedTasksRequest] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -39,6 +41,7 @@ class ToolsApi {
   /// Returns a [Future] containing a [Response] with a [ToolTasksCleared] as data
   /// Throws [DioException] if API call or serialization fails
   Future<Response<ToolTasksCleared>> clearFinishedToolTasks({ 
+    ClearFinishedTasksRequest? clearFinishedTasksRequest,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -67,11 +70,31 @@ class ToolsApi {
         ],
         ...?extra,
       },
+      contentType: 'application/json',
       validateStatus: validateStatus,
     );
 
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(ClearFinishedTasksRequest);
+      _bodyData = clearFinishedTasksRequest == null ? null : _serializers.serialize(clearFinishedTasksRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
     final _response = await _dio.request<Object>(
       _path,
+      data: _bodyData,
       options: _options,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
@@ -110,7 +133,7 @@ class ToolsApi {
   }
 
   /// Delete a finished tool task
-  /// Removes one task from the list once it has reached a terminal state (&#x60;done&#x60; or &#x60;failed&#x60;); a queued or running task answers &#x60;conflict&#x60;, because deleting a row out from under a worker leases nothing back. Same visibility as reading the task: callers delete their own rows, and an administrator may delete any row the listing shows them. 
+  /// Removes one task from the list once it has reached a terminal state (&#x60;done&#x60;, &#x60;failed&#x60; or &#x60;parked&#x60;); a queued or running task answers &#x60;conflict&#x60;, because deleting a row out from under a worker leases nothing back. Deleting a parked task frees the book or rip it held for another merge or split. A book merge or split whose new files still wait under hidden names leaves none behind: they are removed when every part of the book is in place, and otherwise take their names (a free one where another file holds it) for the next scan to catalog; the task&#39;s &#x60;error&#x60; says which beforehand, and the audit log records which it did. When a hidden file cannot take its name or be removed (its folder refuses the server), the task stays, its &#x60;error&#x60; saying so, and the delete answers &#x60;conflict&#x60; with &#x60;params.reason&#x60; &#x60;outputs-hidden&#x60;, &#x60;params.folder&#x60; and &#x60;params.cause&#x60;; a task kept so holds its book from another merge or split, as a parked one does, until it can be cleared. The retention prune settles them the same way, leaving such a task for its next pass. Same visibility as reading the task: callers delete their own rows, and an administrator may delete any row the listing shows them. 
   ///
   /// Parameters:
   /// * [taskId] - Tool task PID (e.g. `tk-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -348,7 +371,7 @@ class ToolsApi {
   }
 
   /// Merge a multi-file book
-  /// Merges a multi-file audiobook into one chaptered file through the streaming engine&#39;s job API: parts join gaplessly without re-encoding, chapter marks land at the part boundaries (titles from the request, falling back to each part&#39;s title tag, then generated names), and richer tags plus the cover carry over in a post-pass. Every user&#39;s resume position remaps from part-relative to the merged timeline. The original parts move to the trash unless &#x60;keepOriginals&#x60;. Needs the streaming engine; answers &#x60;feature-unavailable&#x60; without it. Returns a tool task to follow. 
+  /// Merges a multi-file audiobook into one chaptered file through the streaming engine&#39;s job API: parts join gaplessly into one AAC file (re-encoded, so any mix of part codecs merges), chapter marks land at the part boundaries (titles from the request, falling back to each part&#39;s title tag, then generated names), and richer tags plus the cover carry over in a post-pass. Every user&#39;s resume position remaps from part-relative to the merged timeline. The merged file is written beside the parts, in the book&#39;s own library, so who can see the book does not change. The parts the merge was queued with move to the trash first (reason &#x60;book-merge&#x60;), and nothing else does: a book that gained or lost a file since stops the merge with nothing moved, and a part the trash cannot take puts back the parts that went and stops it with nothing written. Once the merged file is made, what passes on its own (a busy catalog, a read-only flag) is waited out rather than failed. With &#x60;keepOriginals&#x60; the parts stay where they are and the merged copy, its title marked \&quot; (Merged)\&quot;, goes into a folder of its own beside the original. A merge a restart or a shutdown stops part way finishes when the server is back. Needs the streaming engine: a server without one answers 501 &#x60;feature-unavailable&#x60;, and one whose engine is not reachable right now answers 503 with &#x60;Retry-After&#x60;. Returns a tool task to follow. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -456,7 +479,7 @@ class ToolsApi {
   }
 
   /// Split a book at its chapters
-  /// Splits a single-file audiobook into per-chapter files at its chapter marks (sample-exact cuts, lossless for lossless sources), tagging each piece from the book plus its chapter title. Resume positions remap onto the pieces. The original file moves to the trash unless &#x60;keepOriginals&#x60;. A book without chapters answers &#x60;conflict&#x60;. Needs the streaming engine. 
+  /// Splits a single-file audiobook into per-chapter files at its chapter marks (sample-exact cuts, lossless for lossless sources), tagging each piece from the book plus its chapter title. Resume positions remap onto the pieces. The pieces are written in the book&#39;s own library: into the book&#39;s folder when the folder is named for it, else into a new folder named for the book beside the file. The file the split was queued with moves to the trash first (reason &#x60;book-split&#x60;): a book whose file changed since stops the split with nothing moved, and an original the trash cannot take stops it with nothing written. With &#x60;keepOriginals&#x60; the original stays and the pieces, titled \&quot; (Split)\&quot;, go into a folder of their own beside it. A split a restart or a shutdown stops part way finishes when the server is back. Needs the streaming engine, as mergeBook does. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -564,7 +587,7 @@ class ToolsApi {
   }
 
   /// Split a CUE rip into real files
-  /// Splits the single-file rip behind a CUE-carved album into one real file per track (the pid may be any of the rip&#39;s virtual tracks; the shared source resolves from it). Virtual tracks already browse and play natively, so this physical split is optional: it is for people who want real per-track files (write-back and fingerprints work on them, two things virtual tracks refuse by upstream design). Cuts come from the cue sheet, sample-exact and lossless for lossless sources; each piece is tagged from the sheet. Play state carries over per track. The source file and sheet move to the trash unless &#x60;keepOriginals&#x60;. Needs the streaming engine. 
+  /// Splits the single-file rip behind a CUE-carved album into one real file per track (the pid may be any of the rip&#39;s virtual tracks; the shared source resolves from it). Virtual tracks already browse and play natively, so this physical split is optional: it is for people who want real per-track files (write-back and fingerprints work on them, two things virtual tracks refuse by upstream design). Cuts come from the cue sheet, sample-exact and lossless for lossless sources; each piece is tagged from the sheet. Play state carries over per track. Unless &#x60;keepOriginals&#x60;, the source file moves to the trash (reason &#x60;cue-split&#x60;) once every piece is a track, its sheet with it; a sheet another encoding of the rip still uses stays. A split a restart or a shutdown stops part way finishes when the server is back, importing no piece twice, and once the pieces are cut what passes on its own is waited out rather than failed; a piece the import refuses for good (another file holds its place) ends the split instead, the rip kept. Needs the streaming engine, as mergeBook does. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

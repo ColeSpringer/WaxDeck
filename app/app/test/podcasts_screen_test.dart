@@ -18,6 +18,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'disclosure_glyph.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
@@ -539,6 +540,19 @@ void main() {
     expect(find.byKey(const Key('podcast-url-field')), findsOneWidget);
   });
 
+  testWidgets('the by-URL path points right closed and down open', (
+    tester,
+  ) async {
+    await _pump(tester, FakeRepository());
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAdd));
+    await tester.pumpAndSettle();
+    final byUrl = find.bySemanticsIdentifier(SemanticsIds.podcastAddByUrl);
+
+    expectDisclosure(tester, byUrl, open: false);
+    await _openUrlPath(tester);
+    expectDisclosure(tester, byUrl, open: true);
+  });
+
   testWidgets('the subscribe dialog flow adds a tile', (tester) async {
     final repo = FakeRepository();
     await _pump(tester, repo);
@@ -801,6 +815,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Alpha Show'), findsNothing);
     expect(find.text('Charlie Show'), findsOneWidget);
+  });
+
+  testWidgets('a folder points down while open and right once closed', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(
+        testShow('pc-A', title: 'Alpha Show'),
+        settings: const SubscriptionSettings(folder: 'Mornings'),
+      );
+    await _pump(tester, repo);
+    final folder = find.bySemanticsIdentifier(
+      SemanticsIds.podcastFolder('Mornings'),
+    );
+
+    expectDisclosure(tester, folder, open: true);
+    await tester.tap(folder);
+    await tester.pumpAndSettle();
+    expectDisclosure(tester, folder, open: false);
   });
 
   group('sortSubscriptions', () {

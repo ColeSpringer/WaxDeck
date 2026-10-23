@@ -14,6 +14,7 @@ import '../player/smart_rewind.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/server_health.dart';
 import '../shell/shell_messages.dart';
 import 'about_screen.dart';
 import 'account_sections.dart';
@@ -93,6 +94,62 @@ class SettingsSectionScreen extends ConsumerWidget {
   }
 }
 
+/// A setting the streaming engine serves, shaped by what the server says
+/// of it: on a server without one its control goes and [withoutEngine]
+/// says why; while one is away the control stays, since the choice
+/// applies once it answers, and [away] says so; an engine that answers
+/// without the feature ([offers] false) takes the control too, with
+/// [lacking]. With nothing said yet, or by a server too old to say, the
+/// row is as it always was.
+({String help, bool offered}) engineRow(
+  ServerStreaming? streaming, {
+  required bool Function(ServerStreaming) offers,
+  required String help,
+  required String withoutEngine,
+  required String away,
+  required String lacking,
+}) => switch (streaming) {
+  ServerStreaming(configured: false) => (help: withoutEngine, offered: false),
+  ServerStreaming(connected: false) => (help: away, offered: true),
+  final engine? when !offers(engine) => (help: lacking, offered: false),
+  _ => (help: help, offered: true),
+};
+
+/// Whether the gapless switch is offered: not on a server that renders
+/// nothing, which runs no engine or one that renders no queues. While a
+/// configured engine is away it stays, since the choice applies once the
+/// engine answers.
+bool webGaplessOffered(ServerStreaming? streaming) => switch (streaming) {
+  ServerStreaming(configured: false) => false,
+  ServerStreaming(connected: true, timelines: false) => false,
+  _ => true,
+};
+
+/// The gapless switch's help. A switch that is on and doing nothing has
+/// to say why, and which why: the server runs no engine, its engine is
+/// away, the engine renders no queues, the server is momentarily too busy
+/// to, this browser cannot play one, or nothing rendered is anything this
+/// browser decodes. Only some of those go away on their own, so one
+/// sentence for all of them would send somebody to change a setting that
+/// is not the problem. [status] is what the last mint or load said, and
+/// keeps only the answers health cannot give.
+String webGaplessHelp(
+  AppLocalizations l10n,
+  ServerStreaming? streaming,
+  String? status,
+) => switch (streaming) {
+  ServerStreaming(configured: false) => l10n.settingsWebGaplessNoEngine,
+  ServerStreaming(connected: false) => l10n.settingsEngineUnreachable,
+  ServerStreaming(timelines: false) => l10n.settingsWebGaplessUnavailable,
+  _ => switch (status) {
+    null => l10n.settingsWebGaplessHelp,
+    'transcode-limited' => l10n.settingsWebGaplessBusy,
+    'gapless-unsupported' => l10n.settingsWebGaplessBrowser,
+    'gapless-format' => l10n.settingsWebGaplessFormat,
+    _ => l10n.settingsWebGaplessUnavailable,
+  },
+};
+
 /// A heading over a run of related rows.
 class _Group extends StatelessWidget {
   const _Group({required this.title, required this.children});
@@ -129,6 +186,36 @@ class _PlaybackBody extends ConsumerWidget {
     final wax = context.waxL10n;
     final prefs = ref.watch(prefsControllerProvider).value;
     final prefsController = ref.read(prefsControllerProvider.notifier);
+    final streaming = ref.watch(serverStreamingProvider);
+    // Trimming reads the silence the engine's analysis finds.
+    final trim = engineRow(
+      streaming,
+      offers: (engine) => engine.fileTools,
+      help: l10n.settingsTrimDefaultHelp,
+      withoutEngine: l10n.settingsNeedsEngine,
+      away: l10n.settingsEngineUnreachable,
+      lacking: l10n.settingsEngineLacksThis,
+    );
+    final boost = engineRow(
+      streaming,
+      offers: (engine) => engine.voiceBoost,
+      help: l10n.settingsBoostDefaultHelp,
+      withoutEngine: l10n.settingsNeedsEngine,
+      away: l10n.settingsEngineUnreachable,
+      lacking: l10n.settingsEngineLacksThis,
+    );
+    // Crossfade and levelling shape the queue the engine renders as one
+    // stream; nothing plays them otherwise.
+    ({String help, bool offered}) rendered(String help) => engineRow(
+      streaming,
+      offers: (engine) => engine.timelines,
+      help: help,
+      withoutEngine: l10n.settingsNeedsEngine,
+      away: l10n.settingsEngineUnreachable,
+      lacking: l10n.settingsEngineLacksThis,
+    );
+    final crossfade = rendered(l10n.settingsCrossfadeHelp);
+    final replayGain = rendered(l10n.settingsReplayGainHelp);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -218,26 +305,34 @@ class _PlaybackBody extends ConsumerWidget {
               id: 'trim-default',
               child: WaxSettingRow(
                 title: l10n.settingsTrimDefaultTitle,
-                help: l10n.settingsTrimDefaultHelp,
-                control: WaxSwitch(
-                  value: ref.watch(trimSilenceDefaultProvider),
-                  label: l10n.settingsTrimDefaultTitle,
-                  semanticsId: SemanticsIds.setting('trim-default'),
-                  onChanged: ref.read(trimSilenceDefaultProvider.notifier).set,
-                ),
+                help: trim.help,
+                control: trim.offered
+                    ? WaxSwitch(
+                        value: ref.watch(trimSilenceDefaultProvider),
+                        label: l10n.settingsTrimDefaultTitle,
+                        semanticsId: SemanticsIds.setting('trim-default'),
+                        onChanged: ref
+                            .read(trimSilenceDefaultProvider.notifier)
+                            .set,
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
             SettingAnchor(
               id: 'boost-default',
               child: WaxSettingRow(
                 title: l10n.settingsBoostDefaultTitle,
-                help: l10n.settingsBoostDefaultHelp,
-                control: WaxSwitch(
-                  value: ref.watch(voiceBoostDefaultProvider),
-                  label: l10n.settingsBoostDefaultTitle,
-                  semanticsId: SemanticsIds.setting('boost-default'),
-                  onChanged: ref.read(voiceBoostDefaultProvider.notifier).set,
-                ),
+                help: boost.help,
+                control: boost.offered
+                    ? WaxSwitch(
+                        value: ref.watch(voiceBoostDefaultProvider),
+                        label: l10n.settingsBoostDefaultTitle,
+                        semanticsId: SemanticsIds.setting('boost-default'),
+                        onChanged: ref
+                            .read(voiceBoostDefaultProvider.notifier)
+                            .set,
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
           ],
@@ -329,43 +424,53 @@ class _PlaybackBody extends ConsumerWidget {
               id: 'crossfade',
               child: WaxSettingRow(
                 title: l10n.settingsCrossfadeTitle,
-                help: l10n.settingsCrossfadeHelp,
-                control: WaxChoice<double>(
-                  value: prefs?.crossfadeSeconds ?? 0,
-                  options: const <double>[0, 2, 4, 6, 8, 12],
-                  labelFor: (seconds) => seconds == 0
-                      ? l10n.settingsOptionOff
-                      : wax.spellDuration(Duration(seconds: seconds.round())),
-                  label: l10n.settingsCrossfadeTitle,
-                  semanticsId: SemanticsIds.setting('crossfade'),
-                  // Rounded: the options are doubles, and a spec names 6.
-                  optionSemanticsIdFor: (seconds) =>
-                      SemanticsIds.settingOption('crossfade', seconds.round()),
-                  onChanged: prefs == null
-                      ? null
-                      : (seconds) => saveSetting(
-                          context,
-                          prefsController.setCrossfadeSeconds(seconds),
-                        ),
-                ),
+                help: crossfade.help,
+                control: crossfade.offered
+                    ? WaxChoice<double>(
+                        value: prefs?.crossfadeSeconds ?? 0,
+                        options: const <double>[0, 2, 4, 6, 8, 12],
+                        labelFor: (seconds) => seconds == 0
+                            ? l10n.settingsOptionOff
+                            : wax.spellDuration(
+                                Duration(seconds: seconds.round()),
+                              ),
+                        label: l10n.settingsCrossfadeTitle,
+                        semanticsId: SemanticsIds.setting('crossfade'),
+                        // Rounded: the options are doubles, and a spec
+                        // names 6.
+                        optionSemanticsIdFor: (seconds) =>
+                            SemanticsIds.settingOption(
+                              'crossfade',
+                              seconds.round(),
+                            ),
+                        onChanged: prefs == null
+                            ? null
+                            : (seconds) => saveSetting(
+                                context,
+                                prefsController.setCrossfadeSeconds(seconds),
+                              ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
             SettingAnchor(
               id: 'replay-gain',
               child: WaxSettingRow(
                 title: l10n.settingsReplayGainTitle,
-                help: l10n.settingsReplayGainHelp,
-                control: WaxSwitch(
-                  value: prefs?.replayGain ?? false,
-                  label: l10n.settingsReplayGainTitle,
-                  semanticsId: SemanticsIds.setting('replay-gain'),
-                  onChanged: prefs == null
-                      ? null
-                      : (on) => saveSetting(
-                          context,
-                          prefsController.setReplayGain(on),
-                        ),
-                ),
+                help: replayGain.help,
+                control: replayGain.offered
+                    ? WaxSwitch(
+                        value: prefs?.replayGain ?? false,
+                        label: l10n.settingsReplayGainTitle,
+                        semanticsId: SemanticsIds.setting('replay-gain'),
+                        onChanged: prefs == null
+                            ? null
+                            : (on) => saveSetting(
+                                context,
+                                prefsController.setReplayGain(on),
+                              ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
             // Browsers only, and here rather than under the player
@@ -379,27 +484,20 @@ class _PlaybackBody extends ConsumerWidget {
                 id: 'web-gapless',
                 child: WaxSettingRow(
                   title: l10n.settingsWebGaplessTitle,
-                  // A switch that is on and doing nothing has to say
-                  // why, and which why: the server renders none at all,
-                  // it is momentarily too busy to, this browser cannot
-                  // play one, or nothing it renders is anything this
-                  // browser decodes. Only the second of those goes away
-                  // on its own, so one sentence for all four would send
-                  // somebody to change a setting that is not the
-                  // problem.
-                  help: switch (ref.watch(webGaplessStatusProvider)) {
-                    null => l10n.settingsWebGaplessHelp,
-                    'transcode-limited' => l10n.settingsWebGaplessBusy,
-                    'gapless-unsupported' => l10n.settingsWebGaplessBrowser,
-                    'gapless-format' => l10n.settingsWebGaplessFormat,
-                    _ => l10n.settingsWebGaplessUnavailable,
-                  },
-                  control: WaxSwitch(
-                    value: ref.watch(webGaplessProvider),
-                    label: l10n.settingsWebGaplessTitle,
-                    semanticsId: SemanticsIds.setting('web-gapless'),
-                    onChanged: ref.read(webGaplessProvider.notifier).set,
+                  help: webGaplessHelp(
+                    l10n,
+                    streaming,
+                    ref.watch(webGaplessStatusProvider),
                   ),
+                  // Nothing to switch on a server that renders nothing.
+                  control: webGaplessOffered(streaming)
+                      ? WaxSwitch(
+                          value: ref.watch(webGaplessProvider),
+                          label: l10n.settingsWebGaplessTitle,
+                          semanticsId: SemanticsIds.setting('web-gapless'),
+                          onChanged: ref.read(webGaplessProvider.notifier).set,
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
           ],
@@ -478,6 +576,8 @@ class _PlaybackBody extends ConsumerWidget {
     );
   }
 
+  /// A stream quality is a bitrate the engine's transcode keeps to: a
+  /// server without one serves originals whatever is chosen.
   Widget _streamQualityRow({
     required String id,
     required String title,
@@ -487,26 +587,36 @@ class _PlaybackBody extends ConsumerWidget {
   }) => Consumer(
     builder: (context, ref, _) {
       final l10n = context.l10n;
+      final row = engineRow(
+        ref.watch(serverStreamingProvider),
+        offers: (_) => true,
+        help: help,
+        withoutEngine: l10n.settingsNeedsEngine,
+        away: l10n.settingsEngineUnreachable,
+        lacking: help,
+      );
       return SettingAnchor(
         id: id,
         child: WaxSettingRow(
           title: title,
-          help: help,
-          control: WaxChoice<StreamQuality>(
-            value: ref.watch(provider),
-            options: StreamQuality.values,
-            labelFor: (quality) => switch (quality) {
-              StreamQuality.auto => l10n.settingsStreamQualityAuto,
-              StreamQuality.high => l10n.settingsStreamQualityHigh,
-              StreamQuality.normal => l10n.settingsStreamQualityNormal,
-              StreamQuality.low => l10n.settingsStreamQualityLow,
-            },
-            label: title,
-            semanticsId: SemanticsIds.setting(id),
-            optionSemanticsIdFor: (quality) =>
-                SemanticsIds.settingOption(id, quality.name),
-            onChanged: ref.read(provider.notifier).set,
-          ),
+          help: row.help,
+          control: row.offered
+              ? WaxChoice<StreamQuality>(
+                  value: ref.watch(provider),
+                  options: StreamQuality.values,
+                  labelFor: (quality) => switch (quality) {
+                    StreamQuality.auto => l10n.settingsStreamQualityAuto,
+                    StreamQuality.high => l10n.settingsStreamQualityHigh,
+                    StreamQuality.normal => l10n.settingsStreamQualityNormal,
+                    StreamQuality.low => l10n.settingsStreamQualityLow,
+                  },
+                  label: title,
+                  semanticsId: SemanticsIds.setting(id),
+                  optionSemanticsIdFor: (quality) =>
+                      SemanticsIds.settingOption(id, quality.name),
+                  onChanged: ref.read(provider.notifier).set,
+                )
+              : const SizedBox.shrink(),
         ),
       );
     },

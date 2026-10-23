@@ -141,12 +141,15 @@ func (l *Library) playlistExists(ctx context.Context, uc *UserCtx, playlistPID m
 }
 
 // dismissStarterPlaylist records that the account threw its starter
-// away, so the boot reconcile leaves it deleted. Every delete path runs
-// through DeletePlaylist, which is where this is called; a pid that is
-// nobody's starter matches no row.
-func (l *Library) dismissStarterPlaylist(ctx context.Context, uc *UserCtx, playlistPID model.PID) {
-	if err := l.db.DismissStarterPlaylist(ctx, uc.ID, string(playlistPID)); err != nil {
-		l.log.Warn("dismissing starter playlist", "user", uc.ID, "playlist", playlistPID, "err", err)
+// away, so the boot reconcile leaves it deleted. DeletePlaylist, which
+// the REST and Subsonic deletes both come through, calls it with the
+// owner's account id: an administrator deleting a shared starter
+// dismisses the owner's, not their own. A deleted account's starters go
+// with its rows and need no dismissal. A pid that is nobody's starter
+// matches no row.
+func (l *Library) dismissStarterPlaylist(ctx context.Context, ownerID string, playlistPID model.PID) {
+	if err := l.db.DismissStarterPlaylist(ctx, ownerID, string(playlistPID)); err != nil {
+		l.log.Warn("dismissing starter playlist", "user", ownerID, "playlist", playlistPID, "err", err)
 	}
 }
 

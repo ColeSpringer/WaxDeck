@@ -121,6 +121,32 @@
   "@bookMerge": {
     "description": "Row in a book's overflow turning several files into one with chapter marks. Administrators only."
   },
+  "bookMergeAction": "Merge",
+  "@bookMergeAction": {
+    "description": "Confirming button of the dialog that merges a book's files into one."
+  },
+  "bookMergeBody": "The parts are joined into one chaptered file beside them, in the same library; every listener's position carries over. The original files move to the trash unless you keep them.",
+  "@bookMergeBody": {
+    "description": "Body of the dialog confirming a book merge: where the result goes, that positions survive, and what happens to the parts."
+  },
+  "bookMergeKeep": "Keep the original files",
+  "@bookMergeKeep": {
+    "description": "Switch in the merge dialog that keeps the book's parts instead of moving them to the trash; the merged copy then gets its own folder beside them."
+  },
+  "bookMergeKeepHelp": "The merged copy goes into a folder of its own beside them",
+  "@bookMergeKeepHelp": {
+    "description": "Help under the merge dialog's keep switch: where the merged copy goes when the parts stay."
+  },
+  "bookMergeTitle": "Merge {count} files into one?",
+  "@bookMergeTitle": {
+    "description": "Title of the dialog confirming a book merge. {count} is how many files the book is now.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "bookMore": "More",
   "@bookMore": {
     "description": "Accessible name of a book's overflow menu."
@@ -298,6 +324,32 @@
   "bookSplit": "Split at chapters",
   "@bookSplit": {
     "description": "Row in a book's overflow cutting one file into a file per chapter. Administrators only."
+  },
+  "bookSplitAction": "Split",
+  "@bookSplitAction": {
+    "description": "Confirming button of the dialog that splits a book at its chapters."
+  },
+  "bookSplitBody": "One file per chapter is written beside the book. The original moves to the trash unless you keep it.",
+  "@bookSplitBody": {
+    "description": "Body of the dialog confirming a book split: where the pieces go and what happens to the original file."
+  },
+  "bookSplitKeep": "Keep the original file",
+  "@bookSplitKeep": {
+    "description": "Switch in the split dialog that keeps the book's file instead of moving it to the trash; the pieces then get their own folder beside it."
+  },
+  "bookSplitKeepHelp": "The pieces go into a folder of their own beside it",
+  "@bookSplitKeepHelp": {
+    "description": "Help under the split dialog's keep switch: where the pieces go when the original stays."
+  },
+  "bookSplitTitle": "Split at {count} chapters?",
+  "@bookSplitTitle": {
+    "description": "Title of the dialog confirming a book split. {count} is how many chapters, so how many files it makes.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
   },
   "bookStartOver": "Start over",
   "@bookStartOver": {

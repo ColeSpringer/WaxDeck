@@ -444,6 +444,17 @@ func TestAPreviewCarriesHoldsWithTheirCodes(t *testing.T) {
 		t.Fatalf("preview = total %d, held %d by %v; want 2 moves and %v",
 			plan.TotalActions, plan.Held, plan.HeldByCode, want)
 	}
+	// Each listed beside the moves, with its item, where it is and why.
+	listed := map[string]int{}
+	for _, h := range plan.Holds {
+		if !strings.HasPrefix(h.ItemPID, PrefixTrack+"-") || h.From == "" || h.Reason == "" {
+			t.Errorf("hold %+v, want its item, its file and the catalog's words", h)
+		}
+		listed[h.Code]++
+	}
+	if !maps.Equal(listed, want) {
+		t.Fatalf("holds = %+v, want %v", plan.Holds, want)
+	}
 
 	setServerReadOnly(t, ctx, svc, true)
 	plan, err = svc.PreviewOrganize(ctx, uc, profile, nil)
@@ -451,8 +462,8 @@ func TestAPreviewCarriesHoldsWithTheirCodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	want[string(organize.HoldReadOnly)] = 2
-	if plan.TotalActions != 0 || plan.Held != 4 || !maps.Equal(plan.HeldByCode, want) {
-		t.Fatalf("read-only preview = total %d, held %d by %v; want every move held, %v",
-			plan.TotalActions, plan.Held, plan.HeldByCode, want)
+	if plan.TotalActions != 0 || plan.Held != 4 || !maps.Equal(plan.HeldByCode, want) || len(plan.Holds) != 4 {
+		t.Fatalf("read-only preview = total %d, held %d by %v, %d listed; want every move held, %v",
+			plan.TotalActions, plan.Held, plan.HeldByCode, len(plan.Holds), want)
 	}
 }

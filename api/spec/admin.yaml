@@ -48,10 +48,12 @@ paths:
       summary: Create a library at runtime
       description: >
         Registers a new library root without a server restart. The path is
-        validated (an existing folder, absolute, and non-overlapping with
-        existing roots, the inbox folders, and the podcast download dir),
-        cataloged, and scanned in the background; browsing and downloading
-        its files work as soon as the scan indexes them. Streaming through
+        validated (absolute; an existing folder the server can read, or
+        with `allowAbsent` one mounted later; writable by the server when
+        the library is managed; and non-overlapping with existing roots,
+        the inbox folders, and the podcast download dir), cataloged, and
+        scanned in the background; browsing and downloading its files work
+        as soon as the scan indexes them. Streaming through
         the WaxFlow sidecar also needs the sidecar to mount the same-named
         root, so a runtime-added root streams once the sidecar learns it,
         while downloads and direct playback do not wait on that; when the
@@ -76,13 +78,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/LibraryCreated"
         "400":
-          $ref: "#/components/responses/InvalidRequest"
+          description: >
+            The library was refused (code `invalid-request`): the name is
+            missing or holds a path separator, the media is not one of
+            the three, or the path is missing, relative, names no folder
+            (without `allowAbsent`), names a file, names a folder the
+            server cannot read or list or that does not answer in time,
+            is to be managed and cannot be written by the server (not
+            checked while the server is read-only), or overlaps an
+            existing root, the inbox folders or the podcast download dir.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The folder or the name is taken (code `conflict`): a library
+            already holds that folder; a library, a root the
+            configuration names, the podcast download dir or the
+            streaming engine already goes by that name; or another create
+            of that folder or name is under way. A folder nested in or
+            around another root is `invalid-request` instead.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -195,6 +219,66 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /libraries/{pid}:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    delete:
+      operationId: removeLibrary
+      summary: Remove a library
+      description: >
+        Takes the library out of the catalog and answers the job doing it.
+        The files stay on disk: an item with a copy in another library
+        carries on from that copy, and one with no other copy is archived
+        with its play state and playlist entries and comes back when the
+        folder is added again. The library's trash entries go, their files
+        staying in its trash folder. Once the job has taken the library out
+        of the catalog, its name, the account and invite grants naming it,
+        and the streaming engine's mount of it go too, and the removal is
+        audited as `library.remove`. A job stopped before that leaves the
+        library in the catalog with its name, grants and mount, and
+        removing it again finishes the job. Files its finished batches
+        had let go of come back with a scan of the library, which the
+        server starts once the job ends; a job a restart cut short is
+        left to the startup scan when one runs, and one ending while
+        another catalog job runs, to the library's next scan. A library
+        the server's configuration names (`configured`) is `conflict`:
+        every start registers it again, so it is taken out of
+        `WAXDECK_LIBRARY_ROOTS` first. Administrators only.
+      tags: [admin]
+      responses:
+        "202":
+          description: The removal started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "400":
+          description: >
+            The podcast library, which follows the podcast download folder
+            (code `invalid-request`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The removal was refused. `conflict`: the server's configuration
+            names the library. `catalog-busy`: another job holds the
+            catalog's shared file-mutation scope, which clears on its own.
+            `read-only`: the server is in read-only mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -360,7 +444,9 @@ paths:
       description: >
         Recent catalog jobs, newest first: `limit` of them, after any still
         running. A finished targeted job is left out (read it by pid),
-        except a kind change (`set-kind`), which lists with its result.
+        except a kind change (`set-kind`), an organize undo
+        (`organize-undo`) and a library removal (`remove-root`), which
+        list with their result.
         The `job` sync marker says when to read again. Administrators
         only.
       tags: [admin]
@@ -1110,7 +1196,10 @@ paths:
           description: >
             The restore was refused. `conflict`: the original path is
             occupied. `read-only`: the entry's library, or the whole
-            server, is read-only.
+            server, is read-only. `storage-unwritable`: the folder the
+            file goes back to refused the server's write (its
+            permissions, or a read-only mount); the entry stays in the
+            trash.
           content:
             application/json:
               schema:
@@ -1494,6 +1583,32 @@ components:
           type: string
           description: The organize profile a managed library is laid out by.
           example: waxbin-native
+        configured:
+          type: boolean
+          description: >
+            The server's configuration names the library
+            (`WAXDECK_LIBRARY_ROOTS`), so every start registers it and
+            removeLibrary refuses it until the configuration drops it.
+            Absent means false.
+        unreachable:
+          type: boolean
+          description: >
+            The library's folder was not there at its last scan, which
+            marked nothing under it missing: its items stay listed and play
+            once it is back. Absent means false.
+        writable:
+          type: boolean
+          description: >
+            For a managed library, whether the server could write to its
+            folder when last checked; when false, uploads, organize moves
+            and deletes into it fail. The server checks when it starts,
+            when the library is created or arrives from elsewhere (the
+            waxbin CLI), when its read-only flag or the server's is
+            lifted, every half hour, and after a write into a library's
+            folder is refused; listing the libraries checks nothing.
+            Absent on an in-place library and on one the server treats as
+            read-only (its own flag or the whole server's), which are not
+            checked.
 
     LibraryCreated:
       allOf:
@@ -1574,6 +1689,11 @@ components:
             Whether the catalog may place and organize files under this root:
             uploads land here and the organizer may move files within it. The
             default keeps files strictly in place.
+        allowAbsent:
+          type: boolean
+          description: >
+            Register a root whose folder is mounted later; a scan reports it
+            unreachable until then. Absent means false.
 
     Job:
       type: object
@@ -1588,8 +1708,9 @@ components:
           type: string
           description: >
             What the job does: `scan`, `analyze`, `enrich`, `organize`,
-            `import`, `delete`, `restore`, `empty-trash`, `purge-trash`, or
-            `set-kind`. New kinds may appear.
+            `organize-undo`, `import`, `delete`, `restore`, `empty-trash`,
+            `purge-trash`, `set-kind`, or `remove-root`. New kinds may
+            appear.
           example: scan
         state:
           type: string
@@ -1643,7 +1764,9 @@ components:
             not be reached, so nothing under it was marked missing, and
             `subPathGone` that the folder asked for was not there. For
             administrators, `runs` lists each library's own counts in the
-            same words, with its `libraryPid` and `library` name. An
+            same words, with its `libraryPid` and `library` name, and
+            `rootsUnreachable` names the libraries whose folder could not be
+            reached. An
             `analyze` pass reports `analyzed`, `loudnessMeasured`,
             `measureFailed`, `skipped` and `errored`, with
             `fingerprintFallbacks` (files fpcalc could not read,
@@ -1652,8 +1775,12 @@ components:
             they ended in an error, their fingerprint covering the span
             analyzed); an `enrich` pass the
             same tallies as the enrichment status's `lastRun`; an
-            `organize` run `profile`, `moved`, `skipped`, `errored` and
-            `sidecarsMoved`. A `set-kind` run reports `converted` (the
+            `organize` run `profile` (absent when it laid several libraries
+            out by their own), `moved`, `skipped` (files that did not move,
+            in place or held back), `held` (of those, the moves held back),
+            `errored`, `sidecarsMoved` and `dirsPruned` (folders the moves
+            emptied and removed), and an `organize-undo` moving one back the
+            same without `profile`. A `set-kind` run reports `converted` (the
             items that changed kind in place), `absorbed` (each pid folded
             into another item, which no longer exists, mapped to the item
             that took it in, or to an empty string when that item is in a
@@ -1662,6 +1789,11 @@ components:
             `reason`, and for administrators `path`); every pid is in its
             current form, and a change cut short reports what it did before
             it stopped.
+            A `remove-root` run reports `filesDetached` (the files the
+            catalog let go of, which stay on disk), `itemsArchived` (items
+            left with no file, kept until the folder is added again) and
+            `trashRowsDropped` (the library's trash entries, whose files stay
+            in its trash folder).
             Absent while running and for kinds that record none. Shapes
             may grow fields.
         target:
@@ -1677,8 +1809,9 @@ components:
         type:
           type: string
           description: >
-            `item`, `artist`, `release_group`, `album`, `library` or
-            `trash`; new types may appear.
+            `item`, `artist`, `release_group`, `album`, `library`, `trash`
+            or `job` (the organize run an `organize-undo` undoes); new
+            types may appear.
           example: item
         pid:
           type: string
@@ -1841,11 +1974,12 @@ components:
           minimum: 0
           description: >
             Clear finished tool tasks older than this many days on the
-            scheduled prune; terminal rows only. 0 keeps them, and an
-            unconfigured server answers 30 - so unlike
-            `trashRetentionDays`, 0 here is a choice rather than the
-            default. Optional on PUT (absent keeps the current value),
-            always present in responses.
+            scheduled prune; terminal rows only. The same prune drops the
+            Organizer's journal of runs older than this, after which a run
+            can no longer be undone. 0 keeps both, and an unconfigured
+            server answers 30 - so unlike `trashRetentionDays`, 0 here is
+            a choice rather than the default. Optional on PUT (absent keeps
+            the current value), always present in responses.
 
     TranscodingLimits:
       type: object
@@ -2142,8 +2276,9 @@ components:
         reason:
           type: string
           description: >
-            Why it was deleted: `user`, `prune`, or `permanent`. An
-            open string.
+            Why it was deleted: `user`, `prune` or `permanent`, or the
+            file tool whose run took it (`book-merge`, `book-split`,
+            `cue-split`). An open string.
         sizeBytes:
           type: integer
           format: int64

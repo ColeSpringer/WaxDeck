@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -57,8 +58,70 @@ Map<String, Object> _loginJson({
   return (adapter, WaxDeckClient(baseUrl: 'http://host:4420', dio: dio));
 }
 
+/// Holds the session probe's answer until [release], and answers the
+/// rest at once, in call order.
+class _HeldSessionAdapter implements HttpClientAdapter {
+  _HeldSessionAdapter(this.session, this.rest);
+
+  final Object session;
+  final List<(int, Object?)> rest;
+  final Completer<void> release = Completer<void>();
+  final List<RequestOptions> requests = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    Object? body;
+    var status = 200;
+    if (options.path.endsWith('/auth/session')) {
+      await release.future;
+      body = session;
+    } else {
+      (status, body) = rest.removeAt(0);
+    }
+    final text = body == null ? '' : jsonEncode(body);
+    return ResponseBody.fromString(
+      text,
+      status,
+      headers: {
+        if (text.isNotEmpty) Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 void main() {
   _exitBeaconTests();
+
+  test(
+    'a session probe a sign-in overtook leaves the sign-in\'s CSRF token',
+    () async {
+      final adapter = _HeldSessionAdapter(
+        {'authenticated': true, 'user': _userJson, 'csrfToken': 'csrf-stale'},
+        [(200, _loginJson(csrf: 'csrf-fresh')), (204, null)],
+      );
+      final client = WaxDeckClient(
+        baseUrl: 'http://host:4420',
+        dio: Dio()..httpClientAdapter = adapter,
+      );
+      final probe = client.getSession();
+      await client.login(username: 'admin', password: 'pw');
+      adapter.release.complete();
+      await probe;
+
+      // Cookie mode, as a web build rides it.
+      client.authToken = null;
+      await client.putPlayState('tr-x', 1000);
+      expect(adapter.requests.last.headers['X-CSRF-Token'], 'csrf-fresh');
+    },
+  );
 
   test(
     'cookie mode: mutations echo the CSRF token from the session probe',

@@ -477,6 +477,14 @@
   "@settingsEndpointsTitle": {
     "description": "Name of the \"Playback endpoints\" setting, drawn on its own row and in settings search."
   },
+  "settingsEngineLacksThis": "This server's streaming engine doesn't offer this",
+  "@settingsEngineLacksThis": {
+    "description": "Help line under the voice boost or silence trimming default, whose switch is hidden, when the server's streaming engine answers but does not offer that feature (voice boost, or the silence analysis trimming reads). No full stop."
+  },
+  "settingsEngineUnreachable": "The streaming engine is unreachable right now",
+  "@settingsEngineUnreachable": {
+    "description": "Help line under the gapless, voice boost and silence trimming switches while the server's streaming engine is configured but not answering. Temporary: the server retries it. No full stop."
+  },
   "settingsFollowsAccountHelp": "Follows you to your other devices",
   "@settingsFollowsAccountHelp": {
     "description": "The line under the Appearance setting stored on the account rather than on this device: the language."
@@ -701,6 +709,10 @@
   "settingsMatchTheSystem": "Match the system",
   "@settingsMatchTheSystem": {
     "description": "The option that follows the device's own setting rather than choosing one. Shown in both the theme picker and the language picker."
+  },
+  "settingsNeedsEngine": "Needs the streaming engine, which this server runs without",
+  "@settingsNeedsEngine": {
+    "description": "Help line under the voice boost and silence trimming defaults, whose switches are hidden, on a server that runs without a streaming engine. No full stop."
   },
   "settingsNotificationsKeywords": "ntfy, webhook, discord, push, alerts",
   "@settingsNotificationsKeywords": {
@@ -1531,6 +1543,10 @@
   "settingsWebGaplessKeywords": "gapless, crossfade, seam, stream, browser",
   "@settingsWebGaplessKeywords": {
     "description": "Comma-separated search keywords for the \"Gapless playback\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsWebGaplessNoEngine": "This server runs without a streaming engine, which is what renders a queue as one stream",
+  "@settingsWebGaplessNoEngine": {
+    "description": "Help line under the browser's gapless switch, which is hidden, on a server that runs without a streaming engine. No full stop, like every setting's help."
   },
   "settingsWebGaplessTitle": "Gapless playback",
   "@settingsWebGaplessTitle": {

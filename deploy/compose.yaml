@@ -69,9 +69,13 @@ services:
       - waxflow-data:/data
       - waxflow-cache:/cache
     networks: [internal]
-    # Start order, not readiness: on a first run, waxdeck's image seeds
-    # the shared data volume with permissions this image cannot.
-    depends_on: [waxdeck]
+    # Healthy, not only started: the catalog this resolves pids against is
+    # waxdeck's to create (and on a first run waxdeck's image seeds the
+    # shared data volume with permissions this image cannot). Waxdeck
+    # answers healthy without its engine, so the wait cannot deadlock.
+    depends_on:
+      waxdeck:
+        condition: service_healthy
     read_only: true
     tmpfs:
       - /tmp

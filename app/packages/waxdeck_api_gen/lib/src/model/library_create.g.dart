@@ -87,6 +87,8 @@ class _$LibraryCreate extends LibraryCreate {
   final LibraryCreateMediaEnum? media;
   @override
   final bool? managed;
+  @override
+  final bool? allowAbsent;
 
   factory _$LibraryCreate([void Function(LibraryCreateBuilder)? updates]) =>
       (LibraryCreateBuilder()..update(updates))._build();
@@ -96,6 +98,7 @@ class _$LibraryCreate extends LibraryCreate {
     required this.path,
     this.media,
     this.managed,
+    this.allowAbsent,
   }) : super._();
   @override
   LibraryCreate rebuild(void Function(LibraryCreateBuilder) updates) =>
@@ -111,7 +114,8 @@ class _$LibraryCreate extends LibraryCreate {
         name == other.name &&
         path == other.path &&
         media == other.media &&
-        managed == other.managed;
+        managed == other.managed &&
+        allowAbsent == other.allowAbsent;
   }
 
   @override
@@ -121,6 +125,7 @@ class _$LibraryCreate extends LibraryCreate {
     _$hash = $jc(_$hash, path.hashCode);
     _$hash = $jc(_$hash, media.hashCode);
     _$hash = $jc(_$hash, managed.hashCode);
+    _$hash = $jc(_$hash, allowAbsent.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -131,7 +136,8 @@ class _$LibraryCreate extends LibraryCreate {
           ..add('name', name)
           ..add('path', path)
           ..add('media', media)
-          ..add('managed', managed))
+          ..add('managed', managed)
+          ..add('allowAbsent', allowAbsent))
         .toString();
   }
 }
@@ -156,6 +162,10 @@ class LibraryCreateBuilder
   bool? get managed => _$this._managed;
   set managed(bool? managed) => _$this._managed = managed;
 
+  bool? _allowAbsent;
+  bool? get allowAbsent => _$this._allowAbsent;
+  set allowAbsent(bool? allowAbsent) => _$this._allowAbsent = allowAbsent;
+
   LibraryCreateBuilder() {
     LibraryCreate._defaults(this);
   }
@@ -167,6 +177,7 @@ class LibraryCreateBuilder
       _path = $v.path;
       _media = $v.media;
       _managed = $v.managed;
+      _allowAbsent = $v.allowAbsent;
       _$v = null;
     }
     return this;
@@ -201,6 +212,7 @@ class LibraryCreateBuilder
           ),
           media: media,
           managed: managed,
+          allowAbsent: allowAbsent,
         );
     replace(_$result);
     return _$result;

@@ -497,6 +497,14 @@ type LibraryInfo struct {
 	FolderFallback bool
 	Managed        bool
 	Profile        string
+	// Configured is the server's configuration naming the root, which
+	// only a configuration change takes away. Unreachable is its folder
+	// missing at its last scan. Writable is a managed root taking the
+	// server's writes when last probed; nil where the server does not
+	// probe: an in-place root, or one it treats as read-only.
+	Configured  bool
+	Unreachable bool
+	Writable    *bool
 }
 
 // Libraries lists the catalog's libraries with their configured root
@@ -512,7 +520,8 @@ func (l *Library) Libraries(ctx context.Context) ([]LibraryInfo, error) {
 }
 
 // LibrariesWithCounts is Libraries plus how much each root holds: one
-// indexed count per library.
+// indexed count per library. It is the administrators' listing, which
+// says what the last write probe found and writes nothing itself.
 func (l *Library) LibrariesWithCounts(ctx context.Context) ([]LibraryInfo, error) {
 	return l.libraries(ctx, true)
 }
@@ -536,11 +545,15 @@ func (l *Library) libraries(ctx context.Context, counts bool) ([]LibraryInfo, er
 // libraryInfo maps a catalog library, named as the root table names it.
 // The catalog stores no media for the podcast library.
 func (l *Library) libraryInfo(lib *model.Library) LibraryInfo {
-	name := filepath.Base(lib.DisplayRoot)
+	name, writable := filepath.Base(lib.DisplayRoot), true
 	for _, r := range l.libraryRoots() {
 		if rootKey(r.Path) == rootKey(lib.DisplayRoot) {
-			name = r.Name
+			name, writable = r.Name, !r.Unwritable
 		}
+	}
+	var probed *bool
+	if l.probesRoot(lib.Mode == model.ModeManaged, lib.ReadOnly) {
+		probed = &writable
 	}
 	media := string(lib.MediaType())
 	if lib.Mode == model.ModePodcast {
@@ -556,6 +569,9 @@ func (l *Library) libraryInfo(lib *model.Library) LibraryInfo {
 		FolderFallback: lib.FolderFallback,
 		Managed:        lib.Mode == model.ModeManaged,
 		Profile:        lib.Profile,
+		Configured:     l.configuredRoot(lib.DisplayRoot),
+		Unreachable:    l.rootReach.unreachable(lib.PID),
+		Writable:       probed,
 	}
 }
 

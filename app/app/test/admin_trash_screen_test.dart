@@ -31,11 +31,12 @@ TrashEntry _entry(
   DateTime? restoredAt,
   String libraryPid = 'lb-1',
   String libraryName = 'music',
+  String reason = 'delete',
 }) => TrashEntry(
   id: id,
   itemPid: 'tr-1',
   name: 'Music/Bree Trio/pony.flac',
-  reason: 'delete',
+  reason: reason,
   sizeBytes: 2 * 1024 * 1024,
   trashedAt: DateTime.utc(2026, 7, 10),
   restoredAt: restoredAt,
@@ -68,6 +69,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.bySemanticsIdentifier('trash-row-ts-2'), findsOneWidget);
     expect(find.text('restored'), findsOneWidget);
+  });
+
+  testWidgets('what a merge or a split moved says so, in the app\'s words', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.trashEntries.addAll([
+      _entry('ts-1', reason: 'book-merge'),
+      _entry('ts-2', reason: 'book-split'),
+      _entry('ts-3', reason: 'cue-split'),
+    ]);
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.text('book merge'), findsOneWidget);
+    expect(find.text('book split'), findsOneWidget);
+    expect(find.text('CUE split'), findsOneWidget);
+    expect(find.text('book-merge'), findsNothing);
   });
 
   testWidgets('restoring an entry drops it from the default view', (

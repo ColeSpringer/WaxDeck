@@ -15,14 +15,18 @@ part 'tool_task.g.dart';
 /// Properties:
 /// * [id] - Task pid.
 /// * [type] - The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`, or an `import-` migration (`import-jellyfin`, `import-subsonic`, ...). A string, not a closed enum. 
-/// * [state] - `queued`, `running`, `done`, or `failed`. A string, not a closed enum. 
+/// * [state] - `queued`, `running`, `done`, `failed`, or `parked`: a book merge or split, or a CUE split, whose runs kept ending with the server. Parked is terminal and counts as failed: the task is not run again, the delete, Clear finished and the retention prune take it as they take a failed task, and until one does it keeps the book or rip it works on from another merge or split. A string, not a closed enum. 
 /// * [itemPid] - The book, track, or playlist the task was started from. 
+/// * [itemTitle] - What `itemPid` was called when the task was queued: a book merge's or split's book, a CUE split's album. Absent for other tasks. 
 /// * [progressPct] - Progress in percent when the engine reports it.
-/// * [error] - Why the task failed, when `failed`.
+/// * [error] - Why the task failed, when `failed`, or stopped, when `parked`, where it also says where each file the run made or moved is (new files waiting beside the book, originals in the trash) and what clearing the task does with new files still hidden. While a book merge or split, or a CUE split, is `running` it can say what the task waits out instead, in the server's words beside `waitReason`. 
+/// * [waitReason] - Set while a `running` book merge or split, or CUE split, waits to try again on its own, at `retryAt`: `catalog-busy` (another job holds the catalog), `catalog-maintenance`, `read-only` (a library it works in is flagged read-only), `storage-unwritable` (a folder refuses the server), `engine-unavailable`, `part-missing` (a file the catalog has is not where it says), `put-back-blocked` (a file going back from the trash cannot), `stopped` (the server stopped or the run ran out of time), or `other`. A task waits at most six hours in a row, then ends safely for how far it went. A string, not a closed enum. 
+/// * [retryAt] - When a waiting task tries again.
+/// * [bookInTrash] - True while a book merge's or split's sources are in the trash and its new files not yet the book: the book is missing from the library until the task finishes. 
 /// * [resultPids] - What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition or playlist sync opened (entry pids). 
 /// * [createdAt] - When the task was queued.
 /// * [finishedAt] - When it reached a terminal state.
-/// * [summary] - Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...). 
+/// * [summary] - Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...); a `path-mismatch` fix also carries `moved` (the items it moved), `held` (by hold code) and `jobPids` (the organize jobs that moved them). 
 @BuiltValue()
 abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   /// Task pid.
@@ -33,7 +37,7 @@ abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   @BuiltValueField(wireName: r'type')
   String get type;
 
-  /// `queued`, `running`, `done`, or `failed`. A string, not a closed enum. 
+  /// `queued`, `running`, `done`, `failed`, or `parked`: a book merge or split, or a CUE split, whose runs kept ending with the server. Parked is terminal and counts as failed: the task is not run again, the delete, Clear finished and the retention prune take it as they take a failed task, and until one does it keeps the book or rip it works on from another merge or split. A string, not a closed enum. 
   @BuiltValueField(wireName: r'state')
   String get state;
 
@@ -41,13 +45,29 @@ abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   @BuiltValueField(wireName: r'itemPid')
   String? get itemPid;
 
+  /// What `itemPid` was called when the task was queued: a book merge's or split's book, a CUE split's album. Absent for other tasks. 
+  @BuiltValueField(wireName: r'itemTitle')
+  String? get itemTitle;
+
   /// Progress in percent when the engine reports it.
   @BuiltValueField(wireName: r'progressPct')
   double? get progressPct;
 
-  /// Why the task failed, when `failed`.
+  /// Why the task failed, when `failed`, or stopped, when `parked`, where it also says where each file the run made or moved is (new files waiting beside the book, originals in the trash) and what clearing the task does with new files still hidden. While a book merge or split, or a CUE split, is `running` it can say what the task waits out instead, in the server's words beside `waitReason`. 
   @BuiltValueField(wireName: r'error')
   String? get error;
+
+  /// Set while a `running` book merge or split, or CUE split, waits to try again on its own, at `retryAt`: `catalog-busy` (another job holds the catalog), `catalog-maintenance`, `read-only` (a library it works in is flagged read-only), `storage-unwritable` (a folder refuses the server), `engine-unavailable`, `part-missing` (a file the catalog has is not where it says), `put-back-blocked` (a file going back from the trash cannot), `stopped` (the server stopped or the run ran out of time), or `other`. A task waits at most six hours in a row, then ends safely for how far it went. A string, not a closed enum. 
+  @BuiltValueField(wireName: r'waitReason')
+  String? get waitReason;
+
+  /// When a waiting task tries again.
+  @BuiltValueField(wireName: r'retryAt')
+  DateTime? get retryAt;
+
+  /// True while a book merge's or split's sources are in the trash and its new files not yet the book: the book is missing from the library until the task finishes. 
+  @BuiltValueField(wireName: r'bookInTrash')
+  bool? get bookInTrash;
 
   /// What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition or playlist sync opened (entry pids). 
   @BuiltValueField(wireName: r'resultPids')
@@ -61,7 +81,7 @@ abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   @BuiltValueField(wireName: r'finishedAt')
   DateTime? get finishedAt;
 
-  /// Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...). 
+  /// Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...); a `path-mismatch` fix also carries `moved` (the items it moved), `held` (by hold code) and `jobPids` (the organize jobs that moved them). 
   @BuiltValueField(wireName: r'summary')
   BuiltMap<String, JsonObject?>? get summary;
 
@@ -110,6 +130,13 @@ class _$ToolTaskSerializer implements PrimitiveSerializer<ToolTask> {
         specifiedType: const FullType(String),
       );
     }
+    if (object.itemTitle != null) {
+      yield r'itemTitle';
+      yield serializers.serialize(
+        object.itemTitle,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.progressPct != null) {
       yield r'progressPct';
       yield serializers.serialize(
@@ -122,6 +149,27 @@ class _$ToolTaskSerializer implements PrimitiveSerializer<ToolTask> {
       yield serializers.serialize(
         object.error,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.waitReason != null) {
+      yield r'waitReason';
+      yield serializers.serialize(
+        object.waitReason,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.retryAt != null) {
+      yield r'retryAt';
+      yield serializers.serialize(
+        object.retryAt,
+        specifiedType: const FullType(DateTime),
+      );
+    }
+    if (object.bookInTrash != null) {
+      yield r'bookInTrash';
+      yield serializers.serialize(
+        object.bookInTrash,
+        specifiedType: const FullType(bool),
       );
     }
     if (object.resultPids != null) {
@@ -202,6 +250,14 @@ class _$ToolTaskSerializer implements PrimitiveSerializer<ToolTask> {
           if (valueDes == null) continue;
           result.itemPid = valueDes;
           break;
+        case r'itemTitle':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.itemTitle = valueDes;
+          break;
         case r'progressPct':
           final valueDes = serializers.deserialize(
             value,
@@ -217,6 +273,30 @@ class _$ToolTaskSerializer implements PrimitiveSerializer<ToolTask> {
           ) as String?;
           if (valueDes == null) continue;
           result.error = valueDes;
+          break;
+        case r'waitReason':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.waitReason = valueDes;
+          break;
+        case r'retryAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
+          result.retryAt = valueDes;
+          break;
+        case r'bookInTrash':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.bookInTrash = valueDes;
           break;
         case r'resultPids':
           final valueDes = serializers.deserialize(

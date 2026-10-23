@@ -884,8 +884,7 @@ func (l *Library) SetLibraryMatching(ctx context.Context, uc *UserCtx, apiLibrar
 	if err := l.db.SettingSet(ctx, "matching:"+string(pid), matching.Mode, time.Now().UnixNano()); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
-	l.Audit(ctx, uc, "library.matching",
-		AuditTarget{Kind: "library", PID: apiLibraryPID},
+	l.Audit(ctx, uc, "library.matching", l.libraryAuditTarget(ctx, apiLibraryPID, pid),
 		map[string]any{"mode": matching.Mode, "singlesAutoApply": matching.SinglesAutoApply})
 	return nil
 }

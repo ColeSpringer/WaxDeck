@@ -212,12 +212,22 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 		settingRadioExternalArt: strconv.FormatBool(s.RadioExternalArt),
 	}
 	wasRadioArt := l.RadioExternalArtEnabled()
+	wasReadOnly := l.ServerReadOnly()
 	for k, v := range writes {
 		if err := l.db.SettingSet(ctx, k, v, now); err != nil {
 			return AdminSettings{}, &Error{Kind: KindInternal, Err: err}
 		}
 	}
 	l.loadRuntimeToggles(ctx)
+	if wasReadOnly != s.ReadOnly {
+		// The session carries the flag, and the account marker is what
+		// makes an open client read it again.
+		l.emitEveryoneEvent(ctx, eventAccount)
+	}
+	if wasReadOnly && !s.ReadOnly {
+		// No managed root was probed while the server was read-only.
+		l.probeRoots()
+	}
 	if wasRadioArt && !s.RadioExternalArt {
 		// Switching the rung off drops what it fetched. The read path
 		// refuses while it is off regardless, so this is about not
@@ -286,6 +296,28 @@ func (l *Library) TranscodingLimitsPut(ctx context.Context, actor *UserCtx, lim 
 	return lim, nil
 }
 
+// libraryAuditTarget names a library action's target by pid and by the
+// name the library goes by, which the entry keeps once the library is
+// gone.
+func (l *Library) libraryAuditTarget(ctx context.Context, apiLibraryPID string, pid model.PID) AuditTarget {
+	return AuditTarget{Kind: "library", PID: apiLibraryPID, Name: l.libraryName(ctx, pid)}
+}
+
+// libraryName is the name a library goes by: its root's, or, for a
+// podcast library, which is not a root, the name the podcast directory is
+// mounted under. Empty for a library the catalog does not list.
+func (l *Library) libraryName(ctx context.Context, pid model.PID) string {
+	for _, r := range l.libraryRoots() {
+		if r.PID == string(pid) {
+			return r.Name
+		}
+	}
+	if lib, err := l.libraryByPID(ctx, pid); err == nil && lib.Mode == model.ModePodcast {
+		return l.podcastRootName
+	}
+	return ""
+}
+
 // LibraryReadOnlySet flips one library's read-only flag, which the
 // catalog keeps and enforces file by file.
 func (l *Library) LibraryReadOnlySet(ctx context.Context, actor *UserCtx, apiLibraryPID string, readOnly bool) error {
@@ -297,8 +329,7 @@ func (l *Library) LibraryReadOnlySet(ctx context.Context, actor *UserCtx, apiLib
 		return classify(err)
 	}
 	l.refreshLibraryState(ctx)
-	l.Audit(ctx, actor, "library.read-only",
-		AuditTarget{Kind: "library", PID: apiLibraryPID},
+	l.Audit(ctx, actor, "library.read-only", l.libraryAuditTarget(ctx, apiLibraryPID, pid),
 		map[string]any{"readOnly": readOnly})
 	return nil
 }
@@ -330,24 +361,31 @@ func (l *Library) LibraryFolderFallbackSet(ctx context.Context, actor *UserCtx, 
 		return classify(err)
 	}
 	l.refreshLibraryState(ctx)
-	l.Audit(ctx, actor, "library.folder-fallback",
-		AuditTarget{Kind: "library", PID: apiLibraryPID},
+	l.Audit(ctx, actor, "library.folder-fallback", l.libraryAuditTarget(ctx, apiLibraryPID, pid),
 		map[string]any{"folderFallback": on})
 	return nil
 }
 
-// errReadOnly is the uniform refusal for writes into read-only scope.
+// errReadOnly is the refusal for writes into a read-only library.
 func errReadOnly(what string) error {
 	return &Error{Kind: KindReadOnly, Msg: what + " is read-only on this server"}
 }
+
+// errServerReadOnly is the refusal while the server-wide switch is on.
+func errServerReadOnly() error {
+	return &Error{Kind: KindReadOnly, Msg: "the server is in read-only mode"}
+}
+
+// ServerReadOnly reports the server-wide read-only switch, the flag the
+// session carries to every signed-in client.
+func (l *Library) ServerReadOnly() bool { return l.currentToggles().readOnly }
 
 // CheckWritable refuses when the whole server, or the named library, is
 // read-only. An empty library pid checks only the global flag (staging
 // surfaces that have no target library yet).
 func (l *Library) CheckWritable(ctx context.Context, bareLibraryPID string) error {
-	t := l.currentToggles()
-	if t.readOnly {
-		return errReadOnly("the library")
+	if l.ServerReadOnly() {
+		return errServerReadOnly()
 	}
 	if bareLibraryPID != "" && l.libraryReadOnly(bareLibraryPID) {
 		return errReadOnly("this library")

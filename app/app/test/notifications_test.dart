@@ -76,6 +76,7 @@ void main() {
         NotificationKind.playlistSynced: 'playlist-synced',
         NotificationKind.jobFinished: 'job-finished',
         NotificationKind.jobFailed: 'job-failed',
+        NotificationKind.toolTaskFailed: 'tool-task-failed',
         NotificationKind.healthFixFinished: 'health-fix-finished',
       };
       for (final entry in events.entries) {

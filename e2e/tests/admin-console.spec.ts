@@ -1,7 +1,17 @@
 import type { Request } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { T } from './driver';
-import { clickThrough, clickToward, clickUntilRequested, typeInto } from './driver/gestures';
+import { J, T } from './driver';
+import {
+  chooseFromMenu,
+  chooseOnce,
+  clickThrough,
+  clickToward,
+  clickUntilRequested,
+  typeInto,
+  typeOnce,
+  wheelIntoReach,
+} from './driver/gestures';
+import { removeLibraryIfThere } from './driver/libraries';
 import { SemanticsIds } from './semantics-ids';
 
 // The console's oversight surfaces over the real stack. Each write is a
@@ -98,6 +108,107 @@ test('a role granted mid-session reaches the app that is already open', async ({
   // No reload anywhere: the server marks the account changed, the app
   // re-reads its session, and the gates that watch it follow.
   await expect(theirs.settings.section('server')).toBeVisible({ timeout: T.fetch });
+});
+
+// An administrator's Tasks list holds everyone's rows, so the sweep is
+// two: their own, and everyone's behind a question. The wide sweep is
+// never sent here: on a shared stack it would empty finished tasks other
+// workers are polling, and the server and widget suites pin what it
+// deletes.
+test('clearing every member\'s tasks asks first', async ({ app }) => {
+  // A finished task of this account's own: a dry-run genre pass reads the
+  // catalog and writes nothing.
+  const started = await app.api.post('/admin/genre-normalize', { data: { dryRun: true } });
+  await expect
+    .poll(
+      async () =>
+        (await app.api.get('/tools/tasks/{taskId}', { path: { taskId: started.id } })).state,
+      { timeout: T.fetch, message: 'the dry run should finish' },
+    )
+    .toBe('done');
+
+  const isSweep = (r: Request) =>
+    r.url().endsWith('/tools/tasks/clear-finished') && r.method() === 'POST';
+  let sweeps = 0;
+  app.page.on('request', (r) => {
+    if (isSweep(r)) sweeps++;
+  });
+  const menu = app.admin.control(SemanticsIds.tasksClearFinished);
+  const row = app.admin.control(SemanticsIds.taskRow(started.id));
+
+  await app.nav.enter('tasks');
+  await expect(row).toBeVisible({ timeout: T.fetch });
+  await chooseFromMenu(menu, app.admin.control(SemanticsIds.tasksClearFinishedAll), {
+    settled: app.admin.control(SemanticsIds.tasksClearFinishedConfirm),
+  });
+  await expect(app.admin.text('Clear every member\'s finished tasks?')).toBeVisible();
+  expect(sweeps, 'the wide sweep waits for a yes').toBe(0);
+  const kept = await app.api.raw.get('/tools/tasks/{taskId}', { path: { taskId: started.id } });
+  expect(kept.status(), 'the question deletes nothing').toBe(200);
+
+  // Their own sweep needs no question, and sends the scope it means.
+  await app.nav.enter('tasks');
+  await expect(row).toBeVisible({ timeout: T.fetch });
+  const swept = app.page.waitForResponse((r) => isSweep(r.request()), { timeout: T.fetch });
+  await chooseFromMenu(menu, app.admin.control(SemanticsIds.tasksClearFinishedMine));
+  const response = await swept;
+  expect(response.request().postDataJSON()).toEqual({ scope: 'mine' });
+  expect(response.status()).toBe(200);
+  await expect(row).toBeHidden({ timeout: T.fetch });
+  const gone = await app.api.raw.get('/tools/tasks/{taskId}', { path: { taskId: started.id } });
+  expect(gone.status()).toBe(404);
+});
+
+// A library added at runtime is removed from its row's menu behind its
+// name typed back, and its row goes once the removal has run. The name
+// is this attempt's own, so an earlier attempt's never stands in its way,
+// and whatever fails the library is taken out at the end; its folder is
+// empty, so nothing beside this test shifts.
+test('a library is removed from the console behind its typed name', async ({ app }) => {
+  // Long: the create rescans every root, and the removal waits out that
+  // scan's hold on the catalog.
+  test.setTimeout(J.long);
+  const fs = await import('node:fs/promises');
+  const pathMod = await import('node:path');
+  const name = `e2e-removable-${Date.now().toString(36)}`;
+  const dir = pathMod.join(pathMod.resolve(process.cwd(), '.run'), name);
+  await fs.mkdir(dir, { recursive: true });
+  const created = await app.api.post('/libraries', {
+    data: { name, path: dir, media: 'music' as const, managed: false },
+  });
+  try {
+    const page = app.page;
+    const control = (id: string) => app.admin.control(id);
+    await app.nav.enter('adminLibraries');
+    const row = control(SemanticsIds.libraryRow(created.pid));
+    await expect(row).toBeVisible({ timeout: T.fetch });
+
+    const isRemove = (r: Request) =>
+      r.method() === 'DELETE' && r.url().endsWith(`/libraries/${created.pid}`);
+    // The create's scan can hold the catalog's lease when the confirm
+    // lands, which the server answers catalog-busy and the dialog closes
+    // on: the whole ask goes again until a removal starts. The new
+    // library's card sits below the fold, so each ask wheels it into
+    // reach first.
+    const menu = control(SemanticsIds.libraryMenu(created.pid));
+    const field = control(SemanticsIds.confirmField);
+    await expect(async () => {
+      await wheelIntoReach(page, menu);
+      await chooseOnce(menu, control(SemanticsIds.libraryRemove(created.pid)), { settled: field });
+      await typeOnce(page, field, name);
+      const answered = page
+        .waitForResponse((r) => isRemove(r.request()), { timeout: T.step })
+        .catch(() => null);
+      await clickToward(control(SemanticsIds.libraryRemoveConfirm), { gone: field });
+      expect((await answered)?.status()).toBe(202);
+    }).toPass({ timeout: T.fetch });
+
+    await expect(row).toBeHidden({ timeout: T.nav });
+    const listed = await app.api.get('/libraries');
+    expect(listed.libraries.map((l) => l.pid)).not.toContain(created.pid);
+  } finally {
+    await removeLibraryIfThere(app.api, created.pid);
+  }
 });
 
 // An organize profile made in the console lists with its sample, lays out

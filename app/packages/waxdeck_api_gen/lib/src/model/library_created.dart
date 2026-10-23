@@ -22,6 +22,9 @@ part 'library_created.g.dart';
 /// * [folderFallback] - A scan names an untagged file from its folders (setLibraryFolderFallback). In-place libraries only. 
 /// * [managed] - The catalog may place and move files in the library.
 /// * [profile] - The organize profile a managed library is laid out by.
+/// * [configured] - The server's configuration names the library (`WAXDECK_LIBRARY_ROOTS`), so every start registers it and removeLibrary refuses it until the configuration drops it. Absent means false. 
+/// * [unreachable] - The library's folder was not there at its last scan, which marked nothing under it missing: its items stay listed and play once it is back. Absent means false. 
+/// * [writable] - For a managed library, whether the server could write to its folder when last checked; when false, uploads, organize moves and deletes into it fail. The server checks when it starts, when the library is created or arrives from elsewhere (the waxbin CLI), when its read-only flag or the server's is lifted, every half hour, and after a write into a library's folder is refused; listing the libraries checks nothing. Absent on an in-place library and on one the server treats as read-only (its own flag or the whole server's), which are not checked. 
 /// * [streamingWarning] - Present when the library exists but streaming from it does not work yet, saying what an administrator still has to do. Creating a root reconciles the WaxFlow sidecar so it serves the same directory; where that cannot happen (a sidecar too old to reload, a path it cannot open) browsing, downloading, and direct playback still work and streaming waits for a sidecar restart. Absent means streaming works now. 
 /// * [scanStarted] - Whether creating the library started a scan of every root. False when another catalog job was already running: that job began before this root existed, so the root is indexed by the next scan, which an administrator can start from the rescan endpoint once the running job ends. 
 @BuiltValue()
@@ -57,24 +60,17 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
     LibraryCreated object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    if (object.path != null) {
-      yield r'path';
+    if (object.configured != null) {
+      yield r'configured';
       yield serializers.serialize(
-        object.path,
-        specifiedType: const FullType(String),
-      );
-    }
-    if (object.scanStarted != null) {
-      yield r'scanStarted';
-      yield serializers.serialize(
-        object.scanStarted,
+        object.configured,
         specifiedType: const FullType(bool),
       );
     }
-    if (object.folderFallback != null) {
-      yield r'folderFallback';
+    if (object.unreachable != null) {
+      yield r'unreachable';
       yield serializers.serialize(
-        object.folderFallback,
+        object.unreachable,
         specifiedType: const FullType(bool),
       );
     }
@@ -85,11 +81,6 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
         specifiedType: const FullType(bool),
       );
     }
-    yield r'managed';
-    yield serializers.serialize(
-      object.managed,
-      specifiedType: const FullType(bool),
-    );
     if (object.profile != null) {
       yield r'profile';
       yield serializers.serialize(
@@ -97,11 +88,6 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
         specifiedType: const FullType(String),
       );
     }
-    yield r'name';
-    yield serializers.serialize(
-      object.name,
-      specifiedType: const FullType(String),
-    );
     yield r'pid';
     yield serializers.serialize(
       object.pid,
@@ -133,6 +119,44 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
         specifiedType: const FullType(int),
       );
     }
+    if (object.writable != null) {
+      yield r'writable';
+      yield serializers.serialize(
+        object.writable,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.path != null) {
+      yield r'path';
+      yield serializers.serialize(
+        object.path,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.scanStarted != null) {
+      yield r'scanStarted';
+      yield serializers.serialize(
+        object.scanStarted,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.folderFallback != null) {
+      yield r'folderFallback';
+      yield serializers.serialize(
+        object.folderFallback,
+        specifiedType: const FullType(bool),
+      );
+    }
+    yield r'managed';
+    yield serializers.serialize(
+      object.managed,
+      specifiedType: const FullType(bool),
+    );
+    yield r'name';
+    yield serializers.serialize(
+      object.name,
+      specifiedType: const FullType(String),
+    );
   }
 
   @override
@@ -156,29 +180,21 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
       final key = serializedList[i] as String;
       final value = serializedList[i + 1];
       switch (key) {
-        case r'path':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType.nullable(String),
-          ) as String?;
-          if (valueDes == null) continue;
-          result.path = valueDes;
-          break;
-        case r'scanStarted':
+        case r'configured':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType.nullable(bool),
           ) as bool?;
           if (valueDes == null) continue;
-          result.scanStarted = valueDes;
+          result.configured = valueDes;
           break;
-        case r'folderFallback':
+        case r'unreachable':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType.nullable(bool),
           ) as bool?;
           if (valueDes == null) continue;
-          result.folderFallback = valueDes;
+          result.unreachable = valueDes;
           break;
         case r'mediaDeclared':
           final valueDes = serializers.deserialize(
@@ -188,13 +204,6 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
           if (valueDes == null) continue;
           result.mediaDeclared = valueDes;
           break;
-        case r'managed':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(bool),
-          ) as bool;
-          result.managed = valueDes;
-          break;
         case r'profile':
           final valueDes = serializers.deserialize(
             value,
@@ -202,13 +211,6 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
           ) as String?;
           if (valueDes == null) continue;
           result.profile = valueDes;
-          break;
-        case r'name':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(String),
-          ) as String;
-          result.name = valueDes;
           break;
         case r'pid':
           final valueDes = serializers.deserialize(
@@ -247,6 +249,52 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
           ) as int?;
           if (valueDes == null) continue;
           result.itemCount = valueDes;
+          break;
+        case r'writable':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.writable = valueDes;
+          break;
+        case r'path':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.path = valueDes;
+          break;
+        case r'scanStarted':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.scanStarted = valueDes;
+          break;
+        case r'folderFallback':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.folderFallback = valueDes;
+          break;
+        case r'managed':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.managed = valueDes;
+          break;
+        case r'name':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.name = valueDes;
           break;
         default:
           unhandled.add(key);

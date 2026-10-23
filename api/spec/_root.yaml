@@ -134,7 +134,11 @@ info:
       kind of upload - an imported backup archive, a staged account
       data export), `storage-full` (the server has no room to stage what
       the request declared - its own disk, not the caller's allowance,
-      so the caller has nothing to clear), `field-locked`
+      so the caller has nothing to clear), `storage-unwritable` (a
+      library folder refused a write the request needed, through its
+      permissions or a read-only mount, and the write was not made;
+      fixing the folder's ownership or mount is what clears it),
+      `field-locked`
       (the edit targets a locked metadata field and did not set
       `force`), `unsupported-format` (the uploaded file's format
       is not accepted by this server), `drm-protected` (the uploaded
@@ -164,20 +168,44 @@ info:
       capability, and `pid`, the subject it was asked about; the values
       defined for `feature` so far are `windowed-track` (a track that is a
       window into a larger file, sent to a device endpoint on a server
-      running without the streaming engine) and `podcasts` (a subscribe
-      or an OPML import on a server whose podcasts are turned off), and
-      other refusals under that code carry no params yet. Under
+      running without the streaming engine), `podcasts` (a subscribe
+      or an OPML import on a server whose podcasts are turned off) and
+      `streaming-engine` (a request only the streaming engine can serve,
+      such as a queue timeline, a stream of a carved window, voice
+      boost, a format or a bitrate, a device queue only it renders, or
+      a book merge or split or a CUE split, on a server whose engine is
+      configured but not reachable right now: a 503 with `Retry-After`,
+      while play-info mints the original's bytes and `/health.streaming`
+      says when the engine answers again), and other refusals under that
+      code carry no params yet. Under
       `conflict`, a bookmark create replaying the id of a removed
       bookmark carries `reason: removed`,
       and a client drops its copy; a completed upload whose bytes miss
       their declared SHA-256 carries `reason: checksum-mismatch`, its
-      session already ended. Under `unsupported-format`,
+      session already ended; and a book merge or split, or a CUE split,
+      refused before it is queued carries the `reason` its operation
+      names (`task-running`, with `task`, the one at work on the same
+      book or rip; `task-parked`, with `task`, the one that stopped part
+      way on it and is parked until it is cleared in Tasks;
+      `name-taken`, with `name` and `folder`;
+      `copy-elsewhere`, with `copy` and `library`; `parts-in-trash`, with
+      `count`, the files a merge or split that did not finish left in
+      the trash, `files`, the first few of them, and `more`, how many
+      `files` leaves out; and `single-file`, `multi-file`,
+      `no-chapters`, `no-cuts`, `no-sample-rate`, `no-file` or
+      `no-sheet`); a
+      tool task whose clear could not name or remove its hidden files
+      carries `reason: outputs-hidden`, with `folder` and `cause`, and
+      stays. Under `unsupported-format`,
       `reason: unreadable` marks a completed upload whose bytes do not
       read as audio at all, a damaged file rather than a format the
       server refuses. Under `invalid-request`, `reason` names
       two refusals a client words itself: `incompatible-schema` (a backup
       whose schema this server cannot open) and `cue-rip` (a delete
-      naming some tracks of a cue rip but not all); a subscribe also
+      naming some tracks of a cue rip but not all, which also carries
+      `tracks`: every track of the rips it named some of, comma-separated
+      in the order they play, for the client to offer them together); a
+      subscribe also
       names the feed address it will not take, in a message that is
       already a sentence for a person (an import names it per entry, in
       the entry's `reason`): `not-a-feed` (it answered with something
@@ -224,7 +252,12 @@ info:
       stream parameters the server chose, so it opens no other route and
       a URL with those parameters edited, added or dropped answers
       `unauthenticated`, save the server's own cut of a stream that
-      cannot be range-seeked (see `PlayInfo.startOffsetMs`); on
+      cannot be range-seeked (see `PlayInfo.startOffsetMs`). The one
+      exception: a stream token for an item's own bytes (no window,
+      voice boost, format or bitrate the engine makes) also opens
+      `/media/download`, which serves those same bytes, and does so
+      whether or not the streaming engine is answering; a window of a
+      larger file opens it only while the engine is not. On
       `/media/hls` it binds the queue, or the one item rendering, it was
       minted for, so it opens no other queue's or item's playlists and
       segments. Every fetch

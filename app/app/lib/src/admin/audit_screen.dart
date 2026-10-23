@@ -301,7 +301,7 @@ class _AuditRow extends StatelessWidget {
                       ),
                     ),
                     WaxIcon(
-                      expanded ? WaxIcons.collapse : WaxIcons.expand,
+                      expanded ? WaxIcons.collapse : WaxIcons.forward,
                       size: 16,
                       color: colors.textTertiary,
                     ),
@@ -323,20 +323,62 @@ class _AuditRow extends StatelessWidget {
               color: colors.surface1,
               borderRadius: WaxRadius.chip,
             ),
-            // Detail is one JSON block and stays tabular: it scrolls
-            // sideways in its own box rather than wrapping into
-            // something nobody can read.
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Text(
-                event.detail.isEmpty
-                    ? l10n.adminAuditNoDetail
-                    : const JsonEncoder.withIndent('  ').convert(event.detail),
-                style: WaxType.monoData.copyWith(color: colors.textSecondary),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                // What an edit changed, read before the JSON that holds it.
+                for (final line in _changeLines(l10n, event.detail))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: WaxSpace.s4),
+                    child: Text(
+                      line,
+                      style: WaxType.monoData.copyWith(
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                // Detail is one JSON block and stays tabular: it scrolls
+                // sideways in its own box rather than wrapping into
+                // something nobody can read.
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Text(
+                    event.detail.isEmpty
+                        ? l10n.adminAuditNoDetail
+                        : const JsonEncoder.withIndent(
+                            '  ',
+                          ).convert(event.detail),
+                    style: WaxType.monoData.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
       ],
     );
   }
 }
+
+/// The changes an event recorded as "field: from -> to" lines, in field
+/// order. An entry that is not a from and a to is left to the JSON below
+/// it: a detail shape this screen does not know is not worth a guess.
+List<String> _changeLines(AppLocalizations l10n, Map<String, Object?> detail) {
+  final changes = detail['changes'];
+  if (changes is! Map) return const <String>[];
+  final fields = changes.keys.whereType<String>().toList()..sort();
+  return <String>[
+    for (final field in fields)
+      if (changes[field] case {'from': final from, 'to': final to})
+        l10n.adminAuditChange(field, _changeValue(from), _changeValue(to)),
+  ];
+}
+
+/// A recorded value as it reads in a line: text as it is, an empty string
+/// quoted so it shows, everything else as the JSON it came as.
+String _changeValue(Object? value) => switch (value) {
+  '' => '""',
+  final String text => text,
+  _ => jsonEncode(value),
+};

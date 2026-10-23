@@ -333,7 +333,7 @@ func TestADeletedRequesterLeavesTheOthersHeld(t *testing.T) {
 	if kept.ID < gone.ID {
 		gone, kept = kept, gone
 	}
-	if err := s.svc.DeleteAccount(s.ctx, gone.ID); err != nil {
+	if _, err := s.svc.DeleteAccount(s.ctx, nil, gone.ID, AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
 	if !s.svc.DrainFetchQueue(s.ctx) {

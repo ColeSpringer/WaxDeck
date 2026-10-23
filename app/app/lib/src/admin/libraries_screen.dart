@@ -86,11 +86,7 @@ class _LibraryTable extends ConsumerWidget {
           label: l10n.adminLibrariesColumnName,
           priority: WaxColumnPriority.primary,
           text: (library) => library.name,
-          cell: (context, library) => Text(
-            library.name,
-            style: WaxType.titleItem.copyWith(color: colors.textPrimary),
-            overflow: TextOverflow.ellipsis,
-          ),
+          cell: (context, library) => _LibraryName(library: library),
         ),
         WaxColumn<LibraryInfo>(
           label: l10n.adminLibrariesColumnPath,
@@ -194,6 +190,20 @@ class _LibraryTable extends ConsumerWidget {
                   },
                 ),
         ),
+        // The row's menu, a column of its own: the trailing slot holds
+        // the rescan button alone. The podcast library follows the
+        // podcast folder and is never removed here. Aligned, so a card's
+        // row does not stretch the button across it.
+        WaxColumn<LibraryInfo>(
+          label: l10n.adminLibrariesColumnActions,
+          width: 80,
+          cell: (context, library) => library.media == 'podcast'
+              ? const SizedBox.shrink()
+              : Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: _LibraryMenu(library: library),
+                ),
+        ),
       ],
       // A rescan reads every root but the podcast library, whose episodes
       // the podcast engine catalogs.
@@ -210,6 +220,103 @@ class _LibraryTable extends ConsumerWidget {
         'podcast' => l10n.adminLibraryMediaPodcasts,
         _ => l10n.adminLibraryMediaMixed,
       };
+}
+
+/// A library's name, with what the server says of it beside its policy:
+/// that its configuration names it, that its folder was not there at the
+/// last scan, or that it is managed and refuses the server's writes.
+class _LibraryName extends StatelessWidget {
+  const _LibraryName({required this.library});
+
+  final LibraryInfo library;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    Widget caption(String text, Color color) =>
+        Text(text, style: WaxType.caption.copyWith(color: color));
+    final captions = <Widget>[
+      if (library.configured)
+        caption(l10n.adminLibraryConfigured, colors.textTertiary),
+      if (library.unreachable)
+        caption(l10n.adminLibraryUnreachable, colors.error),
+      if (library.managed && library.writable == false)
+        caption(l10n.adminLibraryUnwritable, colors.error),
+    ];
+    final name = Text(
+      library.name,
+      style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+      overflow: TextOverflow.ellipsis,
+    );
+    if (captions.isEmpty) return name;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[name, ...captions],
+    );
+  }
+}
+
+/// A library's menu: removing it, behind its name typed back. A library
+/// the configuration names comes back at every start, so its row says
+/// where it is removed instead.
+class _LibraryMenu extends ConsumerWidget {
+  const _LibraryMenu({required this.library});
+
+  final LibraryInfo library;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    return WaxMenuButton<String>(
+      glyph: WaxIcons.moreVertical,
+      label: l10n.adminLibraryActions(library.name),
+      semanticsId: SemanticsIds.libraryMenu(library.pid),
+      items: <WaxMenuItem<String>>[
+        WaxMenuItem<String>(
+          value: 'remove',
+          label: l10n.adminLibraryRemove,
+          glyph: WaxIcons.delete,
+          destructive: true,
+          enabled: !library.configured,
+          help: library.configured ? l10n.adminLibraryRemoveConfigured : null,
+          semanticsId: SemanticsIds.libraryRemove(library.pid),
+        ),
+      ],
+      onSelected: (_) => _remove(context),
+    );
+  }
+
+  Future<void> _remove(BuildContext context) async {
+    final l10n = context.l10n;
+    // The row is gone by the answer; the container outlives it.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider.notifier);
+    final confirmed = await showTypedConfirm(
+      context,
+      title: l10n.adminLibraryRemoveTitle(library.name),
+      message: l10n.adminLibraryRemoveBody,
+      confirmWord: library.name,
+      confirmLabel: l10n.adminLibraryRemoveAction,
+      fieldSemanticsId: SemanticsIds.confirmField,
+      confirmSemanticsId: SemanticsIds.libraryRemoveConfirm,
+      cancelSemanticsId: SemanticsIds.confirmCancel,
+    );
+    if (!confirmed) return;
+    try {
+      await container.read(repositoryProvider).removeLibrary(library.pid);
+      messenger.show(l10n.adminLibraryRemoving(library.name));
+    } on WaxDeckApiException catch (error) {
+      messenger.show(explainError(l10n, error));
+    }
+    // A refusal for a running job proves the job list stale too.
+    container
+      ..invalidate(librariesProvider)
+      ..invalidate(libraryCountsProvider)
+      ..invalidate(adminJobsProvider)
+      ..invalidate(organizeProfilesProvider);
+  }
 }
 
 /// What a library holds, changed in place after saying what the change
@@ -572,6 +679,7 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
   final TextEditingController _path = TextEditingController();
   String _media = 'mixed';
   bool _managed = false;
+  bool _absent = false;
   bool _busy = false;
 
   /// What the last create said about streaming, kept on screen until the
@@ -605,12 +713,15 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
             path: path,
             media: _media,
             managed: _managed,
+            allowAbsent: _absent,
           );
       // The form may have gone while the create was in flight.
       if (!mounted) return;
       ref
         ..invalidate(librariesProvider)
         ..invalidate(libraryCountsProvider)
+        // Organize counts the managed libraries it can lay out.
+        ..invalidate(organizeProfilesProvider)
         // The create starts a scan of the new root server-side, so the
         // job list is stale the moment it returns - the same three the
         // rescan button invalidates, for the same reason. Left out, the
@@ -623,6 +734,7 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
       setState(() {
         _media = 'mixed';
         _managed = false;
+        _absent = false;
         _warning = created.streamingWarning;
       });
       messenger.show(
@@ -700,6 +812,18 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
                   onChanged: _busy
                       ? null
                       : (value) => setState(() => _managed = value),
+                ),
+              ),
+              WaxSettingRow(
+                title: l10n.adminLibraryAbsentTitle,
+                help: l10n.adminLibraryAbsentHelp,
+                control: WaxSwitch(
+                  label: l10n.adminLibraryAbsentTitle,
+                  value: _absent,
+                  semanticsId: SemanticsIds.libraryAbsent,
+                  onChanged: _busy
+                      ? null
+                      : (value) => setState(() => _absent = value),
                 ),
               ),
               const SizedBox(height: WaxSpace.s16),

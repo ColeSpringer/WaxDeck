@@ -216,9 +216,13 @@ func TestMediaTokensStopWhenTheirPrincipalDoes(t *testing.T) {
 	}
 }
 
-// An account refused download-info cannot take its stream URL to
-// /media/download for the original instead.
-func TestNoDownloadAccountCannotUseTheDownloadRoute(t *testing.T) {
+// An account refused download-info gets nothing from /media/download its
+// stream does not already give it. Its stream of an original, taken there,
+// plays those same bytes inline, as the stream route passes them through
+// (the route takes such a token whatever the engine is doing, so a direct
+// URL minted in an outage outlives it); a stream the engine shapes, a
+// capped transcode, opens nothing there; and a download is refused.
+func TestNoDownloadAccountGetsNoDownloadFromTheDownloadRoute(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	pid := h.items(t, "?limit=1").Items[0].Pid
@@ -228,8 +232,22 @@ func TestNoDownloadAccountCannotUseTheDownloadRoute(t *testing.T) {
 	wantStatus(t, get(t, h.ts, "/api/v1/items/"+pid+"/download-info", token), 403, "download-info")
 	pi := decode[PlayInfo](t, get(t, h.ts, "/api/v1/items/"+pid+"/play-info", token))
 	swapped := strings.Replace(pi.Url, "/media/stream?", "/media/download?", 1)
-	if code := fetchStatus(t, h, swapped); code != http.StatusUnauthorized {
-		t.Errorf("the stream token on the download route = %d, want 401", code)
+	resp, err := http.Get(h.ts.URL + swapped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Disposition"), "inline") {
+		t.Errorf("the stream of an original on the download route = %d %q, want 200 inline",
+			resp.StatusCode, resp.Header.Get("Content-Disposition"))
+	}
+	capped := decode[PlayInfo](t, get(t, h.ts, "/api/v1/items/"+pid+"/play-info?maxBitrateKbps=96", token))
+	if !strings.Contains(capped.Url, "br=96") {
+		t.Fatalf("the capped mint = %s, want a capped stream", capped.Url)
+	}
+	if code := fetchStatus(t, h, strings.Replace(capped.Url, "/media/stream?", "/media/download?", 1)); code != http.StatusUnauthorized {
+		t.Errorf("a capped stream on the download route = %d, want 401", code)
 	}
 	// A download token from before the right was withdrawn stops too.
 	dl, _ := h.media.MintFor(auth.MediaClaims{User: id, Cred: "se:" + session, Purpose: auth.PurposeDownload, PID: pid}, 0)

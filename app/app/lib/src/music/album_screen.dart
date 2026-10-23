@@ -11,6 +11,7 @@ import '../auth/auth_controller.dart';
 import '../discovery/discovery_actions.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_delete.dart';
 import '../library/item_kind.dart';
 import '../library/item_menu.dart';
 import '../sharing/share_dialog.dart';
@@ -284,6 +285,41 @@ class _Header extends ConsumerWidget {
     );
   }
 
+  /// Deletes every track of the album or none, as the kind change names
+  /// them, and leaves the release once it is gone.
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final List<ItemSummary> all;
+    try {
+      all = await ref
+          .read(
+            musicItemsProvider((
+              dimension: MusicDimension.albums,
+              segment: pid,
+            )).notifier,
+          )
+          .readThrough(atMost: itemDeleteMaxItems);
+    } on WaxDeckApiException catch (e) {
+      messenger.show(explainError(l10n, e));
+      return;
+    }
+    if (all.length > itemDeleteMaxItems) {
+      messenger.show(l10n.libraryDeleteAlbumTooLarge(itemDeleteMaxItems));
+      return;
+    }
+    if (!context.mounted) return;
+    await confirmDeleteItems(
+      context,
+      pids: [for (final t in albumOrder(all)) t.pid],
+      onDeleted: () {
+        if (context.mounted) {
+          context.leave(fallback: WaxRoute.musicIndex(MusicDimension.albums));
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isAdmin =
@@ -374,6 +410,13 @@ class _Header extends ConsumerWidget {
                 glyph: WaxIcons.audiobooks,
                 semanticsId: SemanticsIds.itemMenuKindAlbum,
               ),
+            if (tracks.isNotEmpty && canDeleteItems(ref))
+              WaxMenuItem<String>(
+                value: 'delete',
+                label: context.l10n.libraryDeleteFilesMenu,
+                glyph: WaxIcons.delete,
+                semanticsId: SemanticsIds.itemMenuDelete,
+              ),
           ],
           // Every value named, none inferred: the last arm used to be
           // "anything else opens the editor", which would hand the
@@ -392,6 +435,8 @@ class _Header extends ConsumerWidget {
                 unawaited(context.push(WaxRoute.metadata(pid)));
               case 'kind':
                 unawaited(_toBook(context, ref));
+              case 'delete':
+                unawaited(_delete(context, ref));
             }
           },
         ),

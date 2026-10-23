@@ -53,7 +53,7 @@ func TestWatchPendingRequeueWaitsAgain(t *testing.T) {
 	if len(due) != 1 {
 		t.Fatalf("due = %v, want one directory", due)
 	}
-	p.note(due[0], base.Add(10*time.Second))
+	p.renote(due, base.Add(10*time.Second))
 	if due := p.due(base.Add(15 * time.Second)); len(due) != 0 {
 		t.Fatalf("requeued directory came back early: %v", due)
 	}

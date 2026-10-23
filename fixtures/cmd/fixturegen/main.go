@@ -1,7 +1,7 @@
 // Command fixturegen writes a synthesized fixture library to a
 // directory and prints the file list, one path per line.
 //
-//	fixturegen -out <dir> [-preset default|demo|conformance|upload|upload-folder|upload-workbench|saf-probe|cover|podcast|book|loose-book|misfiled-book|all] [-base-url <url>]
+//	fixturegen -out <dir> [-preset default|demo|conformance|upload|upload-folder|upload-workbench|saf-probe|cover|podcast|book|loose-book|misfiled-book|tool-books|all] [-base-url <url>]
 package main
 
 import (
@@ -15,7 +15,7 @@ import (
 func main() {
 	out := flag.String("out", "", "output directory (required)")
 	preset := flag.String("preset", "default",
-		"spec preset: default (the codec/container matrix), demo (a titled album), conformance (the engine-suite tone), long (a ten-second lossless track on its own album), upload (the manual-upload album), upload-folder (the folder-pick album), upload-workbench (the release-workbench album), saf-probe (the Android tree-picker probe folder), cover (an exotic cover image to set by hand), podcast (the preset feeds), book (the audiobook fixtures), loose-book (an audiobook as plain MP3s), misfiled-book (another, for a library to catalog as music), all")
+		"spec preset: default (the codec/container matrix), demo (a titled album), conformance (the engine-suite tone), long (a ten-second lossless track on its own album), upload (the manual-upload album), upload-folder (the folder-pick album), upload-workbench (the release-workbench album), saf-probe (the Android tree-picker probe folder), cover (an exotic cover image to set by hand), podcast (the preset feeds), book (the audiobook fixtures), loose-book (an audiobook as plain MP3s), misfiled-book (another, for a library to catalog as music), tool-books (the books the file tools and deletes are driven on), all")
 	baseURL := flag.String("base-url", "http://127.0.0.1:4421",
 		"base URL podcast enclosure links point at (the podcast preset; 'all' includes the feeds only when this flag is set explicitly)")
 	flag.Parse()
@@ -68,6 +68,12 @@ func run(out, preset, baseURL string, baseURLSet bool) error {
 		paths, err := fixtures.GenerateMisfiledBook(out)
 		for _, p := range paths {
 			fmt.Println(p)
+		}
+		return err
+	case "tool-books":
+		dirs, err := fixtures.GenerateToolBooks(out)
+		for _, d := range dirs {
+			fmt.Println(d)
 		}
 		return err
 	case "all":

@@ -112,6 +112,12 @@ class FakeRepository implements WaxDeckRepository {
   List<String>? serverUploadFormats;
   List<String>? serverRejectedFormats;
 
+  /// What [health] reports of the streaming engine and of podcasts. Null
+  /// is a server older than the fields, which reads as an engine with
+  /// nothing to say and podcasts on.
+  ServerStreaming? serverStreaming;
+  bool? serverPodcasts;
+
   /// Thrown by [health] when set. Deliberately an [Object] rather than
   /// the structured API error: the client maps only transport failures
   /// into that type, and a response a generated deserializer cannot
@@ -308,8 +314,16 @@ class FakeRepository implements WaxDeckRepository {
     roles: ['admin'],
   );
 
+  /// Whether the server this fake stands for is in read-only mode, as a
+  /// session it opens reports.
+  bool serverReadOnly = false;
+
   LoginResult _signIn({WaxDeckUser user = _user, String token = 'test-token'}) {
-    sessionState = SessionState(authenticated: true, user: user);
+    sessionState = SessionState(
+      authenticated: true,
+      user: user,
+      serverReadOnly: serverReadOnly,
+    );
     authToken = token;
     return LoginResult(user: user, token: token);
   }
@@ -324,6 +338,8 @@ class FakeRepository implements WaxDeckRepository {
       apiVersion: apiVersion,
       uploadFormats: serverUploadFormats,
       rejectedFormats: serverRejectedFormats,
+      streaming: serverStreaming,
+      podcasts: serverPodcasts,
     );
   }
 
@@ -3383,7 +3399,11 @@ class FakeRepository implements WaxDeckRepository {
     required String path,
     String? media,
     bool? managed,
+    bool? allowAbsent,
   }) async {
+    createLibraryCalls.add((name: name, path: path, allowAbsent: allowAbsent));
+    final error = createLibraryError;
+    if (error != null) throw error;
     final info = LibraryInfo(
       pid: 'lb-${libraries.length + 1}',
       name: name,
@@ -3407,6 +3427,36 @@ class FakeRepository implements WaxDeckRepository {
   /// What the next [createLibrary] reports about streaming, so a test
   /// can drive the degraded answer.
   String? createLibraryWarning;
+
+  /// Each [createLibrary] call, refused or not.
+  final List<({String name, String path, bool? allowAbsent})>
+  createLibraryCalls = [];
+
+  /// Thrown by [createLibrary] instead of creating, as a server refusing
+  /// the path would.
+  WaxDeckApiException? createLibraryError;
+
+  /// The library pids [removeLibrary] was asked to remove.
+  final List<String> removeLibraryCalls = [];
+
+  /// Thrown by [removeLibrary] instead of starting the removal.
+  WaxDeckApiException? removeLibraryError;
+
+  /// Starts the removal: the fake drops the library at once, as the
+  /// listing reads once the job has ended.
+  @override
+  Future<Job> removeLibrary(String libraryPid) async {
+    removeLibraryCalls.add(libraryPid);
+    final error = removeLibraryError;
+    if (error != null) throw error;
+    libraries.removeWhere((l) => l.pid == libraryPid);
+    return Job(
+      pid: 'jb-remove-${removeLibraryCalls.length}',
+      kind: 'remove-root',
+      state: 'running',
+      target: JobTarget(type: 'library', pid: libraryPid),
+    );
+  }
 
   /// Scans this fake has been asked to start.
   int rescans = 0;
@@ -3527,6 +3577,9 @@ class FakeRepository implements WaxDeckRepository {
   /// The quota snapshot every uploads page carries.
   UploadQuota? uploadPageQuota;
 
+  /// The cursor every uploads page answers, so the screen offers more.
+  String? uploadsNextCursor;
+
   @override
   Future<UploadPage> listUploads({String? cursor, int? limit}) async {
     final error = uploadError;
@@ -3534,6 +3587,7 @@ class FakeRepository implements WaxDeckRepository {
     await listUploadsGate?.future;
     return UploadPage(
       uploads: uploadsById.values.toList(),
+      nextCursor: uploadsNextCursor,
       quota: uploadPageQuota,
     );
   }
@@ -4843,6 +4897,9 @@ class FakeRepository implements WaxDeckRepository {
   /// went.
   WaxDeckApiException? resolveUpgradeRefusal;
   final List<FileDiagnostic> fileDiagnostics = [];
+
+  /// The cursor every diagnostics page answers, so the screen offers more.
+  String? fileDiagnosticsNextCursor;
   final List<DiagnosticCount> diagnosticCounts = [];
 
   @override
@@ -4891,7 +4948,10 @@ class FakeRepository implements WaxDeckRepository {
         .where((d) => code == null || d.code == code)
         .where((d) => severity == null || d.severity == severity)
         .toList();
-    return FileDiagnosticPage(diagnostics: filtered);
+    return FileDiagnosticPage(
+      diagnostics: filtered,
+      nextCursor: fileDiagnosticsNextCursor,
+    );
   }
 
   @override
@@ -5119,9 +5179,17 @@ class FakeRepository implements WaxDeckRepository {
     List<String>? itemPids,
   }) async {
     previewOrganizeCalls.add((profile: profile, itemPids: itemPids));
+    await previewOrganizeGate?.future;
+    if (previewOrganizeError case final error?) throw error;
     return organizePlanResult ??
         OrganizePlan(profile: profile ?? '', totalActions: 0);
   }
+
+  /// Holds a dry run's answer until completed, for the in-flight state.
+  Completer<void>? previewOrganizeGate;
+
+  /// What a dry run fails with, when set.
+  WaxDeckApiException? previewOrganizeError;
 
   @override
   Future<OrganizeReport> applyOrganize({
@@ -5130,11 +5198,75 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     applyOrganizeCalls.add((profile: profile, itemPids: itemPids));
     await applyOrganizeGate?.future;
-    return organizeReportResult;
+    final report = organizeReportResult;
+    // A run that ran as a job is in the history from then on, as the
+    // server's journal lists it.
+    if (report.jobPid.isNotEmpty) {
+      organizeHistory = [
+        OrganizeBatch(
+          jobPid: report.jobPid,
+          kind: 'organize',
+          state: 'done',
+          startedAt: DateTime.utc(2026, 7, 1, 9),
+          profile: profile,
+          committed: report.moved,
+          undoable: report.moved > 0,
+        ),
+        ...organizeHistory,
+      ];
+    }
+    return report;
   }
 
   /// Holds an apply's answer until completed, for the in-flight state.
   Completer<void>? applyOrganizeGate;
+
+  /// The organize runs the history lists, newest first, and the limit
+  /// and cursor each read asked for. A page holds at most
+  /// [organizeHistoryPageCap] runs when set, as a server answers.
+  List<OrganizeBatch> organizeHistory = [];
+  int listOrganizeHistoryCalls = 0;
+  final List<int?> organizeHistoryLimits = [];
+  final List<String?> organizeHistoryCursors = [];
+  int? organizeHistoryPageCap;
+
+  /// Thrown by a read of an older page (one with a cursor) while set.
+  WaxDeckApiException? organizeHistoryOlderError;
+
+  @override
+  Future<OrganizeHistoryPage> listOrganizeHistory({
+    String? cursor,
+    int? limit,
+  }) async {
+    listOrganizeHistoryCalls++;
+    organizeHistoryLimits.add(limit);
+    organizeHistoryCursors.add(cursor);
+    if (cursor != null) {
+      if (organizeHistoryOlderError case final error?) throw error;
+    }
+    final start = cursor == null ? 0 : int.parse(cursor);
+    var size = limit ?? 20;
+    if (organizeHistoryPageCap case final cap? when cap < size) size = cap;
+    final end = (start + size).clamp(start, organizeHistory.length);
+    return OrganizeHistoryPage(
+      runs: organizeHistory.sublist(start, end),
+      nextCursor: end < organizeHistory.length ? '$end' : null,
+    );
+  }
+
+  /// What an undo answers, and the runs it was asked to undo.
+  OrganizeReport undoOrganizeResult = const OrganizeReport(
+    moved: 0,
+    skipped: 0,
+    failed: 0,
+  );
+  final List<String> undoOrganizeCalls = [];
+
+  @override
+  Future<OrganizeReport> undoOrganize(String jobPid) async {
+    undoOrganizeCalls.add(jobPid);
+    return undoOrganizeResult;
+  }
 
   /// Tool tasks by id, in creation order.
   final Map<String, ToolTask> toolTasksById = {};
@@ -5219,6 +5351,12 @@ class FakeRepository implements WaxDeckRepository {
   /// How many times the bulk clear ran.
   int clearFinishedToolTaskCalls = 0;
 
+  /// Whether each bulk clear asked for everyone's tasks, in order.
+  final List<bool> clearFinishedToolTaskScopes = [];
+
+  /// How many finished tasks [clearFinishedToolTasks] answers it kept.
+  int clearFinishedKept = 0;
+
   @override
   Future<void> deleteToolTask(String taskId) async {
     deleteToolTaskCalls.add(taskId);
@@ -5230,7 +5368,7 @@ class FakeRepository implements WaxDeckRepository {
         statusCode: 404,
       );
     }
-    if (task.state != 'done' && task.state != 'failed') {
+    if (!task.finished) {
       throw const WaxDeckApiException(
         code: 'conflict',
         message: 'the task has not finished',
@@ -5241,14 +5379,15 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<int> clearFinishedToolTasks() async {
+  Future<ToolTasksCleared> clearFinishedToolTasks({bool all = false}) async {
     clearFinishedToolTaskCalls++;
+    clearFinishedToolTaskScopes.add(all);
     final finished = [
       for (final task in toolTasksById.values)
-        if (task.state == 'done' || task.state == 'failed') task.id,
+        if (task.finished) task.id,
     ];
     finished.forEach(toolTasksById.remove);
-    return finished.length;
+    return ToolTasksCleared(deleted: finished.length, kept: clearFinishedKept);
   }
 
   /// Enrichment status served by [getEnrichmentStatus].
@@ -5516,9 +5655,16 @@ class FakeRepository implements WaxDeckRepository {
   /// Ids removed by [deleteUser], in order.
   final List<String> deletedUserIds = [];
 
+  /// What each [deleteUser] asked to become of the playlists, in order.
+  final List<String> deletedUserPlaylists = [];
+
   @override
-  Future<void> deleteUser(String userId) async {
+  Future<void> deleteUser(
+    String userId, {
+    String playlists = 'transfer',
+  }) async {
     deletedUserIds.add(userId);
+    deletedUserPlaylists.add(playlists);
     usersById.remove(userId);
   }
 
@@ -6252,12 +6398,15 @@ class FakeRepository implements WaxDeckRepository {
     jobReads++;
     // The server's listing: a finished targeted job is left out, so a
     // burst of one-item runs does not bury the passes, except a kind
-    // change, which someone asked for and is told the result of.
+    // change, an organize undo or a library removal, which someone asked
+    // for and is told the result of.
     return [
       for (final job in jobs)
         if (job.target == null ||
             job.state == 'running' ||
-            job.kind == 'set-kind')
+            job.kind == 'set-kind' ||
+            job.kind == 'organize-undo' ||
+            job.kind == 'remove-root')
           job,
     ];
   }
@@ -6380,6 +6529,14 @@ class FakeRepository implements WaxDeckRepository {
   /// Thrown by [deleteLibraryItems] when set.
   WaxDeckApiException? deleteItemsError;
 
+  /// Decides per call whether [deleteLibraryItems] refuses, and with
+  /// what; the call is recorded either way.
+  WaxDeckApiException? Function(List<String> pids, bool dryRun)?
+  deleteItemsRefusal;
+
+  /// Files an applied delete tries and leaves where they were.
+  int deleteItemsFailed = 0;
+
   /// What an applied [deleteLibraryItems] says beside removing files.
   List<String> deleteItemsWarnings = const [];
 
@@ -6395,6 +6552,8 @@ class FakeRepository implements WaxDeckRepository {
     final error = deleteItemsError;
     if (error != null) throw error;
     deleteItemsCalls.add((pids: pids, mode: mode, dryRun: dryRun));
+    final refusal = deleteItemsRefusal?.call(pids, dryRun);
+    if (refusal != null) throw refusal;
     final entries = [
       for (final pid in pids)
         deletePlansByPid[pid] ??
@@ -6403,11 +6562,33 @@ class FakeRepository implements WaxDeckRepository {
     if (!dryRun) {
       libraryItems.removeWhere((item) => pids.contains(item.pid));
     }
+    return _deleteResult(
+      mode ?? 'trash',
+      dryRun,
+      entries,
+      dryRun ? const [] : deleteItemsWarnings,
+    );
+  }
+
+  /// A delete's answer, with an applied one's totals: every planned file
+  /// gone but [deleteItemsFailed].
+  DeleteItemsResult _deleteResult(
+    String mode,
+    bool dryRun,
+    List<DeletePlanEntry> entries,
+    List<String> warnings,
+  ) {
+    final went = dryRun
+        ? 0
+        : entries.fold(0, (sum, e) => sum + e.files) - deleteItemsFailed;
     return DeleteItemsResult(
       applied: !dryRun,
-      mode: mode ?? 'trash',
+      mode: mode,
       entries: entries,
-      warnings: dryRun ? const [] : deleteItemsWarnings,
+      warnings: warnings,
+      trashed: mode == 'permanent' ? 0 : went,
+      deleted: mode == 'permanent' ? went : 0,
+      failed: dryRun ? 0 : deleteItemsFailed,
     );
   }
 
@@ -6428,6 +6609,11 @@ class FakeRepository implements WaxDeckRepository {
   final List<({String pid, List<String> filePids, String? mode, bool dryRun})>
   deleteItemFilesCalls = [];
 
+  /// Decides per call whether [deleteItemFiles] refuses, and with what;
+  /// the call is recorded either way.
+  WaxDeckApiException? Function(List<String> filePids, bool dryRun)?
+  deleteItemFilesRefusal;
+
   @override
   Future<DeleteItemsResult> deleteItemFiles({
     required String pid,
@@ -6443,6 +6629,8 @@ class FakeRepository implements WaxDeckRepository {
       mode: mode,
       dryRun: dryRun,
     ));
+    final refusal = deleteItemFilesRefusal?.call(filePids, dryRun);
+    if (refusal != null) throw refusal;
     final files = itemFilesByPid[pid] ?? const <ItemFile>[];
     final going = [
       for (final f in files)
@@ -6460,19 +6648,15 @@ class FakeRepository implements WaxDeckRepository {
           if (!filePids.contains(f.filePid)) f,
       ];
     }
-    return DeleteItemsResult(
-      applied: !dryRun,
-      mode: mode ?? 'trash',
-      entries: [
-        DeletePlanEntry(
-          pid: pid,
-          files: going.length,
-          bytes: going.fold(0, (sum, f) => sum + (f.sizeBytes ?? 0)),
-          fileList: going,
-          itemSurvives: files.any((f) => !filePids.contains(f.filePid)),
-        ),
-      ],
-    );
+    return _deleteResult(mode ?? 'trash', dryRun, [
+      DeletePlanEntry(
+        pid: pid,
+        files: going.length,
+        bytes: going.fold(0, (sum, f) => sum + (f.sizeBytes ?? 0)),
+        fileList: going,
+        itemSurvives: files.any((f) => !filePids.contains(f.filePid)),
+      ),
+    ], const []);
   }
 
   /// Thrown by the discovery endpoints (similar tracks, instant mix,

@@ -22,4 +22,8 @@ test('health endpoint reports ok', async ({ app }) => {
   // says what it sent.
   expect(typeof health.version).toBe('string');
   expect(typeof health.apiVersion).toBe('number');
+  // The stack runs its streaming engine, and the run starts once the
+  // server has reached it.
+  expect(health.streaming?.configured).toBe(true);
+  expect(health.streaming?.connected).toBe(true);
 });

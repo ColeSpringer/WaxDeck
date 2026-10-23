@@ -499,6 +499,13 @@ func (l *Library) unsubscribe(ctx context.Context, uc *UserCtx, apiShowPID strin
 		if existed, feedURL, err = l.db.RemoveSubscription(ctx, uc.ID, string(pod.PID)); err != nil {
 			return &Error{Kind: KindInternal, Err: err}
 		}
+		if testHookMembership != nil {
+			testHookMembership("removed")
+		}
+		// Committed: the parks and the change log follow whether or not
+		// the request is still there, or a client gone at the wrong
+		// moment leaves the account's other devices never told.
+		ctx := context.WithoutCancel(ctx)
 		if err := l.dropShowParks(ctx, uc.ID, pod, feedURL); err != nil {
 			return err
 		}

@@ -11,7 +11,8 @@ import (
 )
 
 // One track of a cue rip cannot be deleted alone, and the refusal
-// carries a reason the app words itself.
+// carries a reason the app words itself and every track of the rip, for
+// the app to offer them together.
 func TestDeletingOneTrackOfACueRipSaysWhy(t *testing.T) {
 	t.Parallel()
 	rips := t.TempDir()
@@ -28,14 +29,17 @@ func TestDeletingOneTrackOfACueRipSaysWhy(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := newHarness(t, service.Root{Name: "rips", Path: rips})
-	var one string
+	var one, two string
 	for _, it := range h.items(t, "?limit=200").Items {
-		if it.Title == "Rip One" {
+		switch it.Title {
+		case "Rip One":
 			one = it.Pid
+		case "Rip Two":
+			two = it.Pid
 		}
 	}
-	if one == "" {
-		t.Fatal("the rip's first track was not cataloged")
+	if one == "" || two == "" {
+		t.Fatal("the rip's tracks were not cataloged")
 	}
 
 	resp := h.postJSON(t, "/api/v1/library/items/delete", map[string]any{"pids": []string{one}, "dryRun": true})
@@ -43,7 +47,31 @@ func TestDeletingOneTrackOfACueRipSaysWhy(t *testing.T) {
 	if resp.StatusCode != 400 {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
-	if e := decode[Error](t, resp); e.Params == nil || (*e.Params)["reason"] != "cue-rip" {
+	e := decode[Error](t, resp)
+	if e.Params == nil || (*e.Params)["reason"] != "cue-rip" {
 		t.Fatalf("refusal = %+v, want reason cue-rip", e)
+	}
+	if got := (*e.Params)["tracks"]; got != one+","+two {
+		t.Fatalf("refusal tracks = %q, want the rip's two tracks in order", got)
+	}
+	// The rip's file, deleted from one track's files, is refused the same
+	// way, with the same tracks to offer.
+	files := h.itemFiles(t, h.token, one)
+	if len(files) != 1 {
+		t.Fatalf("files = %+v, want the rip", files)
+	}
+	resp = h.postJSON(t, "/api/v1/items/"+one+"/files/delete", map[string]any{"filePids": []string{files[0].FilePid}, "dryRun": true})
+	defer resp.Body.Close()
+	if resp.StatusCode != 400 {
+		t.Fatalf("file delete status = %d, want 400", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); e.Params == nil || (*e.Params)["reason"] != "cue-rip" || (*e.Params)["tracks"] != one+","+two {
+		t.Fatalf("file delete refusal = %+v, want reason cue-rip with the rip's two tracks", e)
+	}
+	plan := decodeStatus[DeleteItemsResult](t, h.postJSON(t, "/api/v1/library/items/delete", map[string]any{
+		"pids": []string{one, two}, "dryRun": true,
+	}), 200, "the whole rip's plan")
+	if len(plan.Entries) == 0 || plan.Entries[0].Paths == nil || (*plan.Entries[0].Paths)[0] != "Rip Album.flac" {
+		t.Fatalf("plan = %+v, want the rip's one file named", plan.Entries)
 	}
 }

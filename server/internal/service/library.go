@@ -56,6 +56,8 @@ type Root struct {
 	PID            string
 	Profile        string
 	ReadOnly       bool
+	// Unwritable is a managed root refusing the server's write probe.
+	Unwritable bool
 }
 
 // Config configures the library service.
@@ -74,10 +76,16 @@ type Config struct {
 	// files placed there by hand are cataloged without waiting for a
 	// manual rescan or the scan schedule.
 	WatchLibraries bool
+	// WatchRecheck is how often the watcher looks again for a root folder
+	// that was not there; zero is a minute.
+	WatchRecheck time.Duration
 	// WatchSettle is how long a directory must stay event-quiet before
 	// its scoped rescan fires; zero means the ten-second default. Tests
 	// set it short.
 	WatchSettle time.Duration
+	// RootProbeEvery is how often the managed roots are probed for writes
+	// again; zero is rootProbeEvery. Tests set it short.
+	RootProbeEvery time.Duration
 	// ResetStaleCatalog moves a catalog built on a different schema
 	// baseline aside at startup instead of refusing to start. See
 	// staleBaseline for what it does and does not distinguish.
@@ -238,8 +246,22 @@ type Library struct {
 	rootsMu     sync.RWMutex
 	refreshMu   sync.Mutex
 	configRoots []Root
+	// refreshHook runs in a test between a refresh's read of the catalog
+	// and its store of the table, under refreshMu; nothing in the server
+	// sets it.
+	refreshHook func()
 	// rootsLeftOut are configured roots the catalog refused, warned of once.
 	rootsLeftOut sync.Map
+	// rootReach and rootProbe are what the console says of the roots
+	// beyond the catalog's policy (rootstate.go); removals the libraries
+	// the console removes (rootremove.go); creates the ones it is adding
+	// (rootcreate.go).
+	rootReach rootReach
+	rootProbe rootProbe
+	removals  rootRemovals
+	creates   rootCreates
+	// rootProbeEvery is Config.RootProbeEvery.
+	rootProbeEvery time.Duration
 	// maintenance is a catalog hand-off in progress, between the suspend
 	// and reopen hooks; suspendGen numbers the suspends. watchMu keeps a
 	// suspend out of a watchdog's reopen.
@@ -273,6 +295,25 @@ type Library struct {
 	// a test; nothing in the server sets them.
 	deletePlanHook  func(context.Context)
 	deleteApplyHook func(context.Context)
+	// toolStepHook runs as a book tool passes each step of a run, and an
+	// error it answers ends the run there, as a crash or a shutdown would,
+	// in a test; nothing in the server sets it.
+	toolStepHook func(step string) error
+	// mutateHook stands in for the answer of a tool's catalog mutation
+	// (its trash, its scan, its import) in a test, a busy catalog say;
+	// nil lets the call through. Nothing in the server sets it.
+	mutateHook func(op string) error
+	// scanStartHook stands in for the catalog's answer to a whole scan's
+	// start in a test, a busy catalog say; nil lets the start through.
+	// Nothing in the server sets it.
+	scanStartHook func() error
+	// toolLeaseEvery is how often a run renews its task's lease; zero is
+	// toolLeaseRenew. A test shortens it.
+	toolLeaseEvery time.Duration
+	// toolRuns counts the runs this process holds on each task, which the
+	// retire pass leaves whatever their leases say.
+	toolRunsMu sync.Mutex
+	toolRuns   map[string]int
 	// discardReadHook runs between a discard's first read of its session
 	// and its guards, in a test; nothing in the server sets it.
 	discardReadHook func()
@@ -282,10 +323,30 @@ type Library struct {
 	// fileReadHook stands in for the catalog's read of a file's row in a
 	// test; nothing in the server sets it.
 	fileReadHook func(context.Context, model.PID) (*model.File, error)
+	// journalPruneHook stands in for the catalog's organize journal prune
+	// in a test; nothing in the server sets it.
+	journalPruneHook func(context.Context, time.Duration) (int, error)
+	// pathPlanHook runs as the path rule plans the items it is given, nil
+	// for the whole library, and historyReadHook as the organize history
+	// reads the catalog's journal, in a test; nothing in the server sets
+	// them.
+	pathPlanHook    func(pids []string)
+	historyReadHook func()
+	// jobOriginInsertHook stands in for recording who started a job, and
+	// awaitJobHook for waiting a catalog job out, in a test; nothing in the
+	// server sets them.
+	jobOriginInsertHook func(context.Context, wdb.JobOrigin) error
+	awaitJobHook        func(ctx context.Context, pid model.PID, silence time.Duration, tick func(context.Context)) (*model.Job, error)
 	// resetMu serializes a replaced catalog's reset between the reopen
 	// hook and the feed; profilesMu a saved profile's round trip.
 	resetMu    sync.Mutex
 	profilesMu sync.Mutex
+	// runProfiles is the profile each organize run the history last listed
+	// laid out by, which a finished run never changes; history the
+	// journal's listing those runs come from.
+	runProfilesMu sync.Mutex
+	runProfiles   map[model.PID]string
+	history       organizeHistory
 	// catalogResync tells every client to re-mirror the catalog. Set by
 	// SetCatalogResyncer; unset is a no-op.
 	catalogResync atomic.Pointer[func()]
@@ -338,9 +399,15 @@ type Library struct {
 	flowRoots atomic.Pointer[FlowRootSync]
 	// flowSyncMu serializes teaching the bridge: WaxFlow refuses a root
 	// name it already maps, and two teachers could both see one as new.
-	// flowRefused holds the paths it refused by name, not offered again.
+	// flowRefused holds the paths it refused by name, not offered again,
+	// each with flowOutages, the times the engine went away, as of its
+	// offer.
 	flowSyncMu  sync.Mutex
-	flowRefused map[string]string
+	flowRefused map[string]flowRefusal
+	flowOutages atomic.Uint64
+	// streaming is the streaming engine's state as the bridge last said
+	// (SetEngineState), nil before anything was said.
+	streaming atomic.Pointer[EngineState]
 	// coverSyncing single-flights playlist cover generation per playlist,
 	// so concurrent readers of one shared list do not each composite it.
 	coverSyncing map[model.PID]bool
@@ -392,6 +459,16 @@ type Library struct {
 	// pinHook stands in for the catalog write that pins or unpins an
 	// episode in a test; nothing in the server sets it.
 	pinHook func(context.Context, model.PID, *model.Episode, bool) error
+	// handoverHook fails a step of handing a deleted account's playlist
+	// over in a test; nothing in the server sets it.
+	handoverHook func(stage string, pl *model.Playlist) error
+	// accountDisabledHook runs in a test the moment DeleteAccount has
+	// disabled the account; nothing in the server sets it.
+	accountDisabledHook func(context.Context)
+	// deletingAccounts holds the ids of the accounts a DeleteAccount is
+	// running for, so a second request for one is refused rather than run
+	// beside the first.
+	deletingAccounts sync.Map
 	// secretReadHook stands in for the catalog's read of a show's stored
 	// feed password in a test; nothing in the server sets it.
 	secretReadHook func(context.Context, string) (string, error)
@@ -539,6 +616,9 @@ type Library struct {
 	// openedAtNS is when this process opened the library: a job's end
 	// taken in hand before it was cut short by a stop.
 	openedAtNS int64
+	// startupScan is whether this start scans every library, which takes
+	// back what a removal the last stop cut short let go of.
+	startupScan bool
 	// jobFollowEvery is how often the job follower reads the running jobs;
 	// zero is jobFollowInterval.
 	jobFollowEvery time.Duration
@@ -614,6 +694,12 @@ type Library struct {
 	watchNudge     chan struct{}
 	watchReady     chan struct{}
 	watchReadyOnce sync.Once
+	// watchRecheck is Config.WatchRecheck.
+	watchRecheck time.Duration
+	// watchScanHook runs as the watcher scans a settled directory, or lets
+	// go of one a catalog scan covered, in a test; nothing in the server
+	// sets it.
+	watchScanHook func(dir string, scanned bool)
 }
 
 // SocketFileName names the IPC socket, beside the catalog DB unless that
@@ -754,6 +840,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		userWake:                 make(chan string, 64),
 		jobWake:                  make(chan struct{}, 1),
 		openedAtNS:               time.Now().UnixNano(),
+		startupScan:              cfg.ScanOnStart,
 		matchWake:                make(chan struct{}, 1),
 		radioWrites:              make(chan radioWrite, radioWriteQueue),
 		sealer:                   cfg.Sealer,
@@ -781,9 +868,11 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		workers:                  group,
 		radioArtResolver:         cfg.RadioArtResolver,
 		watchQueue:               newWatchPending(cfg.WatchSettle),
+		watchRecheck:             cfg.WatchRecheck,
 		watchScans:               make(chan []string, 1),
 		watchNudge:               make(chan struct{}, 1),
 		watchReady:               make(chan struct{}),
+		rootProbeEvery:           cfg.RootProbeEvery,
 	}
 	if reset != nil {
 		l.recordCatalogReset(ctx, reset)
@@ -800,6 +889,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		lib.Close()
 		return nil, fmt.Errorf("service: library roots: %w", err)
 	}
+	l.reconcileRemovedLibraries(ctx)
 	// The ListenBrainz API base is caller-supplied, so its deliveries
 	// ride a dial-guarded client like every other user-pointed fetch;
 	// the flag opts LAN instances back in. The connection's write-time
@@ -937,6 +1027,11 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		group.Go(ctx, "library-watch", l.watchLibraries)
 		group.Go(ctx, "library-watch-scan", l.watchScanWorker)
 	}
+
+	// The managed roots' write probe, once the server's read-only switch
+	// is read: now, then on a slow timer (and after a refused write).
+	l.probeRoots()
+	group.Go(ctx, "root-probe-timer", l.probeRootsEvery)
 	opened = true
 	return l, nil
 }
@@ -994,6 +1089,11 @@ func (l *Library) RescanFor(ctx context.Context, uc *UserCtx, force bool) (Job, 
 }
 
 func (l *Library) startScan(ctx context.Context, userID string, force bool) (Job, error) {
+	if l.scanStartHook != nil {
+		if err := l.scanStartHook(); err != nil {
+			return Job{}, err
+		}
+	}
 	pid, err := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{Force: force})
 	if err != nil {
 		return Job{}, classify(err)
@@ -1100,7 +1200,7 @@ func (l *Library) JobStatusFor(ctx context.Context, uc *UserCtx, apiJobPID strin
 // reader's sight.
 func (l *Library) narrowJob(ctx context.Context, uc *UserCtx, job *Job) {
 	if job.Scan != nil {
-		job.Scan.Runs = nil
+		job.Scan.Runs, job.Scan.RootsUnreachable = nil, nil
 	}
 	job.Error = l.failureWordsFor(uc, job.Error)
 	if k := job.SetKind; k != nil {
@@ -1163,11 +1263,15 @@ func (l *Library) mayReadEndedItemJob(ctx context.Context, uc *UserCtx, job Job)
 	return err == nil && may
 }
 
+// listedOnceEnded are the targeted jobs the list keeps once they end:
+// someone's deliberate act whose result is worth a row, not a burst.
+var listedOnceEnded = map[string]bool{"set-kind": true, "organize-undo": true, "remove-root": true}
+
 // Jobs lists recent catalog jobs, newest first, after any still running
 // that newer ones pushed out. A finished targeted job is left out (read by
-// pid): a burst of them would push the passes out. A kind change is the
-// exception, someone's deliberate act whose result is worth a row, not a
-// burst. Administrators only.
+// pid): a burst of them would push the passes out. A kind change, an
+// organize undo and a library removal are the exceptions
+// (listedOnceEnded). Administrators only.
 func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, error) {
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
@@ -1177,7 +1281,7 @@ func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, erro
 		return nil, classify(err)
 	}
 	jobs = slices.DeleteFunc(jobs, func(j *model.Job) bool {
-		return j.TargetType != "" && j.State != model.JobRunning && j.Kind != "set-kind"
+		return j.TargetType != "" && j.State != model.JobRunning && !listedOnceEnded[j.Kind]
 	})
 	jobs = jobs[:min(len(jobs), limit)]
 	listed := make(map[model.PID]bool, len(jobs))

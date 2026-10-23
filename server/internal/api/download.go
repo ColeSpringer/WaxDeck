@@ -1,13 +1,16 @@
 package api
 
 import (
+	"context"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
+	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -19,9 +22,9 @@ import (
 // for; a file rewritten since answers the stream-stale error and the
 // client re-requests download-info.
 //
-// A download token opens it. So does a stream token while the engine is
-// unavailable, since the originals then stream from here, and that one
-// serves inline rather than as an attachment.
+// A download token opens it. So does a stream token for the original's
+// bytes, served inline rather than as an attachment (see
+// streamOpensDownload).
 func (s *Server) ServeDownload(w http.ResponseWriter, r *http.Request) {
 	if s.media == nil {
 		writeError(w, http.StatusNotImplemented, "internal", "downloads are not configured on this server")
@@ -37,26 +40,38 @@ func (s *Server) ServeDownload(w http.ResponseWriter, r *http.Request) {
 		s.serveJoinedMP3(w, r, pid, q.Get("mt"))
 		return
 	}
-	// A stream token opens this route only while the engine is away, when
-	// originals stream through here.
-	purposes := []string{auth.PurposeDownload}
-	if !s.bridge.Up() {
-		purposes = append(purposes, auth.PurposeStream)
+	// A token with no stream parameters bound: a download's, or a stream's
+	// the direct play-info minted. Failing that, a stream's bound to the
+	// parameters its URL carries, as one redirected here arrives.
+	mt := q.Get("mt")
+	bound := url.Values{}
+	claims, err := s.media.Verify(mt, auth.MediaWant{Purposes: []string{auth.PurposeDownload, auth.PurposeStream}, PID: pid})
+	if err != nil {
+		bound = q
+		claims, err = s.media.Verify(mt, auth.MediaWant{Purposes: []string{auth.PurposeStream}, PID: pid, Shape: flow.StreamShape(q)})
 	}
-	claims, _, ok := s.verifiedMedia(w, r, q.Get("mt"), auth.MediaWant{Purposes: purposes, PID: pid})
-	if !ok {
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "missing, expired, or wrong media token")
 		return
 	}
-	f, err := s.svc.DownloadSource(r.Context(), pid, q.Get("f"))
-	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound, service.KindInvalid:
-			writeError(w, http.StatusNotFound, "not-found", "no such download")
-		case service.KindMaintenance:
-			writeError(w, http.StatusServiceUnavailable, "catalog-maintenance", "the catalog is in maintenance; retry shortly")
-		default:
-			writeError(w, http.StatusInternalServerError, "internal", "resolving download failed")
+	if _, ok := s.authorizeMediaFor(w, r, claims); !ok {
+		return
+	}
+	var f service.DownloadFile
+	if claims.Purpose == auth.PurposeStream {
+		// One lookup answers both what the token streams and the file.
+		var src flow.Source
+		src, f, err = s.sources.StreamDownloadSource(r.Context(), pid, q.Get("f"))
+		if err != nil {
+			writeDownloadSourceError(w, err)
+			return
 		}
+		if !s.streamOpensDownload(src, bound) {
+			writeError(w, http.StatusUnauthorized, "unauthenticated", "missing, expired, or wrong media token")
+			return
+		}
+	} else if f, err = s.sources.DownloadSource(r.Context(), pid, q.Get("f")); err != nil {
+		writeDownloadSourceError(w, err)
 		return
 	}
 	if id := q.Get("id"); id != "" && id != f.ETag {
@@ -81,6 +96,38 @@ func (s *Server) ServeDownload(w http.ResponseWriter, r *http.Request) {
 	// The modtime drives Last-Modified and If-Range; it is the same
 	// instant the ETag pins.
 	http.ServeContent(w, r, "", time.Unix(0, f.MTimeNS), file)
+}
+
+// downloadSources is the lookup the download route serves a file from.
+type downloadSources interface {
+	StreamDownloadSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, service.DownloadFile, error)
+	DownloadSource(ctx context.Context, apiItemPID, filePID string) (service.DownloadFile, error)
+}
+
+// streamOpensDownload reports whether a stream token bound to the stream
+// parameters bound opens the download route for the source src. One for
+// the original's bytes does, whatever the engine is doing: the stream
+// route passes the same bytes through, and a URL minted while the engine
+// was away (a device's whole queue, perhaps) has to keep working once it
+// is back. One for what only the engine makes never does, nor one for a
+// window of a larger file while the engine answers, since that token may
+// be the engine's cut and this route would hand over the whole file.
+// Without the engine a window plays directly, whole with its span.
+func (s *Server) streamOpensDownload(src flow.Source, bound url.Values) bool {
+	return flow.OriginalBytes(bound, src) && (!src.Virtual || !s.bridge.Up())
+}
+
+// writeDownloadSourceError answers a download whose file could not be
+// resolved.
+func writeDownloadSourceError(w http.ResponseWriter, err error) {
+	switch service.KindOf(err) {
+	case service.KindNotFound, service.KindInvalid, service.KindConflict:
+		writeError(w, http.StatusNotFound, "not-found", "no such download")
+	case service.KindMaintenance:
+		writeError(w, http.StatusServiceUnavailable, "catalog-maintenance", "the catalog is in maintenance; retry shortly")
+	default:
+		writeError(w, http.StatusInternalServerError, "internal", "resolving download failed")
+	}
 }
 
 // Routes served outside the generated router but inside its base path.

@@ -22,6 +22,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'disclosure_glyph.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
@@ -779,6 +780,24 @@ void main() {
     expect(added.streamUrl, 'http://www.somafm.com/groovesalad');
     // The host, minus a `www.` that says nothing about the station.
     expect(added.name, 'somafm.com');
+  });
+
+  testWidgets('the options disclosure points right closed and down open', (
+    tester,
+  ) async {
+    final repo = _repo();
+    await _pumpHub(tester, _container(repo));
+
+    await tester.tap(_byId(SemanticsIds.radioAdd));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('By URL'));
+    await tester.pumpAndSettle();
+    final more = _byId(SemanticsIds.radioMoreOptions);
+
+    expectDisclosure(tester, more, open: false);
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    expectDisclosure(tester, more, open: true);
   });
 
   testWidgets('the disclosure brings back the optional fields', (tester) async {

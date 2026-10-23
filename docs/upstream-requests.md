@@ -39,6 +39,13 @@ note.
   file belongs. Shipped workaround: WaxDeck's path-mismatch health rule
   counts a held move that still has a destination as misplaced, and
   pays the disk pass on its daily sweep.
+- **The organize history is listed only whole.** `OrganizeHistory`
+  groups every journal row before its limit applies (about 75 ms per
+  100k moves), orders by the last move rather than the start, and no
+  call reads one run's counts. Wanted: a keyset page by start time and a
+  one-run read. Shipped workaround: WaxDeck keeps the sorted listing
+  until the catalog's change position moves (or its own prune runs),
+  pages it in memory, and reads a killed run's committed count from it.
 - **`AddRoot` stats the root even with `AllowAbsent`, with no
   deadline.** `config.CheckFolder` stats the path to refuse a file, so
   a hung network mount blocks the call, and WaxDeck registers its
@@ -95,6 +102,25 @@ note.
   over members not in the trash, or a trashed count beside them.
   Shipped workaround: a series detail counts the books it lists; the
   album read and the series listing carry the catalog's numbers.
+- **A failed permanent delete does not say whether the file left the
+  disk.** `trash.Service.apply` removes the file and then detaches it,
+  and a store error at the detach is a `Failure` like any other, so a
+  caller cannot tell a file still in place from one gone from the disk
+  that the catalog still lists. Wanted: the failure saying which (a
+  flag on `trash.Failure`, or a code). Shipped workaround: WaxDeck
+  checks the disk before it calls a failed permanent delete's file
+  "stayed", and says "deleted, but the catalog still lists it" for one
+  that is gone.
+- **A trash move a crash cuts between the move and its catalog write
+  strands the file.** `trash.Service.apply` moves the file into
+  `.waxbin-trash` and then records it; a process that dies between the
+  two leaves the file in the trash folder with no journal row, so it
+  cannot be restored, while the catalog lists it where it was. Wanted:
+  the journal row written first (and dropped if the move fails), or a
+  sweep at open that matches unjournaled trash files to cataloged files
+  gone from their paths. Until then a book merge or split rerun after
+  such a crash sees the part as still the book's, fails its trash and
+  puts back what else went; the stranded part is moved back by hand.
 - **An import's report does not say which files joined an existing
   item.** `inbox.FileOutcome` names the item a file backs and whether
   it was attached as a copy, but not whether the item already existed:
@@ -158,7 +184,10 @@ note.
   holding its audio carries the file's own details, a stand-in for "the
   occupant is the holder's file" that refuses (and keeps the bytes) when
   unsure; the held-file tests drive real collisions, so a reworded
-  sentence fails there.
+  sentence fails there. A CUE split likewise ends, rather than waits,
+  when the plan refused every piece it has left for any reason but a
+  failed catalog check ("check failed") or a target library flagged
+  read-only ("is read-only"), matched by its words.
 - **Apply-time refusals are only counted.** `ApplyImport` quarantines an
   action whose library was flagged read-only since the plan, and
   `ApplyDelete` skips one whose library turned read-only or whose cue
@@ -411,6 +440,24 @@ note.
   so, far past any real one. Shipped workaround: WaxDeck cuts show and
   episode titles to their first 1,000 characters where it maps them, in
   its REST and Subsonic answers, its notifications and its OPML export.
+- **Whether a rule reads per-user state cannot be asked.** The query
+  compiler sets `Compiled.NeedsUser` when a condition or a sort names a
+  field that reads the evaluating user's own state (starred, rated,
+  played and the like), but it takes the field table the sqlite store
+  keeps unexported, and nothing the library exports answers the question
+  for a rule. WaxDeck needs it to tell a shared smart playlist that means
+  the same to every account from one that reads its owner's stars,
+  ratings or plays: when its owner is deleted, the second kind goes to
+  the account that takes it over as a fixed list of the tracks it held,
+  since the new owner's state would otherwise replace the old one's.
+  Wanted: an exported call that says whether a rule reads per-user state
+  (the compiler's own `NeedsUser`), so a consumer keeps no copy of the
+  field table. Shipped workaround: WaxDeck keeps the names by hand
+  (`userStateFields` in `server/internal/service/playlisthandover.go`),
+  and `TestUserStateFieldsMatchTheEngine` reads WaxBin's field table from
+  the module in use and fails when the two differ, so a bump that adds a
+  per-user field cannot pass unnoticed. Delete the table and the test
+  when the call lands.
 
 ## WaxTap
 
@@ -472,6 +519,17 @@ note.
   for the whole run. Shipped workaround: the per-part encodes joined
   frame by frame, the trailing frames that are padding alone dropped,
   and the engine's overload at a seam waited out a few times.
+- **A missing root keeps the daemon from starting.** `source.OpenRoots`
+  fails the whole open when any configured root cannot be opened, so a
+  library whose folder went away (renamed, deleted, or an unplugged
+  drive whose mount point went with it) stops the sidecar at its next
+  start, and every library loses what the engine serves until the folder
+  is back. Wanted: start with a missing root left unmounted, report it,
+  serve the rest, and mount it once it appears. Shipped workaround: none
+  in the code, since dropping a root from the config whenever its folder
+  is unreachable would unmount a library over a passing blip; the
+  server reports the engine unreachable, and docs/admin-and-ops.md tells
+  the operator to bring the folder back or remove the library.
 - **The HLS playlist writer is internal.** `internal/hls` writes the
   master and media playlists the server answers, so a host that renders a
   presentation itself through the exported segmenter (WaxDeck's

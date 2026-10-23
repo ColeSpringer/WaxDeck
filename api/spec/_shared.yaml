@@ -83,6 +83,40 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
 
+    EngineAway:
+      description: >
+        The request needs the streaming engine, which is configured but
+        not reachable right now (code `feature-unavailable`,
+        `params.feature` `streaming-engine`). Ask again after
+        `Retry-After`.
+      headers:
+        Retry-After:
+          description: Seconds before asking again.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    EngineAwayOrMaintenance:
+      description: >
+        Something the request needs is away for now and comes back on
+        its own: the streaming engine, which is configured but not
+        reachable right now (code `feature-unavailable`,
+        `params.feature` `streaming-engine`, with `Retry-After`), or
+        the catalog, handed to a maintenance operation (code
+        `catalog-maintenance`). Ask again shortly.
+      headers:
+        Retry-After:
+          description: Seconds before asking again, sent while the engine is away.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
     UnsupportedFormat:
       description: >
         The file's format is not accepted (code `unsupported-format`):

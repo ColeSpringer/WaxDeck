@@ -1915,12 +1915,15 @@ class PlaybackSession {
     }
   }
 
-  /// Fetches the skip map for the loaded file. Pending maps get exactly
-  /// one retry after [skipMapRetryDelay]; anything else leaves trimming
-  /// inert for this load.
+  /// Fetches the skip map for the loaded file. Pending maps, and the
+  /// refusal of a server whose streaming engine is away (its analysis
+  /// waits for the engine), get exactly one retry after
+  /// [skipMapRetryDelay]; anything else leaves trimming inert for this
+  /// load.
   Future<void> _loadSkipMap() async {
     _skipMapRetry?.cancel();
     final requestedPart = _partIndex;
+    bool pending;
     try {
       final map = await repository.getSkipMap(
         item.pid,
@@ -1930,14 +1933,20 @@ class PlaybackSession {
       if (map.ready) {
         _skipSpans = map.spans;
         _lastJumpedSpan = -1;
-      } else if (map.state == 'pending' && !_skipMapRetried) {
-        _skipMapRetried = true;
-        _skipMapRetry = Timer(skipMapRetryDelay, () {
-          unawaited(_loadSkipMap());
-        });
+        return;
       }
-    } on WaxDeckApiException {
-      // Unavailable or unreachable: trimming stays off for this load.
+      pending = map.state == 'pending';
+    } on WaxDeckApiException catch (error) {
+      if (_disposed || requestedPart != _partIndex) return;
+      pending =
+          error.code == 'feature-unavailable' &&
+          error.params?['feature'] == 'streaming-engine';
+    }
+    if (pending && !_skipMapRetried) {
+      _skipMapRetried = true;
+      _skipMapRetry = Timer(skipMapRetryDelay, () {
+        unawaited(_loadSkipMap());
+      });
     }
   }
 

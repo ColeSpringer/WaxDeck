@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -144,6 +145,35 @@ func (d *DB) HealthRuleCounts(ctx context.Context) (map[string]int, error) {
 			return nil, fmt.Errorf("db: scanning health rule count: %w", err)
 		}
 		out[rule] = n
+	}
+	return out, rows.Err()
+}
+
+// FailingItemsAmong returns which of pids currently fail one rule.
+func (d *DB) FailingItemsAmong(ctx context.Context, rule string, pids []string) ([]string, error) {
+	if len(pids) == 0 {
+		return nil, nil
+	}
+	pidsJSON, err := json.Marshal(pids)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing failing items: %w", err)
+	}
+	rows, err := d.r.QueryContext(ctx, `
+		SELECT item_pid FROM health_index
+		WHERE item_pid IN (SELECT value FROM json_each(?))
+			AND EXISTS (SELECT 1 FROM json_each(rules) WHERE json_each.value = ?)
+		ORDER BY item_pid`, string(pidsJSON), rule)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing failing items: %w", err)
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var pid string
+		if err := rows.Scan(&pid); err != nil {
+			return nil, fmt.Errorf("db: scanning failing item: %w", err)
+		}
+		out = append(out, pid)
 	}
 	return out, rows.Err()
 }

@@ -30,8 +30,10 @@ func (h *Handler) getOpenSubsonicExtensions(w http.ResponseWriter, r *http.Reque
 		{Name: "sonicSimilarity", Versions: []int{1}},
 	}
 	// stream's timeOffset is a cut the streaming engine makes, so only a
-	// server running one honours it.
-	if h.bridge.Up() {
+	// server running one honours it. A configured engine that is away
+	// still counts: a client reads this list once and keeps it, and an
+	// offset asked meanwhile is refused rather than played from the top.
+	if h.engine {
 		exts = append(exts, openSubsonicExtension{Name: "transcodeOffset", Versions: []int{1}})
 	}
 	h.ok(w, r, envelope{OpenSubsonicExtensions: exts})

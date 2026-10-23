@@ -232,6 +232,7 @@ func newItemHLSBridgeAt(t *testing.T, root string, src Source, caps string, stor
 	if err != nil {
 		t.Fatal(err)
 	}
+	connect(t, b)
 	gate := &fakeGate{}
 	b.SetTranscodeGate(gate)
 	return b, sc, gate
@@ -602,6 +603,7 @@ func TestServeHLSLeavesATimelinesBusyEngineRetryable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	connect(t, b)
 	b.SetTranscodeGate(&fakeGate{})
 	res, err := b.TimelineFor(context.Background(), "us-alice",
 		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, TimelineOptions{})

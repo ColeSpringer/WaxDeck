@@ -37,7 +37,9 @@ trap cleanup EXIT INT TERM HUP
 # album must be searchable before the app launches. The server accepts no
 # credentials until its first administrator exists, so each attempt first
 # bootstraps that account (a no-op 409 once it exists) and then logs in
-# with it; the login fallback covers a stack reusing an existing DB.
+# with it; the login fallback covers a stack reusing an existing DB. The
+# server answers before its streaming engine connects, and the suites
+# below play through it, so ready waits for that too.
 READY=
 for _ in $(seq 1 120); do
   curl -sf -X POST "$BASE/api/v1/auth/bootstrap" \
@@ -48,7 +50,8 @@ for _ in $(seq 1 120); do
     -d '{"username":"admin","password":"wax-e2e-pass"}' |
     sed -n 's/.*"token":"\([^"]*\)".*/\1/p') || true
   if [ -n "${TOKEN:-}" ] && curl -sf "$BASE/api/v1/library/search?q=Alpha" \
-    -H "Authorization: Bearer $TOKEN" | grep -q '"tr-'; then
+    -H "Authorization: Bearer $TOKEN" | grep -q '"tr-' &&
+    curl -sf "$BASE/api/v1/health" | grep -q '"connected":true'; then
     READY=1
     break
   fi

@@ -18,6 +18,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import '../uploads/add_to_library.dart';
+import 'item_delete.dart';
 import 'item_detach.dart';
 import 'item_facts_sheet.dart';
 import 'item_kind.dart';
@@ -287,6 +288,18 @@ Future<void> showItemMenuSheet(
                   onTap: () {
                     close();
                     unawaited(showShareLinkDialog(rootContext, pid: pid));
+                  },
+                ),
+              // Last, as destructive verbs go. An episode's download is
+              // its own verb, which the podcast screens offer.
+              if (mediaType != MediaType.podcast && canDeleteItems(sheetRef))
+                WaxOptionRow(
+                  title: l10n.libraryDeleteFilesMenu,
+                  glyph: WaxIcons.delete,
+                  semanticsId: SemanticsIds.itemMenuDelete,
+                  onTap: () {
+                    close();
+                    unawaited(confirmDeleteItem(rootContext, pid: pid));
                   },
                 ),
             ],

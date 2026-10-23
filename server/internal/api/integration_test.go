@@ -42,7 +42,14 @@ type harness struct {
 	// engine being unwell rather than the queue being unrenderable.
 	refuseTimeline atomic.Bool
 	breakTimeline  atomic.Bool
-	library        string
+	// dropTimeline drops the timeline mint's connection unanswered, which
+	// is what a call meets when the engine dies under it.
+	dropTimeline atomic.Bool
+	library      string
+	// engineAway takes the fake sidecar away: every request it gets is
+	// dropped unanswered, as one to a stopped engine process is. The
+	// bridge learns of it at its next probe (h.bridge.Connect).
+	engineAway atomic.Bool
 	// srv is the API server behind ts, for the few tests whose subject
 	// is a bound the server holds in memory rather than an endpoint's
 	// answer (the upload pacer's clock).
@@ -102,7 +109,7 @@ func newHarness(t *testing.T, extraRoots ...service.Root) *harness {
 // private-address guard relaxed for loopback feeds).
 func newHarnessWith(t *testing.T, mutate func(*service.Config), extraRoots ...service.Root) *harness {
 	t.Helper()
-	return newHarnessCore(t, mutate, false, extraRoots...)
+	return newHarnessCore(t, mutate, engineAnswering, extraRoots...)
 }
 
 // newHarnessDirect builds the stack without the streaming bridge: the
@@ -110,10 +117,27 @@ func newHarnessWith(t *testing.T, mutate func(*service.Config), extraRoots ...se
 // serves original bytes directly.
 func newHarnessDirect(t *testing.T) *harness {
 	t.Helper()
-	return newHarnessCore(t, nil, true)
+	return newHarnessCore(t, nil, engineNone)
 }
 
-func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, extraRoots ...service.Root) *harness {
+// newHarnessWithDeadSidecar builds the stack with its streaming engine
+// configured and not answering, as a server started before its sidecar
+// is. Clearing h.engineAway and probing (h.bridge.Connect) brings it up.
+func newHarnessWithDeadSidecar(t *testing.T) *harness {
+	t.Helper()
+	return newHarnessCore(t, nil, engineAwayAtStart)
+}
+
+// harnessEngine is the streaming engine a harness runs with.
+type harnessEngine int
+
+const (
+	engineAnswering harnessEngine = iota
+	engineNone
+	engineAwayAtStart
+)
+
+func newHarnessCore(t *testing.T, mutate func(*service.Config), engine harnessEngine, extraRoots ...service.Root) *harness {
 	t.Helper()
 	h := &harness{}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -177,7 +201,8 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 
 	media := auth.NewMediaTokens(secret, 0)
 	var bridge *flow.Bridge
-	if !noBridge {
+	if engine != engineNone {
+		h.engineAway.Store(engine == engineAwayAtStart)
 		bridge = newFakeFlowBridge(t, ctx, h, cfg, media, svc, log)
 		svc.SetFlowJobs(bridge)
 		// As the process wires it: the limits are unset here, so nothing
@@ -308,6 +333,12 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 	// handling below. Defined in tools_integration_test.go.
 	toolJobs := newFakeToolJobStore(t, h.library)
 	fakeFlow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h.engineAway.Load() {
+			if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+				conn.Close()
+			}
+			return
+		}
 		if toolJobs.handle(w, r) {
 			return
 		}
@@ -330,6 +361,12 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 				Srcs []struct{ Src string } `json:"srcs"`
 			}
 			json.NewDecoder(r.Body).Decode(&req)
+			if h.dropTimeline.Load() {
+				if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+					conn.Close()
+				}
+				return
+			}
 			// The real engine refuses a render it cannot do - a source
 			// it will not decode into a continuous stream is the usual
 			// one - and there is no way to provoke that through a fake
@@ -466,6 +503,9 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 		Logger:   log,
 	})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bridge.Connect(ctx); err != nil && !h.engineAway.Load() {
 		t.Fatal(err)
 	}
 	return bridge

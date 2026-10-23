@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/session_server.dart';
 import 'package:waxdeck_api_gen/src/model/user.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -15,6 +16,7 @@ part 'session_info.g.dart';
 /// * [authenticated] - True when a valid session or token was presented.
 /// * [user] 
 /// * [csrfToken] - CSRF token for cookie-authenticated mutations. Present only when authenticated. 
+/// * [server] 
 @BuiltValue()
 abstract class SessionInfo implements Built<SessionInfo, SessionInfoBuilder> {
   /// True when a valid session or token was presented.
@@ -27,6 +29,9 @@ abstract class SessionInfo implements Built<SessionInfo, SessionInfoBuilder> {
   /// CSRF token for cookie-authenticated mutations. Present only when authenticated. 
   @BuiltValueField(wireName: r'csrfToken')
   String? get csrfToken;
+
+  @BuiltValueField(wireName: r'server')
+  SessionServer? get server;
 
   SessionInfo._();
 
@@ -68,6 +73,13 @@ class _$SessionInfoSerializer implements PrimitiveSerializer<SessionInfo> {
       yield serializers.serialize(
         object.csrfToken,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.server != null) {
+      yield r'server';
+      yield serializers.serialize(
+        object.server,
+        specifiedType: const FullType(SessionServer),
       );
     }
   }
@@ -115,6 +127,14 @@ class _$SessionInfoSerializer implements PrimitiveSerializer<SessionInfo> {
           ) as String?;
           if (valueDes == null) continue;
           result.csrfToken = valueDes;
+          break;
+        case r'server':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(SessionServer),
+          ) as SessionServer?;
+          if (valueDes == null) continue;
+          result.server.replace(valueDes);
           break;
         default:
           unhandled.add(key);

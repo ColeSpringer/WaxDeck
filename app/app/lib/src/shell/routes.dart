@@ -262,6 +262,16 @@ abstract final class WaxRoute {
   static String healthRule(String rule) => '$health/$rule';
   static const diagnostics = '$admin/diagnostics';
   static const organize = '$admin/organize';
+
+  /// [organize] with a dry run of each library's own profile under way as
+  /// it opens: where the path rule's fix sends an administrator. A query
+  /// rather than a path segment, so the one route answers both.
+  static const organizePreviewOwn =
+      '$organize?$organizePreviewParam=$organizeOwnProfiles';
+
+  /// The query parameter [organizePreviewOwn] carries, and its value.
+  static const organizePreviewParam = 'preview';
+  static const organizeOwnProfiles = 'own';
   static const users = '$admin/users';
   static const userEdit = '$users/edit';
   static const audit = '$admin/audit';

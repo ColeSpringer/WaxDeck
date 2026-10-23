@@ -10,9 +10,10 @@ Prometheus metrics, and moving in from another server.
 Everything here lives in the **admin console** at `/admin`, reached from
 the Admin console row in the sidebar or from Settings > Server. The
 console has a dashboard (health, the review queue's depth, jobs in
-flight, the last backup, and the two long operations you start by hand)
-and a section per area, each with a location of its own so "it is under
-Backups" is a link rather than a set of directions. On a phone the
+flight, the last backup, whether the streaming engine is connected,
+unreachable or not configured, and the two long operations you start by
+hand) and a section per area, each with a location of its own so "it is
+under Backups" is a link rather than a set of directions. On a phone the
 console is a list of those sections. An account without the
 administrator role that opens a console location gets a page saying so
 rather than the console: the link keeps its meaning, and nobody is left
@@ -106,6 +107,36 @@ stream already playing finishes. One account holds
 at most `WAXDECK_SESSION_CAP` sessions; a sign-in past it ends the least
 recently used.
 
+Deleting an account asks what becomes of its playlists. The default
+hands its shared playlists to the administrator who deletes it, with
+their entries and a new owner shown, and deletes its private ones, which
+nobody else could see; the other choice deletes every playlist it owns.
+Over the API that is `DELETE /api/v1/users/{id}?playlists=transfer|delete`,
+and `transferTo` names another account to take the shared playlists. A
+smart playlist is evaluated against its owner, so one whose rule reads
+the account's own stars, ratings or plays (or names one of its private
+playlists) is handed over as a fixed list of the tracks it held for that
+account, under the same name and visibility, and gets a new id; one whose
+rule reads only the catalog is handed over as the smart playlist it is.
+The home pins other accounts have of a playlist that becomes a fixed list
+follow it. The account's public share links are handed to no one: a link
+is served under the reach of the account that made it, which is wider or
+narrower than the account that takes the playlist, so they end with the
+account, on its playlists as on anything else it shared. The account is
+disabled first, which is where the last administrator is refused, and a
+deletion that stops part-way leaves it disabled; repeating the request
+finishes it (a second request while one runs is refused). A fixed copy
+that a stopped deletion left of a playlist, which carries the playlist's
+id in its name until its handover has recorded it, is found by the next
+request: with the playlists handed over it is brought up to what the
+playlist evaluates to then and takes the playlist's place, and with the
+answer to delete them it is removed. The audit entry says how many
+playlists went where, how many of them became fixed lists, how many links
+ended, and, for a deletion that stopped, that it did, and the fixed copy
+of a playlist it left behind, if it did; the request that then finds the
+copy says what became of it, removed or kept, by id. An administrator may
+delete any shared playlist, but only its owner edits it.
+
 ## Signup requests and invites
 
 Out of the box, accounts are admin-created. Two self-serve doors can
@@ -128,12 +159,39 @@ Every administrative and destructive action is recorded: who did it,
 to what, and the detail of the change - account edits, permission
 changes, password resets, sign-outs everywhere, share links created
 (and revoked by an administrator), playlist deletions, entity merges,
-item deletions, trash operations, backups and restores, settings
-changes, migration runs.
+item deletions and the deletes the filesystem refused
+(`items.delete.refused`, and `items.delete-files.refused` for a
+delete of some of an item's files), book merges and splits and CUE
+splits (`book.merge`, `book.split`, `item.split-cue`; a merge or split
+that failed after some of the book went to the trash is recorded too,
+with `result` `failed`, what went and what was put back), trash
+operations, backups and restores, settings changes, migration runs.
 Names are captured at write time, so "who deleted this playlist" has
 an answer even after the playlist, or the actor, is gone. The log is
 admin-only, filterable by action prefix (`playlist.` matches every
 playlist action), actor, and target.
+
+An entry says what changed, not only that something did. An account
+edit (`user.update`) lists each field it changed with its value before
+and after, shown in the console as `field: from -> to` rows; no
+credential is ever among them, and saving what the account already holds
+records nothing. A deleted account's entry (`user.delete`) says how many
+playlists were handed over, how many of those became fixed lists, how
+many were deleted, and how many public links ended with the account; a
+deletion that stopped records what it had done first, with `failed`, the
+reason, and `fixedCopyLeft` when a copy of a playlist could not be taken
+back, and a later one that finds such a copy names it in
+`fixedCopiesRemoved` or `fixedCopiesKept`. Server notification target
+changes (`notification-target.create`, `.update`, `.delete`) name the
+kind and label, never the address or its secrets. The library switches
+(`library.read-only`, `library.folder-fallback`, `library.matching`) name
+the library, and `trash.restore` names the file that came back. A
+migration that failed for good is recorded too (`migration.run` with
+`failed` and the reason, web addresses cut to their host), as one that
+finished is. An Organizer run and an undo of one are recorded when they
+end, failed or cut short too: `organize.apply` names the run's job and
+the profile it laid out by, and `organize.undo` the run it undid, each
+with how many files moved, were held back and failed.
 
 ## Backups and restore
 
@@ -211,8 +269,8 @@ restart, take it out.
 With the compose stack that is four steps: add
 `WAXDECK_RESET_CATALOG=true` to `deploy/.env`, run `make up` (it
 rebuilds both images; the server sets the old catalog aside, builds a
-new one and rescans, and the streaming sidecar may restart once or
-twice until the new catalog exists), then delete the line and run
+new one and rescans, and the streaming sidecar starts once the server
+answers healthy), then delete the line and run
 `make up` again so the server is recreated without it. A bare binary
 takes the flag for one start: `WAXDECK_RESET_CATALOG=true waxdeck ...`
 or `-reset-catalog`. A catalog reset alone needs no `make reset`,
@@ -328,11 +386,21 @@ Deletions go to the catalog's reversible trash - a same-volume
 lists every trashed file with where it lived and the library it came
 from, restores files back into the catalog (re-scanned and
 un-archived), and empties the trash permanently, reporting the space
-reclaimed and how many entries read-only libraries kept. Deleting items
-from the item page previews what will be deleted (the files by name,
-and the bytes) before anything moves. The tracks a cue sheet cuts from
+reclaimed and how many entries read-only libraries kept. Deleting
+items - from an item's page, a track's or a book's menu, or a whole
+album from its overflow - previews what will be deleted (each file by
+its place in its library, and the bytes) before anything moves. A move the
+library's folder refuses (its permissions, or a read-only mount) is
+reported, never recorded as done: the file stays, a delete that moved
+nothing is refused and audited as refused, and one that moved some
+files says how many stayed and why. The tracks a cue sheet cuts from
 one file share it, so they are deleted together or not at all: one
-alone is refused.
+alone is refused, and the app offers the tracks asked for together with
+every other track their file holds.
+The files a book merge, a book split or a CUE split replaces go to the
+trash under that tool's reason (`book-merge`, `book-split`,
+`cue-split`). A merge or split takes the files it was queued with and
+nothing else; one that cannot finish puts back what its trash took.
 
 A file holding the same audio as one already cataloged, or another
 encoding of its recording, does not become an item of its own: the
@@ -410,6 +478,11 @@ not reached. The podcast download tree needs a writable root: while the
 server is read-only, episode fetches and download removal are refused,
 and the fetch queue and download retention wait for the flag to clear.
 
+While the server-wide switch is on, every signed-in account's app shows
+a banner saying so, and a refused write answers "the server is in
+read-only mode". Turning the switch on or off reaches apps that are
+already open without a reload.
+
 ## Naming untagged files from folders
 
 An in-place library can name a track that carries no artist, album
@@ -429,19 +502,34 @@ rescan with "Re-read unchanged files". Files carrying only sort tags
 The console's Libraries section lists every root with its path, what it
 holds, how many items the catalog has under it, the organize profile a
 managed root is laid out by, its read-only flag, and its matching mode
-(automatic, ask me, or leave alone). Adding one there
-creates a library root without restarting the server: the path is
-validated (an existing folder, absolute, not overlapping an existing
-root, the inbox, or the podcast download dir), cataloged, and scanned in
-the background. Browsing and downloading its files work as soon as the
-scan indexes them. The catalog keeps the root with its managed policy
-and the server keeps its name, so after a restart it is still watched,
-still an upload target, and still named as it was. A root added with the
-`waxbin` CLI shows up as soon as the catalog reports it, named after its
-directory, and the streaming engine is taught it the same way as one
-added here. The library name doubles as the streaming engine's
-root name, so it also has to be free there - including the podcast root
-name, which the engine mounts but the library list never shows.
+(automatic, ask me, or leave alone). Under its name a row says when the
+server's configuration names it, when its folder was not there at the
+last scan (its items stay listed and play once it is back), and, for a
+managed library while neither it nor the server is read-only, when the
+server cannot write to its folder. The server checks that when it
+starts, when the library is added (here or with the `waxbin` CLI), when
+its read-only flag or the server's is lifted, every half hour, and as
+soon as a write into a library's folder is refused, so a folder whose
+ownership was fixed by hand reads writable again within half an hour.
+Adding one there creates a library root without restarting the server:
+the path is validated (absolute, an existing folder the server can read
+and list, answering within 15 seconds, writable by the server when the
+library is managed and the server is not read-only, not overlapping an
+existing root, the inbox, or the podcast download dir), cataloged, and
+scanned in the background.
+**Folder mounted later** registers a path whose folder is not there yet,
+such as a drive that is mounted after the server starts: its scans
+report it unreachable until the folder appears, and once it does the
+watcher takes it up and the streaming engine is offered it again.
+Browsing and downloading its files work as soon as the scan indexes
+them. The catalog keeps the root with its managed policy and the server
+keeps its name, so after a restart it is still watched, still an upload
+target, and still named as it was. A root added with the `waxbin` CLI
+shows up as soon as the catalog reports it, named after its directory,
+and the streaming engine is taught it the same way as one added here.
+The library name doubles as the streaming engine's root name, so it also
+has to be free there - including the podcast root name, which the engine
+mounts but the library list never shows.
 
 What a library holds can be changed later from its row's **Holds**
 choice, which asks first and then scans the library to apply it. Onto
@@ -466,7 +554,12 @@ runtime. Point both sides at one JSON config file - `WAXDECK_FLOW_CONFIG`
 for the server, `WAXFLOW_CONFIG` for the engine - and creating a library
 rewrites the file's `roots` array and asks the engine to reconcile. A
 configured root the file does not list yet (`books` the first time it is
-mounted) is added the same way when the server starts.
+mounted) is added the same way when the server starts. While the engine
+is not answering (still starting, or stopped), a removed library still
+leaves the file at once, so the engine never starts on a folder that is
+gone, and the reload follows once it answers. A new one waits for that
+answer instead: only a reload checks that the engine can open a path,
+so one it cannot open never reaches the file it starts from.
 `make up` wires this and seeds the file; the compose service mounts the
 directory read-write into WaxDeck and read-only into the engine, and
 both containers run as the same UID (as they already must for the shared
@@ -487,6 +580,58 @@ working. Either way the library is created and keeps browsing and
 downloading; the reason streaming has to wait for an engine restart
 comes back on the create response, stays on the Libraries screen until
 the next one, and is recorded on the `library.create` audit entry.
+
+The engine does not start while a folder its config names is missing. A
+library whose folder goes away after it was mounted (a folder renamed or
+deleted, a drive unplugged together with its mount point) stays in that
+config, so the engine's next start fails on it: the server keeps
+running and reports the engine unreachable, originals still play, and
+every library waits for transcoding, gapless playback, voice boost and
+the book tools until the engine starts again. Bring the folder back
+(mount the drive again), or remove the library, which takes the folder
+out of the config; the engine then starts on its next try. A drive
+unplugged while its mount point stays, empty, does not stop the engine.
+
+## Removing a library
+
+A library added in the console, or with the `waxbin` CLI, is removed
+from its row's menu: **Remove library** asks for the library's name
+typed back, then runs as a job you can follow in Tasks. Its files stay
+on disk. An item with a copy in another library carries on from that
+copy; an item with no other copy is archived with its play state and
+playlist entries, and comes back when the folder is added again and
+scanned. The library's trash entries go, their files staying in its
+trash folder. Once the job has taken the library out of the catalog, the
+server drops the library's name, the grants naming it, from accounts and
+from invites, and its matching settings, and records the removal as
+`library.remove` in the audit log with what it let go of; whoever
+started it is told whether the library went. A job stopped before then
+leaves the library, its name, grants and mount in place, though the
+files of the batches it got through were let go of: when there were
+any, the server scans the library as it follows the job's end, which
+takes them back (a job a restart cut short is left to the startup scan
+when `WAXDECK_SCAN_ON_START` runs one, and with another catalog job
+running then, the library's next scan takes them back), and removing it
+again finishes the job. The streaming engine's config file
+stops naming the folder, so the engine never starts from it again; an
+engine that reloads its roots from that file (see the limits above)
+lets go of it at once, or once it is back when it is not reachable then,
+and one that does not reload serves it until it restarts. When the
+engine refuses that reload, or the config file cannot be written, the
+audit entry's `streamingWarning` says why; a file the server could not
+write is written at its next start, or when the engine comes back.
+
+A library removed with the `waxbin` CLI while the server was stopped is
+cleaned up at the next start: its name, the grants naming it, its
+matching settings and the streaming engine's mount go, and the log says
+so. A library that took its name in another folder meanwhile is mounted
+from its own folder. The audit log has no entry for it, since the server
+did not run that removal.
+
+A library listed in `WAXDECK_LIBRARY_ROOTS` cannot be removed here:
+every start registers it again. Take it out of the configuration and
+restart, then remove it; it keeps its name meanwhile. The podcast
+library follows the podcast download folder and is never removed.
 
 ## Manual files in the library folders
 
@@ -643,17 +788,39 @@ sealed at rest.
 The tasks screen shows background work: file tooling, acquisitions,
 migration imports (with their reports), health fixes, and, for an
 administrator, the catalog's own jobs (scans, analysis, enrichment,
-organize runs, emptying the trash) with their progress and, once they
-end, what they did. A running job is listed however many newer ones
-came after it; finished per-item jobs (an upload's imports, deletes,
-restores, trash purges) are left out, and only the 20 newest finished
-jobs are shown. A job on one target, such as an enrichment of one item
-or the watcher's scan of one library, is listed by that target's name
-only while it runs, and only its starter hears of it (the watcher's
+organize runs and their undos, library removals, emptying the trash)
+with their progress and, once they end, what they did. A running job
+is listed however many newer ones came after it; finished per-item jobs
+(an upload's imports, deletes, restores, trash purges) are left out,
+and only the 20 newest finished jobs are shown. A job on one target,
+such as an enrichment of one item or the watcher's scan of one library,
+is listed by that target's name only while it runs, except a kind
+change, an organize undo and a library removal, which stay listed once
+they end; only its starter hears of it while it runs (the watcher's
 scans notify nobody). Task and job progress streams live over the
 WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves a
 task's lifecycle as server-sent events for anything that prefers a
 plain HTTP stream.
+
+A book merge or split, or a CUE split, waiting out a passing failure
+reads Waiting rather than running: why (the catalog busy, a library
+read-only, a folder that refuses the server, the streaming engine
+unreachable), what would end it where that takes somebody, and when it
+tries next. Once a merge's or split's originals are in the trash, its
+row says the book's files are there until it finishes; the next try is
+said as a time of day, and once it comes, that the task is trying again.
+One parked after its last three runs ended with the server reads Needs
+attention, with why and where each file it made or moved is (a long
+account folds to its first lines, and can be selected to copy out).
+Parked counts as failed: dismissing it, clearing finished tasks and the
+prune take it as they take any failed task, and until one does, the book
+or rip it held takes no other merge or split. Clearing a merge or split
+whose new files still wait hidden settles them first - removed with
+every original in place, otherwise given their names for the next scan -
+and the audit log records which; one whose folder will not let them be
+named or removed stays, saying so and holding its book, until it does.
+Clear finished says how many it kept that way, and the prune tries such
+a task again each night without recording it again.
 
 A finished scan counts files (added, updated, copies, which joined an
 item as a copy, and errored) and the items it marked missing, and says
@@ -667,20 +834,32 @@ folded into another, plus the files it could not write when write-back
 was on. Its dialog follows it and opens the result; anyone who may edit
 that item can read the finished job, so an uploader follows their own.
 
-Whoever started a scan, an analysis, an enrichment pass, a health fix
-or a kind change gets a notification when it ends, saying what it did or why it failed
-(a job cut off by the server stopping says so), even when the server
-restarted in between. An organize run and emptying the trash run inside
-the request that started them: their starter hears of success, and a
-failure is answered on the request. Work the server started on its own
-schedule notifies nobody.
+Whoever started a scan, an analysis, an enrichment pass, a health fix,
+a kind change, an organize run or an undo of one (an `organize-undo`
+job) or a library removal gets a notification when it ends, saying what
+it did or why it failed (a job cut off by the server stopping says so),
+even when the server restarted in between. A book merge or split, or a
+CUE split, that fails or is parked tells whoever started it the same
+way, saying why and where its files are. An organize run and its undo
+answer the request that started them once the job ends. Emptying the
+trash runs inside the request that started it: its starter hears of
+success, and a failure is answered on the request. Work the server
+started on its own schedule notifies nobody.
 
 A finished task is a receipt, and receipts pile up on an account that
 never opens this screen. The scheduled prune clears terminal rows past
 `taskRetentionDays` (Settings > Server); the default is 30 days, and 0
-keeps them indefinitely. Only terminal rows go - a task still running or
-still waiting to be claimed is work in progress whatever its age - and
-the setting is re-read on every pass, so a change takes effect at the
-next run rather than at the next restart. Clearing by hand, per row or
-all-finished-at-once, still works and is unaffected. Both touch tasks
-only; the catalog's jobs are not pruned or cleared from here.
+keeps them indefinitely. The same window ends the Organizer's journal,
+so an organize run older than it can no longer be undone. Only terminal
+rows go - a task still running or still waiting to be claimed is work
+in progress whatever its age - and the setting is re-read on every
+pass, so a change takes effect at the next run rather than at the next
+restart. Clearing by hand still works and is unaffected: a row's
+dismiss, or **Clear finished**, which clears your own finished tasks.
+An administrator's list shows every account's, so there the control is
+a menu of two sweeps - your own, or everyone's, which asks first and
+takes the reports other accounts have not read
+(`POST /api/v1/tools/tasks/clear-finished` with `scope` `mine`, the
+default, or `all`, which is administrators only). Running and queued
+tasks stay either way. Neither the prune nor the sweeps clear the
+catalog's jobs.

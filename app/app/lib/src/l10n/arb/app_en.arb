@@ -76,6 +76,24 @@
   "@aboutVersionsTitle": {
     "description": "Heading over the version numbers a bug report is asked for."
   },
+  "adminAuditChange": "{field}: {from} -> {to}",
+  "@adminAuditChange": {
+    "description": "One change an audit event recorded, above its stored detail: the field's wire name, then its value before and after. The names and values are wire tokens and stay as they are; the arrow between them is the only thing a translation may move.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "permissions.download"
+      },
+      "from": {
+        "type": "String",
+        "example": "true"
+      },
+      "to": {
+        "type": "String",
+        "example": "false"
+      }
+    }
+  },
   "adminAuditEmptyMessage": "Administrative actions are recorded here as they happen.",
   "@adminAuditEmptyMessage": {
     "description": "Empty state of the audit log, saying what will fill it."
@@ -1034,6 +1052,10 @@
   "@adminInvitesEmpty": {
     "description": "Empty state of the invites tab."
   },
+  "adminLibrariesColumnActions": "Actions",
+  "@adminLibrariesColumnActions": {
+    "description": "Header of the libraries table's column holding each library's menu, and the label of that row on a library's card."
+  },
   "adminLibrariesColumnFolders": "Name from folders",
   "@adminLibrariesColumnFolders": {
     "description": "Column heading on the Libraries table: whether a scan names a library's untagged files from their folders (the artist folder and the album folder)."
@@ -1082,9 +1104,31 @@
   "@adminLibrariesTitle": {
     "description": "Title of the screen listing the roots WaxDeck scans."
   },
+  "adminLibraryAbsentHelp": "Register the path now; it is scanned once the folder is there.",
+  "@adminLibraryAbsentHelp": {
+    "description": "Line under the add form's switch for a folder that is not there yet, such as a drive mounted later."
+  },
+  "adminLibraryAbsentTitle": "Folder mounted later",
+  "@adminLibraryAbsentTitle": {
+    "description": "Switch in the add form that registers a path whose folder is not there yet."
+  },
+  "adminLibraryActions": "Actions for {name}",
+  "@adminLibraryActions": {
+    "description": "Accessible name of the menu holding what can be done with one library. {name} is the library.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
   "adminLibraryAddGroup": "Add a library",
   "@adminLibraryAddGroup": {
     "description": "Heading over the form that registers a new root."
+  },
+  "adminLibraryConfigured": "Configured on the server",
+  "@adminLibraryConfigured": {
+    "description": "Caption on a library the server's configuration names, which only a configuration change removes."
   },
   "adminLibraryContentClass": "Content class",
   "@adminLibraryContentClass": {
@@ -1296,6 +1340,42 @@
       }
     }
   },
+  "adminLibraryRemove": "Remove library",
+  "@adminLibraryRemove": {
+    "description": "Menu row that takes a library out of the catalog. Its files stay on disk."
+  },
+  "adminLibraryRemoveAction": "Remove",
+  "@adminLibraryRemoveAction": {
+    "description": "Confirm button of the remove-library dialog."
+  },
+  "adminLibraryRemoveBody": "Its files stay on disk. The catalog forgets the library; items with no other copy are archived and come back if the folder is added again. Type the library's name to confirm.",
+  "@adminLibraryRemoveBody": {
+    "description": "Body of the remove-library dialog, which asks for the library's name typed back."
+  },
+  "adminLibraryRemoveConfigured": "Configured on the server; remove it from WAXDECK_LIBRARY_ROOTS first",
+  "@adminLibraryRemoveConfigured": {
+    "description": "Why the remove row is off for a library the server's configuration names. WAXDECK_LIBRARY_ROOTS is a setting's name; keep it as is."
+  },
+  "adminLibraryRemoveTitle": "Remove \"{name}\"?",
+  "@adminLibraryRemoveTitle": {
+    "description": "Title of the remove-library dialog. {name} is the library.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
+  "adminLibraryRemoving": "Removing \"{name}\"; follow it in Tasks",
+  "@adminLibraryRemoving": {
+    "description": "Message once a library's removal started; it runs as a job the Tasks screen lists.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
   "adminLibraryRescan": "Rescan libraries",
   "@adminLibraryRescan": {
     "description": "Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural. Also titles the confirm dialog the button opens."
@@ -1323,6 +1403,14 @@
   "adminLibraryUnnamedPath": "unnamed on this filesystem",
   "@adminLibraryUnnamedPath": {
     "description": "Fills the path cell of a library that has no directory of its own, such as a catalog library. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminLibraryUnreachable": "Folder not reachable",
+  "@adminLibraryUnreachable": {
+    "description": "Caption on a library whose folder was not there at its last scan, such as a drive not mounted. Its items stay listed."
+  },
+  "adminLibraryUnwritable": "Not writable by the server",
+  "@adminLibraryUnwritable": {
+    "description": "Caption on a managed library whose folder the server cannot write to, so uploads, organize moves and deletes into it fail."
   },
   "adminMigrateAccountHelp": "The stars, ratings, history, and progress land on this account.",
   "@adminMigrateAccountHelp": {
@@ -1457,10 +1545,6 @@
   "adminOpenTasks": "Tasks",
   "@adminOpenTasks": {
     "description": "Button on a message that opens the task list, where the work it started reports."
-  },
-  "adminReadOnlyBanner": "Read-only mode is on. Uploads, edits, and deletes are refused server-wide.",
-  "@adminReadOnlyBanner": {
-    "description": "Banner across the console while read-only mode is on, because every refusal elsewhere says only that something was refused."
   },
   "adminRestoreAppliesAtRestart": "The restore applies at the next server restart.",
   "@adminRestoreAppliesAtRestart": {
@@ -1941,6 +2025,22 @@
   "@adminSharesLoadError": {
     "description": "Title of the error state when the server-wide share list could not be read."
   },
+  "adminStreamingConnected": "Connected",
+  "@adminStreamingConnected": {
+    "description": "Streaming engine tile value: the engine answers."
+  },
+  "adminStreamingDirect": "Originals play directly meanwhile",
+  "@adminStreamingDirect": {
+    "description": "Caption under the streaming engine tile while the engine is unreachable: playback goes on with the original files."
+  },
+  "adminStreamingNotConfigured": "Not configured",
+  "@adminStreamingNotConfigured": {
+    "description": "Streaming engine tile value: the server runs without one (no engine URL is set)."
+  },
+  "adminStreamingUnreachable": "Unreachable",
+  "@adminStreamingUnreachable": {
+    "description": "Streaming engine tile value: an engine is configured and is not answering; the server retries it and plays originals directly meanwhile."
+  },
   "adminThumbsBlurb": "Resized copies of your covers, generated on demand. Clearing them costs a moment of decoding the next time each one is drawn, never a picture.",
   "@adminThumbsBlurb": {
     "description": "Line under the artwork-cache heading, saying what the cache is and what clearing it costs."
@@ -2151,6 +2251,10 @@
   "@adminTileSimilarity": {
     "description": "Tile saying how much of the library has been analyzed for sonic similarity."
   },
+  "adminTileStreaming": "Streaming engine",
+  "@adminTileStreaming": {
+    "description": "Label of the dashboard tile that says whether the server's streaming engine answers."
+  },
   "adminTileTracksEmbedded": "{count, plural, =1{1 track embedded} other{{count} tracks embedded}}",
   "@adminTileTracksEmbedded": {
     "description": "Caption of the similarity tile, counting tracks that have been analyzed. Embedding is what the analysis produces.",
@@ -2293,6 +2397,18 @@
       }
     }
   },
+  "adminTrashReasonBookMerge": "book merge",
+  "@adminTrashReasonBookMerge": {
+    "description": "Reason for a book's part a book merge moved to the trash, the merged file holding its audio. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminTrashReasonBookSplit": "book split",
+  "@adminTrashReasonBookSplit": {
+    "description": "Reason for a book's file a book split moved to the trash, its pieces holding its audio. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminTrashReasonCueSplit": "CUE split",
+  "@adminTrashReasonCueSplit": {
+    "description": "Reason for an album rip a CUE split moved to the trash once its tracks were real files. CUE is the sheet format's name, so it keeps its capitals."
+  },
   "adminTrashReasonPermanent": "permanent",
   "@adminTrashReasonPermanent": {
     "description": "Reason for a deletion that was meant to be final. Lower case: it fills a table cell rather than starting a sentence."
@@ -2399,7 +2515,7 @@
   "@adminUserDeleteAction": {
     "description": "Confirming button in the delete-account dialog."
   },
-  "adminUserDeleteBody": "{username} is removed for good, along with its sessions and preferences. Library files are untouched.",
+  "adminUserDeleteBody": "{username} is removed for good, along with its sessions, preferences and share links, which stop working. Library files are untouched.",
   "@adminUserDeleteBody": {
     "description": "Body of the delete-account dialog. {username} is the account being deleted.",
     "placeholders": {
@@ -2408,6 +2524,22 @@
         "example": "ada"
       }
     }
+  },
+  "adminUserDeletePlaylistsDelete": "Delete their playlists",
+  "@adminUserDeletePlaylistsDelete": {
+    "description": "Choice in the delete-account dialog: every playlist the account owns is deleted."
+  },
+  "adminUserDeletePlaylistsDeleteHelp": "Shared and private alike. Anyone they shared a playlist with loses it.",
+  "@adminUserDeletePlaylistsDeleteHelp": {
+    "description": "Line under the choice that deletes the account's playlists, saying what it costs the people the playlists were shared with."
+  },
+  "adminUserDeletePlaylistsTransfer": "Hand their shared playlists to me",
+  "@adminUserDeletePlaylistsTransfer": {
+    "description": "Choice in the delete-account dialog, and the default: the account's shared playlists become the administrator's who deletes it."
+  },
+  "adminUserDeletePlaylistsTransferHelp": "They keep their entries and stay shared. A smart playlist that depends on their stars, ratings, plays or private playlists becomes a fixed list of its tracks. Their private playlists are deleted.",
+  "@adminUserDeletePlaylistsTransferHelp": {
+    "description": "Line under the choice that hands the account's shared playlists to the administrator, saying what happens to the rest."
   },
   "adminUserDeleteTitle": "Delete account?",
   "@adminUserDeleteTitle": {
@@ -3641,6 +3773,32 @@
   "@bookMerge": {
     "description": "Row in a book's overflow turning several files into one with chapter marks. Administrators only."
   },
+  "bookMergeAction": "Merge",
+  "@bookMergeAction": {
+    "description": "Confirming button of the dialog that merges a book's files into one."
+  },
+  "bookMergeBody": "The parts are joined into one chaptered file beside them, in the same library; every listener's position carries over. The original files move to the trash unless you keep them.",
+  "@bookMergeBody": {
+    "description": "Body of the dialog confirming a book merge: where the result goes, that positions survive, and what happens to the parts."
+  },
+  "bookMergeKeep": "Keep the original files",
+  "@bookMergeKeep": {
+    "description": "Switch in the merge dialog that keeps the book's parts instead of moving them to the trash; the merged copy then gets its own folder beside them."
+  },
+  "bookMergeKeepHelp": "The merged copy goes into a folder of its own beside them",
+  "@bookMergeKeepHelp": {
+    "description": "Help under the merge dialog's keep switch: where the merged copy goes when the parts stay."
+  },
+  "bookMergeTitle": "Merge {count} files into one?",
+  "@bookMergeTitle": {
+    "description": "Title of the dialog confirming a book merge. {count} is how many files the book is now.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "bookMore": "More",
   "@bookMore": {
     "description": "Accessible name of a book's overflow menu."
@@ -3818,6 +3976,32 @@
   "bookSplit": "Split at chapters",
   "@bookSplit": {
     "description": "Row in a book's overflow cutting one file into a file per chapter. Administrators only."
+  },
+  "bookSplitAction": "Split",
+  "@bookSplitAction": {
+    "description": "Confirming button of the dialog that splits a book at its chapters."
+  },
+  "bookSplitBody": "One file per chapter is written beside the book. The original moves to the trash unless you keep it.",
+  "@bookSplitBody": {
+    "description": "Body of the dialog confirming a book split: where the pieces go and what happens to the original file."
+  },
+  "bookSplitKeep": "Keep the original file",
+  "@bookSplitKeep": {
+    "description": "Switch in the split dialog that keeps the book's file instead of moving it to the trash; the pieces then get their own folder beside it."
+  },
+  "bookSplitKeepHelp": "The pieces go into a folder of their own beside it",
+  "@bookSplitKeepHelp": {
+    "description": "Help under the split dialog's keep switch: where the pieces go when the original stays."
+  },
+  "bookSplitTitle": "Split at {count} chapters?",
+  "@bookSplitTitle": {
+    "description": "Title of the dialog confirming a book split. {count} is how many chapters, so how many files it makes.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
   },
   "bookStartOver": "Start over",
   "@bookStartOver": {
@@ -4717,6 +4901,86 @@
       }
     }
   },
+  "errorBookToolCopyElsewhere": "This book has a copy at {copy}, which would be left as the book. Delete the copy, or keep the originals.",
+  "@errorBookToolCopyElsewhere": {
+    "description": "Error sentence for a book merge or split refused with `conflict` and the params' reason copy-elsewhere, when the copy's library has no name to give.",
+    "placeholders": {
+      "copy": {
+        "type": "String",
+        "example": "Ada Author/The Book/part 1.m4b"
+      }
+    }
+  },
+  "errorBookToolCopyElsewhereIn": "This book has a copy at {copy} in the {library} library, which would be left as the book. Delete the copy, or keep the originals.",
+  "@errorBookToolCopyElsewhereIn": {
+    "description": "Error sentence for a book merge or split refused with `conflict` and the params' reason copy-elsewhere: the copy's place and its library.",
+    "placeholders": {
+      "copy": {
+        "type": "String",
+        "example": "Ada Author/The Book/part 1.m4b"
+      },
+      "library": {
+        "type": "String",
+        "example": "Audiobooks"
+      }
+    }
+  },
+  "errorBookToolMultiFile": "This book is already split into several files. Merge it first to split it again.",
+  "@errorBookToolMultiFile": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason multi-file."
+  },
+  "errorBookToolNameTaken": "{name} is already in {folder}. Move it away, then try again.",
+  "@errorBookToolNameTaken": {
+    "description": "Error sentence for a book merge or split refused with `conflict` and the params' reason name-taken: a file already holds the name the new file would take.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "The Book (Merged).m4b"
+      },
+      "folder": {
+        "type": "String",
+        "example": "Ada Author/The Book (Merged)"
+      }
+    }
+  },
+  "errorBookToolNoChapters": "This book has no chapters to split at.",
+  "@errorBookToolNoChapters": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason no-chapters."
+  },
+  "errorBookToolNoCuts": "This book's chapter marks leave nowhere to cut it.",
+  "@errorBookToolNoCuts": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason no-cuts: every chapter mark falls at the start, or on another."
+  },
+  "errorBookToolNoFile": "This book has no file to split.",
+  "@errorBookToolNoFile": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason no-file."
+  },
+  "errorBookToolNoSampleRate": "This book's file does not say its sample rate, so its chapters cannot be cut exactly.",
+  "@errorBookToolNoSampleRate": {
+    "description": "Error sentence for a book split refused with `conflict` and the params' reason no-sample-rate."
+  },
+  "errorBookToolPartsInTrash": "{count, plural, =1{1 of this book's files went} other{{count} of this book's files went}} to the trash with a merge or split that did not finish: {files}{more, plural, =0{} other{, and {more} more}}. Restore {count, plural, =1{it} other{them}} from the trash, then merge or split the book again.",
+  "@errorBookToolPartsInTrash": {
+    "description": "A merge or split refused because an earlier one that did not finish left some of the book's files in the trash, which none of its new files holds: a merge of what remains would leave them out. {files} names the first few by their place in their library, and {more} counts the rest (zero when all are named).",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "60"
+      },
+      "files": {
+        "type": "String",
+        "example": "Ada/Book/part 1.m4b, Ada/Book/part 2.m4b"
+      },
+      "more": {
+        "type": "int",
+        "example": "55"
+      }
+    }
+  },
+  "errorBookToolSingleFile": "This book is already one file, so there is nothing to merge.",
+  "@errorBookToolSingleFile": {
+    "description": "Error sentence for a book merge refused with `conflict` and the params' reason single-file: the book is one file already."
+  },
   "errorCatalogBusy": "Another job is holding the library's files. Try again shortly.",
   "@errorCatalogBusy": {
     "description": "Error sentence for the spec code `catalog-busy`: a file-moving request cannot start yet, and this one clears on its own."
@@ -4732,6 +4996,10 @@
   "errorCueRipDelete": "This track is part of a larger file that holds other tracks too, so it can only be deleted together with them.",
   "@errorCueRipDelete": {
     "description": "Error sentence for `invalid-request` when the params' reason is cue-rip: a delete named one of the tracks a cue sheet cuts from one file, without the rest."
+  },
+  "errorCueSplitNoSheet": "The file this track is cut from has no CUE sheet of its own name beside it, so there is nothing to split it by.",
+  "@errorCueSplitNoSheet": {
+    "description": "Error sentence for a CUE split refused with `conflict` and the params' reason no-sheet: the album file has no .cue of the same name next to it. CUE is the sheet format's name, so it keeps its capitals."
   },
   "errorDirectoryUnavailable": "The directory service did not answer. Try again later.",
   "@errorDirectoryUnavailable": {
@@ -4837,7 +5105,7 @@
   "@errorRateLimited": {
     "description": "Error sentence for the spec code `rate-limited`."
   },
-  "errorReadOnly": "The library is read-only right now, so nothing can be changed.",
+  "errorReadOnly": "The server or this library is read-only right now, so nothing can be changed.",
   "@errorReadOnly": {
     "description": "Error sentence for the spec code `read-only`: reads and playback keep working."
   },
@@ -4853,9 +5121,17 @@
   "@errorStorageFull": {
     "description": "Error sentence for the spec code `storage-full`: the server's own disk, not the reader's allowance, so there is nothing they can clear."
   },
+  "errorStorageUnwritable": "The server cannot write to that library's folder, so nothing was changed. Check the folder's ownership and permissions.",
+  "@errorStorageUnwritable": {
+    "description": "Error sentence for the spec code `storage-unwritable`: a library folder refused the server's write, for its permissions or a read-only mount, so nothing changed."
+  },
   "errorStreamStale": "This file changed on the server. Open it again to play it.",
   "@errorStreamStale": {
     "description": "Error sentence for the spec code `stream-stale`: a minted media URL no longer matches the file it points at."
+  },
+  "errorStreamingEngine": "The streaming engine is not reachable right now. Originals still play; transcoding, gapless playback, voice boost and merging or splitting files wait for it.",
+  "@errorStreamingEngine": {
+    "description": "Error sentence for `feature-unavailable` when the params name the feature streaming-engine: a request only the streaming engine serves (a queue rendered as one stream, a stream with voice boost, a format or a bitrate, a book merge or split, a CUE split) while the server cannot reach its engine. Temporary: the server retries the engine in the background."
   },
   "errorSyncReset": "This device is too far behind to catch up, so it will sync again from scratch.",
   "@errorSyncReset": {
@@ -4864,6 +5140,28 @@
   "errorTimeout": "The device did not answer in time. Try again.",
   "@errorTimeout": {
     "description": "Error sentence for the spec code `timeout`: a command sent to a player that is still connected but did not reply."
+  },
+  "errorToolOutputsHidden": "This task's new files in {folder} could not be named or removed ({cause}), so the task stays. Fix the folder, then clear it again.",
+  "@errorToolOutputsHidden": {
+    "description": "Clearing a finished book merge or split was refused: its new files, still hidden, could not take their names or be removed in their folder, so the task stays (holding its book) until they can. {cause} is the system's reason, as the server gives it.",
+    "placeholders": {
+      "folder": {
+        "type": "String",
+        "example": "Ada/Book"
+      },
+      "cause": {
+        "type": "String",
+        "example": "permission denied"
+      }
+    }
+  },
+  "errorToolTaskParked": "An earlier merge or split of this stopped and needs attention. Clear it in Tasks, then try again.",
+  "@errorToolTaskParked": {
+    "description": "Error sentence for a file tool refused with `conflict` and the params' reason task-parked: an earlier merge or split of the same book, or split of the same rip, stopped part way and is parked, holding it until it is cleared in Tasks. Waiting does not help."
+  },
+  "errorToolTaskRunning": "A merge or split of this is still at work. Try again once it has finished.",
+  "@errorToolTaskRunning": {
+    "description": "Error sentence for a file tool refused with `conflict` and the params' reason task-running: another merge or split of the same book, or split of the same rip, has not finished."
   },
   "errorTranscodeLimited": "Too many streams are being converted at once. Try again in a moment.",
   "@errorTranscodeLimited": {
@@ -5125,6 +5423,10 @@
   "@healthFixBusy": {
     "description": "Message when a fix was refused because an enrichment pass is already running."
   },
+  "healthFixPreviewMoves": "Preview moves",
+  "@healthFixPreviewMoves": {
+    "description": "The path rule's control in the rules table: opens Organize with a dry run of every move, where the whole library's paths are fixed."
+  },
   "healthFixRule": "Fix {rule}",
   "@healthFixRule": {
     "description": "Accessible name of the button that runs a health rule's bulk fix. {rule} is that rule's own name.",
@@ -5158,6 +5460,32 @@
   "healthGenreWhitelist": "Genre outside the canonical tree",
   "@healthGenreWhitelist": {
     "description": "Name of the health rule `genre-whitelist`, which counts items tagged with a genre the server's genre tree does not have."
+  },
+  "healthIssueFix": "Move into place",
+  "@healthIssueFix": {
+    "description": "On one misplaced file's row: moves it where its library's profile puts it, after a confirmation."
+  },
+  "healthIssueFixAction": "Move",
+  "@healthIssueFixAction": {
+    "description": "Confirms moving one file where the profile puts it."
+  },
+  "healthIssueFixHeld": "This file cannot move: {reason}",
+  "@healthIssueFixHeld": {
+    "description": "Said in place of the confirmation when the dry run holds the file back; the reason is why, as the Organize screen words it.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "The destination is already taken"
+      }
+    }
+  },
+  "healthIssueFixInPlace": "This file is already where the profile puts it.",
+  "@healthIssueFixInPlace": {
+    "description": "Said in place of the confirmation when the dry run finds nothing to move for the file."
+  },
+  "healthIssueFixTitle": "Move this file where the profile puts it?",
+  "@healthIssueFixTitle": {
+    "description": "Title of the confirmation before one file moves; under it, where the file is now and where it moves to."
   },
   "healthIssuesEmptyMessage": "Every item the sweeper has seen passes it.",
   "@healthIssuesEmptyMessage": {
@@ -5669,9 +5997,15 @@
   "@libraryDeleteAction": {
     "description": "Confirming button of the dialog that deletes an item's files."
   },
-  "libraryDeleteFilesLabel": "Delete files",
-  "@libraryDeleteFilesLabel": {
-    "description": "Accessible name of the overflow control offering to delete an item's files."
+  "libraryDeleteAlbumTooLarge": "This album has more than {max} tracks, too many to delete in one go.",
+  "@libraryDeleteAlbumTooLarge": {
+    "description": "Snackbar when an album's delete is asked for an album with more tracks than one delete can name; nothing is deleted. {max} is that limit.",
+    "placeholders": {
+      "max": {
+        "type": "int",
+        "example": "500"
+      }
+    }
   },
   "libraryDeleteFilesMenu": "Delete files...",
   "@libraryDeleteFilesMenu": {
@@ -5720,6 +6054,20 @@
       }
     }
   },
+  "libraryDeletePermanentPartial": "{failed} of {total} files could not be deleted",
+  "@libraryDeletePermanentPartial": {
+    "description": "Snackbar line after a permanent deletion some of whose files the server could not remove; they stayed where they were.",
+    "placeholders": {
+      "failed": {
+        "type": "int",
+        "example": "1"
+      },
+      "total": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "libraryDeletePreview": "{count, plural, =1{This removes 1 file, {size}.} other{This removes {count} files, {size}.}}",
   "@libraryDeletePreview": {
     "description": "What the dry run found, shown in the delete dialog before anything moves. {size} is the total on disk, already formatted.",
@@ -5733,6 +6081,57 @@
       }
     }
   },
+  "libraryDeletePreviewFiles": "{count, plural, =1{1 file} other{{count} files}}: {list}",
+  "@libraryDeletePreviewFiles": {
+    "description": "What a screen reader hears for the delete dialog's file list: how many files, then each by its place in its library.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "list": {
+        "type": "String",
+        "example": "Hum Collective/Shell Songs/01 - Hell Shell.m4a, Hum Collective/Shell Songs/02 - Tide.m4a"
+      }
+    }
+  },
+  "libraryDeleteRipAction": "Delete all {count} tracks...",
+  "@libraryDeleteRipAction": {
+    "description": "Button offering to delete the tracks asked for together with every other track their shared files hold, after a delete naming only some of a file's tracks was refused. The ellipsis says the delete dialog follows.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "libraryDeleteRipShared": "{extra, plural, =1{1 more track is} other{{extra} more tracks are}} cut from the same file as {chosen, plural, =1{the track you picked} other{tracks you picked}}, and tracks cut from one file are deleted together or not at all.",
+  "@libraryDeleteRipShared": {
+    "description": "Body of the dialog shown when a delete names only some tracks of a CUE rip: how many more tracks share a file with the ones picked and would go with them. Said of the extra tracks, since among several picked tracks only some may share a file; extra is never zero.",
+    "placeholders": {
+      "chosen": {
+        "type": "int",
+        "example": "2"
+      },
+      "extra": {
+        "type": "int",
+        "example": "9"
+      }
+    }
+  },
+  "libraryDeleteRipTitle": "Delete the other tracks too?",
+  "@libraryDeleteRipTitle": {
+    "description": "Title of the dialog offering to delete, with the tracks chosen, every other track their shared files hold, after a delete of only some of them was refused."
+  },
+  "libraryDeleteRipTooMany": "With the tracks that share their files, this is more than {max} tracks, too many to delete in one go.",
+  "@libraryDeleteRipTooMany": {
+    "description": "Snackbar when the tracks picked and the others that share their files are more than one delete may name.",
+    "placeholders": {
+      "max": {
+        "type": "int",
+        "example": "500"
+      }
+    }
+  },
   "libraryDeleteTitle": "Delete files?",
   "@libraryDeleteTitle": {
     "description": "Title of the dialog confirming that an item's files are deleted."
@@ -5743,6 +6142,20 @@
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "libraryDeleteTrashPartial": "{failed} of {total} files could not be moved to the trash",
+  "@libraryDeleteTrashPartial": {
+    "description": "Snackbar line after a delete some of whose files the server could not move to the trash; they stayed where they were.",
+    "placeholders": {
+      "failed": {
+        "type": "int",
+        "example": "1"
+      },
+      "total": {
+        "type": "int",
+        "example": "12"
       }
     }
   },
@@ -7670,6 +8083,14 @@
   "@notifSubscriptionFailedTitle": {
     "description": "Switch label for the `subscription-failed` notification, and the heading of its inbox row: a subscription change a gpodder client asked for was not made, a feed that did not subscribe or any change from an account that may not change its subscriptions."
   },
+  "notifToolTaskFailedHelp": "A book merge or split, or a CUE split, you started failed, or stopped after its runs kept ending with the server.",
+  "@notifToolTaskFailedHelp": {
+    "description": "What the tool-task-failed notification is about, in a delivery target's event checklist."
+  },
+  "notifToolTaskFailedTitle": "Tool task failed",
+  "@notifToolTaskFailedTitle": {
+    "description": "Heading of the notification that a book merge or split, or a CUE split, the reader started failed or stopped and needs attention. The line under it says which and why."
+  },
   "organizeApply": "Apply",
   "@organizeApply": {
     "description": "Runs the move. Both the confirming button and the button that opens the confirmation."
@@ -7692,6 +8113,10 @@
   "@organizeColumnTo": {
     "description": "Column of the dry-run table: where the profile would put it."
   },
+  "organizeColumnWhy": "Why",
+  "@organizeColumnWhy": {
+    "description": "Column heading for why a move is held back."
+  },
   "organizeConfirmMessage": "Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.",
   "@organizeConfirmMessage": {
     "description": "Body of the typed confirmation before files are moved."
@@ -7703,6 +8128,16 @@
   "organizeConfirmTitle": "Apply organize profile?",
   "@organizeConfirmTitle": {
     "description": "Title of the typed confirmation before files are moved."
+  },
+  "organizeDirsPruned": "{count, plural, =1{1 emptied folder removed} other{{count} emptied folders removed}}",
+  "@organizeDirsPruned": {
+    "description": "Under a finished run: source folders its moves left empty, which it removed.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   },
   "organizeDiscard": "Discard preview",
   "@organizeDiscard": {
@@ -7747,6 +8182,100 @@
   "organizeHint": "Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.",
   "@organizeHint": {
     "description": "Drawn where the plan or the report goes, before either exists."
+  },
+  "organizeHistoryMore": "Show older runs",
+  "@organizeHistoryMore": {
+    "description": "Button under the organize history that lists the next, older page of runs. Shown while the server holds older ones."
+  },
+  "organizeHistoryOverline": "Every run can be undone while its journal lasts",
+  "@organizeHistoryOverline": {
+    "description": "Overline of the list of runs: the scheduled prune drops a run's journal, and its undo, after the task retention window."
+  },
+  "organizeHistoryRow": "Organize - {moved} moved - {when}",
+  "@organizeHistoryRow": {
+    "description": "One organize run in the history: how many files it moved, and when it started.",
+    "placeholders": {
+      "moved": {
+        "type": "int",
+        "example": "382"
+      },
+      "when": {
+        "type": "String",
+        "example": "Oct 21, 2026 9:14 PM"
+      }
+    }
+  },
+  "organizeHistoryTitle": "History",
+  "@organizeHistoryTitle": {
+    "description": "Heading over the organize runs the server can still undo."
+  },
+  "organizeHistoryUndoRow": "Undo - {moved} moved back - {when}",
+  "@organizeHistoryUndoRow": {
+    "description": "One undo of a run in the history: how many files it moved back, and when it started.",
+    "placeholders": {
+      "moved": {
+        "type": "int",
+        "example": "382"
+      },
+      "when": {
+        "type": "String",
+        "example": "Oct 21, 2026 9:14 PM"
+      }
+    }
+  },
+  "organizeHoldBookHeld": "Another part of its book is held",
+  "@organizeHoldBookHeld": {
+    "description": "Why a move is held back: a book moves whole, and another of its parts cannot move."
+  },
+  "organizeHoldCollision": "Another file in this run takes the destination",
+  "@organizeHoldCollision": {
+    "description": "Why a move is held back: another move of the same run claims the place first."
+  },
+  "organizeHoldMissing": "The file is not on disk",
+  "@organizeHoldMissing": {
+    "description": "Why a move is held back: the catalog's file is gone from the disk."
+  },
+  "organizeHoldMovedSince": "Moved again since that run",
+  "@organizeHoldMovedSince": {
+    "description": "Why an undo leaves a file where it is: it moved again after the run being undone."
+  },
+  "organizeHoldOccupied": "The destination is already taken",
+  "@organizeHoldOccupied": {
+    "description": "Why a move is held back: a file the run does not move already holds the place."
+  },
+  "organizeHoldOccupiedCase": "A file named the same except for case stands beside it",
+  "@organizeHoldOccupiedCase": {
+    "description": "Why a move is held back: a file whose name differs from the destination only by letter case or accents sits in the folder."
+  },
+  "organizeHoldReadOnly": "The library is read-only",
+  "@organizeHoldReadOnly": {
+    "description": "Why a run or an undo held a file back: its library is read-only."
+  },
+  "organizeHoldServerReadOnly": "The server is read-only",
+  "@organizeHoldServerReadOnly": {
+    "description": "Why a dry run holds a move back: the whole server is read-only."
+  },
+  "organizeHoldUncataloged": "The catalog no longer holds the file",
+  "@organizeHoldUncataloged": {
+    "description": "Why an undo leaves a file where it is: the catalog dropped the file after the run."
+  },
+  "organizeHoldUntagged": "No artist or album to file it under",
+  "@organizeHoldUntagged": {
+    "description": "Why a move is held back: the item has no artist, album artist or album for the profile to file it under."
+  },
+  "organizeHoldVirtual": "A cue rip's shared file stays where it is",
+  "@organizeHoldVirtual": {
+    "description": "Why a move is held back: the file is one cue rip carrying several tracks."
+  },
+  "organizeHoldsTitle": "{count, plural, =1{1 move held back} other{{count} moves held back}}",
+  "@organizeHoldsTitle": {
+    "description": "Heading over the moves the dry run holds back, each with why.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
   },
   "organizeLoadError": "Could not load organize profiles",
   "@organizeLoadError": {
@@ -7981,6 +8510,32 @@
   "organizeTitle": "Organize files",
   "@organizeTitle": {
     "description": "Title of the screen that rewrites the library's on-disk layout."
+  },
+  "organizeUndo": "Undo moves",
+  "@organizeUndo": {
+    "description": "A run's control in the history: moves the files it moved back where it found them, behind a typed confirmation."
+  },
+  "organizeUndoConfirmMessage": "Every file it moved goes back where it was found, with its sidecars; a file moved again since stays where it is.",
+  "@organizeUndoConfirmMessage": {
+    "description": "Body of the typed confirmation before a run is undone."
+  },
+  "organizeUndoConfirmTitle": "Undo this run?",
+  "@organizeUndoConfirmTitle": {
+    "description": "Title of the typed confirmation before a run is undone."
+  },
+  "organizeUndoWord": "UNDO",
+  "@organizeUndoWord": {
+    "description": "The word typed to confirm an undo; typed as shown, so keep it one plain word."
+  },
+  "organizeUndone": "{count, plural, =1{1 file moved back} other{{count} files moved back}}",
+  "@organizeUndone": {
+    "description": "Said when an undo ends: how many files went back where the run found them.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "382"
+      }
+    }
   },
   "playerAddLyrics": "Add lyrics",
   "@playerAddLyrics": {
@@ -13466,6 +14021,14 @@
   "@settingsEndpointsTitle": {
     "description": "Name of the \"Playback endpoints\" setting, drawn on its own row and in settings search."
   },
+  "settingsEngineLacksThis": "This server's streaming engine doesn't offer this",
+  "@settingsEngineLacksThis": {
+    "description": "Help line under the voice boost or silence trimming default, whose switch is hidden, when the server's streaming engine answers but does not offer that feature (voice boost, or the silence analysis trimming reads). No full stop."
+  },
+  "settingsEngineUnreachable": "The streaming engine is unreachable right now",
+  "@settingsEngineUnreachable": {
+    "description": "Help line under the gapless, voice boost and silence trimming switches while the server's streaming engine is configured but not answering. Temporary: the server retries it. No full stop."
+  },
   "settingsFollowsAccountHelp": "Follows you to your other devices",
   "@settingsFollowsAccountHelp": {
     "description": "The line under the Appearance setting stored on the account rather than on this device: the language."
@@ -13690,6 +14253,10 @@
   "settingsMatchTheSystem": "Match the system",
   "@settingsMatchTheSystem": {
     "description": "The option that follows the device's own setting rather than choosing one. Shown in both the theme picker and the language picker."
+  },
+  "settingsNeedsEngine": "Needs the streaming engine, which this server runs without",
+  "@settingsNeedsEngine": {
+    "description": "Help line under the voice boost and silence trimming defaults, whose switches are hidden, on a server that runs without a streaming engine. No full stop."
   },
   "settingsNotificationsKeywords": "ntfy, webhook, discord, push, alerts",
   "@settingsNotificationsKeywords": {
@@ -14521,6 +15088,10 @@
   "@settingsWebGaplessKeywords": {
     "description": "Comma-separated search keywords for the \"Gapless playback\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
   },
+  "settingsWebGaplessNoEngine": "This server runs without a streaming engine, which is what renders a queue as one stream",
+  "@settingsWebGaplessNoEngine": {
+    "description": "Help line under the browser's gapless switch, which is hidden, on a server that runs without a streaming engine. No full stop, like every setting's help."
+  },
   "settingsWebGaplessTitle": "Gapless playback",
   "@settingsWebGaplessTitle": {
     "description": "Name of the \"Gapless playback\" setting, drawn on its own row and in settings search. Web only."
@@ -14924,6 +15495,10 @@
   "shellPaletteStationDetail": "Radio station",
   "@shellPaletteStationDetail": {
     "description": "The second line of a palette row that is a radio station."
+  },
+  "shellReadOnlyBanner": "This server is read-only right now: uploads, edits that write files and deletions are paused.",
+  "@shellReadOnlyBanner": {
+    "description": "Banner across the shell, for every signed-in account, while the server-wide read-only switch is on."
   },
   "shellReconnecting": "Reconnecting to the server. Anything already playing keeps playing.",
   "@shellReconnecting": {
@@ -15477,9 +16052,33 @@
   "@statsYearTopTracks": {
     "description": "Heading over the recap's five most-played tracks."
   },
+  "toolsBookInTrash": "The book's files are in the trash until this finishes.",
+  "@toolsBookInTrash": {
+    "description": "Line on a book merge or split task whose sources are in the trash and whose new files are not yet the book: the book is missing from the library until the task finishes."
+  },
+  "toolsClearAllAction": "Clear",
+  "@toolsClearAllAction": {
+    "description": "Confirm button of the dialog that asks before clearing every account's finished tasks."
+  },
+  "toolsClearAllBody": "Finished and failed task receipts of every account go, reports they have not read included. Running tasks stay.",
+  "@toolsClearAllBody": {
+    "description": "Body of the dialog an administrator confirms before clearing every account's finished tasks."
+  },
+  "toolsClearAllTitle": "Clear every member's finished tasks?",
+  "@toolsClearAllTitle": {
+    "description": "Title of the dialog an administrator confirms before clearing every account's finished tasks."
+  },
   "toolsClearFinished": "Clear finished",
   "@toolsClearFinished": {
-    "description": "Button that removes every finished task from the list at once."
+    "description": "Label of the Tasks screen's control that clears the signed-in account's finished tasks at once; for an administrator it opens a menu of the two sweeps."
+  },
+  "toolsClearFinishedAll": "Clear everyone's finished tasks",
+  "@toolsClearFinishedAll": {
+    "description": "Menu row, for an administrator, that clears every account's finished tasks after a confirmation."
+  },
+  "toolsClearFinishedMine": "Clear my finished tasks",
+  "@toolsClearFinishedMine": {
+    "description": "Menu row, for an administrator, that clears only their own finished tasks."
   },
   "toolsCountAdded": "added {count}",
   "@toolsCountAdded": {
@@ -15498,6 +16097,16 @@
       "count": {
         "type": "int",
         "example": "120"
+      }
+    }
+  },
+  "toolsCountArchived": "archived {count}",
+  "@toolsCountArchived": {
+    "description": "Counter in a finished library removal's result: items with no copy in another library, archived with their play state until the folder is added again. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "4"
       }
     }
   },
@@ -15527,6 +16136,16 @@
       "count": {
         "type": "int",
         "example": "6"
+      }
+    }
+  },
+  "toolsCountDetached": "detached {count}",
+  "@toolsCountDetached": {
+    "description": "Counter in a finished library removal's result: files the catalog let go of, which stay on disk. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "120"
       }
     }
   },
@@ -15583,6 +16202,26 @@
       }
     }
   },
+  "toolsCountFoldersRemoved": "folders removed {count}",
+  "@toolsCountFoldersRemoved": {
+    "description": "Counter in a finished organize run's result: source folders its moves left empty, which it removed. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsCountHeld": "{count} held",
+  "@toolsCountHeld": {
+    "description": "Counter in a finished path fix's result: items it held back, for any cause. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "toolsCountLyrics": "lyrics {count}",
   "@toolsCountLyrics": {
     "description": "Counter in a finished enrichment's result: tracks some source answered lyrics for. Lower case: it sits in a comma-separated run of counters.",
@@ -15613,6 +16252,20 @@
       }
     }
   },
+  "toolsCountMovedOf": "moved {moved} of {attempted}",
+  "@toolsCountMovedOf": {
+    "description": "Counter in a finished path fix's result: how many of the items it tried it moved into place. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "moved": {
+        "type": "int",
+        "example": "3"
+      },
+      "attempted": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
   "toolsCountNotWritten": "not written {count}",
   "@toolsCountNotWritten": {
     "description": "Counter in a finished kind change's result: files the change could not be written into. Lower case: it sits in a comma-separated run of counters.",
@@ -15635,6 +16288,16 @@
   "toolsCountSkipped": "skipped {count}",
   "@toolsCountSkipped": {
     "description": "Counter in a finished job's or fix's result: items left alone. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsCountTrashEntriesDropped": "trash entries dropped {count}",
+  "@toolsCountTrashEntriesDropped": {
+    "description": "Counter in a finished library removal's result: the library's trash entries that went with it, their files staying in its trash folder. Shown only when there were any. Lower case: it sits in a comma-separated run of counters.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -15712,9 +16375,17 @@
   "@toolsJobOrganize": {
     "description": "Name of a catalog job that moves files into the library's layout."
   },
+  "toolsJobOrganizeUndo": "Organize undo",
+  "@toolsJobOrganizeUndo": {
+    "description": "Name of a catalog job that moves an organize run's files back where the run found them."
+  },
   "toolsJobPurgeTrash": "Purge from the trash",
   "@toolsJobPurgeTrash": {
     "description": "Name of a catalog job that permanently deletes one trashed file."
+  },
+  "toolsJobRemoveRoot": "Library removal",
+  "@toolsJobRemoveRoot": {
+    "description": "Name of a catalog job that takes a library out of the catalog, leaving its files on disk."
   },
   "toolsJobRestore": "Restore",
   "@toolsJobRestore": {
@@ -15806,6 +16477,14 @@
       }
     }
   },
+  "toolsShowAll": "Show all",
+  "@toolsShowAll": {
+    "description": "Opens a task's account (why it failed or stopped, and where its files are) past its first lines."
+  },
+  "toolsShowLess": "Show less",
+  "@toolsShowLess": {
+    "description": "Folds a task's opened account back to its first lines."
+  },
   "toolsStateCanceled": "Stopped",
   "@toolsStateCanceled": {
     "description": "State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language."
@@ -15821,6 +16500,10 @@
   "toolsStateFailed": "Failed",
   "@toolsStateFailed": {
     "description": "State of a task that did not finish. Agrees with the word for a task in this language."
+  },
+  "toolsStateParked": "Needs attention",
+  "@toolsStateParked": {
+    "description": "State of a book merge or split, or a CUE split, whose runs kept ending with the server. It counts as failed: it is not run again, it is dismissed and cleared like a failed task, and until then its book takes no other merge or split. Its error line says why and where each of its files is."
   },
   "toolsStateQueued": "Queued",
   "@toolsStateQueued": {
@@ -15839,6 +16522,10 @@
         "example": "42"
       }
     }
+  },
+  "toolsStateWaiting": "Waiting",
+  "@toolsStateWaiting": {
+    "description": "State of a task in flight that is waiting out a passing failure and tries again on its own; a line under it says why."
   },
   "toolsSummaryListens": "listens {count}",
   "@toolsSummaryListens": {
@@ -15936,6 +16623,20 @@
   "@toolsTaskPlaylistSync": {
     "description": "Name of the task that reconciles a playlist bound to an external source: enumerate, download what is new, and update membership."
   },
+  "toolsTaskTitled": "{task}: {title}",
+  "@toolsTaskTitled": {
+    "description": "A tool task row's title: what the task does, then the title of the book or album it works on, as it was when the task was queued.",
+    "placeholders": {
+      "task": {
+        "type": "String",
+        "example": "Book merge"
+      },
+      "title": {
+        "type": "String",
+        "example": "The Fixture Book"
+      }
+    }
+  },
   "toolsTasksCleared": "{count, plural, =1{Cleared 1 task} other{Cleared {count} tasks}}",
   "@toolsTasksCleared": {
     "description": "Message after finished tasks were swept, saying how many went.",
@@ -15946,6 +16647,16 @@
       }
     }
   },
+  "toolsTasksKept": "{count, plural, =1{1 task kept: its files could not be moved; see its row} other{{count} tasks kept: their files could not be moved; see each row}}",
+  "@toolsTasksKept": {
+    "description": "After Clear finished: how many finished tasks stayed because files they left in the library could not be named or removed; each such row says why and what to fix.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "toolsTasksSection": "Tool tasks",
   "@toolsTasksSection": {
     "description": "Heading over the tool tasks list when the catalog's jobs are listed above it."
@@ -15953,6 +16664,56 @@
   "toolsTitle": "Tool tasks",
   "@toolsTitle": {
     "description": "Title of the screen following long-running library work: merges, splits, downloads, imports."
+  },
+  "toolsWaitCatalogBusy": "Another job holds the catalog; this carries on once it is free.",
+  "@toolsWaitCatalogBusy": {
+    "description": "Why a waiting task waits: another catalog job holds the catalog."
+  },
+  "toolsWaitCatalogMaintenance": "The catalog is under maintenance; this carries on once that is done.",
+  "@toolsWaitCatalogMaintenance": {
+    "description": "Why a waiting task waits: the catalog is suspended for maintenance (a backup or restore)."
+  },
+  "toolsWaitEngineUnavailable": "The audio engine is not available; this carries on once it is back.",
+  "@toolsWaitEngineUnavailable": {
+    "description": "Why a waiting task waits: the engine that cuts or joins audio is not available."
+  },
+  "toolsWaitNextTry": "Next try at {time}",
+  "@toolsWaitNextTry": {
+    "description": "When a waiting task tries again, as a time of day: a countdown would be wrong as soon as the screen stood still. {time} is the local time, such as 3:04 PM.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "3:04 PM"
+      }
+    }
+  },
+  "toolsWaitOther": "Something passing got in the way; this tries again on its own.",
+  "@toolsWaitOther": {
+    "description": "Why a waiting task waits, when the cause has no sentence of its own; the server's words follow."
+  },
+  "toolsWaitPartMissing": "A file of the book is not where the catalog has it. If it does not come back, this puts back what it moved and stops.",
+  "@toolsWaitPartMissing": {
+    "description": "Why a book merge or split waits: one of the book's files is missing from where the catalog has it."
+  },
+  "toolsWaitPutBackBlocked": "A file cannot go back from the trash: its place is taken or its folder refuses the server. Clear the place or fix the folder and this carries on.",
+  "@toolsWaitPutBackBlocked": {
+    "description": "Why a book merge or split waits: undoing, it cannot put a file back from the trash."
+  },
+  "toolsWaitReadOnly": "A library this works in is read-only. Turn read-only off for it, or for the server, and this carries on.",
+  "@toolsWaitReadOnly": {
+    "description": "Why a waiting task waits: a library it works in, or the whole server, is in read-only mode."
+  },
+  "toolsWaitStopped": "This was cut short, by the server stopping or by running out of time; it carries on where it was.",
+  "@toolsWaitStopped": {
+    "description": "Why a waiting task waits: the server stopped, or the run ran out of time, part way through; the sentence names both, as the reason does."
+  },
+  "toolsWaitStorageUnwritable": "A folder this writes to refuses the server. Fix the folder's ownership and permissions and this carries on.",
+  "@toolsWaitStorageUnwritable": {
+    "description": "Why a waiting task waits: a library folder refuses the server's writes."
+  },
+  "toolsWaitTryingNow": "Trying again now",
+  "@toolsWaitTryingNow": {
+    "description": "A waiting task whose next try has come: the worker takes it up within moments."
   },
   "unitBpm": "{bpm} BPM",
   "@unitBpm": {

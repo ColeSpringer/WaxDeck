@@ -255,6 +255,10 @@
   "@shellPaletteStationDetail": {
     "description": "The second line of a palette row that is a radio station."
   },
+  "shellReadOnlyBanner": "This server is read-only right now: uploads, edits that write files and deletions are paused.",
+  "@shellReadOnlyBanner": {
+    "description": "Banner across the shell, for every signed-in account, while the server-wide read-only switch is on."
+  },
   "shellReconnecting": "Reconnecting to the server. Anything already playing keeps playing.",
   "@shellReconnecting": {
     "description": "Banner across the shell while the live connection is being re-established."

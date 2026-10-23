@@ -230,6 +230,9 @@ const (
 	// eventLibraries marks the root table moving, wherever the change came
 	// from. Pid-less, and for every account.
 	eventLibraries = "libraries"
+	// eventServer marks what /health reports moving: the streaming engine
+	// going away or coming back. Pid-less, and for every account.
+	eventServer = "server"
 )
 
 // PeekCatalogMints reads the mint count from the waxdeck.db in dataDir
@@ -1200,7 +1203,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 		case eventReview, eventUpload, eventTask, eventTaskProgress, eventEntityState,
 			eventFeedDisabled, eventImportCompleted, eventEpisodeDownloaded,
 			eventPlaylistSynced, eventAccount, eventNotification,
-			eventJob, eventHealth, eventLibraries:
+			eventJob, eventHealth, eventLibraries, eventServer:
 			// Marker kinds hydrate nothing: the pid names what to
 			// refetch and the surfaces are live reads.
 			key := e.Kind + "\x00" + e.ItemPID

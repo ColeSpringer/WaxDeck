@@ -13,12 +13,18 @@ class _$SessionInfo extends SessionInfo {
   final User? user;
   @override
   final String? csrfToken;
+  @override
+  final SessionServer? server;
 
   factory _$SessionInfo([void Function(SessionInfoBuilder)? updates]) =>
       (SessionInfoBuilder()..update(updates))._build();
 
-  _$SessionInfo._({required this.authenticated, this.user, this.csrfToken})
-    : super._();
+  _$SessionInfo._({
+    required this.authenticated,
+    this.user,
+    this.csrfToken,
+    this.server,
+  }) : super._();
   @override
   SessionInfo rebuild(void Function(SessionInfoBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -32,7 +38,8 @@ class _$SessionInfo extends SessionInfo {
     return other is SessionInfo &&
         authenticated == other.authenticated &&
         user == other.user &&
-        csrfToken == other.csrfToken;
+        csrfToken == other.csrfToken &&
+        server == other.server;
   }
 
   @override
@@ -41,6 +48,7 @@ class _$SessionInfo extends SessionInfo {
     _$hash = $jc(_$hash, authenticated.hashCode);
     _$hash = $jc(_$hash, user.hashCode);
     _$hash = $jc(_$hash, csrfToken.hashCode);
+    _$hash = $jc(_$hash, server.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -50,7 +58,8 @@ class _$SessionInfo extends SessionInfo {
     return (newBuiltValueToStringHelper(r'SessionInfo')
           ..add('authenticated', authenticated)
           ..add('user', user)
-          ..add('csrfToken', csrfToken))
+          ..add('csrfToken', csrfToken)
+          ..add('server', server))
         .toString();
   }
 }
@@ -71,6 +80,10 @@ class SessionInfoBuilder implements Builder<SessionInfo, SessionInfoBuilder> {
   String? get csrfToken => _$this._csrfToken;
   set csrfToken(String? csrfToken) => _$this._csrfToken = csrfToken;
 
+  SessionServerBuilder? _server;
+  SessionServerBuilder get server => _$this._server ??= SessionServerBuilder();
+  set server(SessionServerBuilder? server) => _$this._server = server;
+
   SessionInfoBuilder() {
     SessionInfo._defaults(this);
   }
@@ -81,6 +94,7 @@ class SessionInfoBuilder implements Builder<SessionInfo, SessionInfoBuilder> {
       _authenticated = $v.authenticated;
       _user = $v.user;
       _csrfToken = $v.csrfToken;
+      _server = $v.server?.toBuilder();
       _$v = null;
     }
     return this;
@@ -100,17 +114,34 @@ class SessionInfoBuilder implements Builder<SessionInfo, SessionInfoBuilder> {
   SessionInfo build() => _build();
 
   _$SessionInfo _build() {
-    final _$result =
-        _$v ??
-        _$SessionInfo._(
-          authenticated: BuiltValueNullFieldError.checkNotNull(
-            authenticated,
-            r'SessionInfo',
-            'authenticated',
-          ),
-          user: user,
-          csrfToken: csrfToken,
+    _$SessionInfo _$result;
+    try {
+      _$result =
+          _$v ??
+          _$SessionInfo._(
+            authenticated: BuiltValueNullFieldError.checkNotNull(
+              authenticated,
+              r'SessionInfo',
+              'authenticated',
+            ),
+            user: user,
+            csrfToken: csrfToken,
+            server: _server?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'server';
+        _server?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'SessionInfo',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

@@ -70,6 +70,7 @@ abstract final class SemanticsIds {
   static String inviteRevoke(Object id) => 'invite-revoke-$id';
   static String inviteRow(Object id) => 'invite-row-$id';
   static const String inviteToken = 'invite-token';
+  static const String libraryAbsent = 'library-absent';
   static String libraryDetail(Object id) => 'library-detail-$id';
   static String libraryFolderFallback(Object id) =>
       'library-folder-fallback-$id';
@@ -78,10 +79,13 @@ abstract final class SemanticsIds {
   static const String libraryMedia = 'library-media';
   static String libraryMediaChoice(Object id) => 'library-media-choice-$id';
   static const String libraryMediaConfirm = 'library-media-confirm';
+  static String libraryMenu(Object id) => 'library-menu-$id';
   static const String libraryName = 'library-name';
   static const String libraryPath = 'library-path';
   static String libraryProfile(Object id) => 'library-profile-$id';
   static String libraryReadOnly(Object id) => 'library-read-only-$id';
+  static String libraryRemove(Object id) => 'library-remove-$id';
+  static const String libraryRemoveConfirm = 'library-remove-confirm';
   static String libraryRescan(Object id) => 'library-rescan-$id';
   static const String libraryRescanConfirm = 'library-rescan-confirm';
   static const String libraryRescanForce = 'library-rescan-force';
@@ -147,6 +151,8 @@ abstract final class SemanticsIds {
   static const String userAdminRole = 'user-admin-role';
   static const String userChildPreset = 'user-child-preset';
   static const String userDelete = 'user-delete';
+  static String userDeletePlaylists(Object mode) =>
+      'user-delete-playlists-$mode';
   static String userDetail(Object id) => 'user-detail-$id';
   static const String userDisabled = 'user-disabled';
   static String userLibrary(Object id) => 'user-library-$id';
@@ -201,6 +207,9 @@ abstract final class SemanticsIds {
   static const String bookEdition = 'book-edition';
   static String bookFinishedFilter(Object name) => 'book-finished-$name';
   static const String bookMarkFinished = 'book-mark-finished';
+  static const String bookMerge = 'book-merge';
+  static const String bookMergeConfirm = 'book-merge-confirm';
+  static const String bookMergeKeep = 'book-merge-keep';
   static const String bookOverflow = 'book-overflow';
   static const String bookPartsNote = 'book-parts-note';
   static const String bookPin = 'book-pin';
@@ -215,6 +224,9 @@ abstract final class SemanticsIds {
   static const String bookSettingsSave = 'book-settings-save';
   static const String bookSettingsSpeed = 'book-settings-speed';
   static String bookSort(Object name) => 'book-sort-$name';
+  static const String bookSplit = 'book-split';
+  static const String bookSplitConfirm = 'book-split-confirm';
+  static const String bookSplitKeep = 'book-split-keep';
   static const String bookStartOver = 'book-start-over';
   static const String booksAdd = 'books-add';
   static const String booksHub = 'books-hub';
@@ -345,7 +357,10 @@ abstract final class SemanticsIds {
   static String health(Object rule) => 'health-rule-$rule';
   static String healthFix(Object rule) => 'health-fix-$rule';
   static String healthFixBlocked(Object rule) => 'health-fix-blocked-$rule';
+  static String healthFixPreview(Object rule) => 'health-fix-preview-$rule';
   static String healthIssue(Object pid) => 'health-issue-$pid';
+  static String healthIssueFix(Object pid) => 'health-issue-fix-$pid';
+  static const String healthIssueFixConfirm = 'health-issue-fix-confirm';
   static const String healthScore = 'health-score';
   static const String healthSweep = 'health-sweep';
   static const String healthWarmingUp = 'health-warming-up';
@@ -387,11 +402,14 @@ abstract final class SemanticsIds {
   static const String itemDelete = 'item-delete';
   static const String itemDeleteConfirm = 'item-delete-confirm';
   static String itemDeleteMode(Object mode) => 'item-delete-mode-$mode';
+  static const String itemDeletePaths = 'item-delete-paths';
+  static const String itemDeleteRip = 'item-delete-rip';
   static const String itemFactsError = 'item-facts-error';
   static String itemFactsRow(Object key) => 'item-facts-$key';
   static String itemFactsSheet(Object pid) => 'item-facts-sheet-$pid';
   static String itemFileDelete(Object filePid) => 'item-file-delete-$filePid';
   static String itemFileRow(Object filePid) => 'item-file-$filePid';
+  static const String itemMenuDelete = 'item-menu-delete';
   static const String itemMenuDetach = 'item-menu-detach';
   static const String itemMenuDetachConfirm = 'item-menu-detach-confirm';
   static const String itemMenuDetachWriteBack = 'item-menu-detach-writeback';
@@ -535,6 +553,12 @@ abstract final class SemanticsIds {
   static const String organizeApply = 'organize-apply';
   static const String organizeConfirm = 'organize-confirm';
   static const String organizeDiscard = 'organize-discard';
+  static const String organizeHistory = 'organize-history';
+  static const String organizeHistoryMore = 'organize-history-more';
+  static String organizeHistoryRow(Object jobPid) =>
+      'organize-history-row-$jobPid';
+  static String organizeHold(Object from) => 'organize-hold-$from';
+  static const String organizeHolds = 'organize-holds';
   static const String organizePlan = 'organize-plan';
   static const String organizePreview = 'organize-preview';
   static const String organizeProfileAudiobook = 'organize-profile-audiobook';
@@ -558,6 +582,8 @@ abstract final class SemanticsIds {
   static const String organizeReport = 'organize-report';
   static String organizeRow(Object from) => 'organize-row-$from';
   static String organizeRowDetail(Object from) => 'organize-row-detail-$from';
+  static String organizeUndo(Object jobPid) => 'organize-undo-$jobPid';
+  static const String organizeUndoConfirm = 'organize-undo-confirm';
 
   // player: Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript, lyrics, the visualizer, and car mode.
   static const String addToPlaylist = 'add-to-playlist';
@@ -933,7 +959,7 @@ abstract final class SemanticsIds {
   static const String shareStartAt = 'share-start-at';
   static const String sharesEmpty = 'shares-empty';
 
-  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
+  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, the skip link, and the read-only banner.
   static const String navAccount = 'nav-account';
   static String navAccountAction(Object name) => 'nav-account-$name';
   static String navDestination(Object name) => 'nav-$name';
@@ -941,6 +967,8 @@ abstract final class SemanticsIds {
   static const String navOverflow = 'nav-overflow';
   static const String navRegion = 'nav-region';
   static const String navSidebarCollapse = 'nav-sidebar-collapse';
+  static const String readOnlyBanner = 'read-only-banner';
+  static const String readOnlyBannerSettings = 'read-only-banner-settings';
   static const String skipToContent = 'skip-to-content';
 
   // stats: Listening stats and year in review.
@@ -965,6 +993,10 @@ abstract final class SemanticsIds {
   static String taskDismiss(Object id) => 'task-dismiss-$id';
   static String taskRow(Object id) => 'task-row-$id';
   static const String tasksClearFinished = 'tasks-clear-finished';
+  static const String tasksClearFinishedAll = 'tasks-clear-finished-all';
+  static const String tasksClearFinishedConfirm =
+      'tasks-clear-finished-confirm';
+  static const String tasksClearFinishedMine = 'tasks-clear-finished-mine';
   static const String tasksScreen = 'tasks-screen';
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.

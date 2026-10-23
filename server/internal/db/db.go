@@ -887,6 +887,7 @@ const baselineSchema = `
 		type           TEXT    NOT NULL,
 		state          TEXT    NOT NULL DEFAULT 'queued',
 		item_pid       TEXT    NOT NULL,
+		item_title     TEXT    NOT NULL DEFAULT '',
 		user_id        TEXT    NOT NULL DEFAULT '',
 		params         TEXT    NOT NULL DEFAULT '{}',
 		progress_pct   REAL    NOT NULL DEFAULT 0,
@@ -896,10 +897,31 @@ const baselineSchema = `
 		attempts       INTEGER NOT NULL DEFAULT 0,
 		lease_until_ns INTEGER NOT NULL DEFAULT 0,
 		created_at_ns  INTEGER NOT NULL,
-		finished_at_ns INTEGER NOT NULL DEFAULT 0
+		finished_at_ns INTEGER NOT NULL DEFAULT 0,
+		-- What one live task may hold at a time (a book, a rip): a second
+		-- task with the key is refused while the first is queued or running.
+		lock_key       TEXT    NOT NULL DEFAULT '',
+		-- Set once a run has put work into the library that only finishing
+		-- the run settles: the task is then leased past its attempts and
+		-- never retired for running out of them.
+		resumable      INTEGER NOT NULL DEFAULT 0,
+		-- Why a running task waits to try again, '' when it does not.
+		wait_reason    TEXT    NOT NULL DEFAULT ''
 	);
 	CREATE INDEX tool_tasks_user ON tool_tasks (user_id, created_at_ns DESC, id);
 	CREATE INDEX tool_tasks_state ON tool_tasks (state, lease_until_ns);
+	CREATE INDEX tool_tasks_lock ON tool_tasks (lock_key) WHERE lock_key <> '' AND state IN ('queued', 'running', 'parked');
+	-- The files a book merge or split's trash took, by book and the path
+	-- they were taken from, until the run that took them finished (its new
+	-- files hold them) or put them back. It outlives the task's row: while
+	-- one is still in the trash, a merge or split of what remains of the
+	-- book would leave it out.
+	CREATE TABLE tool_trash (
+		book_pid  TEXT NOT NULL,
+		orig_path TEXT NOT NULL,
+		task_id   TEXT NOT NULL,
+		PRIMARY KEY (book_pid, orig_path)
+	);
 	-- Who started a catalog job, and for a health fix the rule it fixes:
 	-- the job's end is announced to them. A row lives until that
 	-- announcement, so a restart between the two still makes it;
@@ -908,6 +930,7 @@ const baselineSchema = `
 		pid            TEXT    PRIMARY KEY,
 		user_id        TEXT    NOT NULL,
 		rule           TEXT    NOT NULL DEFAULT '',
+		detail         TEXT    NOT NULL DEFAULT '',
 		created_at_ns  INTEGER NOT NULL,
 		settling_at_ns INTEGER NOT NULL DEFAULT 0
 	);

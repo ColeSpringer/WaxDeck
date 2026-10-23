@@ -175,6 +175,7 @@ func TestNotificationLinks(t *testing.T) {
 		{"gpodder-device-removed", "", "https://wax.example.com/podcasts"},
 		{"episode-downloaded", "ep-1", "https://wax.example.com/episodes/ep-1"},
 		{"playlist-synced", "pl-1", "https://wax.example.com/playlists/pl-1"},
+		{"tool-task-failed", "tk-1", "https://wax.example.com/tasks"},
 		{notifyTestEvent, "", ""},
 		{"invented-by-a-newer-server", "", ""},
 	} {

@@ -68,9 +68,10 @@ paths:
       summary: Inspect the current session
       description: >
         Returns whether the caller is authenticated and, if so, the session's
-        user and CSRF token. Unauthenticated callers get
-        `authenticated: false`, not a 401. Clients use this at startup to
-        decide whether to show the login screen.
+        user, CSRF token and the server's read-only state. Unauthenticated
+        callers get `authenticated: false`, not a 401. Clients use this at
+        startup to decide whether to show the login screen, and again when an
+        `account` event arrives.
       tags: [auth]
       security: []
       responses:
@@ -570,6 +571,24 @@ components:
           description: >
             CSRF token for cookie-authenticated mutations. Present only when
             authenticated.
+        server:
+          $ref: "#/components/schemas/SessionServer"
+
+    SessionServer:
+      type: object
+      description: >
+        Server-wide state every signed-in account is shown. Present only
+        when authenticated.
+      required: [readOnly]
+      properties:
+        readOnly:
+          type: boolean
+          description: >
+            True while the server is in read-only mode: uploads, edits that
+            write files and deletions are refused for every account.
+            Turning the setting on or off marks every enabled account
+            changed on its sync stream (the `account` event), so a client
+            re-reads the session.
 
     BootstrapStatus:
       type: object

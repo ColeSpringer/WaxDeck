@@ -60,6 +60,7 @@ func newTestBridge(t *testing.T, upstream http.HandlerFunc, src Source) *Bridge 
 	if err != nil {
 		t.Fatal(err)
 	}
+	connect(t, b)
 	// A gate that admits everything, since a bridge without one refuses
 	// every token; a test about the gate wires its own.
 	b.SetTranscodeGate(&fakeGate{})

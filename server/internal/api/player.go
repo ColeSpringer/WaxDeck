@@ -47,13 +47,20 @@ type delivery struct {
 	ttl     time.Duration
 	force   string
 	formats []string
+	// engineOnly is an endpoint that plays only what the engine makes
+	// (the jukebox, which reads WAV), for which an original is no
+	// fallback while the engine is away.
+	engineOnly bool
 }
 
 // StreamItems builds absolute media URLs for a device endpoint. The
 // jukebox gets wav, cast devices get the derived shape, and renderers
 // get the best format they and the engine agree on, falling back to the
 // mp3 floor. Without the engine, span tracks are refused: partial
-// support that loses positions is worse than a clear error.
+// support that loses positions is worse than a clear error. While a
+// configured engine is away the refusal says so, and so does the
+// jukebox's for every item, since it plays nothing but what the engine
+// makes.
 //
 // A multi-file audiobook is one entry rendered as one item per part,
 // because a device fetches whole files and steps through them itself.
@@ -82,7 +89,7 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 		d.force = "mp3"
 		d.formats = target.Formats
 	case connect.KindJukebox:
-		d.force = "wav"
+		d.force, d.engineOnly = "wav", true
 	}
 	out := make([]connect.MediaItem, 0, len(entries))
 	for i, e := range entries {
@@ -155,15 +162,18 @@ func (r *ConnectResolver) wholeItem(ctx context.Context, uc *service.UserCtx, us
 			DeviceFormats: d.formats,
 			VoiceBoost:    r.Svc.EffectiveVoiceBoost(ctx, uc, e.PID),
 		})
-		if err != nil {
+		switch {
+		case err == nil:
+			item.URL, item.MimeType = d.base+info.URL, info.MimeType
+			return item, nil
+		case !errors.Is(err, flow.ErrEngineDown):
 			if u, mime, ok := r.enclosureItem(ctx, userID, e.PID, d.ttl, d.force, err); ok {
 				item.URL, item.MimeType = d.base+u, mime
 				return item, nil
 			}
 			return connect.MediaItem{}, err
 		}
-		item.URL, item.MimeType = d.base+info.URL, info.MimeType
-		return item, nil
+		// The engine went away since it was asked: the original, below.
 	}
 	res, err := r.Svc.DirectPlayInfo(ctx, uc, e.PID, "")
 	if err != nil {
@@ -173,7 +183,13 @@ func (r *ConnectResolver) wholeItem(ctx context.Context, uc *service.UserCtx, us
 		}
 		return connect.MediaItem{}, err
 	}
+	if d.engineOnly {
+		return connect.MediaItem{}, engineAwayRefusal(e.PID, "this endpoint plays only what the streaming engine renders")
+	}
 	if res.HasSpan {
+		if r.Bridge != nil {
+			return connect.MediaItem{}, engineAwayRefusal(e.PID, "this track is a window into a larger file, which only the streaming engine cuts")
+		}
 		return connect.MediaItem{}, connect.InvalidError{
 			Msg:    "this track is a window into a larger file and needs the streaming engine to cast: " + e.PID,
 			Code:   "feature-unavailable",
@@ -204,15 +220,31 @@ func (r *ConnectResolver) partItem(ctx context.Context, userID string, e connect
 			FilePID:       piece.Part.FilePID,
 			VoiceBoost:    voiceBoost,
 		})
-		if err != nil {
+		if err == nil {
+			item.URL, item.MimeType = d.base+info.URL, info.MimeType
+			return item, nil
+		}
+		if !errors.Is(err, flow.ErrEngineDown) {
 			return connect.MediaItem{}, err
 		}
-		item.URL, item.MimeType = d.base+info.URL, info.MimeType
-		return item, nil
+	}
+	if d.engineOnly {
+		return connect.MediaItem{}, engineAwayRefusal(e.PID, "this endpoint plays only what the streaming engine renders")
 	}
 	item.URL = r.downloadURL(userID, e.PID, piece.File.ETag, piece.Part.FilePID, d)
 	item.MimeType = piece.File.MimeType
 	return item, nil
+}
+
+// engineAwayRefusal refuses an item only the engine can render for the
+// endpoint while a configured engine is away, in the outage's words,
+// which a controller reads as "shortly" rather than "never here".
+func engineAwayRefusal(pid, why string) connect.InvalidError {
+	return connect.InvalidError{
+		Msg:    why + ", and " + flow.ErrEngineDown.Error() + ": " + pid,
+		Code:   "feature-unavailable",
+		Params: map[string]string{"feature": flow.FeatureStreamingEngine, "pid": pid},
+	}
 }
 
 // downloadURL builds the original-bytes URL a device fetches on a
@@ -293,6 +325,9 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 		members = append(members, flow.TimelineMember{PID: e.PID, Src: src})
 	}
 	res, err := r.Bridge.TimelineFor(ctx, userID, members, opts)
+	if errors.Is(err, flow.ErrEngineDown) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -476,6 +511,13 @@ func connectHTTP(err error) (status int, body Error, ok bool) {
 		// the whitelist is what it would be walking around.
 		if len(inv.Params) > 0 && code == inv.Code {
 			body.Params = &inv.Params
+			// An engine that is away is a wait rather than a lack: the
+			// outage's own status, which the handlers send with when to
+			// ask again. Only the server sets params, so no endpoint's
+			// refusal can claim it.
+			if code == "feature-unavailable" && inv.Params["feature"] == flow.FeatureStreamingEngine {
+				status = http.StatusServiceUnavailable
+			}
 		}
 		return status, body, true
 	}
@@ -586,6 +628,8 @@ func (s *Server) CreatePlaybackSession(ctx context.Context, req CreatePlaybackSe
 				return CreatePlaybackSession403JSONResponse{ForbiddenJSONResponse(body)}, nil
 			case http.StatusNotImplemented:
 				return CreatePlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(body)}, nil
+			case http.StatusServiceUnavailable:
+				return CreatePlaybackSession503JSONResponse{engineAway(body)}, nil
 			}
 		}
 		return nil, err
@@ -648,6 +692,8 @@ func (s *Server) TransferPlaybackSession(ctx context.Context, req TransferPlayba
 				return TransferPlaybackSession403JSONResponse{ForbiddenJSONResponse(body)}, nil
 			case http.StatusNotImplemented:
 				return TransferPlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(body)}, nil
+			case http.StatusServiceUnavailable:
+				return TransferPlaybackSession503JSONResponse{engineAway(body)}, nil
 			}
 		}
 		return nil, err
@@ -660,7 +706,13 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 	if !ok {
 		return CreateQueueTimeline401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
 	}
-	if !s.bridge.Up() || !s.bridge.TimelinesSupported() {
+	// One reading of the engine decides the call: two reads either side
+	// of it going away would answer as though there were none.
+	engine := s.bridge.Status()
+	if s.bridge != nil && !engine.Connected {
+		return engineAwayTimeline(), nil
+	}
+	if !engine.Timelines {
 		return CreateQueueTimeline501JSONResponse{FeatureUnavailableJSONResponse(errObj("feature-unavailable", "queue timelines need the streaming engine"))}, nil
 	}
 	body := req.Body
@@ -710,7 +762,7 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		if err != nil {
 			return CreateQueueTimeline409JSONResponse{ConflictJSONResponse(errObj("conflict", "this item cannot join a timeline: "+pid))}, nil
 		}
-		if src.Virtual && !s.bridge.TimelineMemberWindowsSupported() {
+		if src.Virtual && !engine.TimelineWindows {
 			return CreateQueueTimeline409JSONResponse{ConflictJSONResponse(errObj("conflict", "virtual tracks cannot join a timeline: "+pid))}, nil
 		}
 		if opts.ReplayGain {
@@ -720,6 +772,9 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 	}
 	res, err := s.bridge.TimelineFor(ctx, p.User.ID, members, opts)
 	if err != nil {
+		if errors.Is(err, flow.ErrEngineDown) {
+			return engineAwayTimeline(), nil
+		}
 		if errors.Is(err, flow.ErrTranscodeLimited) {
 			return CreateQueueTimeline429JSONResponse{TranscodeLimitedJSONResponse(errObj("transcode-limited",
 				"the server's transcode session limit is reached; retry when a session ends"))}, nil
@@ -774,6 +829,20 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		})
 	}
 	return out, nil
+}
+
+// engineAwayTimeline refuses a timeline while a configured engine is
+// not answering: the queue plays per item until it does.
+func engineAwayTimeline() CreateQueueTimeline503JSONResponse {
+	e := errObj("feature-unavailable", flow.ErrEngineDown.Error())
+	e.Params = &map[string]string{"feature": flow.FeatureStreamingEngine}
+	return CreateQueueTimeline503JSONResponse{engineAway(e)}
+}
+
+// engineAway is the outage's answer on a typed route: the refusal naming
+// the engine, and when to ask again.
+func engineAway(body Error) EngineAwayJSONResponse {
+	return EngineAwayJSONResponse{Body: body, Headers: EngineAwayResponseHeaders{RetryAfter: ptr(flow.EngineRetrySeconds)}}
 }
 
 // ReleaseQueueTimeline hands a listener's transcode slot back the

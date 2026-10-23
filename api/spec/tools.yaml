@@ -8,15 +8,29 @@ paths:
       summary: Merge a multi-file book
       description: >
         Merges a multi-file audiobook into one chaptered file through
-        the streaming engine's job API: parts join gaplessly without
-        re-encoding, chapter marks land at the part boundaries
-        (titles from the request, falling back to each part's title
-        tag, then generated names), and richer tags plus the cover
-        carry over in a post-pass. Every user's resume position
-        remaps from part-relative to the merged timeline. The
-        original parts move to the trash unless `keepOriginals`.
-        Needs the streaming engine; answers `feature-unavailable`
-        without it. Returns a tool task to follow.
+        the streaming engine's job API: parts join gaplessly into one
+        AAC file (re-encoded, so any mix of part codecs merges),
+        chapter marks land at the part boundaries (titles from the
+        request, falling back to each part's title tag, then generated
+        names), and richer tags plus the cover carry over in a
+        post-pass. Every user's resume position remaps from
+        part-relative to the merged timeline. The merged file is
+        written beside the parts, in the book's own library, so who can
+        see the book does not change. The parts the merge was queued
+        with move to the trash first (reason `book-merge`), and nothing
+        else does: a book that gained or lost a file since stops the
+        merge with nothing moved, and a part the trash cannot take puts
+        back the parts that went and stops it with nothing written.
+        Once the merged file is made, what passes on its own (a busy
+        catalog, a read-only flag) is waited out rather than failed.
+        With `keepOriginals` the parts stay where they are and the
+        merged copy, its title marked " (Merged)", goes into a folder of
+        its own beside the original. A merge a restart or a shutdown
+        stops part way finishes when the server is back. Needs the
+        streaming engine: a server without one answers 501
+        `feature-unavailable`, and one whose engine is not reachable
+        right now answers 503 with `Retry-After`. Returns a tool task
+        to follow.
       tags: [tools]
       requestBody:
         required: false
@@ -40,11 +54,36 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The merge was refused before anything was queued.
+            `conflict`, with `params.reason`: `single-file` (the book is
+            already one file), `name-taken` (a file already holds the
+            merged file's name; `params.name` and `params.folder` say
+            which and where), `copy-elsewhere` (the book has a copy,
+            `params.copy`, in `params.library`, which a merge that trashes
+            the parts would leave as the book; merging with
+            `keepOriginals` is not refused for it), `task-running` (a
+            merge or split of the book is queued or running;
+            `params.task` names it), `task-parked` (one stopped part way
+            and is parked until it is cleared in Tasks; `params.task`
+            names it) or
+            `parts-in-trash` (a merge or split of the book that did not
+            finish left some of its files in the trash, and none of its
+            new files holds them, so a merge of what remains would leave
+            them out; `params.count` says how many, `params.files` names
+            the first few and `params.more` counts the rest; restoring
+            them lifts the refusal). `read-only`: a library the merge writes in, or the whole
+            server, is read-only. `storage-unwritable`: a folder the merge
+            writes in, or the one its trash is made in, refused the
+            server's write (its permissions, or a read-only mount).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
         "503":
-          $ref: "#/components/responses/CatalogMaintenance"
+          $ref: "#/components/responses/EngineAwayOrMaintenance"
 
   /books/{pid}/split:
     parameters:
@@ -56,10 +95,18 @@ paths:
         Splits a single-file audiobook into per-chapter files at its
         chapter marks (sample-exact cuts, lossless for lossless
         sources), tagging each piece from the book plus its chapter
-        title. Resume positions remap onto the pieces. The original
-        file moves to the trash unless `keepOriginals`. A book
-        without chapters answers `conflict`. Needs the streaming
-        engine.
+        title. Resume positions remap onto the pieces. The pieces
+        are written in the book's own library: into the book's folder
+        when the folder is named for it, else into a new folder named
+        for the book beside the file. The file the split was queued
+        with moves to the trash first (reason `book-split`): a book
+        whose file changed since stops the split with nothing moved,
+        and an original the trash cannot take stops it with nothing
+        written. With `keepOriginals` the original stays and the
+        pieces, titled " (Split)", go into a folder of their own beside
+        it. A split a restart or a shutdown stops part way finishes
+        when the server is back. Needs the streaming engine, as
+        mergeBook does.
       tags: [tools]
       requestBody:
         required: false
@@ -83,11 +130,27 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The split was refused before anything was queued.
+            `conflict`, with `params.reason`: `multi-file` (the book is
+            already several files), `no-chapters` (it has none to split
+            at), `no-cuts` (its chapter marks leave no point to cut at),
+            `no-sample-rate` (its file declares none to place cuts by),
+            `no-file`, `name-taken`, `copy-elsewhere`, `task-running`,
+            `task-parked` or `parts-in-trash`, with the params mergeBook
+            gives them.
+            `read-only`: a library the split writes in, or the whole
+            server, is read-only. `storage-unwritable`: a folder the
+            split writes in, or the one its trash is made in, refused the
+            server's write (its permissions, or a read-only mount).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
         "503":
-          $ref: "#/components/responses/CatalogMaintenance"
+          $ref: "#/components/responses/EngineAwayOrMaintenance"
 
   /items/{pid}/split-cue:
     parameters:
@@ -105,9 +168,16 @@ paths:
         virtual tracks refuse by upstream design). Cuts come from
         the cue sheet, sample-exact and lossless for lossless
         sources; each piece is tagged from the sheet. Play state
-        carries over per track. The source file and sheet move to
-        the trash unless `keepOriginals`. Needs the streaming
-        engine.
+        carries over per track. Unless `keepOriginals`, the source file
+        moves to the trash (reason `cue-split`) once every piece is a
+        track, its sheet with it; a sheet another encoding of the rip
+        still uses stays. A split a restart or a
+        shutdown stops part way finishes when the server is back,
+        importing no piece twice, and once the pieces are cut what
+        passes on its own is waited out rather than failed; a piece the
+        import refuses for good (another file holds its place) ends the
+        split instead, the rip kept. Needs the streaming engine, as
+        mergeBook does.
       tags: [tools]
       requestBody:
         required: false
@@ -131,11 +201,23 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The split was refused before anything was queued.
+            `conflict`: the track is not cut from a rip by a cue sheet,
+            or, with `params.reason`, `no-sheet` (the rip has no sheet of
+            its own name beside it, the one the catalog carves it by),
+            `task-running` (a split of the rip is queued or running) or
+            `task-parked` (one stopped part way and is parked until it is
+            cleared in Tasks), `params.task` naming it. `read-only`: the
+            rip's library, or the whole server, is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
         "503":
-          $ref: "#/components/responses/CatalogMaintenance"
+          $ref: "#/components/responses/EngineAwayOrMaintenance"
 
   /tools/tasks:
     get:
@@ -178,13 +260,25 @@ paths:
       operationId: clearFinishedToolTasks
       summary: Clear finished tasks
       description: >
-        Deletes every finished or failed task the caller can see and
-        answers how many went: an administrator's sweep clears
-        everyone's rows, the same scope the listing shows and the
-        per-row delete grants. Running and queued tasks are untouched.
-        A POST action rather than a filtered DELETE, matching the
-        library's bulk-delete idiom.
+        Deletes finished tasks (`done`, `failed` or `parked`) and
+        answers how many went. `scope` `mine` (the default,
+        administrators included) clears the caller's own; `all` clears
+        every account's, reports nobody has read included, and is for
+        administrators only (`forbidden` otherwise). Running and queued
+        tasks are untouched. A parked task cleared frees the book or rip
+        it held for another merge or split. Clearing a book merge or
+        split whose new files still wait under hidden names settles them
+        first, as deleting the task does, and one whose hidden files
+        could not be named or removed stays, counted in `kept`. A POST
+        action rather than a filtered DELETE, matching the library's
+        bulk-delete idiom.
       tags: [tools]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClearFinishedTasksRequest"
       responses:
         "200":
           description: How many tasks were deleted.
@@ -192,8 +286,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ToolTasksCleared"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /tools/tasks/{taskId}:
     parameters:
@@ -222,9 +320,23 @@ paths:
       summary: Delete a finished tool task
       description: >
         Removes one task from the list once it has reached a
-        terminal state (`done` or `failed`); a queued or running
-        task answers `conflict`, because deleting a row out from
-        under a worker leases nothing back. Same visibility as
+        terminal state (`done`, `failed` or `parked`); a queued or
+        running task answers `conflict`, because deleting a row out
+        from under a worker leases nothing back. Deleting a parked
+        task frees the book or rip it held for another merge or
+        split. A book merge or split whose new files still wait under
+        hidden names leaves none behind: they are removed when every
+        part of the book is in place, and otherwise take their names (a
+        free one where another file holds it) for the next scan to
+        catalog; the task's `error` says which beforehand, and the
+        audit log records which it did. When a hidden file cannot take
+        its name or be removed (its folder refuses the server), the
+        task stays, its `error` saying so, and the delete answers
+        `conflict` with `params.reason` `outputs-hidden`,
+        `params.folder` and `params.cause`; a task kept so holds its
+        book from another merge or split, as a parked one does, until
+        it can be cleared. The retention prune settles them the same
+        way, leaving such a task for its next pass. Same visibility as
         reading the task: callers delete their own rows, and an
         administrator may delete any row the listing shows them.
       tags: [tools]
@@ -303,19 +415,62 @@ components:
         state:
           type: string
           description: >
-            `queued`, `running`, `done`, or `failed`. A string, not
-            a closed enum.
+            `queued`, `running`, `done`, `failed`, or `parked`: a book
+            merge or split, or a CUE split, whose runs kept ending with
+            the server. Parked is terminal and counts as failed: the task
+            is not run again, the delete, Clear finished and the retention
+            prune take it as they take a failed task, and until one does
+            it keeps the book or rip it works on from another merge or
+            split. A string, not a closed enum.
         itemPid:
           type: string
           description: >
             The book, track, or playlist the task was started from.
+        itemTitle:
+          type: string
+          description: >
+            What `itemPid` was called when the task was queued: a book
+            merge's or split's book, a CUE split's album. Absent for
+            other tasks.
         progressPct:
           type: number
           format: double
           description: Progress in percent when the engine reports it.
         error:
           type: string
-          description: Why the task failed, when `failed`.
+          description: >
+            Why the task failed, when `failed`, or stopped, when
+            `parked`, where it also says where each file the run made or
+            moved is (new files waiting beside the book, originals in the
+            trash) and what clearing the task does with new files still
+            hidden.
+            While a book merge or split, or a CUE split, is
+            `running` it can say what the task waits out instead, in the
+            server's words beside `waitReason`.
+        waitReason:
+          type: string
+          description: >
+            Set while a `running` book merge or split, or CUE split,
+            waits to try again on its own, at `retryAt`: `catalog-busy`
+            (another job holds the catalog), `catalog-maintenance`,
+            `read-only` (a library it works in is flagged read-only),
+            `storage-unwritable` (a folder refuses the server),
+            `engine-unavailable`, `part-missing` (a file the catalog has
+            is not where it says), `put-back-blocked` (a file going back
+            from the trash cannot), `stopped` (the server stopped or the
+            run ran out of time), or `other`. A task waits at most six
+            hours in a row, then ends safely for how far it went. A
+            string, not a closed enum.
+        retryAt:
+          type: string
+          format: date-time
+          description: When a waiting task tries again.
+        bookInTrash:
+          type: boolean
+          description: >
+            True while a book merge's or split's sources are in the
+            trash and its new files not yet the book: the book is
+            missing from the library until the task finishes.
         resultPids:
           type: array
           description: >
@@ -342,17 +497,40 @@ components:
             `health-fix` task carries `rule` from the moment it is
             queued, and once it has run `attempted`, `filled`, `failed`
             (item counts) and `skipped`, an object counting the items
-            left alone by reason (`gone`, `locked`, `no match`, ...).
+            left alone by reason (`gone`, `locked`, `no match`, ...); a
+            `path-mismatch` fix also carries `moved` (the items it
+            moved), `held` (by hold code) and `jobPids` (the organize
+            jobs that moved them).
+
+    ClearFinishedTasksRequest:
+      type: object
+      description: Which tasks a clear-finished sweep removes.
+      properties:
+        scope:
+          type: string
+          enum: [mine, all]
+          default: mine
+          description: >
+            `mine` clears the caller's own finished tasks. `all` clears
+            every account's and is for administrators only.
 
     ToolTasksCleared:
       type: object
       description: The result of clearing finished tasks.
-      required: [deleted]
+      required: [deleted, kept]
       properties:
         deleted:
           type: integer
           description: How many tasks were deleted.
           example: 4
+        kept:
+          type: integer
+          description: >
+            How many finished tasks stayed because what they left in the
+            library could not be settled: a book merge's or split's hidden
+            files that could not be named or removed. Each row's `error`
+            says why.
+          example: 0
 
     ToolTaskPage:
       type: object
@@ -404,4 +582,5 @@ components:
           type: boolean
           default: false
           description: >
-            Keep the source file and sheet instead of trashing them.
+            Keep the source file and its sheet instead of moving them to
+            the trash.

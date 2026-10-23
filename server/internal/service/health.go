@@ -646,10 +646,12 @@ func (l *Library) plannedMoves(ctx context.Context) map[model.PID]bool {
 	return moves
 }
 
-// readPlannedMoves is plannedMoves with its failure, for a re-check that
-// must not read a plan it could not make as nothing to move. Each library
-// plans under its own profile.
+// readPlannedMoves is plannedMoves with its failure. Each library plans
+// under its own profile.
 func (l *Library) readPlannedMoves(ctx context.Context) (map[model.PID]bool, error) {
+	if l.pathPlanHook != nil {
+		l.pathPlanHook(nil)
+	}
 	plan, err := l.lib.PlanOrganize(ctx, query.New(query.EntityItems).Build(), waxbin.OrganizeOptions{})
 	if err != nil {
 		return nil, classify(err)
@@ -1176,16 +1178,36 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, req UpgradeRe
 	if err != nil {
 		return 0, planRefusal(err, carved)
 	}
-	trashed, err := l.applyUpgradeDelete(ctx, plan, "")
-	if trashed > 0 {
+	// Finished and recorded once started, as a delete is.
+	ctx = context.WithoutCancel(ctx)
+	run, err := l.applyUpgradeDelete(ctx, plan, "")
+	switch {
+	case run.trashed() > 0:
+		apiOf := make(map[model.PID]string, len(req.RemoveItemPIDs))
+		for _, p := range req.RemoveItemPIDs {
+			if _, pid, ok := parseAPIPID(p); ok {
+				apiOf[pid] = p
+			}
+		}
+		var removed []string
+		for _, pid := range removes {
+			if !run.left(pid) {
+				removed = append(removed, apiOf[pid])
+			}
+		}
 		l.Audit(ctx, uc, "items.delete",
 			AuditTarget{Kind: "item", PID: req.KeepItemPID},
-			map[string]any{"reason": "quality-upgrade", "removed": req.RemoveItemPIDs, "trashed": trashed})
+			run.record(map[string]any{"reason": "quality-upgrade", "removed": removed, "trashed": run.trashed()},
+				func(item model.PID) string { return apiOf[item] }))
+	case errors.Is(err, errNothingDeleted):
+		l.Audit(ctx, uc, "items.delete.refused",
+			AuditTarget{Kind: "item", PID: req.KeepItemPID},
+			map[string]any{"reason": "quality-upgrade", "removed": req.RemoveItemPIDs, "error": err.Error()})
 	}
 	if err != nil {
 		return 0, err
 	}
-	return trashed, nil
+	return run.trashed(), nil
 }
 
 // resolveUpgradeFiles trashes lesser encodings one item holds as its
@@ -1256,36 +1278,95 @@ func (l *Library) resolveUpgradeFiles(ctx context.Context, uc *UserCtx, item mod
 	if err != nil {
 		return 0, classify(err)
 	}
-	trashed, err := l.applyUpgradeDelete(ctx, plan, item)
-	if trashed > 0 {
+	ctx = context.WithoutCancel(ctx)
+	run, err := l.applyUpgradeDelete(ctx, plan, item)
+	switch {
+	case run.trashed() > 0:
+		removed := slices.DeleteFunc(slices.Clone(files), func(f model.PID) bool {
+			_, stayed := run.stayed[f]
+			return stayed
+		})
 		l.Audit(ctx, uc, "items.delete-files",
 			AuditTarget{Kind: "item", PID: req.KeepItemPID},
-			map[string]any{"reason": "quality-upgrade", "kept": req.KeepFilePID, "removed": files, "trashed": trashed})
+			run.record(map[string]any{"reason": "quality-upgrade", "kept": req.KeepFilePID, "removed": removed, "trashed": run.trashed()},
+				func(model.PID) string { return req.KeepItemPID }))
+	case errors.Is(err, errNothingDeleted):
+		l.Audit(ctx, uc, "items.delete-files.refused",
+			AuditTarget{Kind: "item", PID: req.KeepItemPID},
+			map[string]any{"reason": "quality-upgrade", "kept": req.KeepFilePID, "removed": files, "error": err.Error()})
 	}
 	if err != nil {
 		return 0, err
 	}
-	return trashed, nil
+	return run.trashed(), nil
+}
+
+// upgradeRun is what an upgrade's move to the trash did: its plan, the
+// catalog's report, and each planned file that stayed, with why.
+type upgradeRun struct {
+	plan   *trash.Plan
+	rep    *trash.Report
+	stayed map[model.PID]string
+}
+
+// trashed is how many files went to the trash.
+func (r upgradeRun) trashed() int {
+	if r.rep == nil {
+		return 0
+	}
+	return r.rep.Trashed
+}
+
+// left reports whether a planned file of item stayed, which keeps it. A
+// CUE rip's file is planned once, under the first of its tracks named,
+// and keeps every track it plays.
+func (r upgradeRun) left(item model.PID) bool {
+	for _, a := range r.plan.Actions {
+		if _, ok := r.stayed[a.FilePID]; ok && (a.ItemPID == item || slices.Contains(a.Tracks, item)) {
+			return true
+		}
+	}
+	return false
+}
+
+// record adds to an upgrade's audit detail the files the run left, as a
+// delete records them: how many, and each with its item (as itemPID
+// names it), its name and why.
+func (r upgradeRun) record(detail map[string]any, itemPID func(model.PID) string) map[string]any {
+	var failures []map[string]string
+	for _, a := range r.plan.Actions {
+		if why, ok := r.stayed[a.FilePID]; ok {
+			failures = append(failures, map[string]string{"pid": itemPID(a.ItemPID), "file": filepath.Base(a.Src), "reason": why})
+		}
+	}
+	if len(failures) > 0 {
+		detail["failed"], detail["failures"] = len(failures), failures
+	}
+	return detail
 }
 
 // applyUpgradeDelete moves an upgrade's lesser encodings to the trash.
 // A file the plan cannot take refuses the resolve before anything
 // moves, as does, for files of one item, a cue rip's file that plays
-// other tracks too; a move that then fails refuses it after the others
-// went, with how many did, rather than answering a smaller count as
-// success.
-func (l *Library) applyUpgradeDelete(ctx context.Context, plan *trash.Plan, item model.PID) (int, error) {
+// other tracks too; a run that moved nothing is refused as a delete
+// is, and a move that fails after others went refuses the resolve with
+// how many did, rather than answering a smaller count as success.
+func (l *Library) applyUpgradeDelete(ctx context.Context, plan *trash.Plan, item model.PID) (upgradeRun, error) {
 	for _, a := range plan.Actions {
 		if a.Skip {
-			return 0, &Error{Kind: KindConflict, Msg: filepath.Base(a.Src) + ": " + a.Reason}
+			return upgradeRun{}, &Error{Kind: KindConflict, Msg: filepath.Base(a.Src) + ": " + a.Reason}
 		}
 		if item != "" && ripPlaysOthers(a, item) {
-			return 0, errCueRipPart()
+			return upgradeRun{}, errCueRipPart()
 		}
 	}
 	rep, stayed, err := l.applyDeletion(ctx, plan)
 	if err != nil {
-		return 0, err
+		return upgradeRun{}, err
+	}
+	run := upgradeRun{plan: plan, rep: rep, stayed: stayed}
+	if refused := l.deletionRefused(ctx, plan, rep, stayed); refused != nil {
+		return run, refused
 	}
 	if left := rep.Errored + rep.Skipped; left > 0 {
 		reason := ""
@@ -1295,8 +1376,8 @@ func (l *Library) applyUpgradeDelete(ctx context.Context, plan *trash.Plan, item
 				break
 			}
 		}
-		return rep.Trashed, &Error{Kind: KindConflict,
+		return run, &Error{Kind: KindConflict,
 			Msg: fmt.Sprintf("%d of the files could not be moved to the trash%s", left, reason)}
 	}
-	return rep.Trashed, nil
+	return run, nil
 }

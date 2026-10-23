@@ -19,7 +19,7 @@ class SystemApi {
   const SystemApi(this._dio, this._serializers);
 
   /// Liveness and version probe
-  /// Unauthenticated liveness probe. Reports the server version and the API version it serves. 
+  /// Unauthenticated liveness probe. Reports the server version and the API version it serves, the streaming engine&#39;s state, and whether podcasts are on. The server answers healthy whether or not its streaming engine does: an engine that is configured but not reachable is retried in the background, originals play directly meanwhile, and the pid-less &#x60;server&#x60; sync marker tells signed-in clients when the engine goes away or comes back. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation

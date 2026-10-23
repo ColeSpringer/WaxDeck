@@ -11,12 +11,12 @@ part 'job_target.g.dart';
 /// What a targeted job ran on; absent for a whole pass. A targeted job is announced only to whoever started it. 
 ///
 /// Properties:
-/// * [type] - `item`, `artist`, `release_group`, `album`, `library` or `trash`; new types may appear. 
+/// * [type] - `item`, `artist`, `release_group`, `album`, `library`, `trash` or `job` (the organize run an `organize-undo` undoes); new types may appear. 
 /// * [pid] - The target's PID.
 /// * [name] - The target's name, when it can still be read.
 @BuiltValue()
 abstract class JobTarget implements Built<JobTarget, JobTargetBuilder> {
-  /// `item`, `artist`, `release_group`, `album`, `library` or `trash`; new types may appear. 
+  /// `item`, `artist`, `release_group`, `album`, `library`, `trash` or `job` (the organize run an `organize-undo` undoes); new types may appear. 
   @BuiltValueField(wireName: r'type')
   String get type;
 

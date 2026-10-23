@@ -371,12 +371,6 @@ Every entry carries a gate tag saying what actually blocks it:
 
 ## Infrastructure
 
-- `[in-repo]` **A library cannot be removed.** Neither the console, the
-  API nor the `waxbin` CLI has a verb for it, so a library added by
-  mistake, or one a configured root now overlaps (which then boots left
-  out with a warning), stays until the catalog is reset. Removal needs
-  the catalog to drop the root and its items, WaxDeck to forget its
-  stored name, and the streaming bridge to unmount it.
 - `[in-repo]` **A live catalog restore leaves server rows naming the old
   catalog's pids.** Podcast subscriptions and feed state keep shows the
   restored catalog may lack, so the feed refresh keeps asking the

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/libraries_screen.dart';
+import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -26,9 +27,10 @@ Widget _host(ProviderContainer container) => UncontrolledProviderScope(
   child: localizedHost(const LibrariesScreen()),
 );
 
-/// Wide enough for the table to be a table rather than a card list.
+/// Wide enough for the table to be a table rather than a card list, which
+/// the table test below holds it to.
 Future<void> _pump(WidgetTester tester, Widget host) async {
-  tester.view.physicalSize = const Size(1200, 1600);
+  tester.view.physicalSize = const Size(1300, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(host);
@@ -102,6 +104,42 @@ void main() {
     );
     // The list picked the new root up.
     expect(find.text('/srv/media/audiobooks'), findsWidgets);
+  });
+
+  testWidgets('a library made managed is one Organize counts at once', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..organizeManagedLibraries = 0;
+    final container = _container(repo);
+    container.listen(organizeProfilesProvider, (_, _) {});
+    expect(
+      (await container.read(organizeProfilesProvider.future)).managedLibraries,
+      0,
+    );
+    await _pump(tester, _host(container));
+
+    repo.organizeManagedLibraries = 1;
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.libraryName),
+      'sorted',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.libraryPath),
+      '/srv/media/sorted',
+    );
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      (await container.read(organizeProfilesProvider.future)).managedLibraries,
+      1,
+    );
   });
 
   testWidgets('a blank name or path is refused before any call', (
@@ -708,5 +746,385 @@ void main() {
       ),
     );
     expect(rescan.busy, isTrue);
+  });
+
+  testWidgets('removing a library needs the typed name and follows the job', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.addAll(const [
+      LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
+      LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
+    ]);
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-2')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRemove('lb-2')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Remove "spare"?'), findsOneWidget);
+
+    final confirm = find.bySemanticsIdentifier(
+      SemanticsIds.libraryRemoveConfirm,
+    );
+    await tester.tap(confirm, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(repo.removeLibraryCalls, isEmpty, reason: 'nothing before the name');
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'spare',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+
+    expect(repo.removeLibraryCalls, ['lb-2']);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Removing "spare"; follow it in Tasks',
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRow('lb-2')),
+      findsNothing,
+      reason: 'the listing is read again',
+    );
+  });
+
+  testWidgets('a configured library offers no remove and says why', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.add(
+      const LibraryInfo(
+        pid: 'lb-1',
+        name: 'music',
+        path: '/srv/music',
+        configured: true,
+      ),
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    expect(find.text('Configured on the server'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-1')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Configured on the server; remove it from WAXDECK_LIBRARY_ROOTS first',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRemove('lb-1')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Remove "music"?'), findsNothing);
+    expect(repo.removeLibraryCalls, isEmpty);
+  });
+
+  testWidgets('the podcast library has nothing to remove', (tester) async {
+    final repo = FakeRepository();
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-p', name: 'podcasts', media: 'podcast'),
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-p')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a row says when its folder is gone or not writable', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.addAll(const [
+      LibraryInfo(
+        pid: 'lb-1',
+        name: 'drive',
+        path: '/mnt/drive',
+        unreachable: true,
+      ),
+      LibraryInfo(
+        pid: 'lb-2',
+        name: 'locked',
+        path: '/srv/locked',
+        managed: true,
+        writable: false,
+      ),
+      LibraryInfo(
+        pid: 'lb-3',
+        name: 'open',
+        path: '/srv/open',
+        managed: true,
+        writable: true,
+      ),
+      // Read-only: the server does not try its folder, so says nothing.
+      LibraryInfo(
+        pid: 'lb-4',
+        name: 'kept',
+        path: '/srv/kept',
+        managed: true,
+        readOnly: true,
+      ),
+    ]);
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    expect(find.text('Folder not reachable'), findsOneWidget);
+    expect(
+      find.text('Not writable by the server'),
+      findsOneWidget,
+      reason: 'the locked library only, not the read-only one',
+    );
+    expect(find.text('Configured on the server'), findsNothing);
+  });
+
+  testWidgets('a refused path keeps the form and says why', (tester) async {
+    final repo = FakeRepository()
+      ..createLibraryError = const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'the library path must be absolute',
+        statusCode: 400,
+      );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.libraryName),
+      'shelf',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.libraryPath),
+      'relative/path',
+    );
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'the library path must be absolute',
+    );
+    expect(find.text('shelf'), findsOneWidget);
+    expect(find.text('relative/path'), findsOneWidget);
+  });
+
+  testWidgets('the absent-folder switch reaches the request', (tester) async {
+    final repo = FakeRepository();
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.libraryName),
+      'later',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.libraryPath),
+      '/mnt/later',
+    );
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier(SemanticsIds.libraryAbsent),
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryAbsent),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(repo.createLibraryCalls, [
+      (name: 'later', path: '/mnt/later', allowAbsent: true),
+    ]);
+    final absent = tester.widget<WaxSwitch>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.libraryAbsent),
+        matching: find.byType(WaxSwitch),
+      ),
+    );
+    expect(absent.value, isFalse, reason: 'the form starts over');
+  });
+
+  testWidgets('a refused removal says why and reads the lists again', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..removeLibraryError = const WaxDeckApiException(
+        code: 'catalog-busy',
+        message:
+            'a conflicting catalog job is already running; retry when it finishes',
+        statusCode: 409,
+      );
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    final countsRead = repo.listLibrariesCalls.where((c) => c).length;
+    final jobsRead = repo.jobReads;
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-2')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRemove('lb-2')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'spare',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRemoveConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.removeLibraryCalls, ['lb-2']);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      "Another job is holding the library's files. Try again shortly.",
+      reason: "the table's sentence, not the server's",
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRow('lb-2')),
+      findsOneWidget,
+    );
+    expect(
+      repo.listLibrariesCalls.where((c) => c).length,
+      greaterThan(countsRead),
+      reason: 'the libraries are read again',
+    );
+    expect(repo.jobReads, greaterThan(jobsRead), reason: 'and the jobs');
+  });
+
+  testWidgets('a removal refused on a stale list says to look again', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..removeLibraryError = const WaxDeckApiException(
+        code: 'conflict',
+        message:
+            'this library is configured in WAXDECK_LIBRARY_ROOTS; take it out '
+            'of the configuration and restart, then remove it here',
+        statusCode: 409,
+      );
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
+    );
+    final container = _container(repo);
+    // Read by the screens that list libraries without their counts.
+    container.listen(librariesProvider, (_, _) {});
+    await _pump(tester, _host(container));
+    final listed = repo.listLibrariesCalls.where((c) => !c).length;
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-2')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRemove('lb-2')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'spare',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRemoveConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Something else changed this first. Take another look and try again.',
+      reason: "the table's sentence: the row it acted on was out of date",
+    );
+    expect(
+      repo.listLibrariesCalls.where((c) => !c).length,
+      greaterThan(listed),
+      reason: 'the libraries other screens list are read again',
+    );
+  });
+
+  testWidgets('a wide window draws a table whose header labels the menus', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.addAll(const [
+      LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
+      LibraryInfo(pid: 'lb-3', name: 'tapes', path: '/srv/tapes'),
+    ]);
+    await _pump(tester, _host(_container(repo)));
+    expect(
+      find.text('Actions'),
+      findsOneWidget,
+      reason: 'one header over both rows, not a label on each card',
+    );
+    for (final pid in ['lb-2', 'lb-3']) {
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.libraryMenu(pid)),
+        findsOneWidget,
+      );
+    }
+  });
+
+  testWidgets('a narrow window labels the row menu and opens it', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.addAll(const [
+      LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
+      LibraryInfo(pid: 'lb-3', name: 'tapes', path: '/srv/tapes'),
+    ]);
+    final container = _container(repo);
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_host(container));
+    await tester.pumpAndSettle();
+
+    final trigger = find.bySemanticsIdentifier(
+      SemanticsIds.libraryMenu('lb-2'),
+    );
+    expect(
+      find.text('Actions'),
+      findsNWidgets(2),
+      reason: 'each card row says what it is',
+    );
+    expect(
+      tester.getSize(trigger).width,
+      lessThanOrEqualTo(48),
+      reason: 'the button keeps its own size on a card',
+    );
+    await tester.tap(trigger, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRemove('lb-2')),
+      findsOneWidget,
+    );
   });
 }

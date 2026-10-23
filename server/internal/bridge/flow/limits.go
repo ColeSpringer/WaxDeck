@@ -53,11 +53,10 @@ var ErrMediaRefused = errors.New("the media token's item is not available to its
 // catalog is handed to a maintenance operation for the moment.
 var ErrCatalogMaintenance = errors.New("the catalog is in maintenance")
 
-// Up reports whether the streaming engine serves streams, false for a
-// server without one. Every site that picks between the engine and the
-// original bytes asks this, so a runtime notion of "up" lands in one
-// place.
-func (b *Bridge) Up() bool { return b != nil }
+// Up reports whether the streaming engine is answering: false for a
+// server without one and while it is away. Every site that picks between
+// the engine and the original bytes asks this.
+func (b *Bridge) Up() bool { return b.Caps() != nil }
 
 // SetTranscodeGate wires the session gate. Without one (the default)
 // sessions are admitted and uncapped, but no media token is served: the

@@ -6,6 +6,7 @@ import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'direction_glyph.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 
@@ -24,6 +25,25 @@ Future<void> _pump(WidgetTester tester, Widget host) async {
 }
 
 void main() {
+  testWidgets('load more points down to the rows it brings in', (tester) async {
+    final repo = FakeRepository()..fileDiagnosticsNextCursor = 'more';
+    repo.fileDiagnostics.add(
+      FileDiagnostic(
+        path: '/music/a.wma',
+        origin: 'scan',
+        code: 'unsupported_format',
+        severity: 'info',
+        seenAt: DateTime.utc(2026, 7, 20),
+      ),
+    );
+    await _pump(tester, _host(repo));
+    expectPointing(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.diagnosticsMore),
+      up: false,
+    );
+  });
+
   testWidgets('shows summary chips and rows, and filters by code', (
     tester,
   ) async {

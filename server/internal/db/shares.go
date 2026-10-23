@@ -138,3 +138,17 @@ func scanShare(row rowScanner) (*Share, error) {
 	}
 	return &s, nil
 }
+
+// CountLiveShares counts the account's share links that can still be
+// opened at now: not revoked, and not past their expiry.
+func (d *DB) CountLiveShares(ctx context.Context, userID string, now time.Time) (int, error) {
+	var n int
+	err := d.r.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM shares
+		WHERE user_id = ? AND revoked = 0 AND (expires_at_ns = 0 OR expires_at_ns > ?)`,
+		userID, now.UnixNano()).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("db: counting shares: %w", err)
+	}
+	return n, nil
+}

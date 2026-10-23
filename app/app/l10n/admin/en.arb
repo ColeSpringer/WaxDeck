@@ -1,6 +1,24 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "adminAuditChange": "{field}: {from} -> {to}",
+  "@adminAuditChange": {
+    "description": "One change an audit event recorded, above its stored detail: the field's wire name, then its value before and after. The names and values are wire tokens and stay as they are; the arrow between them is the only thing a translation may move.",
+    "placeholders": {
+      "field": {
+        "type": "String",
+        "example": "permissions.download"
+      },
+      "from": {
+        "type": "String",
+        "example": "true"
+      },
+      "to": {
+        "type": "String",
+        "example": "false"
+      }
+    }
+  },
   "adminAuditEmptyMessage": "Administrative actions are recorded here as they happen.",
   "@adminAuditEmptyMessage": {
     "description": "Empty state of the audit log, saying what will fill it."
@@ -959,6 +977,10 @@
   "@adminInvitesEmpty": {
     "description": "Empty state of the invites tab."
   },
+  "adminLibrariesColumnActions": "Actions",
+  "@adminLibrariesColumnActions": {
+    "description": "Header of the libraries table's column holding each library's menu, and the label of that row on a library's card."
+  },
   "adminLibrariesColumnFolders": "Name from folders",
   "@adminLibrariesColumnFolders": {
     "description": "Column heading on the Libraries table: whether a scan names a library's untagged files from their folders (the artist folder and the album folder)."
@@ -1007,9 +1029,31 @@
   "@adminLibrariesTitle": {
     "description": "Title of the screen listing the roots WaxDeck scans."
   },
+  "adminLibraryAbsentHelp": "Register the path now; it is scanned once the folder is there.",
+  "@adminLibraryAbsentHelp": {
+    "description": "Line under the add form's switch for a folder that is not there yet, such as a drive mounted later."
+  },
+  "adminLibraryAbsentTitle": "Folder mounted later",
+  "@adminLibraryAbsentTitle": {
+    "description": "Switch in the add form that registers a path whose folder is not there yet."
+  },
+  "adminLibraryActions": "Actions for {name}",
+  "@adminLibraryActions": {
+    "description": "Accessible name of the menu holding what can be done with one library. {name} is the library.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
   "adminLibraryAddGroup": "Add a library",
   "@adminLibraryAddGroup": {
     "description": "Heading over the form that registers a new root."
+  },
+  "adminLibraryConfigured": "Configured on the server",
+  "@adminLibraryConfigured": {
+    "description": "Caption on a library the server's configuration names, which only a configuration change removes."
   },
   "adminLibraryContentClass": "Content class",
   "@adminLibraryContentClass": {
@@ -1221,6 +1265,42 @@
       }
     }
   },
+  "adminLibraryRemove": "Remove library",
+  "@adminLibraryRemove": {
+    "description": "Menu row that takes a library out of the catalog. Its files stay on disk."
+  },
+  "adminLibraryRemoveAction": "Remove",
+  "@adminLibraryRemoveAction": {
+    "description": "Confirm button of the remove-library dialog."
+  },
+  "adminLibraryRemoveBody": "Its files stay on disk. The catalog forgets the library; items with no other copy are archived and come back if the folder is added again. Type the library's name to confirm.",
+  "@adminLibraryRemoveBody": {
+    "description": "Body of the remove-library dialog, which asks for the library's name typed back."
+  },
+  "adminLibraryRemoveConfigured": "Configured on the server; remove it from WAXDECK_LIBRARY_ROOTS first",
+  "@adminLibraryRemoveConfigured": {
+    "description": "Why the remove row is off for a library the server's configuration names. WAXDECK_LIBRARY_ROOTS is a setting's name; keep it as is."
+  },
+  "adminLibraryRemoveTitle": "Remove \"{name}\"?",
+  "@adminLibraryRemoveTitle": {
+    "description": "Title of the remove-library dialog. {name} is the library.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
+  "adminLibraryRemoving": "Removing \"{name}\"; follow it in Tasks",
+  "@adminLibraryRemoving": {
+    "description": "Message once a library's removal started; it runs as a job the Tasks screen lists.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
   "adminLibraryRescan": "Rescan libraries",
   "@adminLibraryRescan": {
     "description": "Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural. Also titles the confirm dialog the button opens."
@@ -1248,6 +1328,14 @@
   "adminLibraryUnnamedPath": "unnamed on this filesystem",
   "@adminLibraryUnnamedPath": {
     "description": "Fills the path cell of a library that has no directory of its own, such as a catalog library. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminLibraryUnreachable": "Folder not reachable",
+  "@adminLibraryUnreachable": {
+    "description": "Caption on a library whose folder was not there at its last scan, such as a drive not mounted. Its items stay listed."
+  },
+  "adminLibraryUnwritable": "Not writable by the server",
+  "@adminLibraryUnwritable": {
+    "description": "Caption on a managed library whose folder the server cannot write to, so uploads, organize moves and deletes into it fail."
   },
   "adminMigrateAccountHelp": "The stars, ratings, history, and progress land on this account.",
   "@adminMigrateAccountHelp": {
@@ -1382,10 +1470,6 @@
   "adminOpenTasks": "Tasks",
   "@adminOpenTasks": {
     "description": "Button on a message that opens the task list, where the work it started reports."
-  },
-  "adminReadOnlyBanner": "Read-only mode is on. Uploads, edits, and deletes are refused server-wide.",
-  "@adminReadOnlyBanner": {
-    "description": "Banner across the console while read-only mode is on, because every refusal elsewhere says only that something was refused."
   },
   "adminRestoreAppliesAtRestart": "The restore applies at the next server restart.",
   "@adminRestoreAppliesAtRestart": {
@@ -1866,6 +1950,22 @@
   "@adminSharesLoadError": {
     "description": "Title of the error state when the server-wide share list could not be read."
   },
+  "adminStreamingConnected": "Connected",
+  "@adminStreamingConnected": {
+    "description": "Streaming engine tile value: the engine answers."
+  },
+  "adminStreamingDirect": "Originals play directly meanwhile",
+  "@adminStreamingDirect": {
+    "description": "Caption under the streaming engine tile while the engine is unreachable: playback goes on with the original files."
+  },
+  "adminStreamingNotConfigured": "Not configured",
+  "@adminStreamingNotConfigured": {
+    "description": "Streaming engine tile value: the server runs without one (no engine URL is set)."
+  },
+  "adminStreamingUnreachable": "Unreachable",
+  "@adminStreamingUnreachable": {
+    "description": "Streaming engine tile value: an engine is configured and is not answering; the server retries it and plays originals directly meanwhile."
+  },
   "adminThumbsBlurb": "Resized copies of your covers, generated on demand. Clearing them costs a moment of decoding the next time each one is drawn, never a picture.",
   "@adminThumbsBlurb": {
     "description": "Line under the artwork-cache heading, saying what the cache is and what clearing it costs."
@@ -2076,6 +2176,10 @@
   "@adminTileSimilarity": {
     "description": "Tile saying how much of the library has been analyzed for sonic similarity."
   },
+  "adminTileStreaming": "Streaming engine",
+  "@adminTileStreaming": {
+    "description": "Label of the dashboard tile that says whether the server's streaming engine answers."
+  },
   "adminTileTracksEmbedded": "{count, plural, =1{1 track embedded} other{{count} tracks embedded}}",
   "@adminTileTracksEmbedded": {
     "description": "Caption of the similarity tile, counting tracks that have been analyzed. Embedding is what the analysis produces.",
@@ -2218,6 +2322,18 @@
       }
     }
   },
+  "adminTrashReasonBookMerge": "book merge",
+  "@adminTrashReasonBookMerge": {
+    "description": "Reason for a book's part a book merge moved to the trash, the merged file holding its audio. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminTrashReasonBookSplit": "book split",
+  "@adminTrashReasonBookSplit": {
+    "description": "Reason for a book's file a book split moved to the trash, its pieces holding its audio. Lower case: it fills a table cell rather than starting a sentence."
+  },
+  "adminTrashReasonCueSplit": "CUE split",
+  "@adminTrashReasonCueSplit": {
+    "description": "Reason for an album rip a CUE split moved to the trash once its tracks were real files. CUE is the sheet format's name, so it keeps its capitals."
+  },
   "adminTrashReasonPermanent": "permanent",
   "@adminTrashReasonPermanent": {
     "description": "Reason for a deletion that was meant to be final. Lower case: it fills a table cell rather than starting a sentence."
@@ -2324,7 +2440,7 @@
   "@adminUserDeleteAction": {
     "description": "Confirming button in the delete-account dialog."
   },
-  "adminUserDeleteBody": "{username} is removed for good, along with its sessions and preferences. Library files are untouched.",
+  "adminUserDeleteBody": "{username} is removed for good, along with its sessions, preferences and share links, which stop working. Library files are untouched.",
   "@adminUserDeleteBody": {
     "description": "Body of the delete-account dialog. {username} is the account being deleted.",
     "placeholders": {
@@ -2333,6 +2449,22 @@
         "example": "ada"
       }
     }
+  },
+  "adminUserDeletePlaylistsDelete": "Delete their playlists",
+  "@adminUserDeletePlaylistsDelete": {
+    "description": "Choice in the delete-account dialog: every playlist the account owns is deleted."
+  },
+  "adminUserDeletePlaylistsDeleteHelp": "Shared and private alike. Anyone they shared a playlist with loses it.",
+  "@adminUserDeletePlaylistsDeleteHelp": {
+    "description": "Line under the choice that deletes the account's playlists, saying what it costs the people the playlists were shared with."
+  },
+  "adminUserDeletePlaylistsTransfer": "Hand their shared playlists to me",
+  "@adminUserDeletePlaylistsTransfer": {
+    "description": "Choice in the delete-account dialog, and the default: the account's shared playlists become the administrator's who deletes it."
+  },
+  "adminUserDeletePlaylistsTransferHelp": "They keep their entries and stay shared. A smart playlist that depends on their stars, ratings, plays or private playlists becomes a fixed list of its tracks. Their private playlists are deleted.",
+  "@adminUserDeletePlaylistsTransferHelp": {
+    "description": "Line under the choice that hands the account's shared playlists to the administrator, saying what happens to the rest."
   },
   "adminUserDeleteTitle": "Delete account?",
   "@adminUserDeleteTitle": {

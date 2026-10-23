@@ -46,6 +46,9 @@ type PartsResolver interface {
 // binds the start part and the rate as it binds any stream's shape; the
 // cut rides outside it, as every cut does.
 func (b *Bridge) JoinedPlayInfo(ctx context.Context, user, apiItemPID string, opts PlayOptions) (PlayInfo, error) {
+	if !b.Up() {
+		return PlayInfo{}, ErrEngineDown
+	}
 	parts, start, err := b.joinedParts(ctx, apiItemPID, opts.FilePID)
 	if err != nil {
 		return PlayInfo{}, err
@@ -167,6 +170,7 @@ func (b *Bridge) serveJoined(w http.ResponseWriter, r *http.Request, user, pid s
 				if ctx.Err() == nil {
 					b.log.Error("joined stream", "pid", pid, "part", p.FilePID, "err", err)
 				}
+				b.unreachable(ctx, err)
 				writeJSONError(w, http.StatusBadGateway, "internal", "stream backend unavailable")
 				return
 			}
@@ -242,7 +246,7 @@ func (b *Bridge) openPart(ctx context.Context, method string, params url.Values)
 		return nil, err
 	}
 	req.Header.Set("X-API-Key", b.apiKey)
-	return http.DefaultClient.Do(req)
+	return b.engineHTTP.Do(req)
 }
 
 // relayRefusal answers the engine's refusal of a joined stream's first

@@ -41,6 +41,7 @@ String? _title(AppLocalizations l, String token) => switch (token) {
   'review-ready' => l.notifReviewReadyTitle,
   'signup-requested' => l.notifSignupRequestedTitle,
   'subscription-failed' => l.notifSubscriptionFailedTitle,
+  'tool-task-failed' => l.notifToolTaskFailedTitle,
   _ => null,
 };
 
@@ -60,5 +61,6 @@ String? _help(AppLocalizations l, String token) => switch (token) {
   'review-ready' => l.notifReviewReadyHelp,
   'signup-requested' => l.notifSignupRequestedHelp,
   'subscription-failed' => l.notifSubscriptionFailedHelp,
+  'tool-task-failed' => l.notifToolTaskFailedHelp,
   _ => null,
 };

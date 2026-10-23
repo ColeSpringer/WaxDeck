@@ -437,10 +437,9 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
       child: WaxButton(
         label: _details ? l10n.radioFewerOptions : l10n.radioMoreOptions,
         kind: WaxButtonKind.text,
-        // Matching every other disclosure in the app (the audit rows, the
-        // podcast folders, the queue's history): open shows the caret
-        // that closes it.
-        icon: _details ? WaxIcons.collapse : WaxIcons.expand,
+        // The sidebar's groups open the same way: right while closed,
+        // down while open.
+        icon: _details ? WaxIcons.collapse : WaxIcons.forward,
         semanticsId: SemanticsIds.radioMoreOptions,
         onPressed: () => setState(() => _details = !_details),
       ),

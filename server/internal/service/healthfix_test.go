@@ -380,7 +380,7 @@ func TestAScopedFixCountsFilledOnlyWhereTheRuleNowPasses(t *testing.T) {
 
 // A path fix counts items, not the files it moves: a book is one item
 // over several parts, and an item held back because another took its
-// place is skipped for that.
+// place is held under that code.
 func TestAPathFixCountsItemsNotFiles(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
@@ -417,8 +417,8 @@ func TestAPathFixCountsItemsNotFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	sum := fixSummary(t, ctx, svc, uc, start.TaskID)
-	if sum.Attempted != 3 || sum.Filled != 2 || sum.Failed != 0 ||
-		sum.Skipped["destination taken"] != 1 || len(sum.Skipped) != 1 {
+	if sum.Attempted != 3 || sum.Moved == nil || *sum.Moved != 2 || sum.Failed != 0 ||
+		sum.Held[string(organize.HoldCollision)] != 1 || len(sum.Held) != 1 || len(sum.Skipped) != 0 {
 		t.Fatalf("summary %+v, want the book and one twin moved and the other twin held back", sum)
 	}
 }
@@ -638,8 +638,8 @@ func managedTrackFixture(t *testing.T) (context.Context, *Library, *UserCtx, str
 	return ctx, svc, uc, paths[0], apiPID(PrefixTrack, items[0].PID)
 }
 
-// A fix's summary names its holds in words, never the catalog's codes,
-// and a second pass over a moved track finds it in place.
+// A fix's summary counts its holds by the catalog's code, and a second
+// pass over a moved track finds it in place and runs no job.
 func TestAPathFixNamesWhatItHeldBack(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, scope := untaggedBesideStrayFixture(t)
@@ -651,11 +651,13 @@ func TestAPathFixNamesWhatItHeldBack(t *testing.T) {
 		}
 		return fixSummary(t, ctx, svc, uc, start.TaskID)
 	}
-	if sum := fix(); sum.Filled != 1 || sum.Skipped["missing tags"] != 1 || len(sum.Skipped) != 1 {
+	if sum := fix(); sum.Moved == nil || *sum.Moved != 1 || sum.Held[string(organize.HoldUntagged)] != 1 ||
+		len(sum.Held) != 1 || len(sum.Skipped) != 0 {
 		t.Fatalf("first pass %+v, want the stray moved and the untagged track held for its tags", sum)
 	}
-	if sum := fix(); sum.Filled != 0 || sum.Skipped["already in place"] != 1 || sum.Skipped["missing tags"] != 1 {
-		t.Fatalf("second pass %+v, want the moved track found in place", sum)
+	if sum := fix(); sum.Moved == nil || *sum.Moved != 0 || sum.Skipped["already in place"] != 1 ||
+		sum.Held[string(organize.HoldUntagged)] != 1 || len(sum.JobPIDs) != 0 {
+		t.Fatalf("second pass %+v, want the moved track found in place and no job run", sum)
 	}
 }
 
@@ -768,7 +770,7 @@ func TestAPathFixLeavesAReadOnlyLibraryInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	sum := fixSummary(t, ctx, svc, uc, start.TaskID)
-	if sum.Filled != 0 || sum.Skipped["read-only library"] != 1 {
+	if sum.Filled != 0 || sum.Held[string(organize.HoldReadOnly)] != 1 {
 		t.Fatalf("summary %+v, want the track held back as read-only", sum)
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -801,8 +803,10 @@ func TestAReadOnlyServerRefusesAFileWritingFix(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openEnrichFixture(t, func(c *Config) { c.Roots[0].Managed = true })
 	setServerReadOnly(t, ctx, svc, true)
+	// A path fix names its items; unscoped, it is refused for that first.
+	scope := []string{apiPID(PrefixTrack, model.NewPID())}
 	for _, rule := range []string{ruleWriteUnsynced, rulePathMismatch} {
-		if _, err := svc.StartHealthFix(ctx, uc, rule, nil); KindOf(err) != KindReadOnly {
+		if _, err := svc.StartHealthFix(ctx, uc, rule, scope); KindOf(err) != KindReadOnly {
 			t.Fatalf("%s: err = %v, want read-only", rule, err)
 		}
 	}
@@ -832,7 +836,7 @@ func TestAPathFixRunningOnAReadOnlyServerMovesNothing(t *testing.T) {
 	}
 	setServerReadOnly(t, ctx, svc, true)
 	sum := fixSummary(t, ctx, svc, uc, start.TaskID)
-	if sum.Filled != 0 || sum.Skipped[readOnlyReason] != 1 {
+	if sum.Filled != 0 || sum.Held[string(organize.HoldReadOnly)] != 1 || len(sum.JobPIDs) != 0 {
 		t.Fatalf("summary %+v, want the track held back as read-only", sum)
 	}
 	if _, err := os.Stat(path); err != nil {

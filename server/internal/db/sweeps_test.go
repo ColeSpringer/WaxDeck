@@ -11,7 +11,7 @@ import (
 // what they must prove is the pair of edges: what they take, and what
 // they leave for the work that is still live.
 
-func TestPruneFinishedToolTasksTakesOnlyOldTerminalRows(t *testing.T) {
+func TestTheOldFinishedToolTasksAreOnlyOldTerminalRows(t *testing.T) {
 	d := openTest(t)
 	ctx := context.Background()
 	now := time.Now().UnixNano()
@@ -35,7 +35,15 @@ func TestPruneFinishedToolTasksTakesOnlyOldTerminalRows(t *testing.T) {
 	insert("queued", "queued", 0)
 	insert("running", "running", 0)
 
-	n, err := d.PruneFinishedToolTasks(ctx, horizon)
+	old, err := d.FinishedToolTasks(ctx, "", true, horizon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]string, len(old))
+	for i, row := range old {
+		ids[i] = row.ID
+	}
+	n, err := d.DeleteToolTasksByID(ctx, ids)
 	if err != nil {
 		t.Fatal(err)
 	}

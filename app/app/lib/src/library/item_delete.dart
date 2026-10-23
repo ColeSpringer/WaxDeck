@@ -28,10 +28,11 @@ bool canDeleteItems(WidgetRef ref) {
 /// Previews a deletion with a dry run, then performs the mode the
 /// listener picked.
 ///
-/// A function rather than only a button, because two surfaces offer this
-/// verb in two shapes: an item screen's own overflow row, and the
-/// player's single overflow menu, where a second three-dot control
-/// beside the first would be two menus wearing one glyph.
+/// A function rather than a widget, because each surface that offers the
+/// verb draws it in its own shape: a row of a track's sheet, a row of the
+/// player's overflow menu, a row of a book screen's overflow, a copy's
+/// button on the Details sheet, and (through [confirmDeleteItems]) a row
+/// of an album screen's overflow.
 /// Takes no `ref` on purpose: the work outlives the widget that asked
 /// for it, so it goes through the container rather than through a
 /// caller's provider dependencies - which is the whole point of the
@@ -39,9 +40,36 @@ bool canDeleteItems(WidgetRef ref) {
 ///
 /// With [filePids] it deletes those files of the item rather than the
 /// whole item (a copy, from the Details sheet), and the item stays.
+///
+/// [onDeleted] runs once what was asked for is gone: every file went
+/// and no item stays on a file the deletion left, so a screen showing
+/// the item can leave it.
 Future<void> confirmDeleteItem(
   BuildContext context, {
   required String pid,
+  List<String>? filePids,
+  VoidCallback? onDeleted,
+}) => _confirmDelete(
+  context,
+  pids: [pid],
+  filePids: filePids,
+  onDeleted: onDeleted,
+);
+
+/// The most items one delete may name, the request's own limit.
+const itemDeleteMaxItems = 500;
+
+/// [confirmDeleteItem] for several items at once: an album's tracks, or
+/// every track one file holds.
+Future<void> confirmDeleteItems(
+  BuildContext context, {
+  required List<String> pids,
+  VoidCallback? onDeleted,
+}) => _confirmDelete(context, pids: pids, onDeleted: onDeleted);
+
+Future<void> _confirmDelete(
+  BuildContext context, {
+  required List<String> pids,
   List<String>? filePids,
   VoidCallback? onDeleted,
 }) async {
@@ -68,9 +96,9 @@ Future<void> confirmDeleteItem(
       false;
   Future<DeleteItemsResult> delete({String? mode, bool dryRun = false}) =>
       filePids == null
-      ? repo.deleteLibraryItems(pids: [pid], mode: mode, dryRun: dryRun)
+      ? repo.deleteLibraryItems(pids: pids, mode: mode, dryRun: dryRun)
       : repo.deleteItemFiles(
-          pid: pid,
+          pid: pids.single,
           filePids: filePids,
           mode: mode,
           dryRun: dryRun,
@@ -79,19 +107,61 @@ Future<void> confirmDeleteItem(
   void rereadFiles() {
     if (filePids == null) return;
     container
-      ..invalidate(itemFilesProvider(pid))
-      ..invalidate(itemDetailProvider(pid));
+      ..invalidate(itemFilesProvider(pids.single))
+      ..invalidate(itemDetailProvider(pids.single));
   }
 
+  final DeleteItemsResult plan;
   try {
-    final plan = await delete(dryRun: true);
-    if (!context.mounted) return;
-    final mode = await showDialog<String>(
+    plan = await delete(dryRun: true);
+  } on WaxDeckApiException catch (e) {
+    // A track cut from one file with others goes with them or not at
+    // all; the refusal names them, and they are offered with the tracks
+    // asked for rather than left a dead end. Only to a delete of items:
+    // one of files was asked for those files, never for items.
+    final rip = filePids == null ? _ripTracks(e) : const <String>[];
+    final all = [
+      ...pids,
+      for (final pid in rip)
+        if (!pids.contains(pid)) pid,
+    ];
+    // No track beyond those asked for - no list, or one naming only
+    // them - leaves nothing to offer: the same delete again would be
+    // refused again, so the refusal is said as it stands.
+    if (all.length == pids.length || !context.mounted) {
+      if (e.isRefusal) rereadFiles();
+      messenger.show(explainError(l10n, e), channel: ShellChannel.itemDelete);
+      return;
+    }
+    // More than one delete may name is not offered: it would only be
+    // refused after the listener agreed to it.
+    if (all.length > itemDeleteMaxItems) {
+      messenger.show(
+        l10n.libraryDeleteRipTooMany(itemDeleteMaxItems),
+        channel: ShellChannel.itemDelete,
+      );
+      return;
+    }
+    final whole = await showDialog<bool>(
       context: context,
-      builder: (_) =>
-          _DeleteItemsDialog(plan: plan, allowPermanent: allowPermanent),
+      builder: (_) => _WholeFileDialog(
+        chosen: pids.length,
+        extra: all.length - pids.length,
+      ),
     );
-    if (mode == null) return;
+    if (whole == true && context.mounted) {
+      await _confirmDelete(context, pids: all, onDeleted: onDeleted);
+    }
+    return;
+  }
+  if (!context.mounted) return;
+  final mode = await showDialog<String>(
+    context: context,
+    builder: (_) =>
+        _DeleteItemsDialog(plan: plan, allowPermanent: allowPermanent),
+  );
+  if (mode == null) return;
+  try {
     final result = await delete(mode: mode);
     rereadFiles();
     // The listings that could be showing what just went: the music
@@ -103,17 +173,29 @@ Future<void> confirmDeleteItem(
     for (final provider in homeShelfProviders) {
       container.invalidate(provider);
     }
-    // The server's sentences follow: a copy that took a deleted file's
-    // place, which keeps the item where the listing still shows it.
+    // What went, then how many stayed, then the server's sentences: a
+    // copy that took a deleted file's place, which keeps the item where
+    // the listing still shows it, and each file that stayed and why.
+    final permanent = result.mode == 'permanent';
+    final went = permanent ? result.deleted : result.trashed;
+    final tried = went + result.failed;
     messenger.show(
       [
-        result.mode == 'permanent'
-            ? l10n.libraryDeletePermanentDone(result.totalFiles)
-            : l10n.libraryDeleteTrashDone(result.totalFiles),
+        permanent
+            ? l10n.libraryDeletePermanentDone(went)
+            : l10n.libraryDeleteTrashDone(went),
+        if (result.failed > 0)
+          permanent
+              ? l10n.libraryDeletePermanentPartial(result.failed, tried)
+              : l10n.libraryDeleteTrashPartial(result.failed, tried),
         ...result.warnings,
       ].join('\n'),
     );
-    onDeleted?.call();
+    // A file that stayed, or an item a file keeps, leaves what was asked
+    // for in the library, and a screen showing it with it.
+    if (result.failed == 0 && !result.entries.any((e) => e.itemSurvives)) {
+      onDeleted?.call();
+    }
   } on WaxDeckApiException catch (e) {
     // A refusal is the server's answer about the item as it stands, and
     // the list the file was picked from may be older: a copy deleted
@@ -123,40 +205,53 @@ Future<void> confirmDeleteItem(
   }
 }
 
-/// The "Delete files..." overflow on an item screen. Rendered for
-/// accounts holding the delete right; the server enforces the
-/// permission either way. The dialog previews the deletion with a dry
-/// run before anything moves.
-class ItemDeleteAction extends ConsumerWidget {
-  const ItemDeleteAction({super.key, required this.pid, this.onDeleted});
+/// The tracks a refusal says go together with the one named - every
+/// track one file holds - or none for any other refusal.
+List<String> _ripTracks(WaxDeckApiException e) {
+  final tracks = e.params?['tracks'];
+  if (e.code != 'invalid-request' ||
+      e.params?['reason'] != 'cue-rip' ||
+      tracks == null) {
+    return const [];
+  }
+  return [
+    for (final pid in tracks.split(','))
+      if (pid.isNotEmpty) pid,
+  ];
+}
 
-  final String pid;
+/// Offers the tracks asked for together with every other track their
+/// files hold, after a delete naming some of a file's tracks was refused;
+/// true goes on to delete them all.
+class _WholeFileDialog extends StatelessWidget {
+  const _WholeFileDialog({required this.chosen, required this.extra});
 
-  /// Called after a successful deletion, when the surrounding screen
-  /// should leave (its item is gone).
-  final VoidCallback? onDeleted;
+  /// How many tracks were picked, and how many more (never none) share
+  /// their files.
+  final int chosen, extra;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (!canDeleteItems(ref)) return const SizedBox.shrink();
+  Widget build(BuildContext context) {
     final l10n = context.l10n;
-    // The design system's own menu, not Material's. A `PopupMenuButton`
-    // mounts a Material `Tooltip` whatever it is given, and Material's
-    // tooltips share one open set: once any of them has shown, the next
-    // control a pointer touches opens with no delay at all, which is
-    // the aggression this app stopped doing everywhere else.
-    return WaxMenuButton<String>(
-      glyph: WaxIcons.moreVertical,
-      label: l10n.libraryDeleteFilesLabel,
-      semanticsId: SemanticsIds.itemDelete,
-      items: <WaxMenuItem<String>>[
-        WaxMenuItem<String>(
-          value: 'delete',
-          label: l10n.libraryDeleteFilesMenu,
+    // Scrolls rather than overflows on a short window.
+    return AlertDialog(
+      scrollable: true,
+      title: Text(l10n.libraryDeleteRipTitle),
+      content: WaxProse(l10n.libraryDeleteRipShared(chosen, extra)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(l10n.commonCancel),
+        ),
+        Semantics(
+          identifier: SemanticsIds.itemDeleteRip,
+          child: FilledButton(
+            key: const Key(SemanticsIds.itemDeleteRip),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.libraryDeleteRipAction(chosen + extra)),
+          ),
         ),
       ],
-      onSelected: (_) =>
-          confirmDeleteItem(context, pid: pid, onDeleted: onDeleted),
     );
   }
 }
@@ -185,12 +280,20 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
   Widget build(BuildContext context) {
     final plan = widget.plan;
     final l10n = context.l10n;
+    // Where each file is in its library, which tells two files of one
+    // name apart; a plan that carries no paths names them alone.
     final names = [
       for (final entry in plan.entries)
-        for (final file in entry.fileList) file.name,
+        if (entry.paths.isNotEmpty)
+          ...entry.paths
+        else
+          for (final file in entry.fileList) file.name,
     ];
+    // Scrolls rather than overflows on a short window, so every choice
+    // stays reachable.
     return AlertDialog(
       key: const Key('item-delete-dialog'),
+      scrollable: true,
       title: Text(l10n.libraryDeleteTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -203,16 +306,38 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
             ),
             key: const Key('item-delete-preview'),
           ),
-          // Which files go, by name: the first few, then how many more.
-          for (final name in names.take(_namedFiles))
-            Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: WaxType.monoData,
+          // Which files go: the first few, then how many more. Read out
+          // whole as one sentence, which a list of paths is not, and no
+          // longer than the list drawn.
+          if (names.isNotEmpty)
+            Semantics(
+              identifier: SemanticsIds.itemDeletePaths,
+              label: l10n.libraryDeletePreviewFiles(
+                names.length,
+                [
+                  ...names.take(_namedFiles),
+                  if (names.length > _namedFiles)
+                    l10n.libraryDeleteMoreFiles(names.length - _namedFiles),
+                ].join(', '),
+              ),
+              excludeSemantics: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final name in names.take(_namedFiles))
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: WaxType.monoData,
+                    ),
+                  if (names.length > _namedFiles)
+                    Text(
+                      l10n.libraryDeleteMoreFiles(names.length - _namedFiles),
+                    ),
+                ],
+              ),
             ),
-          if (names.length > _namedFiles)
-            Text(l10n.libraryDeleteMoreFiles(names.length - _namedFiles)),
           if (plan.entries.isNotEmpty &&
               plan.entries.every((e) => e.itemSurvives)) ...<Widget>[
             const SizedBox(height: WaxSpace.s8),

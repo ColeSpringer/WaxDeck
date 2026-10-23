@@ -216,7 +216,7 @@ func (l *Library) exportIsBeingRead(ctx context.Context, row wdb.MigrationExport
 	if err != nil {
 		return false
 	}
-	return t.State != taskStateDone && t.State != taskStateFailed
+	return !ToolTaskFinished(t.State)
 }
 
 // dropMigrationExport removes an export's file and then its row. File

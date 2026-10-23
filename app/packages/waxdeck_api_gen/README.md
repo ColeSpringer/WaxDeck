@@ -127,7 +127,11 @@ Conventions:
   kind of upload - an imported backup archive, a staged account
   data export), `storage-full` (the server has no room to stage what
   the request declared - its own disk, not the caller's allowance,
-  so the caller has nothing to clear), `field-locked`
+  so the caller has nothing to clear), `storage-unwritable` (a
+  library folder refused a write the request needed, through its
+  permissions or a read-only mount, and the write was not made;
+  fixing the folder's ownership or mount is what clears it),
+  `field-locked`
   (the edit targets a locked metadata field and did not set
   `force`), `unsupported-format` (the uploaded file's format
   is not accepted by this server), `drm-protected` (the uploaded
@@ -157,20 +161,44 @@ Conventions:
   capability, and `pid`, the subject it was asked about; the values
   defined for `feature` so far are `windowed-track` (a track that is a
   window into a larger file, sent to a device endpoint on a server
-  running without the streaming engine) and `podcasts` (a subscribe
-  or an OPML import on a server whose podcasts are turned off), and
-  other refusals under that code carry no params yet. Under
+  running without the streaming engine), `podcasts` (a subscribe
+  or an OPML import on a server whose podcasts are turned off) and
+  `streaming-engine` (a request only the streaming engine can serve,
+  such as a queue timeline, a stream of a carved window, voice
+  boost, a format or a bitrate, a device queue only it renders, or
+  a book merge or split or a CUE split, on a server whose engine is
+  configured but not reachable right now: a 503 with `Retry-After`,
+  while play-info mints the original's bytes and `/health.streaming`
+  says when the engine answers again), and other refusals under that
+  code carry no params yet. Under
   `conflict`, a bookmark create replaying the id of a removed
   bookmark carries `reason: removed`,
   and a client drops its copy; a completed upload whose bytes miss
   their declared SHA-256 carries `reason: checksum-mismatch`, its
-  session already ended. Under `unsupported-format`,
+  session already ended; and a book merge or split, or a CUE split,
+  refused before it is queued carries the `reason` its operation
+  names (`task-running`, with `task`, the one at work on the same
+  book or rip; `task-parked`, with `task`, the one that stopped part
+  way on it and is parked until it is cleared in Tasks;
+  `name-taken`, with `name` and `folder`;
+  `copy-elsewhere`, with `copy` and `library`; `parts-in-trash`, with
+  `count`, the files a merge or split that did not finish left in
+  the trash, `files`, the first few of them, and `more`, how many
+  `files` leaves out; and `single-file`, `multi-file`,
+  `no-chapters`, `no-cuts`, `no-sample-rate`, `no-file` or
+  `no-sheet`); a
+  tool task whose clear could not name or remove its hidden files
+  carries `reason: outputs-hidden`, with `folder` and `cause`, and
+  stays. Under `unsupported-format`,
   `reason: unreadable` marks a completed upload whose bytes do not
   read as audio at all, a damaged file rather than a format the
   server refuses. Under `invalid-request`, `reason` names
   two refusals a client words itself: `incompatible-schema` (a backup
   whose schema this server cannot open) and `cue-rip` (a delete
-  naming some tracks of a cue rip but not all); a subscribe also
+  naming some tracks of a cue rip but not all, which also carries
+  `tracks`: every track of the rips it named some of, comma-separated
+  in the order they play, for the client to offer them together); a
+  subscribe also
   names the feed address it will not take, in a message that is
   already a sentence for a person (an import names it per entry, in
   the entry's `reason`): `not-a-feed` (it answered with something
@@ -217,7 +245,12 @@ Conventions:
   stream parameters the server chose, so it opens no other route and
   a URL with those parameters edited, added or dropped answers
   `unauthenticated`, save the server's own cut of a stream that
-  cannot be range-seeked (see `PlayInfo.startOffsetMs`); on
+  cannot be range-seeked (see `PlayInfo.startOffsetMs`). The one
+  exception: a stream token for an item's own bytes (no window,
+  voice boost, format or bitrate the engine makes) also opens
+  `/media/download`, which serves those same bytes, and does so
+  whether or not the streaming engine is answering; a window of a
+  larger file opens it only while the engine is not. On
   `/media/hls` it binds the queue, or the one item rendering, it was
   minted for, so it opens no other queue's or item's playlists and
   segments. Every fetch
@@ -449,6 +482,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**putSchedule**](doc/AdminApi.md#putschedule) | **PUT** /admin/schedules/{kind} | Set a scheduled job&#39;s cron and enabled state
 [*AdminApi*](doc/AdminApi.md) | [**putScrobblingConfig**](doc/AdminApi.md#putscrobblingconfig) | **PUT** /admin/scrobbling | Set the server&#39;s Last.fm API credentials
 [*AdminApi*](doc/AdminApi.md) | [**putTranscodingLimits**](doc/AdminApi.md#puttranscodinglimits) | **PUT** /admin/transcoding | Replace the transcoding limits
+[*AdminApi*](doc/AdminApi.md) | [**removeLibrary**](doc/AdminApi.md#removelibrary) | **DELETE** /libraries/{pid} | Remove a library
 [*AdminApi*](doc/AdminApi.md) | [**rescanLibrary**](doc/AdminApi.md#rescanlibrary) | **POST** /library/rescan | Start a library rescan
 [*AdminApi*](doc/AdminApi.md) | [**restoreTrashEntry**](doc/AdminApi.md#restoretrashentry) | **POST** /admin/trash/{trashId}/restore | Restore a trashed file
 [*AdminApi*](doc/AdminApi.md) | [**setLibraryFolderFallback**](doc/AdminApi.md#setlibraryfolderfallback) | **PUT** /libraries/{pid}/folder-fallback | Name untagged files from their folders
@@ -559,10 +593,12 @@ Class | Method | HTTP request | Description
 [*NotificationsApi*](doc/NotificationsApi.md) | [**updateServerNotificationTarget**](doc/NotificationsApi.md#updateservernotificationtarget) | **PUT** /admin/notification-targets/{targetId} | Update a server-scope notification target
 [*OrganizeApi*](doc/OrganizeApi.md) | [**applyOrganize**](doc/OrganizeApi.md#applyorganize) | **POST** /organize/apply | Apply an organize pass
 [*OrganizeApi*](doc/OrganizeApi.md) | [**deleteOrganizeProfile**](doc/OrganizeApi.md#deleteorganizeprofile) | **DELETE** /organize/profiles/{name} | Delete an organize profile
+[*OrganizeApi*](doc/OrganizeApi.md) | [**listOrganizeHistory**](doc/OrganizeApi.md#listorganizehistory) | **GET** /organize/history | List organize runs
 [*OrganizeApi*](doc/OrganizeApi.md) | [**listOrganizeProfiles**](doc/OrganizeApi.md#listorganizeprofiles) | **GET** /organize/profiles | List organize profiles
 [*OrganizeApi*](doc/OrganizeApi.md) | [**previewOrganize**](doc/OrganizeApi.md#previeworganize) | **POST** /organize/preview | Dry-run an organize pass
 [*OrganizeApi*](doc/OrganizeApi.md) | [**previewOrganizeProfile**](doc/OrganizeApi.md#previeworganizeprofile) | **POST** /organize/profiles/preview | Render an unsaved profile&#39;s samples
 [*OrganizeApi*](doc/OrganizeApi.md) | [**putOrganizeProfile**](doc/OrganizeApi.md#putorganizeprofile) | **PUT** /organize/profiles/{name} | Save an organize profile
+[*OrganizeApi*](doc/OrganizeApi.md) | [**undoOrganize**](doc/OrganizeApi.md#undoorganize) | **POST** /organize/undo | Undo an organize run
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getAlbumPlayState**](doc/PlaybackApi.md#getalbumplaystate) | **GET** /albums/{pid}/play-state | Get the caller&#39;s star and rating for an album
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getArtistPlayState**](doc/PlaybackApi.md#getartistplaystate) | **GET** /artists/{pid}/play-state | Get the caller&#39;s star and rating for an artist
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getDownloadInfo**](doc/PlaybackApi.md#getdownloadinfo) | **GET** /items/{pid}/download-info | Resolve an offline download for an item
@@ -760,6 +796,7 @@ Class | Method | HTTP request | Description
  - [CatalogSyncPage](doc/CatalogSyncPage.md)
  - [ChapterMark](doc/ChapterMark.md)
  - [ChaptersEdit](doc/ChaptersEdit.md)
+ - [ClearFinishedTasksRequest](doc/ClearFinishedTasksRequest.md)
  - [CommitCredits](doc/CommitCredits.md)
  - [CommitLyrics](doc/CommitLyrics.md)
  - [CoverageCount](doc/CoverageCount.md)
@@ -927,7 +964,10 @@ Class | Method | HTTP request | Description
  - [OpmlImportEntry](doc/OpmlImportEntry.md)
  - [OpmlImportResult](doc/OpmlImportResult.md)
  - [OrganizeAction](doc/OrganizeAction.md)
+ - [OrganizeBatch](doc/OrganizeBatch.md)
  - [OrganizeFailure](doc/OrganizeFailure.md)
+ - [OrganizeHistory](doc/OrganizeHistory.md)
+ - [OrganizeHold](doc/OrganizeHold.md)
  - [OrganizePlan](doc/OrganizePlan.md)
  - [OrganizeProfile](doc/OrganizeProfile.md)
  - [OrganizeProfileInput](doc/OrganizeProfileInput.md)
@@ -937,6 +977,7 @@ Class | Method | HTTP request | Description
  - [OrganizeRequest](doc/OrganizeRequest.md)
  - [OrganizeSample](doc/OrganizeSample.md)
  - [OrganizeTemplates](doc/OrganizeTemplates.md)
+ - [OrganizeUndoRequest](doc/OrganizeUndoRequest.md)
  - [PasswordChange](doc/PasswordChange.md)
  - [Permissions](doc/Permissions.md)
  - [PlayInfo](doc/PlayInfo.md)
@@ -1033,6 +1074,7 @@ Class | Method | HTTP request | Description
  - [SessionInfo](doc/SessionInfo.md)
  - [SessionList](doc/SessionList.md)
  - [SessionRename](doc/SessionRename.md)
+ - [SessionServer](doc/SessionServer.md)
  - [SetItemKindRequest](doc/SetItemKindRequest.md)
  - [Share](doc/Share.md)
  - [ShareCreate](doc/ShareCreate.md)
@@ -1052,6 +1094,7 @@ Class | Method | HTTP request | Description
  - [StarUpdate](doc/StarUpdate.md)
  - [StarredEntities](doc/StarredEntities.md)
  - [StatsMediaType](doc/StatsMediaType.md)
+ - [StreamingEngineState](doc/StreamingEngineState.md)
  - [SubscribeRequest](doc/SubscribeRequest.md)
  - [Subscription](doc/Subscription.md)
  - [SubscriptionPage](doc/SubscriptionPage.md)

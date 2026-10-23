@@ -166,7 +166,11 @@ paths:
             mode, or the library an upload or acquisition was staged for
             is read-only. `catalog-busy`: another job holds the catalog's shared
             file-mutation scope, which clears on its own, so the same
-            decision is worth sending again.
+            decision is worth sending again. `storage-unwritable`: the
+            library folder a file was going into refused the write (its
+            permissions, or a read-only mount); the decision stays unmade,
+            the staged files stay staged, and the same decision lands once
+            the folder is fixed.
           content:
             application/json:
               schema:

@@ -1,8 +1,11 @@
-import type { Request } from '@playwright/test';
+import type { Locator, Request } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { App, J, T, clickUntilRequested, retryCatalogBusy } from './driver';
-import { clickThrough } from './driver/gestures';
+import { clickThrough, typeInto, wheelIntoReach, wheelIntoView } from './driver/gestures';
+import type { components } from './api-types';
 import { SemanticsIds } from './semantics-ids';
+
+type OrganizeReport = components['schemas']['OrganizeReport'];
 
 // The catalog's own jobs and the health fixes, driven from the screens an
 // administrator starts them on: followed in Tasks, told in the bell. A
@@ -283,4 +286,148 @@ test('an album the library reads as music becomes one audiobook', async ({ app }
 
   // Leave the library as the other specs expect it.
   await kindChanged(app, [bookPid], 'music');
+});
+
+/// Opens a typed-word confirmation from [trigger], confirms it, and answers
+/// the accepted report. The library watcher scans what a run moved about
+/// ten seconds later, so a confirm can land while that scan holds the
+/// file-mutation scope: the dialog then closes on catalog-busy, and the
+/// action is asked for again once the catalog is free.
+async function confirmTyped(
+  app: App,
+  trigger: Locator,
+  word: string,
+  confirm: string,
+  isAction: (r: Request) => boolean,
+): Promise<OrganizeReport> {
+  const page = app.page;
+  const field = app.admin.control(SemanticsIds.confirmField);
+  const height = page.viewportSize()?.height ?? (await page.evaluate(() => window.innerHeight));
+  for (let attempt = 1; ; attempt++) {
+    // Under a report's held files, a history row sits screens past the
+    // fold, further than a notch per try covers in time: one wheel takes
+    // it most of the way, and the fine one lands it.
+    const box = await trigger.boundingBox({ timeout: T.nav });
+    const off = box === null ? 0 : box.y + box.height / 2 - height / 2;
+    if (Math.abs(off) > height) await wheelIntoView(page, trigger, { by: off });
+    await wheelIntoReach(page, trigger);
+    await clickThrough(trigger, field);
+    await typeInto(page, field, word);
+    const answered = page.waitForResponse((r) => isAction(r.request()), { timeout: T.fetch });
+    await clickUntilRequested(page, app.admin.control(confirm), isAction);
+    const response = await answered;
+    // The status first: a body that is not JSON would hide it.
+    if (response.status() === 409 && (await response.json()).code === 'catalog-busy' && attempt < 3) {
+      await catalogIdle(app);
+      continue;
+    }
+    expect(response.status(), `the ${word} confirm should be accepted`).toBe(200);
+    return (await response.json()) as OrganizeReport;
+  }
+}
+
+// The path rule's bulk fix is an organize pass: Health opens Organize with
+// the dry run under way, the apply asks for the typed word, and the run is
+// in the history, whose undo puts every file back. Asserted on the whole
+// library's dry run and on items this test picks from it, which nothing
+// else moves while this serial project runs.
+test('the path rule previews from Organize, applies with the typed word and can be undone', async ({
+  app,
+}) => {
+  test.setTimeout(J.journey);
+  await catalogIdle(app);
+  await sweptOnce(app);
+  const pathRule = (await app.api.get('/library/health')).rules.find(
+    (r) => r.rule === 'path-mismatch',
+  );
+  expect(pathRule?.fixable, 'the managed library makes the path rule fixable').toBe(true);
+  expect(pathRule?.failing ?? 0, 'the fixture files sit off the profile').toBeGreaterThan(0);
+  const first = await app.api.post('/organize/preview', { data: {} });
+  const picked = [...new Set(first.actions.map((a) => a.itemPid))].slice(0, 3);
+  expect(picked.length, 'the dry run should move something').toBeGreaterThan(0);
+  const pending = async () =>
+    (await app.api.post('/organize/preview', { data: { itemPids: picked } })).totalActions;
+  const before = await pending();
+  // The runs already listed, so a run this test leaves standing is found
+  // even when its answer never arrived.
+  const listedBefore = new Set(
+    (await app.api.get('/organize/history', { query: { limit: 100 } })).batches.map((b) => b.jobPid),
+  );
+
+  const page = app.page;
+  const control = (id: string) => app.admin.control(id);
+  await app.nav.enter('health');
+  const isPreview = (r: Request) => r.url().endsWith('/organize/preview') && r.method() === 'POST';
+  const previewed = page.waitForResponse((r) => isPreview(r.request()), { timeout: T.fetch });
+  const previewMoves = control(SemanticsIds.healthFixPreview('path-mismatch'));
+  await wheelIntoReach(page, previewMoves);
+  await clickUntilRequested(page, previewMoves, isPreview);
+  expect((await previewed).status()).toBe(200);
+  await expect(control(SemanticsIds.organizePlan)).toBeVisible({ timeout: T.fetch });
+
+  let applied = '';
+  let undone = false;
+  try {
+    const isApply = (r: Request) => r.url().endsWith('/organize/apply') && r.method() === 'POST';
+    applied = (
+      await confirmTyped(app, control(SemanticsIds.organizeApply), 'ORGANIZE', SemanticsIds.organizeConfirm, isApply)
+    ).jobPid;
+    expect(applied).toMatch(/^jb-/);
+    await expect(control(SemanticsIds.organizeReport)).toBeVisible({ timeout: T.fetch });
+    expect(await pending(), 'the picked items should be in place').toBe(0);
+
+    // The report's held files push the history screens below the fold,
+    // where the list has not built its rows yet.
+    const appliedRow = control(SemanticsIds.organizeHistoryRow(applied));
+    await wheelIntoView(page, appliedRow);
+    await expect(appliedRow).toBeVisible({ timeout: T.fetch });
+    const isUndo = (r: Request) => r.url().endsWith('/organize/undo') && r.method() === 'POST';
+    const undo = await confirmTyped(
+      app,
+      control(SemanticsIds.organizeUndo(applied)),
+      'UNDO',
+      SemanticsIds.organizeUndoConfirm,
+      isUndo,
+    );
+    if (undo.held > 0) {
+      // A held file stays where the run put it: the run is undone once
+      // more, and a second hold fails here with the holds named.
+      const again = await retryCatalogBusy(() =>
+        app.api.post('/organize/undo', { data: { jobPid: applied } }),
+      );
+      expect(
+        again.held,
+        `the undo held ${JSON.stringify(undo.holds)}, and again ${JSON.stringify(again.holds)}`,
+      ).toBe(0);
+    }
+    undone = true;
+    await expect(control(SemanticsIds.organizeHistoryRow(undo.jobPid))).toBeVisible({ timeout: T.fetch });
+    expect(await pending(), 'the picked items should be back where they were').toBe(before);
+    expect(
+      (await app.api.post('/organize/preview', { data: {} })).totalActions,
+      'every file the run moved should be back where it was',
+    ).toBe(first.totalActions);
+  } finally {
+    // Every later spec reads the fixture layout, so a run this test left
+    // standing goes back however it ended, its answer captured or not,
+    // once it is no longer running.
+    if (!undone) {
+      const history = async () =>
+        (await app.api.get('/organize/history', { query: { limit: 100 } })).batches;
+      const left =
+        applied ||
+        (await history()).find((b) => b.kind === 'organize' && !listedBefore.has(b.jobPid))?.jobPid;
+      if (left) {
+        await expect
+          .poll(async () => (await app.api.get('/jobs/{pid}', { path: { pid: left } })).state, {
+            timeout: T.fetch,
+            message: 'the run left standing should end',
+          })
+          .not.toBe('running');
+        if ((await history()).some((b) => b.jobPid === left && b.undoable)) {
+          await retryCatalogBusy(() => app.api.post('/organize/undo', { data: { jobPid: left } }));
+        }
+      }
+    }
+  }
 });

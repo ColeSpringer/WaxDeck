@@ -819,9 +819,9 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 	// one that could not run leaves that warning standing.
 	tags := flatTags(doc)
 	kind, _ := kindForMediaType(u.MediaType)
-	// No SourceType, for the reason importToolFile gives: an upload knows
-	// the bytes arrived, not where they came from, and a standing origin
-	// is left alone rather than claimed as manual.
+	// No SourceType: an upload knows the bytes arrived, not where they
+	// came from, and a standing origin is left alone rather than claimed
+	// as manual.
 	res, err := l.planImport(ctx, waxbin.AcquiredFile{Path: final}, kind, waxbin.AcquiredMeta{
 		Copy: true, DupPolicy: model.DupAllow,
 	})
@@ -1031,7 +1031,7 @@ func (l *Library) planImport(ctx context.Context, f waxbin.AcquiredFile, kind mo
 // carries the import's own reason - so the caller leaves the decision
 // unmade and it can be retried once the cause is fixed.
 func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) ([]string, error) {
-	var warnings, failures []string
+	var warnings, failures, unwritable []string
 	// Staging path -> what landed, for every file that entered the
 	// library (a zero value when the imported item did not resolve).
 	// Settling keys on membership, and a failed decide persists the
@@ -1112,6 +1112,9 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 			feed.restart(ctx)
 			report, err := l.applyImport(ctx, res.Plan)
 			if err != nil {
+				if cause := l.storageRefused(err.Error()); cause != "" {
+					return fail(errStorageUnwritableFor(name, cause))
+				}
 				// Another job holding the file-mutation scope clears on
 				// its own: catalog-busy, not a conflict to fix.
 				return fail(classifyMutation(err))
@@ -1125,8 +1128,12 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 						return fail(err)
 					}
 				}
-				failures = append(failures, fmt.Sprintf("%s: %s", name,
-					l.failureWords(importFailureReason(res.Plan, report))))
+				reason := importFailureReason(res.Plan, report)
+				if cause := l.storageRefused(reason); cause != "" {
+					unwritable = append(unwritable, errStorageUnwritableFor(name, cause).Msg)
+					continue
+				}
+				failures = append(failures, fmt.Sprintf("%s: %s", name, l.failureWords(reason)))
 				continue
 			}
 			doc.Imported = true
@@ -1151,6 +1158,11 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 	if feed.broken {
 		l.log.Warn("the change feed could not be followed through an import; its files grant no edit rights",
 			"entry", entry.ID)
+	}
+	// A folder that refused a file is said first: it is the operator's
+	// to fix, and the other failures may be its echo.
+	if len(unwritable) > 0 {
+		return fail(&Error{Kind: KindStorageUnwritable, Msg: failuresMessage(append(unwritable, failures...))})
 	}
 	if len(failures) > 0 {
 		return fail(&Error{Kind: KindConflict, Msg: failuresMessage(failures)})

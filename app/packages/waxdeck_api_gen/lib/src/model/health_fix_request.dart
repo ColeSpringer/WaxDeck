@@ -13,14 +13,14 @@ part 'health_fix_request.g.dart';
 ///
 /// Properties:
 /// * [rule] - The rule to fix.
-/// * [itemPids] - Restrict to these items; absent fixes everything currently failing the rule. 
+/// * [itemPids] - Restrict to these items; absent fixes everything currently failing the rule, which `path-mismatch` refuses. 
 @BuiltValue()
 abstract class HealthFixRequest implements Built<HealthFixRequest, HealthFixRequestBuilder> {
   /// The rule to fix.
   @BuiltValueField(wireName: r'rule')
   String get rule;
 
-  /// Restrict to these items; absent fixes everything currently failing the rule. 
+  /// Restrict to these items; absent fixes everything currently failing the rule, which `path-mismatch` refuses. 
   @BuiltValueField(wireName: r'itemPids')
   BuiltList<String>? get itemPids;
 

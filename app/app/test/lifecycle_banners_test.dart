@@ -1,12 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/l10n/l10n.dart';
+import 'package:waxdeck/src/admin/server_settings_screen.dart';
+import 'package:waxdeck/src/auth/auth_controller.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/lifecycle_banners.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'routed_host.dart';
 
 /// The banners on their own, the way the shell frame hosts them.
 class _BannerHost extends ConsumerWidget {
@@ -16,7 +21,7 @@ class _BannerHost extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
     body: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: lifecycleBanners(context.l10n, ref),
+      children: lifecycleBanners(context, ref),
     ),
   );
 }
@@ -26,7 +31,10 @@ Future<ProviderContainer> _pump(
   required FakeRepository repo,
 }) async {
   final container = ProviderContainer(
-    overrides: [repositoryProvider.overrideWithValue(repo)],
+    overrides: [
+      repositoryProvider.overrideWithValue(repo),
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -144,5 +152,111 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('updated'), findsNothing);
+  });
+
+  group('the read-only banner', () {
+    const listener = WaxDeckUser(
+      id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
+      username: 'listener',
+      roles: ['user'],
+    );
+    SessionState session({required bool readOnly}) => SessionState(
+      authenticated: true,
+      user: listener,
+      serverReadOnly: readOnly,
+    );
+
+    testWidgets('stays up while the session says read-only, and clears', (
+      tester,
+    ) async {
+      final repo = FakeRepository(sessionState: session(readOnly: true));
+      final container = await _pump(tester, repo: repo);
+
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.readOnlyBanner),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('This server is read-only right now'),
+        findsOneWidget,
+      );
+
+      // The account marker is what makes an open client read it again.
+      repo.sessionState = session(readOnly: false);
+      await container.read(authControllerProvider.notifier).refreshSession();
+      await tester.pumpAndSettle();
+      expect(find.byType(WaxBanner), findsNothing);
+
+      repo.sessionState = session(readOnly: true);
+      await container.read(authControllerProvider.notifier).refreshSession();
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.readOnlyBanner),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('leads an administrator to the switch, and no one else', (
+      tester,
+    ) async {
+      final admin = FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-01JZX5N8QW3F4V9T2B7KDADMIN01',
+            username: 'admin',
+            roles: ['admin'],
+          ),
+          serverReadOnly: true,
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(admin),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: routedHost(const _BannerHost()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final action = find.bySemanticsIdentifier(
+        SemanticsIds.readOnlyBannerSettings,
+      );
+      expect(action, findsOneWidget);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      expect(find.byType(ServerSettingsScreen), findsOneWidget);
+
+      await _pump(
+        tester,
+        repo: FakeRepository(sessionState: session(readOnly: true)),
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.readOnlyBanner),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.readOnlyBannerSettings),
+        findsNothing,
+      );
+    });
+
+    testWidgets('says nothing on a writable server or when signed out', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        repo: FakeRepository(sessionState: session(readOnly: false)),
+      );
+      expect(find.byType(WaxBanner), findsNothing);
+
+      await _pump(tester, repo: FakeRepository());
+      expect(find.byType(WaxBanner), findsNothing);
+    });
   });
 }

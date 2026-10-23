@@ -17,20 +17,45 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/colespringer/waxflow/client"
+	"github.com/colespringer/waxflow/waxerr"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 )
 
-// capsStartupWait bounds how long New waits for the sidecar's /caps
-// before giving up.
-const capsStartupWait = 30 * time.Second
+// The engine connection's schedule: an ask that fails is repeated after
+// retryMin, doubling to retryMax; an engine that answers is asked again
+// every probeEvery; one ask waits probeTimeout at most, which is what
+// finds an engine that accepts connections and answers nothing.
+const (
+	defaultRetryMin     = time.Second
+	defaultRetryMax     = 30 * time.Second
+	defaultProbeEvery   = 15 * time.Second
+	defaultProbeTimeout = 5 * time.Second
+	defaultStallLimit   = 30 * time.Second
+)
+
+// ErrEngineDown is a request that needs the streaming engine while it
+// is not answering.
+var ErrEngineDown = errors.New("the streaming engine is not reachable right now")
+
+// FeatureStreamingEngine is the feature-unavailable param that names the
+// engine, and EngineRetrySeconds is when its refusal says to ask again:
+// the probe interval, as a hint. An engine away for a while is asked
+// less often than that (Run backs off to retryMax), so a client asking
+// again on time may meet the same refusal.
+const (
+	FeatureStreamingEngine = "streaming-engine"
+	EngineRetrySeconds     = 15
+)
 
 // Root maps one library directory to the WaxFlow root name the same
 // directory is mounted under in the sidecar.
@@ -71,8 +96,8 @@ type Config struct {
 	Logger    *slog.Logger
 }
 
-// Bridge is the live bridge, holding the sidecar's capabilities as
-// fetched at startup.
+// Bridge is the live bridge, holding the sidecar's capabilities while
+// it answers.
 type Bridge struct {
 	base   *url.URL
 	apiKey string
@@ -81,17 +106,52 @@ type Bridge struct {
 	roots   []Root
 	rootsMu sync.RWMutex
 	// configPath is the sidecar's config file; reloadMu serializes the
-	// rewrite-then-reconcile against it.
+	// rewrite-then-reconcile against it, and guards pending, a change made
+	// while the engine was away that its next answer reloads.
 	configPath string
 	reloadMu   sync.Mutex
+	pending    *rootsPending
 	tokens     *auth.MediaTokens
 	resolver   SourceResolver
-	caps       *client.Caps
-	client     *client.Client
-	proxy      *httputil.ReverseProxy
-	log        *slog.Logger
+	// caps is the engine's last answer, nil while it is not answering.
+	// Every reader takes it once per call (Caps) and reads nil as no
+	// engine.
+	caps   atomic.Pointer[client.Caps]
+	client *client.Client
+	proxy  *httputil.ReverseProxy
+	log    *slog.Logger
+	// engineHTTP carries the requests a stream makes of the engine outside
+	// the proxy (an HLS rendering's, a joined book's parts), with the
+	// proxy's own stall-bounded transport.
+	engineHTTP *http.Client
 	// gate admits engine-backed stream sessions; nil admits everything.
 	gate TranscodeGate
+
+	// link is what the bridge last said about the engine, which is what
+	// keeps the log and the hooks to one word per crossing, and why is the
+	// reason it is down, which is said apart. linkMu serializes the
+	// crossings and queues each one's hooks in told, which runHooks tells
+	// outside it, one crossing at a time (hookMu). kick asks Run to probe
+	// now.
+	linkMu sync.Mutex
+	link   linkState
+	why    downWhy
+	told   []func()
+	hookMu sync.Mutex
+	onUp   []func(context.Context, Status)
+	onDown []func()
+	// onHeld runs on an answer that crosses nothing while root adds are
+	// held for one (OnHeld).
+	onHeld []func(held []string)
+	kick   chan struct{}
+
+	retryMin, retryMax, probeEvery, probeTimeout time.Duration
+	// stallLimit bounds one wait on the engine during a stream: for its
+	// headers, and for each read of its body (stallTransport).
+	stallLimit time.Duration
+	// reloadTimeout bounds a root reload; zero leaves the client's own
+	// bound on a call.
+	reloadTimeout time.Duration
 
 	// Timeline bookkeeping, built lazily on first use; tlStore persists
 	// the stash half of it and is nil when nothing was configured.
@@ -100,64 +160,56 @@ type Bridge struct {
 	tlStore TimelineStore
 }
 
-// New validates the configuration against the live sidecar (fail fast:
-// a bridge that cannot see /caps serves nothing but confusion) and
-// returns the bridge.
-func New(ctx context.Context, cfg Config) (*Bridge, error) {
-	base, err := url.Parse(cfg.BaseURL)
-	if err != nil || base.Scheme == "" || base.Host == "" {
-		return nil, fmt.Errorf("flow: bad base URL %q", cfg.BaseURL)
+// CheckBaseURL refuses an engine address New cannot use, for a start that
+// checks its settings before it opens anything.
+func CheckBaseURL(raw string) error {
+	if u, err := url.Parse(raw); err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("flow: bad base URL %q", raw)
 	}
+	return nil
+}
+
+// New builds the bridge without asking anything of the sidecar: until
+// Run (or Connect) hears it answer, the bridge reads as no engine and
+// originals serve directly, so a server starts whether or not its
+// engine is up.
+func New(ctx context.Context, cfg Config) (*Bridge, error) {
+	if err := CheckBaseURL(cfg.BaseURL); err != nil {
+		return nil, err
+	}
+	base, _ := url.Parse(cfg.BaseURL)
 	log := cfg.Logger
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	// No client options: the only calls made through c are JSON (Caps here,
-	// Sign and CreateTimeline on the stream path), and the client self-bounds
-	// each at its 30s per-call default when ctx carries no deadline. That
-	// preserves the effective bound the removed client-wide 30s timeout gave
-	// these calls, so nothing here depended on it. Streaming rides b.proxy, not
-	// these methods, so unbounded stream bodies never reach c.
+	// No client options: the only calls made through c are JSON (Caps,
+	// Sign and CreateTimeline), and the client self-bounds each at its 30s
+	// per-call default when ctx carries no deadline; the probe sets its own.
+	// Streaming rides b.proxy, not these methods, so unbounded stream
+	// bodies never reach c.
 	c, err := client.New(cfg.BaseURL, cfg.APIKey)
 	if err != nil {
 		return nil, fmt.Errorf("flow: %w", err)
-	}
-	// The sidecar and this server start together under compose and test
-	// harnesses; give it a bounded window to come up, then fail fast.
-	var caps *client.Caps
-	deadline := time.Now().Add(capsStartupWait)
-	for {
-		caps, err = c.Caps(ctx)
-		if err == nil {
-			break
-		}
-		if ctx.Err() != nil || time.Now().After(deadline) {
-			return nil, fmt.Errorf("flow: fetching /caps from %s (is the waxflow sidecar up?): %w", cfg.BaseURL, err)
-		}
-		log.Info("waiting for waxflow sidecar", "base", cfg.BaseURL)
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(time.Second):
-		}
-	}
-	if !caps.Delivery.Progressive {
-		return nil, fmt.Errorf("flow: sidecar at %s does not serve progressive streams", cfg.BaseURL)
 	}
 	roots := append([]Root(nil), cfg.Roots...)
 	sortRoots(roots)
 
 	b := &Bridge{
-		base:       base,
-		apiKey:     cfg.APIKey,
-		roots:      roots,
-		configPath: cfg.ConfigPath,
-		tokens:     cfg.Tokens,
-		resolver:   cfg.Resolver,
-		caps:       caps,
-		client:     c,
-		log:        log,
-		tlStore:    cfg.Timelines,
+		base:         base,
+		apiKey:       cfg.APIKey,
+		roots:        roots,
+		configPath:   cfg.ConfigPath,
+		tokens:       cfg.Tokens,
+		resolver:     cfg.Resolver,
+		client:       c,
+		log:          log,
+		tlStore:      cfg.Timelines,
+		kick:         make(chan struct{}, 1),
+		retryMin:     defaultRetryMin,
+		retryMax:     defaultRetryMax,
+		probeEvery:   defaultProbeEvery,
+		probeTimeout: defaultProbeTimeout,
+		stallLimit:   defaultStallLimit,
 	}
 	if b.tlStore != nil {
 		if err := b.loadTimelineStash(ctx); err != nil {
@@ -167,23 +219,322 @@ func New(ctx context.Context, cfg Config) (*Bridge, error) {
 			log.Warn("loading the timeline stash", "err", err)
 		}
 	}
+	b.engineHTTP = &http.Client{Transport: b.engineTransport()}
 	b.proxy = &httputil.ReverseProxy{
+		Transport:      b.engineHTTP.Transport,
 		Rewrite:        b.rewrite,
 		ModifyResponse: b.modifyResponse,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Error("stream proxy", "err", err)
+			b.unreachable(r.Context(), err)
 			writeJSONError(w, http.StatusBadGateway, "internal", "stream backend unavailable")
 		},
 		// Audio is latency-sensitive: flush as bytes arrive, never buffer.
 		FlushInterval: -1,
 	}
-	log.Info("waxflow bridge up",
-		"base", cfg.BaseURL,
+	return b, nil
+}
+
+// linkState is what the bridge has said about the engine so far.
+type linkState int
+
+const (
+	linkUnknown linkState = iota
+	linkUp
+	linkDown
+)
+
+// downWhy is why the engine is down, as the bridge last said: not
+// answering, refusing this server's key, or answering without what this
+// server needs of it (lacks).
+type downWhy struct {
+	refused bool
+	lacks   string
+}
+
+// downWhyOf reads why a failed ask left the engine down.
+func downWhyOf(err error) downWhy {
+	var cannot *cannotServeError
+	if errors.As(err, &cannot) {
+		return downWhy{lacks: cannot.lacks}
+	}
+	return downWhy{refused: credentialsRefused(err)}
+}
+
+// cannotServeError is an engine that answers without something this
+// server needs of it.
+type cannotServeError struct{ lacks string }
+
+func (e *cannotServeError) Error() string {
+	return "the streaming engine does not offer " + e.lacks
+}
+
+// lacking names what this server needs of an engine that caps does not
+// offer, empty when it offers it all: progressive streams, which every
+// stream the bridge mints is.
+func lacking(caps *client.Caps) string {
+	if !caps.Delivery.Progressive {
+		return "progressive streams"
+	}
+	return ""
+}
+
+// OnUp registers fn to run each time the engine answers after not
+// answering: its first answer, and its return from every outage. st is
+// what it offers in the answer that crossed, which a request finding the
+// engine gone a moment later cannot change under fn. The hooks run on
+// the probe, never on a request, one crossing at a time and in the order
+// of the crossings. Register before Run.
+func (b *Bridge) OnUp(fn func(ctx context.Context, st Status)) {
+	b.linkMu.Lock()
+	defer b.linkMu.Unlock()
+	b.onUp = append(b.onUp, fn)
+}
+
+// OnDown registers fn to run each time the engine stops answering (a
+// probe that fails, or a request that finds it gone, at the probe it asks
+// for), and once at startup when its first ask fails. Register before
+// Run.
+func (b *Bridge) OnDown(fn func()) {
+	b.linkMu.Lock()
+	defer b.linkMu.Unlock()
+	b.onDown = append(b.onDown, fn)
+}
+
+// OnHeld registers fn to run on an answer that crosses nothing while root
+// adds are held for the engine (an add whose reload got no answer while it
+// stayed up), with their names, so they are offered again now rather than
+// at the next crossing, whose OnUp offers them anyway. Register before
+// Run.
+func (b *Bridge) OnHeld(fn func(held []string)) {
+	b.linkMu.Lock()
+	defer b.linkMu.Unlock()
+	b.onHeld = append(b.onHeld, fn)
+}
+
+// Run keeps the bridge connected for the life of ctx: it asks the
+// engine for its capabilities until it answers, backing off from
+// retryMin to retryMax, then asks again every probeEvery, and at once
+// when a request finds the engine gone. An engine that answers without
+// what this server needs is asked every probeEvery too, so an upgraded
+// one is taken on without a restart. It returns nil when ctx ends.
+func (b *Bridge) Run(ctx context.Context) error {
+	wait := b.retryMin
+	for {
+		next := b.probeEvery
+		var cannot *cannotServeError
+		if err := b.Connect(ctx); err == nil || errors.As(err, &cannot) {
+			wait = b.retryMin
+		} else {
+			next = wait
+			wait = min(wait*2, b.retryMax)
+		}
+		if ctx.Err() != nil {
+			return nil
+		}
+		timer := time.NewTimer(next)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case <-b.kick:
+			timer.Stop()
+		case <-timer.C:
+		}
+	}
+}
+
+// Connect asks the engine for its capabilities once and settles the
+// bridge on the answer: up, with the snapshot every reader takes, or
+// down. A crossing is logged once and runs the hooks, after those of the
+// crossings requests made since the last ask. Run is this on a schedule;
+// a caller that needs the answer now asks directly.
+func (b *Bridge) Connect(ctx context.Context) error {
+	b.runHooks()
+	ask, cancel := context.WithTimeout(ctx, b.probeTimeout)
+	caps, err := b.client.Caps(ask)
+	cancel()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err == nil {
+		if lacks := lacking(caps); lacks != "" {
+			err = &cannotServeError{lacks: lacks}
+		}
+	}
+	// The removals made while the engine was away are reloaded before the
+	// answer is taken, so the crossing's hooks see the table settled; a
+	// reload that gets no answer makes this no answer either.
+	if err == nil {
+		err = b.reloadPending(ctx, caps)
+	}
+	crossed := b.settle(ctx, caps, err)
+	b.runHooks()
+	if err == nil {
+		// A removal made while the answer was being taken found the engine
+		// away; it waits on this answer too, not on the next probe.
+		if rerr := b.reloadPending(ctx, caps); rerr != nil {
+			b.reloadUnanswered(rerr)
+			b.runHooks()
+		} else if !crossed {
+			// Adds held for an answer (a reload that got none while the
+			// engine stayed up) are offered again now; a crossing's OnUp
+			// offers them already.
+			b.offerHeld()
+		}
+	}
+	return err
+}
+
+// settle records one answer of the engine's, queueing the hooks of a
+// crossing, and reports whether it crossed up.
+func (b *Bridge) settle(ctx context.Context, caps *client.Caps, err error) (crossedUp bool) {
+	b.linkMu.Lock()
+	defer b.linkMu.Unlock()
+	if err != nil {
+		b.caps.Store(nil)
+		why := downWhyOf(err)
+		if b.link == linkDown && b.why == why {
+			return
+		}
+		// A refused key is a setting to fix and an engine that cannot serve
+		// this server one to replace, each said whatever came before it; a
+		// loss is news; an engine not up yet at startup is the ordinary
+		// boot, which under compose starts it once this server is healthy.
+		switch {
+		case why.refused:
+			b.log.Error(keyRefusedLog+"; serving originals directly until it does",
+				"base", b.base.String(), "err", err)
+		case why.lacks != "":
+			b.log.Error("the streaming engine answers but cannot serve this server: upgrade it; serving originals directly until then",
+				"base", b.base.String(), "lacks", why.lacks)
+		case b.link == linkUnknown:
+			b.log.Info("streaming engine not answering yet; serving originals directly until it answers",
+				"base", b.base.String(), "err", err)
+		default:
+			b.log.Warn("streaming engine unreachable; serving originals directly until it answers",
+				"base", b.base.String(), "err", err)
+		}
+		b.why = why
+		if b.link == linkDown {
+			// Only the reason changed; the hooks were told at the crossing.
+			return false
+		}
+		b.link = linkDown
+		hooks := slices.Clone(b.onDown)
+		b.told = append(b.told, func() {
+			for _, fn := range hooks {
+				fn()
+			}
+		})
+		return false
+	}
+	b.caps.Store(caps)
+	b.why = downWhy{}
+	if b.link == linkUp {
+		return false
+	}
+	b.link = linkUp
+	b.log.Info("waxflow bridge up",
+		"base", b.base.String(),
 		"outputs", len(caps.Outputs),
 		"cutFormats", caps.Delivery.CutFormats,
 		"hls", caps.Delivery.HLS,
 		"rootsReload", b.RootsReloadSupported())
-	return b, nil
+	st := statusOf(caps)
+	hooks := slices.Clone(b.onUp)
+	b.told = append(b.told, func() {
+		for _, fn := range hooks {
+			fn(ctx, st)
+		}
+	})
+	return true
+}
+
+// runHooks tells the hooks of the crossings queued so far, in the order
+// they were made, one crossing at a time and outside linkMu, so a request
+// finding the engine gone meanwhile waits on none of them. Each crossing
+// leaves the queue as it is told: a hook that panics takes only its own.
+func (b *Bridge) runHooks() {
+	b.hookMu.Lock()
+	defer b.hookMu.Unlock()
+	for {
+		b.linkMu.Lock()
+		if len(b.told) == 0 {
+			b.linkMu.Unlock()
+			return
+		}
+		tell := b.told[0]
+		b.told[0] = nil
+		b.told = b.told[1:]
+		b.linkMu.Unlock()
+		tell()
+	}
+}
+
+// lost is a request finding the engine gone: an outage from this moment,
+// said and crossed like one a probe finds, so the next answer is a return
+// that sets right whatever the window put wrong. Run asks again at once
+// rather than at its next probe, and that probe tells the hooks.
+func (b *Bridge) lost(err error) {
+	b.settle(context.Background(), nil, err)
+	b.probeSoon()
+}
+
+// probeSoon asks Run to probe now rather than at its next interval.
+func (b *Bridge) probeSoon() {
+	select {
+	case b.kick <- struct{}{}:
+	default:
+	}
+}
+
+// unreachable is a request that failed to reach the engine. A stall is
+// that request's own trouble until the probe it asks for says otherwise:
+// an engine answering slowly for one source (a disk spinning up, a
+// network mount) is not gone, and crossing it down and back would mark
+// every account and offer every refused root again. Anything else that
+// left the request without an answer is lost. A listener who left is
+// neither.
+func (b *Bridge) unreachable(ctx context.Context, err error) {
+	switch {
+	case ctx.Err() != nil:
+	case errors.Is(err, errEngineStalled):
+		b.probeSoon()
+	default:
+		b.lost(err)
+	}
+}
+
+// engineGone reports whether err is one of the bridge's own calls to the
+// engine getting no answer at all (a connection refused, dropped or
+// reset, or none within the client's own bound on a call) while its
+// asker still waited. A call cut off without an answer finds the engine
+// gone, as a stream does; one that ran out of time asks for a probe, as a
+// stalled stream does. An answer the engine gave, a refusal included, is
+// neither.
+func (b *Bridge) engineGone(ctx context.Context, err error) bool {
+	var transport *url.Error
+	if err == nil || ctx.Err() != nil || !errors.As(err, &transport) {
+		return false
+	}
+	if transport.Timeout() {
+		b.probeSoon()
+	} else {
+		b.lost(err)
+	}
+	return true
+}
+
+// RefuseEngineDown answers a request only the engine can serve while it
+// is away: the umbrella code with the param a client keys on, and when
+// to ask again.
+func RefuseEngineDown(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Retry-After", strconv.Itoa(EngineRetrySeconds))
+	w.WriteHeader(http.StatusServiceUnavailable)
+	fmt.Fprintf(w, `{"code":"feature-unavailable","message":%q,"params":{"feature":%q}}`+"\n",
+		ErrEngineDown.Error(), FeatureStreamingEngine)
 }
 
 // sortRoots orders roots longest path first, so a root nested inside
@@ -192,8 +543,46 @@ func sortRoots(roots []Root) {
 	sort.SliceStable(roots, func(i, j int) bool { return len(roots[i].Path) > len(roots[j].Path) })
 }
 
-// Caps exposes the sidecar capabilities fetched at startup.
-func (b *Bridge) Caps() *client.Caps { return b.caps }
+// Caps is the engine's last answer, nil while it is not answering and
+// on a server without one.
+func (b *Bridge) Caps() *client.Caps {
+	if b == nil {
+		return nil
+	}
+	return b.caps.Load()
+}
+
+// Status is what the engine offers this server right now.
+type Status struct {
+	// Connected says the engine is answering, as far as the bridge knows:
+	// it answered its last ask, and no request has found it gone since.
+	Connected bool
+	// Timelines, VoiceBoost and FileTools are its gapless renderings,
+	// spoken-word dynamics and jobs surface, false while it is away;
+	// TimelineWindows is whether a timeline takes a window of a file as
+	// a member.
+	Timelines       bool
+	TimelineWindows bool
+	VoiceBoost      bool
+	FileTools       bool
+}
+
+// Status reads one snapshot of the engine; the zero Status while it is
+// away and on a server without one.
+func (b *Bridge) Status() Status { return statusOf(b.Caps()) }
+
+func statusOf(caps *client.Caps) Status {
+	if caps == nil {
+		return Status{}
+	}
+	return Status{
+		Connected:       true,
+		Timelines:       timelinesSupported(caps),
+		TimelineWindows: timelinesSupported(caps) && caps.Delivery.TimelineMemberWindows,
+		VoiceBoost:      slices.Contains(caps.DSP.Dynamics, "voice"),
+		FileTools:       caps.Delivery.Jobs,
+	}
+}
 
 // PlayInfo is everything play-info hands a client for one item.
 type PlayInfo struct {
@@ -287,6 +676,9 @@ var forceFormats = map[string]string{
 // stream parameters the mint chose (part, boost, format, bitrate), so a
 // URL with any of them edited, added or dropped fails at fetch.
 func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts PlayOptions) (PlayInfo, error) {
+	if !b.Up() {
+		return PlayInfo{}, ErrEngineDown
+	}
 	src, err := b.resolver.StreamSource(ctx, apiItemPID, opts.FilePID)
 	if err != nil {
 		return PlayInfo{}, err
@@ -309,9 +701,16 @@ func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts 
 // again against the token before it serves a byte. An HLS rendering
 // pins the source it was minted from, so only a caller holding what its
 // own resolution just answered asks for one.
+//
+// While the engine is away it mints nothing and answers ErrEngineDown,
+// for the caller to serve the original directly.
 func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string, src Source, opts PlayOptions) (PlayInfo, error) {
-	gainDB, boost := VoiceBoostParams(src, b.caps, opts.VoiceBoost)
-	shape := ShapeFor(src, b.caps, boost)
+	caps := b.Caps()
+	if caps == nil {
+		return PlayInfo{}, ErrEngineDown
+	}
+	gainDB, boost := VoiceBoostParams(src, caps, opts.VoiceBoost)
+	shape := ShapeFor(src, caps, boost)
 	force := opts.ForceFormat
 	advertise := ""
 	if len(opts.DeviceFormats) > 0 {
@@ -322,14 +721,14 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 		// narrowing it, and it may name a spelling of the media type
 		// that differs from ours, which is what the device has to see.
 		capped := b.gate != nil && b.gate.MaxBitrateKbps(ctx, user) > 0
-		force, advertise = DeviceFormat(src, shape, b.caps, opts.DeviceFormats, opts.ForceFormat, capped)
+		force, advertise = DeviceFormat(src, shape, caps, opts.DeviceFormats, opts.ForceFormat, capped)
 	}
 	mime, forced := forceFormats[force]
 	// The fetch side gates on the live caps too, so a format this daemon
 	// cannot produce must not reach the URL either: the two decisions
 	// have to agree or the mime advertised here would describe bytes the
 	// stream never serves.
-	forced = forced && hasOutput(b.caps, force)
+	forced = forced && hasOutput(caps, force)
 	// Forcing the source's own format is not a transcode: the fetch side
 	// keeps the auto shape for it, so the URL must not carry the hint
 	// either, and the client is told the container's own media type -
@@ -395,13 +794,13 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 		if ceiling > 0 {
 			capKbps = min(capKbps, ceiling)
 		}
-		capped, applied := CappedShape(src, b.caps, shape, capKbps)
+		capped, applied := CappedShape(src, caps, shape, capKbps)
 		if applied {
 			// The caller's own target wins over the ladder's when it is
 			// one the closed hint set carries and this engine produces:
 			// the fetch side gates on the same two, so anything else
 			// would advertise a type the stream never serves.
-			if f := opts.CapFormat; lossyBitrateFormats[f] && hasOutput(b.caps, f) {
+			if f := opts.CapFormat; lossyBitrateFormats[f] && hasOutput(caps, f) {
 				if mime, closed := forceFormats[f]; closed {
 					capped.Format, capped.MimeType = f, mime
 				}
@@ -415,7 +814,7 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 	// presentation rather than a live stream it could only move inside
 	// by minting a cut; failing that, the live stream as ever.
 	if opts.HLS && !forced && !opts.CutOriginal && !shape.Seekable {
-		if format := hlsFormatFor(shape, b.caps); format != "" {
+		if format := hlsFormatFor(shape, caps); format != "" {
 			if info, ok := b.itemRenderingFor(ctx, user, apiItemPID, src, opts, format, capKbps, gainDB, boost); ok {
 				return info, nil
 			}
@@ -438,7 +837,7 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 	// the original's own rate, or the top of the range where it has none.
 	br, encode := capKbps, capKbps > 0
 	if wantsCut && shape.Seekable && !forced {
-		shape, encode, br = originalCutShape(src, b.caps), true, 0
+		shape, encode, br = originalCutShape(src, caps), true, 0
 		if lossyBitrateFormats[shape.Format] {
 			br = MaxStreamBitrateKbps
 			if !lossless(src.Codec) && src.BitrateKbps > 0 {
@@ -504,6 +903,11 @@ func originalCutShape(src Source, caps *client.Caps) Shape {
 	return pick("mp3")
 }
 
+// StreamShape is the canonical form of the stream parameters a stream
+// token binds, read off a URL that carries them: what the download route
+// checks a stream redirected to it against.
+func StreamShape(q url.Values) string { return streamShape(q) }
+
 // streamShape is the canonical form of the stream parameters a token
 // binds: the ones the mint chooses (join only for a book played as one
 // stream), sorted and escaped, so a URL with any of them edited, added
@@ -550,59 +954,37 @@ func (b *Bridge) AddRoot(name, path string) {
 // removeRoot drops a root the sidecar refused, so the bridge's table
 // stays what the sidecar can actually serve.
 func (b *Bridge) removeRoot(name string) {
-	b.rootsMu.Lock()
-	defer b.rootsMu.Unlock()
-	roots := make([]Root, 0, len(b.roots))
-	for _, r := range b.roots {
-		if r.Name != name {
-			roots = append(roots, r)
-		}
-	}
-	b.roots = roots
+	b.applyRoots(nil, []string{name})
 }
 
 // SyncRoot teaches the bridge a library root created at runtime and
-// brings the sidecar to the same set. A nil error means streaming from
-// the new root works now; any error names what an administrator still
-// has to do.
+// brings the sidecar to the same set (ChangeRoots). A nil error means
+// streaming from the new root works now, or, while the engine is away or
+// a reload could not reach it, that the root is held until the engine
+// answers and the root is offered again; any error names what an
+// administrator still has to do.
 //
 // Either both sides end up knowing the root or neither does. A refused
 // reload restores the config file and drops the root back out of the
 // bridge, for two reasons: the sidecar opens every root at startup, so
 // a path it refused would turn its next restart into a boot failure,
 // and a rejected root left in the set would be re-sent with the next
-// library and take that one down with it.
+// library and take that one down with it. The lock ChangeRoots holds
+// spans the add as well as the reload for the same reason: two library
+// creates whose reloads interleaved would each carry the other's root,
+// and one bad path would roll the other's good one back out.
 func (b *Bridge) SyncRoot(ctx context.Context, name, path string) error {
-	if !b.RootsReloadSupported() {
-		b.AddRoot(name, path)
-		// The root is not written to the sidecar's config either, and the
-		// message says so rather than implying a restart alone would find
-		// it. Writing it unreloaded would put an unvalidated path in a file
-		// the sidecar opens at startup: the reload is what proves the
-		// sidecar can see a path, and a config it cannot open is a boot
-		// failure, which is the same hazard the refusal rollback below
-		// exists to prevent.
-		//
-		// The bridge keeps the root: its table is WaxDeck's own view, and
-		// an operator who configures the root on the sidecar and restarts it
-		// then gets streaming without restarting WaxDeck too.
-		if b.configPath == "" {
-			return fmt.Errorf("no sidecar config file is configured (set --flow-config), so this root has to be added to the sidecar's own configuration and the sidecar restarted before it streams")
-		}
-		return fmt.Errorf("the sidecar at %s does not accept root reloads, so this root has to be added to its configuration and the sidecar restarted before it streams", b.base)
-	}
-	// The lock spans the add as well as the reload. Without that, two
-	// concurrent library creates cross-contaminate: each adds its root,
-	// then the first reload carries both, and one bad path fails the other
-	// create's reload and rolls its good root back out.
-	b.reloadMu.Lock()
-	defer b.reloadMu.Unlock()
-	b.AddRoot(name, path)
-	if err := b.reloadRootsLocked(ctx); err != nil {
-		b.removeRoot(name)
-		return err
-	}
-	return nil
+	return b.ChangeRoots(ctx, []Root{{Name: name, Path: path}}, nil)
+}
+
+// RemoveRoot takes a removed library's root off the bridge and the
+// sidecar (ChangeRoots): the bridge stops mapping it whatever follows, so
+// nothing mints a stream under it again, and the sidecar's config file
+// lets it go, which the sidecar takes at its next reload or start. An
+// error says what still names the root: a refused reload, or a config
+// file that could not be written.
+func (b *Bridge) RemoveRoot(ctx context.Context, name string) error {
+	return b.ChangeRoots(ctx, nil, []string{name})
 }
 
 // RootNames lists every root name the bridge maps. It is wider than the
@@ -632,7 +1014,8 @@ func (b *Bridge) snapshotRoots() []Root {
 // the sidecar without restarting it: the sidecar has to serve the
 // reload endpoint, and WaxDeck has to know which config file to rewrite.
 func (b *Bridge) RootsReloadSupported() bool {
-	return b.configPath != "" && b.caps != nil && b.caps.Delivery.RootsReload
+	caps := b.Caps()
+	return b.configPath != "" && caps != nil && caps.Delivery.RootsReload
 }
 
 // ReloadRoots rewrites the sidecar's config file with the bridge's
@@ -651,7 +1034,11 @@ func (b *Bridge) ReloadRoots(ctx context.Context) error {
 	if b.configPath == "" {
 		return fmt.Errorf("flow: no sidecar config file is configured (set --flow-config)")
 	}
-	if b.caps == nil || !b.caps.Delivery.RootsReload {
+	caps := b.Caps()
+	if caps == nil {
+		return fmt.Errorf("flow: %w", ErrEngineDown)
+	}
+	if !caps.Delivery.RootsReload {
 		return fmt.Errorf("flow: the sidecar at %s does not serve root reloads", b.base)
 	}
 	// One reload at a time. Two concurrent library creates would
@@ -660,12 +1047,13 @@ func (b *Bridge) ReloadRoots(ctx context.Context) error {
 	// serializing them costs nothing.
 	b.reloadMu.Lock()
 	defer b.reloadMu.Unlock()
-	return b.reloadRootsLocked(ctx)
+	return b.reloadRootsLocked(ctx, nil)
 }
 
 // reloadRootsLocked is ReloadRoots' body, called with reloadMu held so
-// SyncRoot can hold the lock across its own AddRoot too.
-func (b *Bridge) reloadRootsLocked(ctx context.Context) error {
+// ChangeRoots can hold the lock across its own change of the table too.
+// drop names roots the change let go, which the file loses as well.
+func (b *Bridge) reloadRootsLocked(ctx context.Context, drop []string) error {
 	// The reconcile does not inherit the caller's cancellation. SyncRoot runs
 	// on the request context, and the rollback below restores the config file
 	// on any error, cancellation included, so an administrator whose browser
@@ -676,11 +1064,16 @@ func (b *Bridge) reloadRootsLocked(ctx context.Context) error {
 	// caller's deadline with it is deliberate: the client applies its own 30s
 	// default to a context carrying none, which is the bound this POST needs.
 	ctx = context.WithoutCancel(ctx)
+	if b.reloadTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, b.reloadTimeout)
+		defer cancel()
+	}
 	prev, perm, err := readRootsConfig(b.configPath)
 	if err != nil {
 		return err
 	}
-	if err := writeRootsConfig(b.configPath, prev, perm, b.snapshotRoots()); err != nil {
+	if err := writeRootSet(b.configPath, prev, perm, b.snapshotRoots(), drop); err != nil {
 		return err
 	}
 	// ReloadRoots answers (nil, err) on any failure, so the delta is read
@@ -703,7 +1096,9 @@ func (b *Bridge) reloadRootsLocked(ctx context.Context) error {
 }
 
 // ServeStream is the /media/stream handler: verify the media token,
-// re-resolve the item, and reverse-proxy the sidecar's answer.
+// re-resolve the item, and reverse-proxy the sidecar's answer. While the
+// engine is away, an original goes to the download route instead
+// (serveWithoutEngine).
 func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	pid := q.Get("pid")
@@ -725,6 +1120,11 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if q.Get("join") != "" {
+		// A joined book is an encode of its parts, whatever they hold.
+		if !b.Up() {
+			RefuseEngineDown(w)
+			return
+		}
 		b.serveJoined(w, r, claims.User, pid, q)
 		return
 	}
@@ -732,6 +1132,11 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	src, err := b.resolver.StreamSource(r.Context(), pid, q.Get("f"))
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "not-found", "no streamable item with pid "+pid)
+		return
+	}
+	caps := b.Caps()
+	if caps == nil {
+		b.serveWithoutEngine(w, r, q, src)
 		return
 	}
 	ref, err := b.srcRef(src.Path)
@@ -743,8 +1148,8 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	// The boost flag rides the URL, but the gain is derived here from
 	// stored loudness and the live capabilities, never from anything
 	// client-controlled.
-	gainDB, boost := VoiceBoostParams(src, b.caps, q.Get("vb") == "1")
-	shape := ShapeFor(src, b.caps, boost)
+	gainDB, boost := VoiceBoostParams(src, caps, q.Get("vb") == "1")
+	shape := ShapeFor(src, caps, boost)
 	// The format hint is client-visible but closed: it can only pick a
 	// narrow-endpoint format for an item the token already authorizes.
 	if f := q.Get("fmt"); f != "" {
@@ -763,7 +1168,7 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 		// own bitrate, uncharged, while the client had been told a
 		// smaller number.
 		copyOfSource := shape.Seekable && q.Get("enc") == "" && SameAsSource(src, f)
-		if known && hasOutput(b.caps, f) && !copyOfSource {
+		if known && hasOutput(caps, f) && !copyOfSource {
 			shape.Format = f
 			// Clear Seekable so this stream routes through the admission control
 			// below: a forced format engages the engine (a transcode), not a
@@ -794,7 +1199,7 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	params := url.Values{}
 	params.Set("src", ref)
 	params.Set("format", shape.Format)
-	params.Set("id", fmt.Sprintf("%d-%d", src.Size, src.MTimeNS))
+	params.Set("id", sourceID(src))
 	setWindow(params, src)
 	if boost {
 		params.Set("dynamics", "voice")
@@ -817,6 +1222,48 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	// Stash the upstream query for the Rewrite hook.
 	r = r.WithContext(context.WithValue(r.Context(), upstreamQueryKey{}, params.Encode()))
 	b.proxy.ServeHTTP(w, r)
+}
+
+// sourceID is a file's validator: the id the engine pins a stream to,
+// and the download route's ETag for the same bytes.
+func sourceID(src Source) string { return fmt.Sprintf("%d-%d", src.Size, src.MTimeNS) }
+
+// OriginalBytes reports whether the stream parameters q name the
+// source's own bytes, which serve with no engine: no voice boost, no
+// encode or bitrate the mint chose, no joined book, and no format but a
+// copy of the source. A window of a larger file is the engine's to cut,
+// which a caller weighs apart (src.Virtual).
+func OriginalBytes(q url.Values, src Source) bool {
+	if q.Get("vb") != "" || q.Get("enc") != "" || q.Get("br") != "" || q.Get("join") != "" {
+		return false
+	}
+	f := q.Get("fmt")
+	return f == "" || SameAsSource(src, f)
+}
+
+// serveWithoutEngine answers a stream fetch while the engine is away. A
+// URL minted for the original bytes goes to the download route under
+// its own token and the file's validator, keeping every parameter its
+// token binds, so a stream minted before the outage plays through it.
+// A stream only the engine makes (a window, voice boost, a format, a
+// bitrate) is refused in words a client keys on.
+func (b *Bridge) serveWithoutEngine(w http.ResponseWriter, r *http.Request, q url.Values, src Source) {
+	if src.Virtual || !OriginalBytes(q, src) {
+		RefuseEngineDown(w)
+		return
+	}
+	if _, _, err := streamCut(q.Get("t"), Shape{Seekable: true}, src.DurationMS); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid-request", err.Error())
+		return
+	}
+	loc := url.Values{}
+	for _, k := range []string{"pid", "mt", "f", "fmt"} {
+		if v := q.Get(k); v != "" {
+			loc.Set(k, v)
+		}
+	}
+	loc.Set("id", sourceID(src))
+	http.Redirect(w, r, "/media/download?"+loc.Encode(), http.StatusFound)
 }
 
 // heldBitrate is the bitrate a lossy encode is held to: the smaller of the
@@ -894,7 +1341,14 @@ func (b *Bridge) ServeShareStream(w http.ResponseWriter, r *http.Request, apiIte
 		writeJSONError(w, http.StatusInternalServerError, "internal", "item is not under a streamable root")
 		return
 	}
-	shape := ShapeFor(src, b.caps, false)
+	// The API serves the original itself while the engine is away; this
+	// is one that went away after that was asked.
+	caps := b.Caps()
+	if caps == nil {
+		RefuseEngineDown(w)
+		return
+	}
+	shape := ShapeFor(src, caps, false)
 	if !shape.Seekable {
 		release, admitted := b.admit(r.Context(), w, ownerUserID)
 		if !admitted {
@@ -905,7 +1359,7 @@ func (b *Bridge) ServeShareStream(w http.ResponseWriter, r *http.Request, apiIte
 	params := url.Values{}
 	params.Set("src", ref)
 	params.Set("format", shape.Format)
-	params.Set("id", fmt.Sprintf("%d-%d", src.Size, src.MTimeNS))
+	params.Set("id", sourceID(src))
 	setWindow(params, src)
 	if !shape.Seekable && lossyBitrateFormats[shape.Format] {
 		if bitrate := b.heldBitrate(r.Context(), ownerUserID, ""); bitrate > 0 {
@@ -945,7 +1399,12 @@ func (b *Bridge) ServeAnalysisAudio(w http.ResponseWriter, r *http.Request, apiI
 		writeJSONError(w, http.StatusBadRequest, "invalid-request", "format must be wav or flac")
 		return
 	}
-	if !hasOutput(b.caps, format) {
+	caps := b.Caps()
+	if caps == nil {
+		RefuseEngineDown(w)
+		return
+	}
+	if !hasOutput(caps, format) {
 		writeJSONError(w, http.StatusServiceUnavailable, "feature-unavailable",
 			"the streaming engine does not offer the "+format+" output")
 		return
@@ -966,7 +1425,7 @@ func (b *Bridge) ServeAnalysisAudio(w http.ResponseWriter, r *http.Request, apiI
 	params.Set("format", format)
 	params.Set("rate", "16000")
 	params.Set("ch", "1")
-	params.Set("id", fmt.Sprintf("%d-%d", src.Size, src.MTimeNS))
+	params.Set("id", sourceID(src))
 	setWindow(params, src)
 	r = r.WithContext(context.WithValue(r.Context(), upstreamQueryKey{}, params.Encode()))
 	b.proxy.ServeHTTP(w, r)
@@ -1000,8 +1459,7 @@ func (b *Bridge) modifyResponse(resp *http.Response) error {
 		return nil
 	}
 	if keyRefused(resp) {
-		b.log.Error("the streaming engine refused this server's API key: --flow-api-key (WAXDECK_FLOW_API_KEY) must be one the engine accepts (WAXFLOW_API_KEYS)",
-			"status", resp.StatusCode)
+		b.log.Error(keyRefusedLog, "status", resp.StatusCode)
 	}
 	engine := resp.Header
 	status, code, message := engineRefusal(resp, true)
@@ -1069,6 +1527,22 @@ func replaceWithError(resp *http.Response, status int, code, message string) {
 	resp.Header.Set("Content-Type", "application/json")
 	resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
 	resp.Body = io.NopCloser(strings.NewReader(body))
+}
+
+// keyRefusedLog is what the log says when the engine refuses this
+// server's API key, wherever that is found: no wait cures it, only an
+// administrator can.
+const keyRefusedLog = "the streaming engine refused this server's API key: --flow-api-key (WAXDECK_FLOW_API_KEY) must be one the engine accepts (WAXFLOW_API_KEYS)"
+
+// credentialsRefused reports whether err is the engine refusing this
+// server's credentials on an ask of its own (a 401 or 403, which the
+// client decodes to the unauthorized codes).
+func credentialsRefused(err error) bool {
+	switch waxerr.CodeOf(err) {
+	case waxerr.CodeUnauthorized, waxerr.CodeSignatureInvalid, waxerr.CodeSignatureExpired:
+		return true
+	}
+	return false
 }
 
 // keyRefused reports whether resp is the engine refusing the API key this

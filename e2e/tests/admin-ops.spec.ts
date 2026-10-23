@@ -1,5 +1,10 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import type { Request } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { J, T } from './driver';
+import { J, T, chooseFromMenu, clickThrough, clickUntilRequested, retryCatalogBusy } from './driver';
+import { removeLibrariesNamed, removeLibraryIfThere } from './driver/libraries';
+import { SemanticsIds } from './semantics-ids';
 
 // The admin-and-ops surface, driven over the API against the live
 // stack: the audit log answering "who deleted this playlist", the
@@ -34,6 +39,31 @@ test('the audit log answers who deleted a playlist', async ({ app }) => {
   expect(hit, 'the deletion is on the record').toBeTruthy();
   expect(hit!.actorName).toBe(app.account.username);
   expect(hit!.targetName).toBe('Doomed playlist');
+});
+
+// An edit is recorded with what it changed, field by field and from and to,
+// so "who gave this account that name" has an answer that is not a guess;
+// saving what the account already holds is not an event.
+test('the audit log says what an account edit changed', async ({ app, otherAccount }) => {
+  const member = await otherAccount('renamed');
+  const { user } = await app.api.as(member.token).get('/auth/session');
+  const userId = user!.id;
+  const label = `Renamed ${Date.now().toString(36)}`;
+  const edits = async () =>
+    (await app.api.get('/admin/audit', { query: { action: 'user.update', targetPid: userId } }))
+      .events ?? [];
+  const before = (await edits()).length;
+
+  await app.api.patch('/users/{userId}', { path: { userId }, data: { displayName: label } });
+  const recorded = await edits();
+  expect(recorded.length, 'the edit is on the record').toBe(before + 1);
+  expect(recorded[0].actorName).toBe(app.account.username);
+  const changes = (recorded[0].detail?.changes ?? {}) as Record<string, { from: unknown; to: unknown }>;
+  expect(Object.keys(changes), 'only what the edit changed').toEqual(['displayName']);
+  expect(changes.displayName.to).toBe(label);
+
+  await app.api.patch('/users/{userId}', { path: { userId }, data: { displayName: label } });
+  expect((await edits()).length, 'a save that changes nothing records nothing').toBe(before + 1);
 });
 
 // Both of these read the backup set - one creates an archive and
@@ -399,6 +429,199 @@ test('deleted items land in the trash and restore cleanly', async ({ app }) => {
   }).toPass({ timeout: T.fetch });
 });
 
+// A delete the filesystem will not take is refused in words and moves
+// nothing: the file stays, and the audit records the refusal rather than
+// a delete. The Locked Book sits alone in its folder, so locking the
+// folder reaches no other test's files.
+test('a delete the filesystem refuses is said and audited as refused', async ({ app }) => {
+  test.skip(
+    process.platform === 'win32' || process.getuid?.() === 0,
+    'a folder cannot be made unwritable to this process here',
+  );
+  const book = await app.seed.book('The Locked Book');
+  const [file] = (await app.api.get('/items/{pid}/files', { path: { pid: book.pid } })).files;
+  expect(file?.path, 'an administrator reads where the file is').toBeTruthy();
+  const folder = path.dirname(file.path!);
+  const mode = fs.statSync(folder).mode & 0o7777;
+  await app.nav.open(`/books/${book.pid}`, app.books.resume());
+
+  // The delete itself, not the dialog's preview of it.
+  const isDelete = (r: Request) =>
+    r.method() === 'POST' && r.url().endsWith('/library/items/delete') && r.postDataJSON()?.dryRun === false;
+  fs.chmodSync(folder, 0o555);
+  try {
+    // A sibling's scan or removal can hold the file-mutation scope as the
+    // confirm lands, which refuses it as catalog-busy with the dialog
+    // already gone: the delete is asked for again once the scope is free.
+    for (let attempt = 1; ; attempt++) {
+      await chooseFromMenu(
+        app.books.control(SemanticsIds.bookOverflow),
+        app.books.control(SemanticsIds.itemMenuDelete),
+        { settled: app.books.control(SemanticsIds.itemDeleteConfirm) },
+      );
+      const answered = app.page.waitForResponse((r) => isDelete(r.request()), { timeout: T.fetch });
+      await clickUntilRequested(app.page, app.books.control(SemanticsIds.itemDeleteConfirm), isDelete);
+      const response = await answered;
+      if (response.status() === 409 && (await response.json()).code === 'catalog-busy' && attempt < 5) {
+        await expect
+          .poll(
+            async () => {
+              const list = await app.api.get('/jobs', { query: { limit: 50 } });
+              return (list.jobs ?? []).filter((j) => j.state === 'running').length;
+            },
+            { timeout: T.fetch, message: 'the catalog job holding the scope should end' },
+          )
+          .toBe(0);
+        continue;
+      }
+      await expect(app.books.text("The server cannot write to that library's folder")).toBeVisible({
+        timeout: T.nav,
+      });
+      break;
+    }
+  } finally {
+    fs.chmodSync(folder, mode);
+  }
+
+  expect(fs.existsSync(file.path!), 'the refused file stays where it was').toBeTruthy();
+  const audit = await app.api.get('/admin/audit', {
+    query: { action: 'items.delete.refused', limit: 20 },
+  });
+  const refused = (audit.events ?? []).find((e) =>
+    ((e.detail?.pids as string[] | undefined) ?? []).includes(book.pid),
+  );
+  expect(refused, 'the refusal is on the record').toBeTruthy();
+});
+
+// The delete dialog names what goes by its place in the library before
+// anything moves. Long Division is alone on its album, so the album's
+// first row is the track, and a preview deletes nothing.
+test('deleting a track from its row menu previews the file', async ({ app }) => {
+  const track = await app.seed.item('Long Division');
+  const [file] = (await app.api.get('/items/{pid}/files', { path: { pid: track.pid } })).files;
+  await app.music.openAlbumOf(track.pid);
+  const paths = app.music.control(SemanticsIds.itemDeletePaths);
+  await chooseFromMenu(
+    app.music.control(SemanticsIds.albumTrackMore(0)),
+    app.music.control(SemanticsIds.itemMenuDelete),
+    { settled: paths },
+  );
+  await expect
+    .poll(async () => (await paths.getAttribute('aria-label')) ?? (await paths.textContent()) ?? '', {
+      timeout: T.fetch,
+      message: 'the preview should name the file',
+    })
+    .toContain(file.name);
+
+  await app.page.keyboard.press('Escape');
+  await expect(paths).toBeHidden();
+  expect((await app.api.raw.get('/items/{pid}', { path: { pid: track.pid } })).ok()).toBeTruthy();
+});
+
+// A merge writes its file beside the book in the book's own library. Kept
+// originals stay whole and the merged copy gets a folder of its own;
+// deleting the copy for good afterwards leaves a kept stack the same two
+// parts to merge next run.
+test('an admin merges a book from its page and it stays in its library', async ({ app }) => {
+  test.setTimeout(J.long);
+  const book = await app.seed.book('The Merge Book');
+  const before = await app.api.get('/books/{pid}', { path: { pid: book.pid } });
+  expect(before.parts.length, 'the merge fixture is two files').toBe(2);
+  const [part] = (await app.api.get('/items/{pid}/files', { path: { pid: book.pid } })).files;
+  // A merged copy an earlier run left on a reused stack holds the name
+  // this merge gives, which the server refuses to take from it. It goes
+  // first; its title is not the original's.
+  const listed = await app.api.tryGet('/library/items', { query: { mediaType: 'audiobook' } });
+  const stale = (listed?.items ?? [])
+    .filter((it) => it.title === 'The Merge Book (Merged)' && it.pid !== book.pid)
+    .map((it) => it.pid);
+  if (stale.length > 0) {
+    await app.api.raw.post('/library/items/delete', {
+      data: { pids: stale, mode: 'permanent' as const, dryRun: false },
+    });
+  }
+  await app.nav.open(`/books/${book.pid}`, app.books.resume());
+
+  await chooseFromMenu(
+    app.books.control(SemanticsIds.bookOverflow),
+    app.books.control(SemanticsIds.bookMerge),
+    { settled: app.books.control(SemanticsIds.bookMergeConfirm) },
+  );
+  const keep = app.books.control(SemanticsIds.bookMergeKeep);
+  // Toggled and read back rather than fired blind: a tap can land while
+  // the dialog settles and be lost, and a merge that ran without keeping
+  // the originals would trash the fixture's parts. The click fires only
+  // on a read that found the switch off; a read of nothing (the node
+  // re-creating) polls again.
+  await expect
+    .poll(
+      async () => {
+        const on = await keep.getAttribute('aria-checked');
+        if (on === 'false') {
+          await keep.click();
+          // The node redraws a frame after the tap, later on a loaded
+          // run: wait for the change before reading again, so a stale
+          // read cannot click the switch back off.
+          await expect(keep)
+            .toHaveAttribute('aria-checked', 'true', { timeout: T.step })
+            .catch(() => {});
+        }
+        return on;
+      },
+      { timeout: T.nav, message: 'the keep-originals switch should read on' },
+    )
+    .toBe('true');
+  await expect(keep, 'the switch still reads on as the merge is confirmed').toHaveAttribute('aria-checked', 'true');
+  const queued = app.page.waitForResponse(
+    (r) => r.url().includes(`/books/${book.pid}/merge`) && r.request().method() === 'POST',
+  );
+  await clickThrough(
+    app.books.control(SemanticsIds.bookMergeConfirm),
+    app.books.text('Queued. Follow it in Tasks.'),
+  );
+  const taskId = ((await (await queued).json()) as { id: string }).id;
+
+  let done = await app.api.get('/tools/tasks/{taskId}', { path: { taskId } });
+  await expect
+    .poll(
+      async () => {
+        done = await app.api.get('/tools/tasks/{taskId}', { path: { taskId } });
+        return done.state;
+      },
+      { timeout: J.long, message: 'the merge should finish' },
+    )
+    .toBe('done');
+  const merged = done.resultPids?.[0];
+  expect(merged, 'the task names the merged book').toBeTruthy();
+  expect(merged, 'the merged copy is a book of its own').not.toBe(book.pid);
+  const mergedDir = path.join(path.dirname(path.dirname(part.path!)), 'The Merge Book (Merged)');
+  const [out] = (await app.api.get('/items/{pid}/files', { path: { pid: merged! } })).files;
+  // What the cleanup may delete: the merged copy, known by its folder,
+  // and never the original, which a reused stack could not get back.
+  const isCopy = merged !== book.pid && out !== undefined && path.dirname(out.path!) === mergedDir;
+  try {
+    expect(path.dirname(out.path!)).toBe(mergedDir);
+    expect(out.libraryPid, 'the merged book stays in its library').toBe(part.libraryPid);
+    const original = await app.api.get('/books/{pid}', { path: { pid: book.pid } });
+    expect(original.parts.length, 'the kept original stays whole').toBe(2);
+    const audit = await app.api.get('/admin/audit', { query: { action: 'book.merge', limit: 20 } });
+    expect(
+      (audit.events ?? []).find((e) => e.detail?.result === merged),
+      'the merge is on the record',
+    ).toBeTruthy();
+  } finally {
+    // Waited out past a sibling's scan, and swallowed otherwise, so a
+    // refused cleanup cannot hide the assertion that failed.
+    if (isCopy) {
+      await retryCatalogBusy(() =>
+        app.api.post('/library/items/delete', {
+          data: { pids: [merged!], mode: 'permanent' as const, dryRun: false },
+        }),
+      ).catch(() => {});
+    }
+  }
+});
+
 // Creating a library at runtime has to reach the streaming sidecar, or
 // the root browses and downloads while streaming waits for a restart.
 // The stack runs a file-configured sidecar, so this drives the real
@@ -409,7 +632,12 @@ test('deleted items land in the trash and restore cleanly', async ({ app }) => {
 // The new root is deliberately empty. The reload is what is under test,
 // and adding media here would shift the fixture listings the specs
 // running beside this one page through.
-test('a library created at runtime reaches the streaming sidecar', async ({ app }) => {
+test('a library created at runtime reaches the streaming sidecar and leaves it on removal', async ({
+  app,
+}) => {
+  // Long: the create rescans every root, and the removal waits out that
+  // scan's hold on the catalog.
+  test.setTimeout(J.long);
   const fs = await import('node:fs/promises');
   const pathMod = await import('node:path');
 
@@ -419,42 +647,85 @@ test('a library created at runtime reaches the streaming sidecar', async ({ app 
   const runDir = pathMod.resolve(process.cwd(), '.run');
   const extra = pathMod.join(runDir, 'runtime-root');
   await fs.mkdir(extra, { recursive: true });
+  const sidecarNames = async () =>
+    (
+      JSON.parse(await fs.readFile(pathMod.join(runDir, 'waxflow.json'), 'utf8')) as {
+        roots: { name: string }[];
+      }
+    ).roots.map((r) => r.name);
 
+  // An earlier attempt that failed may have left its library, whose name
+  // and folder this one needs.
+  await removeLibrariesNamed(app.api, 'runtime');
   const created = await app.api.post('/libraries', {
     data: { name: 'runtime', path: extra, media: 'music' as const, managed: false },
   });
   const libraryPid = created.pid;
+  try {
+    // The 201 says so as well as the audit entry: the administrator who
+    // made the change is looking at the response, and reporting a plain
+    // success while streaming is broken is a silent partial failure.
+    expect(created.streamingWarning, 'the create reports streaming as working').toBeUndefined();
+    expect(created.path, 'the create names the root it registered').toBe(extra);
+    expect(await sidecarNames(), 'the sidecar file names the new root').toContain('runtime');
 
-  // The 201 says so as well as the audit entry: the administrator who
-  // made the change is looking at the response, and reporting a plain
-  // success while streaming is broken is a silent partial failure.
-  expect(created.streamingWarning, 'the create reports streaming as working').toBeUndefined();
-  expect(created.path, 'the create names the root it registered').toBe(extra);
+    // The sidecar's own reconcile is the verification: a refusal (a path
+    // it cannot open, a reload it does not serve) is recorded here.
+    const audit = await app.api.get('/admin/audit', {
+      query: { action: 'library.create', limit: 10 },
+    });
+    const hit = (audit.events ?? []).find((e) => e.targetPid === libraryPid);
+    expect(hit, 'the create is on the record').toBeTruthy();
+    expect(
+      hit!.detail?.streamingWarning,
+      'the sidecar reconciled the new root without a restart',
+    ).toBeUndefined();
 
-  // The sidecar's own reconcile is the verification: a refusal (a path
-  // it cannot open, a reload it does not serve) is recorded here.
-  const audit = await app.api.get('/admin/audit', {
-    query: { action: 'library.create', limit: 10 },
-  });
-  const hit = (audit.events ?? []).find((e) => e.targetPid === libraryPid);
-  expect(hit, 'the create is on the record').toBeTruthy();
-  expect(
-    hit!.detail?.streamingWarning,
-    'the sidecar reconciled the new root without a restart',
-  ).toBeUndefined();
+    // The name is the sidecar's addressing key, so one already mapped
+    // there is refused even though it is not in the library table: the
+    // podcast download root is exactly that case.
+    const clash = await app.api.raw.post('/libraries', {
+      data: {
+        name: 'podcasts',
+        path: pathMod.join(runDir, 'runtime-clash'),
+        media: 'music' as const,
+        managed: false,
+      },
+    });
+    expect(clash.status()).toBe(409);
 
-  // The name is the sidecar's addressing key, so one already mapped
-  // there is refused even though it is not in the library table: the
-  // podcast download root is exactly that case.
-  const clash = await app.api.raw.post('/libraries', {
-    data: {
-      name: 'podcasts',
-      path: pathMod.join(runDir, 'runtime-clash'),
-      media: 'music' as const,
-      managed: false,
-    },
-  });
-  expect(clash.status()).toBe(409);
+    // Removing it takes it back out the same way: the catalog lets go of
+    // the folder, whose files stay, and once the job has taken it out the
+    // record says so and the sidecar's roots file no longer names it. The
+    // create's scan holds the catalog's lease for a moment, which the
+    // removal waits out.
+    const removal = await retryCatalogBusy(() =>
+      app.api.delete('/libraries/{pid}', { path: { pid: libraryPid } }),
+    );
+    expect(removal.kind).toBe('remove-root');
+    await expect
+      .poll(
+        async () => (await app.api.tryGet('/jobs/{pid}', { path: { pid: removal.pid } }))?.state,
+        { timeout: T.fetch, message: 'the removal should run to done' },
+      )
+      .toBe('done');
+    const listed = await app.api.get('/libraries');
+    expect(listed.libraries.map((l) => l.pid)).not.toContain(libraryPid);
+    await expect
+      .poll(
+        async () => {
+          const removed = await app.api.tryGet('/admin/audit', {
+            query: { action: 'library.remove', limit: 10 },
+          });
+          return (removed?.events ?? []).find((e) => e.targetPid === libraryPid)?.targetName;
+        },
+        { timeout: T.fetch, message: 'the removal should be on the record' },
+      )
+      .toBe('runtime');
+    expect(await sidecarNames(), 'the sidecar file lets go of the root').not.toContain('runtime');
+  } finally {
+    await removeLibraryIfThere(app.api, libraryPid);
+  }
 });
 
 // An account the administrator has granted no library imports a fixture
@@ -528,6 +799,60 @@ test('a content rule stops an album share and silences the earlier link', async 
   expect((await anonApi.raw.minted(`${early.url}/stream?i=0`)).status()).toBe(404);
 });
 
+// A deleted member's shared playlists go to the administrator who deletes
+// the account, entries and all, and the record says how many went where.
+test('deleting a member hands their shared playlist to the administrator', async ({
+  app,
+  otherAccount,
+}) => {
+  const member = await otherAccount('leaving');
+  const theirs = app.api.as(member.token);
+  const { user } = await theirs.get('/auth/session');
+  const userId = user!.id;
+  // The handover counts what the account holds, and an attempt that failed
+  // before the delete left its playlists on it: clear them first.
+  for (const owned of (await theirs.get('/playlists')).playlists ?? []) {
+    if (owned.isOwner) {
+      await theirs.delete('/playlists/{pid}', { path: { pid: owned.pid } });
+    }
+  }
+  const items = await app.api.get('/library/items', { query: { mediaType: 'music', limit: 5 } });
+  const pids = (items.items ?? []).slice(0, 2).map((i) => i.pid);
+  expect(pids, 'the fixture library should hold music').toHaveLength(2);
+  const shared = await theirs.post('/playlists', {
+    data: { name: 'Handed over', kind: 'static', visibility: 'shared', itemPids: pids },
+  });
+  const private_ = await theirs.post('/playlists', {
+    data: { name: 'Kept to themselves', kind: 'static', visibility: 'private', itemPids: pids },
+  });
+
+  await app.api.delete('/users/{userId}', { path: { userId } });
+  try {
+    const handed = await app.api.get('/playlists/{pid}', { path: { pid: shared.pid } });
+    expect(handed.isOwner, 'the administrator owns it now').toBe(true);
+    // Listed under the name the account goes by, its display name if it has one.
+    const me = (await app.api.get('/auth/session')).user!;
+    expect(handed.ownerName).toBe(me.displayName || me.username);
+    expect(handed.visibility).toBe('shared');
+    const entries = await app.api.get('/playlists/{pid}/items', { path: { pid: shared.pid } });
+    expect(entries.entries.map((e) => e.item.pid), 'its entries are kept').toEqual(pids);
+    const gone = await app.api.raw.get('/playlists/{pid}', { path: { pid: private_.pid } });
+    expect(gone.status(), 'a private playlist went with its owner').toBe(404);
+
+    const audit = await app.api.get('/admin/audit', {
+      query: { action: 'user.delete', targetPid: userId },
+    });
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0].detail).toMatchObject({
+      playlistsTransferred: 1,
+      transferredTo: app.account.username,
+    });
+  } finally {
+    // It is the administrator's now, and this account is reused.
+    await app.api.raw.delete('/playlists/{pid}', { path: { pid: shared.pid } });
+  }
+});
+
 // Disabling or deleting an account closes the sockets its devices hold,
 // at once and with 4401, rather than leaving them hearing invalidations
 // and driving the player until they happen to reconnect.
@@ -557,8 +882,9 @@ test('disabling or deleting an account closes its sockets', async ({ app, otherA
 });
 
 // The download permission governs downloading: an account without it is
-// refused download-info, and its stream URL taken to the download route
-// opens nothing (it used to hand over the original as an attachment).
+// refused download-info, a download URL it minted before stops, and its
+// stream URL taken to the download route plays only the bytes its stream
+// already gives (an original's, inline; a capped stream's, nothing).
 // Disabling an account stops new opens of every URL it minted.
 test('media URLs follow the account that minted them', async ({
   app,
@@ -572,14 +898,21 @@ test('media URLs follow the account that minted them', async ({
   const account = await app.api.get('/users/{userId}', { path: { userId } });
   const theirs = app.api.as(listener.token);
   try {
+    const download = (await theirs.get('/items/{pid}/download-info', { path: { pid } })).files[0].url;
     await app.api.patch('/users/{userId}', {
       path: { userId },
       data: { permissions: { ...account.permissions!, download: false } },
     });
     expect((await theirs.raw.get('/items/{pid}/download-info', { path: { pid } })).status()).toBe(403);
+    expect((await anonApi.raw.minted(download)).status(), 'a download URL minted before').toBe(403);
     const playInfo = await theirs.get('/items/{pid}/play-info', { path: { pid } });
-    const swapped = playInfo.url.replace('/media/stream?', '/media/download?');
-    expect((await anonApi.raw.minted(swapped)).status()).toBe(401);
+    const swapped = await anonApi.raw.minted(playInfo.url.replace('/media/stream?', '/media/download?'));
+    expect(swapped.status(), 'the original stream on the download route').toBe(200);
+    expect(swapped.headers()['content-disposition']).toMatch(/^inline/);
+    const capped = await theirs.get('/items/{pid}/play-info', { path: { pid }, query: { maxBitrateKbps: 96 } });
+    expect(capped.url, 'a capped stream').toContain('br=96');
+    const cappedSwap = capped.url.replace('/media/stream?', '/media/download?');
+    expect((await anonApi.raw.minted(cappedSwap)).status(), 'the capped stream on the download route').toBe(401);
 
     expect((await anonApi.raw.minted(playInfo.url)).status()).toBe(200);
     await app.api.patch('/users/{userId}', { path: { userId }, data: { disabled: true } });

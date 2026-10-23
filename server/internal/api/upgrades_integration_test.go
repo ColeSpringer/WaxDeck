@@ -116,8 +116,8 @@ func TestUpgradesResolveByFile(t *testing.T) {
 	}
 }
 
-// A move the trash could not make refuses the resolve with the count,
-// rather than answering success for less than was asked.
+// A resolve whose every move the filesystem refused says the library
+// cannot be written, and is audited as refused rather than as a delete.
 func TestAnUpgradeTheTrashCouldNotTakeIsRefused(t *testing.T) {
 	t.Parallel()
 	skipWithoutUnwritablePaths(t)
@@ -134,8 +134,13 @@ func TestAnUpgradeTheTrashCouldNotTakeIsRefused(t *testing.T) {
 	if resp.StatusCode != 409 {
 		t.Fatalf("resolve into an unwritable folder = %d, want 409", resp.StatusCode)
 	}
-	if e := decode[Error](t, resp); e.Code != "conflict" || !strings.Contains(e.Message, "could not be moved to the trash") {
-		t.Fatalf("refusal = %+v, want the failed move counted", e)
+	if e := decode[Error](t, resp); e.Code != "storage-unwritable" || strings.Contains(e.Message, h.library) {
+		t.Fatalf("refusal = %+v, want storage-unwritable without the server's folder", e)
+	}
+	refused := decode[AuditEventPage](t, get(t, h.ts, "/api/v1/admin/audit?action=items.delete-files.refused", h.token)).Events
+	done := decode[AuditEventPage](t, get(t, h.ts, "/api/v1/admin/audit?action=items.delete-files", h.token)).Events
+	if len(refused) != 1 || len(done) != 0 {
+		t.Fatalf("audit refused %d, deleted %d, want the refusal alone", len(refused), len(done))
 	}
 }
 

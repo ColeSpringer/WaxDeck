@@ -17,6 +17,11 @@ part 'delete_items_result.g.dart';
 /// * [mode] - The mode that was (or would be) used.
 /// * [entries] - Per-item breakdown.
 /// * [warnings] - What the deletion did beside removing files, in sentences: a copy that took a deleted file's place, and a file it could not remove, which stayed and is not counted in `entries`. A whole-item delete names each under its item's name. Absent when there is nothing to say. 
+/// * [trashed] - Files moved to the trash. Absent from a plan.
+/// * [deleted] - Files deleted outright, in `permanent` mode. Absent from a plan. 
+/// * [failed] - Files the deletion tried to remove and could not, which stayed where they were; `entries` say whose. Absent from a plan. 
+/// * [dirsPruned] - Folders the deletion emptied and removed. Absent from a plan. 
+/// * [reclaimedBytes] - Disk space the deletion freed: the files a `permanent` deletion removed. A move to the trash frees nothing until the trash is emptied. Absent from a plan. 
 @BuiltValue()
 abstract class DeleteItemsResult implements Built<DeleteItemsResult, DeleteItemsResultBuilder> {
   /// False for a dry run.
@@ -34,6 +39,26 @@ abstract class DeleteItemsResult implements Built<DeleteItemsResult, DeleteItems
   /// What the deletion did beside removing files, in sentences: a copy that took a deleted file's place, and a file it could not remove, which stayed and is not counted in `entries`. A whole-item delete names each under its item's name. Absent when there is nothing to say. 
   @BuiltValueField(wireName: r'warnings')
   BuiltList<String>? get warnings;
+
+  /// Files moved to the trash. Absent from a plan.
+  @BuiltValueField(wireName: r'trashed')
+  int? get trashed;
+
+  /// Files deleted outright, in `permanent` mode. Absent from a plan. 
+  @BuiltValueField(wireName: r'deleted')
+  int? get deleted;
+
+  /// Files the deletion tried to remove and could not, which stayed where they were; `entries` say whose. Absent from a plan. 
+  @BuiltValueField(wireName: r'failed')
+  int? get failed;
+
+  /// Folders the deletion emptied and removed. Absent from a plan. 
+  @BuiltValueField(wireName: r'dirsPruned')
+  int? get dirsPruned;
+
+  /// Disk space the deletion freed: the files a `permanent` deletion removed. A move to the trash frees nothing until the trash is emptied. Absent from a plan. 
+  @BuiltValueField(wireName: r'reclaimedBytes')
+  int? get reclaimedBytes;
 
   DeleteItemsResult._();
 
@@ -78,6 +103,41 @@ class _$DeleteItemsResultSerializer implements PrimitiveSerializer<DeleteItemsRe
       yield serializers.serialize(
         object.warnings,
         specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
+    if (object.trashed != null) {
+      yield r'trashed';
+      yield serializers.serialize(
+        object.trashed,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.deleted != null) {
+      yield r'deleted';
+      yield serializers.serialize(
+        object.deleted,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.failed != null) {
+      yield r'failed';
+      yield serializers.serialize(
+        object.failed,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.dirsPruned != null) {
+      yield r'dirsPruned';
+      yield serializers.serialize(
+        object.dirsPruned,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.reclaimedBytes != null) {
+      yield r'reclaimedBytes';
+      yield serializers.serialize(
+        object.reclaimedBytes,
+        specifiedType: const FullType(int),
       );
     }
   }
@@ -131,6 +191,46 @@ class _$DeleteItemsResultSerializer implements PrimitiveSerializer<DeleteItemsRe
           ) as BuiltList<String>?;
           if (valueDes == null) continue;
           result.warnings.replace(valueDes);
+          break;
+        case r'trashed':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.trashed = valueDes;
+          break;
+        case r'deleted':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.deleted = valueDes;
+          break;
+        case r'failed':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.failed = valueDes;
+          break;
+        case r'dirsPruned':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.dirsPruned = valueDes;
+          break;
+        case r'reclaimedBytes':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.reclaimedBytes = valueDes;
           break;
         default:
           unhandled.add(key);

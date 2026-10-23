@@ -285,10 +285,11 @@ components:
             surface), `task-progress` (a task's progress moved; refetch it,
             though it is not news), `entity-state` (an artist or album was
             starred or rated), and `job` (the `jb-` catalog job ended, or,
-            for a scan, analysis, enrichment, organize run or emptying the
-            trash, was first seen, crossed another five percent of progress
-            or changed its message, a message marked at most every fifteen
-            seconds; refetch `GET /jobs` or `GET /jobs/{pid}`). `job`
+            for a scan, analysis, enrichment, organize run, organize undo,
+            library removal or emptying the trash, was first seen, crossed
+            another five percent of progress or changed its message, a
+            message marked at most every fifteen seconds; refetch
+            `GET /jobs` or `GET /jobs/{pid}`). `job`
             reaches administrators; a targeted job's, while it runs, only
             whoever started it.
 
@@ -302,6 +303,11 @@ components:
 
             `libraries` carries no `pid`: a library was added, restored or
             changed, from anywhere, so re-read `GET /libraries`.
+
+
+            `server` carries no `pid`: what `GET /health` reports moved
+            (the streaming engine went away or came back), so re-read it.
+            It reaches every signed-in account.
 
 
             Further markers are announcements rather than refetch
@@ -325,16 +331,19 @@ components:
 
 
             `account` carries no `pid`: the caller's own roles or
-            effective permissions changed, which is what
-            `GET /auth/session` reports (roles plus the `uploadEnabled`,
-            `managePodcasts` and `delete` booleans), so re-read it. The
-            session itself keeps working; only what it may do moved.
+            effective permissions changed, or the server's read-only mode
+            was turned on or off. `GET /auth/session` reports both
+            (roles plus the `uploadEnabled`, `managePodcasts` and
+            `delete` booleans, and `server.readOnly`), so re-read it. The
+            session itself keeps working; only what it may do, or what
+            the server accepts, moved.
           example: play-state
         pid:
           type: string
           description: >
             The item, show, book, playlist, or job the event is about
-            (absent for `prefs`, `account`, `health`, and `libraries`).
+            (absent for `prefs`, `account`, `health`, `libraries`, and
+            `server`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"

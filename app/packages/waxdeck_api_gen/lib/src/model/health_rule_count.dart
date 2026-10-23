@@ -15,7 +15,7 @@ part 'health_rule_count.g.dart';
 /// * [rule] - The rule name.
 /// * [label] - Human-readable rule label.
 /// * [failing] - Items currently failing the rule.
-/// * [fixable] - Whether the bulk-fix endpoint can fix this rule on this install. 
+/// * [fixable] - Whether the fix endpoint can fix this rule on this install; a `path-mismatch` fix takes `itemPids`. 
 /// * [fixing] - True while a fix for the rule is under way: a pass-backed fix from its start until its re-check lands, a task-backed one while its task is queued or running. Another fix for the rule answers `conflict` meanwhile. 
 /// * [fixBlocked] - Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. `read-only`: the server is read-only, and the fix writes files. 
 @BuiltValue()
@@ -32,7 +32,7 @@ abstract class HealthRuleCount implements Built<HealthRuleCount, HealthRuleCount
   @BuiltValueField(wireName: r'failing')
   int get failing;
 
-  /// Whether the bulk-fix endpoint can fix this rule on this install. 
+  /// Whether the fix endpoint can fix this rule on this install; a `path-mismatch` fix takes `itemPids`. 
   @BuiltValueField(wireName: r'fixable')
   bool get fixable;
 

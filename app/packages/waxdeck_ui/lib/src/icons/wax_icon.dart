@@ -359,19 +359,32 @@ abstract final class WaxIcons {
     IconData(0xE058, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
-  /// Phosphor `caret-down`.
+  /// Phosphor `caret-down`. A sheet that grows upward closes with it, and
+  /// a row that opens below itself draws it while open, with [forward]
+  /// while closed.
   static const collapse = WaxGlyph(
     IconData(0xE136, fontFamily: _regularFamily, fontPackage: _fontPackage),
     IconData(0xE136, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
-  /// Phosphor `caret-up`.
+  /// Phosphor `caret-up`. A sheet that grows upward opens with it; a row
+  /// that opens below itself does not, and draws [forward] while closed.
   static const expand = WaxGlyph(
     IconData(0xE13C, fontFamily: _regularFamily, fontPackage: _fontPackage),
     IconData(0xE13C, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
-  /// Phosphor `caret-right`.
+  /// [expand] by its shape, for a control whose action goes up: a move to
+  /// the top.
+  static const caretUp = expand;
+
+  /// [collapse] by its shape, for a control whose action goes down: a move
+  /// to the bottom, or more rows brought in below.
+  static const caretDown = collapse;
+
+  /// Phosphor `caret-right`. It points on to what comes next, and it is
+  /// what a row that opens below itself draws while closed, as the
+  /// sidebar's groups do.
   static const forward = WaxGlyph(
     IconData(0xE13A, fontFamily: _regularFamily, fontPackage: _fontPackage),
     IconData(0xE13A, fontFamily: _fillFamily, fontPackage: _fontPackage),

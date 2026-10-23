@@ -6,6 +6,7 @@ import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'disclosure_glyph.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 
@@ -77,6 +78,19 @@ void main() {
     expect(_field('artist'), findsOne);
     expect(_field('album'), findsOne);
     expect(_field('title'), findsOne);
+  });
+
+  testWidgets('the toggle points right closed and down open', (tester) async {
+    await tester.pumpWidget(_host(_repo(_entry())));
+    await tester.pumpAndSettle();
+    final toggle = find.bySemanticsIdentifier(
+      SemanticsIds.reviewIdentifyToggle,
+    );
+
+    expectDisclosure(tester, toggle, open: false);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expectDisclosure(tester, toggle, open: true);
   });
 
   testWidgets('a stored override opens the group and prefills it', (

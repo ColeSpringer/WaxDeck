@@ -21,7 +21,7 @@ export interface paths {
         put?: never;
         /**
          * Create a library at runtime
-         * @description Registers a new library root without a server restart. The path is validated (an existing folder, absolute, and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries `streamingWarning` saying so, rather than reporting a plain success. `name` is the display name and the WaxFlow root name the same directory is served under. Administrators only.
+         * @description Registers a new library root without a server restart. The path is validated (absolute; an existing folder the server can read, or with `allowAbsent` one mounted later; writable by the server when the library is managed; and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries `streamingWarning` saying so, rather than reporting a plain success. `name` is the display name and the WaxFlow root name the same directory is served under. Administrators only.
          */
         post: operations["createLibrary"];
         delete?: never;
@@ -87,6 +87,29 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{pid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a library
+         * @description Takes the library out of the catalog and answers the job doing it. The files stay on disk: an item with a copy in another library carries on from that copy, and one with no other copy is archived with its play state and playlist entries and comes back when the folder is added again. The library's trash entries go, their files staying in its trash folder. Once the job has taken the library out of the catalog, its name, the account and invite grants naming it, and the streaming engine's mount of it go too, and the removal is audited as `library.remove`. A job stopped before that leaves the library in the catalog with its name, grants and mount, and removing it again finishes the job. Files its finished batches had let go of come back with a scan of the library, which the server starts once the job ends; a job a restart cut short is left to the startup scan when one runs, and one ending while another catalog job runs, to the library's next scan. A library the server's configuration names (`configured`) is `conflict`: every start registers it again, so it is taken out of `WAXDECK_LIBRARY_ROOTS` first. Administrators only.
+         */
+        delete: operations["removeLibrary"];
         options?: never;
         head?: never;
         patch?: never;
@@ -193,7 +216,7 @@ export interface paths {
         };
         /**
          * List recent catalog jobs
-         * @description Recent catalog jobs, newest first: `limit` of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (`set-kind`), which lists with its result. The `job` sync marker says when to read again. Administrators only.
+         * @description Recent catalog jobs, newest first: `limit` of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (`set-kind`), an organize undo (`organize-undo`) and a library removal (`remove-root`), which list with their result. The `job` sync marker says when to read again. Administrators only.
          */
         get: operations["listJobs"];
         put?: never;
@@ -811,7 +834,7 @@ export interface paths {
         };
         /**
          * Inspect the current session
-         * @description Returns whether the caller is authenticated and, if so, the session's user and CSRF token. Unauthenticated callers get `authenticated: false`, not a 401. Clients use this at startup to decide whether to show the login screen.
+         * @description Returns whether the caller is authenticated and, if so, the session's user, CSRF token and the server's read-only state. Unauthenticated callers get `authenticated: false`, not a 401. Clients use this at startup to decide whether to show the login screen, and again when an `account` event arrives.
          */
         get: operations["getSession"];
         put?: never;
@@ -1359,7 +1382,7 @@ export interface paths {
         put?: never;
         /**
          * Bulk-fix a health rule
-         * @description Fixes one `fixable` rule across `itemPids` or every failing item. An unscoped metadata fix is an enrichment job (`jobPid`) over its rule's phases; the rest is a `health-fix` task (`taskId`). Administrators only.
+         * @description Fixes one `fixable` rule across `itemPids` or every failing item. An unscoped metadata fix is an enrichment job (`jobPid`) over its rule's phases; the rest is a `health-fix` task (`taskId`). `path-mismatch` needs `itemPids`: moving every mismatched file is an organize pass, previewed and applied through `/organize/preview` and `/organize/apply`. A path fix moves its items as organize jobs, each undoable through `/organize/undo`, and its summary counts `moved` (the items it moved) and `held` (by hold code, as `/organize/preview` names them) beside `skipped` and `failed`, and lists the jobs as `jobPids`. Administrators only.
          */
         post: operations["fixHealthIssues"];
         delete?: never;
@@ -1724,7 +1747,7 @@ export interface paths {
         put?: never;
         /**
          * Delete some of an item's files
-         * @description Deletes files of one item, to the catalog trash by default or permanently (`mode` `permanent`, administrators only), as deleteLibraryItems deletes whole items. A copy goes alone; the primary or a part gives its place to a copy when the item has one, which `warnings` names, and an item that loses its last file is archived. `dryRun` answers the plan without deleting. Needs the `delete` permission or the admin role; the item must be visible to the caller and every file one of its files in a library the caller can see (`not-found` otherwise). A read-only library answers `read-only`. The file of a cue rip plays every track carved from it, so deleting it here when it plays other tracks is `invalid-request` with `params.reason` `cue-rip`: delete those tracks together through deleteLibraryItems.
+         * @description Deletes files of one item, to the catalog trash by default or permanently (`mode` `permanent`, administrators only), as deleteLibraryItems deletes whole items. A copy goes alone; the primary or a part gives its place to a copy when the item has one, which `warnings` names, and an item that loses its last file is archived. `dryRun` answers the plan without deleting. Needs the `delete` permission or the admin role; the item must be visible to the caller and every file one of its files in a library the caller can see (`not-found` otherwise). A read-only library answers `read-only`. The file of a cue rip plays every track carved from it, so deleting it here when it plays other tracks is `invalid-request` with `params.reason` `cue-rip`: delete those tracks together through deleteLibraryItems. A file the filesystem will not move stays, as deleteLibraryItems reports one: `storage-unwritable` when nothing went, else the files that went with `failed` counting the rest.
          */
         post: operations["deleteItemFiles"];
         delete?: never;
@@ -1744,7 +1767,7 @@ export interface paths {
         put?: never;
         /**
          * Delete library items
-         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. An item's copies (getItemFiles) go with it, except one in a read-only library or a library the caller cannot see, which stays and keeps the item (`itemSurvives`). A read-only library holding the item's own file answers `read-only`. Podcast episodes are not deletable here, and one anywhere in `pids` refuses the whole call (`invalid-request`): the podcast download tree owns its own files, and removing an episode's download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. The tracks a cue sheet carves out of one file go together: naming some but not all is `invalid-request` with `params.reason` `cue-rip`.
+         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. An item's copies (getItemFiles) go with it, except one in a read-only library or a library the caller cannot see, which stays and keeps the item (`itemSurvives`). A read-only library holding the item's own file answers `read-only`. Podcast episodes are not deletable here, and one anywhere in `pids` refuses the whole call (`invalid-request`): the podcast download tree owns its own files, and removing an episode's download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. The tracks a cue sheet carves out of one file go together: naming some but not all is `invalid-request` with `params.reason` `cue-rip`. A file the filesystem will not move stays where it is and is never reported gone. When no file went, the call answers `storage-unwritable` for a folder that refused the move (its permissions, or a read-only mount) and `internal` for any other failure, and nothing changed. When some went, it answers what did: `entries` count the files that went, each entry's `failed` and `error` say what stayed of its item and why, and the result totals both.
          */
         post: operations["deleteLibraryItems"];
         delete?: never;
@@ -2370,7 +2393,7 @@ export interface paths {
          * List the notification event catalog
          * @description Every notification event this server can emit, with its scope: `server` events describe server operations and deliver to server-scope targets (plus admin-owned personal targets that opted in), `user` events concern one user and deliver to that user's personal targets. Clients build the per-target event checklist from this catalog; a target's `enabledEvents` must name events from it. The reserved `test` event never appears here: per-target tests are requested through the target's test endpoint and bypass event selection.
          *
-         *     The current catalog is `signup-requested`, `backup-completed`, `backup-failed`, `catalog-reset`, `episode-arrived`, `episode-downloaded`, `feed-disabled`, `subscription-failed`, `gpodder-device-removed`, `review-ready`, `import-completed`, `playlist-synced`, `job-finished`, `job-failed`, and `health-fix-finished`. The last three reach the administrator who started the work: a catalog job (a scan, an analysis, an enrichment or organize run, emptying the trash) finished or failed, or a health fix finished. Work the server started on its own schedule notifies nobody. `catalog-reset` says the server built a new catalog because the old one's schema was another release's; its body counts the libraries added from the console, which the audit log names. `subscription-failed` says a podcast app syncing over gpodder asked for a feed that will not subscribe, or that still could not be fetched after a week of tries, or asked to change the subscriptions of an account that may not follow or manage podcasts; one sync names at most five feeds the inbox has not named in the last thirty days and counts the rest in one more, and an account's refusal is said once in thirty days for each device. `gpodder-device-removed` says a new podcast app device took the slot of the least recently seen of the account's fifty, and that what it kept followed stays followed; a day's first three name the device, and one more says others went.
+         *     The current catalog is `signup-requested`, `backup-completed`, `backup-failed`, `catalog-reset`, `episode-arrived`, `episode-downloaded`, `feed-disabled`, `subscription-failed`, `gpodder-device-removed`, `review-ready`, `import-completed`, `playlist-synced`, `job-finished`, `job-failed`, `tool-task-failed`, and `health-fix-finished`. The last four reach the account that started the work: a catalog job (a scan, an analysis, an enrichment or organize run, emptying the trash) finished or failed, a book merge or split or a CUE split failed or stopped for good (parked), or a health fix finished. Work the server started on its own schedule notifies nobody. `catalog-reset` says the server built a new catalog because the old one's schema was another release's; its body counts the libraries added from the console, which the audit log names. `subscription-failed` says a podcast app syncing over gpodder asked for a feed that will not subscribe, or that still could not be fetched after a week of tries, or asked to change the subscriptions of an account that may not follow or manage podcasts; one sync names at most five feeds the inbox has not named in the last thirty days and counts the rest in one more, and an account's refusal is said once in thirty days for each device. `gpodder-device-removed` says a new podcast app device took the slot of the least recently seen of the account's fifty, and that what it kept followed stays followed; a day's first three name the device, and one more says others went.
          */
         get: operations["listNotificationEvents"];
         put?: never;
@@ -2709,7 +2732,7 @@ export interface paths {
         put?: never;
         /**
          * Dry-run an organize pass
-         * @description Plans a profile's moves for `itemPids`, or every managed library, touching nothing; read-only files are counted rather than planned. Lists the first 500 actions and the total. Administrators only.
+         * @description Plans a profile's moves for `itemPids`, or every managed library, touching nothing; read-only files are counted rather than planned. Lists the first 500 actions and the total, and the first 500 moves held back with why. Administrators only.
          */
         post: operations["previewOrganize"];
         delete?: never;
@@ -2729,9 +2752,49 @@ export interface paths {
         put?: never;
         /**
          * Apply an organize pass
-         * @description Recomputes the plan and applies it synchronously, crash-safe per file and respecting locked fields; read-only libraries stay put, and a read-only server answers `read-only`. Administrators only.
+         * @description Recomputes the plan and runs it as an `organize` catalog job, answering once the job ends: crash-safe per file and respecting locked fields, and read-only libraries stay put. The job journals its moves, so `/organize/undo` can move them back. A plan with nothing to move runs no job. Administrators only.
          */
         post: operations["applyOrganize"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organize/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List organize runs
+         * @description The organize runs, and the undos of them, whose moves the catalog's journal still holds, newest first by when each started, a page at a time: `nextCursor` reaches the older ones. The scheduled prune drops a run's journal once it is older than the task retention window, and the run can no longer be undone. Administrators only.
+         */
+        get: operations["listOrganizeHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organize/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo an organize run
+         * @description Moves back what an organize run (or an undo, which redoes it) moved, as an `organize-undo` catalog job, answering once the job ends. Each file goes from where it stands to where the run found it, with its sidecars and the folder companions the run carried; tags the run wrote stay. A file moved again since, one the catalog no longer holds, one whose old place another file now holds, one gone from disk and one in a read-only library are held back. Administrators only.
+         */
+        post: operations["undoOrganize"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2747,7 +2810,7 @@ export interface paths {
         };
         /**
          * Resolve a playable stream for an item
-         * @description Returns everything a client needs to start playback: a short-TTL, origin-relative stream URL (media-token authenticated, so it is playable by bare `<audio>` elements, cast devices, and DLNA renderers that cannot send headers), the served format, and expiry. Clients re-request play-info when a stream URL expires or the server signals `stream-stale`. On a server running without the streaming engine, the url serves the item's original file bytes directly (ranged, no transcoding, in whatever format the file is in) through the same endpoint downloads use, inline and with the byte-identity pin; expiry is enforced per request, so an in-flight fetch completes but a later range request after `expiresAt` answers `unauthenticated` and the client re-requests play-info. The url dies with the session that asked for it. A capped account's transcoded stream is never wider than its ceiling, whether or not the request carries `maxBitrateKbps` (an original played directly is the file itself), and the stream parameters are part of the url's credential. An item carved out of a larger file additionally carries `spanStartMs`/`spanEndMs` and the client plays only that window; a client that does not implement the window MUST treat a span-bearing response as unplayable rather than play the served audio whole. A multi-file audiobook resolves one part per call: pass `positionMs` (book-timeline milliseconds) to get the part containing that position, and read `partIndex`, `partCount`, and `partStartMs` from the response; when playback crosses the end of a part, re-request play-info with the new book-timeline position. The response's `durationMs` is always the length of what the client plays: the resolved part for multi-file books, the item's own window, never the backing file, for span-carved direct playback, and the whole item or part for a stream cut at `positionMs` (see `startOffsetMs`); the book total lives on the item summary and the book detail. Positions reported to play-state for multi-file books are always book-timeline milliseconds (`partStartMs` plus the in-part position). A podcast episode whose audio has not been fetched to the server resolves by enclosure passthrough: the url points at `/media/enclosure`, which relays the feed's own enclosure through this origin (a proxy, not a redirect, so the listener's address never reaches the podcast host and the web build can play it). Ranges pass both ways, so scrubbing works when the host honours them. Passthrough audio is not analyzed, so the skip map stays `unavailable` and neither silence trim nor voice boost applies until the episode is fetched, and `seekable` is best effort for passthrough: whether the host honours ranges is unknown until the first upstream request. The relay serves only audio and video, never a playlist or a stream manifest: a host answering with a page, a document, a picture or a playlist is refused with `feed-unreachable`, and every relayed response carries `X-Content-Type-Options: nosniff`. The episode still reports `downloaded: false`, and fetching it is still what makes it play from local bytes with analysis. An episode whose feed named no enclosure at all answers `conflict`, as does one whose feed calls its enclosure a playlist or a stream manifest, and an episode of a YouTube show, whose enclosure is a watch page rather than audio, answers `conflict` until the server has fetched it.
+         * @description Returns everything a client needs to start playback: a short-TTL, origin-relative stream URL (media-token authenticated, so it is playable by bare `<audio>` elements, cast devices, and DLNA renderers that cannot send headers), the served format, and expiry. Clients re-request play-info when a stream URL expires or the server signals `stream-stale`. On a server running without the streaming engine, the url serves the item's original file bytes directly (ranged, no transcoding, in whatever format the file is in) through the same endpoint downloads use, inline and with the byte-identity pin; expiry is enforced per request, so an in-flight fetch completes but a later range request after `expiresAt` answers `unauthenticated` and the client re-requests play-info. A server whose engine is configured but not reachable right now mints that same direct url, exactly as an engine-less server does, and the url keeps working once the engine answers again (a carved track's direct url, whose window only the engine cuts, then answers `unauthenticated` and the client re-requests play-info). A stream url minted before the engine went away keeps playing an original through the download endpoint, and answers `feature-unavailable` (`params.feature` `streaming-engine`, with `Retry-After`) only for a stream the engine alone makes: a carved window, voice boost, a format or a bitrate, which a re-request mints as the original. The url dies with the session that asked for it. A capped account's transcoded stream is never wider than its ceiling, whether or not the request carries `maxBitrateKbps` (an original played directly is the file itself), and the stream parameters are part of the url's credential. An item carved out of a larger file additionally carries `spanStartMs`/`spanEndMs` and the client plays only that window; a client that does not implement the window MUST treat a span-bearing response as unplayable rather than play the served audio whole. A multi-file audiobook resolves one part per call: pass `positionMs` (book-timeline milliseconds) to get the part containing that position, and read `partIndex`, `partCount`, and `partStartMs` from the response; when playback crosses the end of a part, re-request play-info with the new book-timeline position. The response's `durationMs` is always the length of what the client plays: the resolved part for multi-file books, the item's own window, never the backing file, for span-carved direct playback, and the whole item or part for a stream cut at `positionMs` (see `startOffsetMs`); the book total lives on the item summary and the book detail. Positions reported to play-state for multi-file books are always book-timeline milliseconds (`partStartMs` plus the in-part position). A podcast episode whose audio has not been fetched to the server resolves by enclosure passthrough: the url points at `/media/enclosure`, which relays the feed's own enclosure through this origin (a proxy, not a redirect, so the listener's address never reaches the podcast host and the web build can play it). Ranges pass both ways, so scrubbing works when the host honours them. Passthrough audio is not analyzed, so the skip map stays `unavailable` and neither silence trim nor voice boost applies until the episode is fetched, and `seekable` is best effort for passthrough: whether the host honours ranges is unknown until the first upstream request. The relay serves only audio and video, never a playlist or a stream manifest: a host answering with a page, a document, a picture or a playlist is refused with `feed-unreachable`, and every relayed response carries `X-Content-Type-Options: nosniff`. The episode still reports `downloaded: false`, and fetching it is still what makes it play from local bytes with analysis. An episode whose feed named no enclosure at all answers `conflict`, as does one whose feed calls its enclosure a playlist or a stream manifest, and an episode of a YouTube show, whose enclosure is a watch page rather than audio, answers `conflict` until the server has fetched it.
          */
         get: operations["getPlayInfo"];
         put?: never;
@@ -3016,7 +3079,7 @@ export interface paths {
         };
         /**
          * Get an item's silence skip map
-         * @description Precomputed silence spans for client-side trimming of spoken-word content: clients skip a mapped span by seeking to its end, so positions stay honest on every platform and the hours-saved arithmetic is exact (trimming therefore needs a seekable stream). Maps are keyed to the item's audio essence and to the upstream detector version, so a re-encode or a detector revision invalidates them; offline clients compare the response's `essenceHash` against their download store to spot a stale stored map. Maps are per audio file: for a multi-file audiobook, pass `partIndex` to get the map of one part, with spans in that part's own timeline. Only podcast episodes and audiobooks are mapped; other items, and episodes whose audio is not fetched to the server yet, answer `unavailable` (an episode may become mappable after its fetch). When no map exists yet the server queues analysis and answers `pending`; poll again later (analysis runs in the background at low priority, and repeated polls coalesce onto the single queued analysis). Downloads for offline playback should fetch and store this map alongside the audio, or trimming silently stops working in airplane mode.
+         * @description Precomputed silence spans for client-side trimming of spoken-word content: clients skip a mapped span by seeking to its end, so positions stay honest on every platform and the hours-saved arithmetic is exact (trimming therefore needs a seekable stream). Maps are keyed to the item's audio essence and to the upstream detector version, so a re-encode or a detector revision invalidates them; offline clients compare the response's `essenceHash` against their download store to spot a stale stored map. Maps are per audio file: for a multi-file audiobook, pass `partIndex` to get the map of one part, with spans in that part's own timeline. Only podcast episodes and audiobooks are mapped; other items, and episodes whose audio is not fetched to the server yet, answer `unavailable` (an episode may become mappable after its fetch). When no map exists yet the server queues analysis and answers `pending`; poll again later (analysis runs in the background at low priority, and repeated polls coalesce onto the single queued analysis). While the server's streaming engine is away, an episode, book or book part with no map yet answers the engine-away 503 instead: its analysis is queued all the same and runs once the engine answers. Downloads for offline playback should fetch and store this map alongside the audio, or trimming silently stops working in airplane mode.
          */
         get: operations["getSkipMap"];
         put?: never;
@@ -3131,7 +3194,7 @@ export interface paths {
         put?: never;
         /**
          * Start playback on an endpoint
-         * @description Loads a queue onto an endpoint and starts a server-tracked playback session there ("play on the kitchen speaker"). An endpoint plays at most one session: starting a new session on an endpoint that already has one ends the old session first, whoever owned it (physical outputs are last-writer-wins, like the speaker itself). Item pids must all be visible to the caller; the server shapes stream delivery for the target endpoint's capabilities, re-minting URLs as needed, so the same queue plays on a phone, a cast device, or a renderer without the caller caring about formats. Sessions on device endpoints are server-authoritative; a session created on one of the caller's own client endpoints is loaded onto that client and then mirrors the client's local playback. Conflict with code `endpoint-offline` means the target endpoint is not connected right now, and `timeout` means it is connected but did not answer in time. A queue the target cannot play answers `feature-unavailable` naming the pid - a windowed track sent to a device endpoint on a server running without the streaming engine, say - which a controller can turn into an offer to play it somewhere that can, rather than a bare failure. When the target is a client endpoint, that client's own refusal code and message are what arrive here - `endpoint-failed` where it took the load and could not carry it out.
+         * @description Loads a queue onto an endpoint and starts a server-tracked playback session there ("play on the kitchen speaker"). An endpoint plays at most one session: starting a new session on an endpoint that already has one ends the old session first, whoever owned it (physical outputs are last-writer-wins, like the speaker itself). Item pids must all be visible to the caller; the server shapes stream delivery for the target endpoint's capabilities, re-minting URLs as needed, so the same queue plays on a phone, a cast device, or a renderer without the caller caring about formats. Sessions on device endpoints are server-authoritative; a session created on one of the caller's own client endpoints is loaded onto that client and then mirrors the client's local playback. Conflict with code `endpoint-offline` means the target endpoint is not connected right now, and `timeout` means it is connected but did not answer in time. A queue the target cannot play answers `feature-unavailable` naming the pid - a windowed track sent to a device endpoint on a server running without the streaming engine, say - which a controller can turn into an offer to play it somewhere that can, rather than a bare failure. While a configured engine is not reachable, a queue only it can render for the target (a windowed track, or anything for the jukebox, which plays only what the engine renders) answers 503 with `params.feature` `streaming-engine` instead. When the target is a client endpoint, that client's own refusal code and message are what arrive here - `endpoint-failed` where it took the load and could not carry it out.
          *     Starting playback somewhere else from a device that is playing is a handoff, and a device plays one thing: the queue, index, position, rate, and repeat move to the target, and the source silences itself. The order in `itemPids` is the play order, so a shuffled queue arrives shuffled whatever `shuffle` says. A caller that holds a mirror session's id transfers it instead; one that does not passes `handoffFrom` here and stops its own playback when this call answers.
          */
         post: operations["createPlaybackSession"];
@@ -3219,7 +3282,7 @@ export interface paths {
         put?: never;
         /**
          * Mint a gapless queue timeline
-         * @description Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response's single HLS URL plays the whole queue; `boundaries` map each item onto the combined timeline (offsets in samples at `envelopeRate`; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline's duration plus margin (`expiresAt` reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as `stream-stale`, and a timeline aged out of the engine's store answers `not-found` on fetch. Re-request this endpoint in either case. The URL dies with the session that minted it, and a change to the account's library grants or content rules ends it too: its fetches answer `unauthenticated`, and a re-request mints one under the new rules. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. A rendering counts against the concurrent transcode limits like a stream does: one slot a listener, however many timelines they hold live at once (and the HLS streams `getPlayInfo` serves them share it), taken at the mint unless they hold it already and given back once every one of those has gone unfetched for a minute - so a mint over the cap answers `transcode-limited` before anything plays, and a fetch resuming a listen whose slot was released can answer it too. A client that stops playing releases the rendering it holds (`releaseQueueTimeline`) rather than waiting the minute out; the sweep stays the backstop for the client that cannot, a closed browser tab being the case. A caller that can only decode some formats says so in `formats`; the rendering format is part of a timeline's identity, so the same queue asked for in two formats is two streams. Requires the streaming engine with timeline support (`feature-unavailable` otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer `conflict` naming the pid, and a `crossfadeSeconds` longer than the shortest queue member can carry answers `invalid-request` naming it.
+         * @description Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response's single HLS URL plays the whole queue; `boundaries` map each item onto the combined timeline (offsets in samples at `envelopeRate`; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline's duration plus margin (`expiresAt` reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as `stream-stale`, and a timeline aged out of the engine's store answers `not-found` on fetch. Re-request this endpoint in either case. The URL dies with the session that minted it, and a change to the account's library grants or content rules ends it too: its fetches answer `unauthenticated`, and a re-request mints one under the new rules. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. A rendering counts against the concurrent transcode limits like a stream does: one slot a listener, however many timelines they hold live at once (and the HLS streams `getPlayInfo` serves them share it), taken at the mint unless they hold it already and given back once every one of those has gone unfetched for a minute - so a mint over the cap answers `transcode-limited` before anything plays, and a fetch resuming a listen whose slot was released can answer it too. A client that stops playing releases the rendering it holds (`releaseQueueTimeline`) rather than waiting the minute out; the sweep stays the backstop for the client that cannot, a closed browser tab being the case. A caller that can only decode some formats says so in `formats`; the rendering format is part of a timeline's identity, so the same queue asked for in two formats is two streams. Requires the streaming engine with timeline support (`feature-unavailable` otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer `conflict` naming the pid, and a `crossfadeSeconds` longer than the shortest queue member can carry answers `invalid-request` naming it. While a configured engine is not reachable it answers 503 `feature-unavailable` with `params.feature` `streaming-engine`; the queue plays per item meanwhile.
          */
         post: operations["createQueueTimeline"];
         delete?: never;
@@ -3444,7 +3507,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a playlist
-         * @description Deletes a playlist. Owner only.
+         * @description Deletes a playlist. Owner only, except that an administrator may also delete any shared playlist (the audit entry names its owner). Another account's private playlist reads as absent.
          */
         delete: operations["deletePlaylist"];
         options?: never;
@@ -4535,7 +4598,7 @@ export interface paths {
          * Pull analysis work (worker)
          * @description Leases a batch of tracks awaiting embedding, each naming where to pull its decode-ready audio (a cue-carved track's own window). Leases lapse on their own; an empty batch means sleep `retryAfterSeconds`. Worker token.
          *
-         *     A server without the streaming engine cannot serve a carved track's window, so it keeps those tracks for its own analysis.
+         *     A server without the streaming engine cannot serve a carved track's window, so it keeps those tracks for its own analysis. While a configured engine is not reachable, nothing is leased: the batch is empty and `retryAfterSeconds` says when to ask again.
          */
         get: operations["pullSimilarityWork"];
         put?: never;
@@ -4735,7 +4798,7 @@ export interface paths {
         };
         /**
          * Liveness and version probe
-         * @description Unauthenticated liveness probe. Reports the server version and the API version it serves.
+         * @description Unauthenticated liveness probe. Reports the server version and the API version it serves, the streaming engine's state, and whether podcasts are on. The server answers healthy whether or not its streaming engine does: an engine that is configured but not reachable is retried in the background, originals play directly meanwhile, and the pid-less `server` sync marker tells signed-in clients when the engine goes away or comes back.
          */
         get: operations["getHealth"];
         put?: never;
@@ -4760,7 +4823,7 @@ export interface paths {
         put?: never;
         /**
          * Merge a multi-file book
-         * @description Merges a multi-file audiobook into one chaptered file through the streaming engine's job API: parts join gaplessly without re-encoding, chapter marks land at the part boundaries (titles from the request, falling back to each part's title tag, then generated names), and richer tags plus the cover carry over in a post-pass. Every user's resume position remaps from part-relative to the merged timeline. The original parts move to the trash unless `keepOriginals`. Needs the streaming engine; answers `feature-unavailable` without it. Returns a tool task to follow.
+         * @description Merges a multi-file audiobook into one chaptered file through the streaming engine's job API: parts join gaplessly into one AAC file (re-encoded, so any mix of part codecs merges), chapter marks land at the part boundaries (titles from the request, falling back to each part's title tag, then generated names), and richer tags plus the cover carry over in a post-pass. Every user's resume position remaps from part-relative to the merged timeline. The merged file is written beside the parts, in the book's own library, so who can see the book does not change. The parts the merge was queued with move to the trash first (reason `book-merge`), and nothing else does: a book that gained or lost a file since stops the merge with nothing moved, and a part the trash cannot take puts back the parts that went and stops it with nothing written. Once the merged file is made, what passes on its own (a busy catalog, a read-only flag) is waited out rather than failed. With `keepOriginals` the parts stay where they are and the merged copy, its title marked " (Merged)", goes into a folder of its own beside the original. A merge a restart or a shutdown stops part way finishes when the server is back. Needs the streaming engine: a server without one answers 501 `feature-unavailable`, and one whose engine is not reachable right now answers 503 with `Retry-After`. Returns a tool task to follow.
          */
         post: operations["mergeBook"];
         delete?: never;
@@ -4783,7 +4846,7 @@ export interface paths {
         put?: never;
         /**
          * Split a book at its chapters
-         * @description Splits a single-file audiobook into per-chapter files at its chapter marks (sample-exact cuts, lossless for lossless sources), tagging each piece from the book plus its chapter title. Resume positions remap onto the pieces. The original file moves to the trash unless `keepOriginals`. A book without chapters answers `conflict`. Needs the streaming engine.
+         * @description Splits a single-file audiobook into per-chapter files at its chapter marks (sample-exact cuts, lossless for lossless sources), tagging each piece from the book plus its chapter title. Resume positions remap onto the pieces. The pieces are written in the book's own library: into the book's folder when the folder is named for it, else into a new folder named for the book beside the file. The file the split was queued with moves to the trash first (reason `book-split`): a book whose file changed since stops the split with nothing moved, and an original the trash cannot take stops it with nothing written. With `keepOriginals` the original stays and the pieces, titled " (Split)", go into a folder of their own beside it. A split a restart or a shutdown stops part way finishes when the server is back. Needs the streaming engine, as mergeBook does.
          */
         post: operations["splitBook"];
         delete?: never;
@@ -4806,7 +4869,7 @@ export interface paths {
         put?: never;
         /**
          * Split a CUE rip into real files
-         * @description Splits the single-file rip behind a CUE-carved album into one real file per track (the pid may be any of the rip's virtual tracks; the shared source resolves from it). Virtual tracks already browse and play natively, so this physical split is optional: it is for people who want real per-track files (write-back and fingerprints work on them, two things virtual tracks refuse by upstream design). Cuts come from the cue sheet, sample-exact and lossless for lossless sources; each piece is tagged from the sheet. Play state carries over per track. The source file and sheet move to the trash unless `keepOriginals`. Needs the streaming engine.
+         * @description Splits the single-file rip behind a CUE-carved album into one real file per track (the pid may be any of the rip's virtual tracks; the shared source resolves from it). Virtual tracks already browse and play natively, so this physical split is optional: it is for people who want real per-track files (write-back and fingerprints work on them, two things virtual tracks refuse by upstream design). Cuts come from the cue sheet, sample-exact and lossless for lossless sources; each piece is tagged from the sheet. Play state carries over per track. Unless `keepOriginals`, the source file moves to the trash (reason `cue-split`) once every piece is a track, its sheet with it; a sheet another encoding of the rip still uses stays. A split a restart or a shutdown stops part way finishes when the server is back, importing no piece twice, and once the pieces are cut what passes on its own is waited out rather than failed; a piece the import refuses for good (another file holds its place) ends the split instead, the rip kept. Needs the streaming engine, as mergeBook does.
          */
         post: operations["splitCueRip"];
         delete?: never;
@@ -4846,7 +4909,7 @@ export interface paths {
         put?: never;
         /**
          * Clear finished tasks
-         * @description Deletes every finished or failed task the caller can see and answers how many went: an administrator's sweep clears everyone's rows, the same scope the listing shows and the per-row delete grants. Running and queued tasks are untouched. A POST action rather than a filtered DELETE, matching the library's bulk-delete idiom.
+         * @description Deletes finished tasks (`done`, `failed` or `parked`) and answers how many went. `scope` `mine` (the default, administrators included) clears the caller's own; `all` clears every account's, reports nobody has read included, and is for administrators only (`forbidden` otherwise). Running and queued tasks are untouched. A parked task cleared frees the book or rip it held for another merge or split. Clearing a book merge or split whose new files still wait under hidden names settles them first, as deleting the task does, and one whose hidden files could not be named or removed stays, counted in `kept`. A POST action rather than a filtered DELETE, matching the library's bulk-delete idiom.
          */
         post: operations["clearFinishedToolTasks"];
         delete?: never;
@@ -4874,7 +4937,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a finished tool task
-         * @description Removes one task from the list once it has reached a terminal state (`done` or `failed`); a queued or running task answers `conflict`, because deleting a row out from under a worker leases nothing back. Same visibility as reading the task: callers delete their own rows, and an administrator may delete any row the listing shows them.
+         * @description Removes one task from the list once it has reached a terminal state (`done`, `failed` or `parked`); a queued or running task answers `conflict`, because deleting a row out from under a worker leases nothing back. Deleting a parked task frees the book or rip it held for another merge or split. A book merge or split whose new files still wait under hidden names leaves none behind: they are removed when every part of the book is in place, and otherwise take their names (a free one where another file holds it) for the next scan to catalog; the task's `error` says which beforehand, and the audit log records which it did. When a hidden file cannot take its name or be removed (its folder refuses the server), the task stays, its `error` saying so, and the delete answers `conflict` with `params.reason` `outputs-hidden`, `params.folder` and `params.cause`; a task kept so holds its book from another merge or split, as a parked one does, until it can be cleared. The retention prune settles them the same way, leaving such a task for its next pass. Same visibility as reading the task: callers delete their own rows, and an administrator may delete any row the listing shows them.
          */
         delete: operations["deleteToolTask"];
         options?: never;
@@ -5127,7 +5190,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an account
-         * @description Deletes the account and revokes all its sessions. Administrators only, and never the calling account or the last enabled administrator (`conflict`). The user's listening history in the catalog is orphaned, not destroyed.
+         * @description Deletes the account and revokes all its sessions. Administrators only, and never the calling account or the last enabled administrator (`conflict`). The user's listening history in the catalog is orphaned, not destroyed. The account is disabled first, which is the step that refuses the last enabled administrator, then the playlists it owns are settled as `playlists` says, then the account goes. A deletion that stops part-way leaves the account disabled and what was already settled as it is; repeating the request finishes it, taking up or, when the answer is to delete the playlists, removing any fixed copy of a playlist the stopped request left, and a second request while one is running is a `conflict`. The account's public share links end with it, on its playlists as on anything else it shared: a link is served under the reach of the account that made it, so it is handed to no one. The audit entry `user.delete` records how many playlists were handed over, how many of those went as fixed lists, how many were deleted, and how many links ended, and a deletion that stopped is recorded as failed with the counts so far, naming the fixed copy of a playlist it could not take back, if it left one. A request that finds such a copy left by an earlier one names what became of it, by pid: removed with the rest of the playlists, or kept for the account that took them when the playlist it was made from has been deleted since (`fixedCopiesRemoved`, `fixedCopiesKept`).
          */
         delete: operations["deleteUser"];
         options?: never;
@@ -5538,6 +5601,12 @@ export interface components {
              * @example waxbin-native
              */
             profile?: string;
+            /** @description The server's configuration names the library (`WAXDECK_LIBRARY_ROOTS`), so every start registers it and removeLibrary refuses it until the configuration drops it. Absent means false. */
+            configured?: boolean;
+            /** @description The library's folder was not there at its last scan, which marked nothing under it missing: its items stay listed and play once it is back. Absent means false. */
+            unreachable?: boolean;
+            /** @description For a managed library, whether the server could write to its folder when last checked; when false, uploads, organize moves and deletes into it fail. The server checks when it starts, when the library is created or arrives from elsewhere (the waxbin CLI), when its read-only flag or the server's is lifted, every half hour, and after a write into a library's folder is refused; listing the libraries checks nothing. Absent on an in-place library and on one the server treats as read-only (its own flag or the whole server's), which are not checked. */
+            writable?: boolean;
         };
         /** @description A newly created library, with any degradation it left behind. */
         LibraryCreated: components["schemas"]["Library"] & {
@@ -5576,6 +5645,8 @@ export interface components {
              * @default false
              */
             managed: boolean;
+            /** @description Register a root whose folder is mounted later; a scan reports it unreachable until then. Absent means false. */
+            allowAbsent?: boolean;
         };
         /** @description A server-run catalog job. */
         Job: {
@@ -5585,7 +5656,7 @@ export interface components {
              */
             pid: string;
             /**
-             * @description What the job does: `scan`, `analyze`, `enrich`, `organize`, `import`, `delete`, `restore`, `empty-trash`, `purge-trash`, or `set-kind`. New kinds may appear.
+             * @description What the job does: `scan`, `analyze`, `enrich`, `organize`, `organize-undo`, `import`, `delete`, `restore`, `empty-trash`, `purge-trash`, `set-kind`, or `remove-root`. New kinds may appear.
              * @example scan
              */
             kind: string;
@@ -5613,7 +5684,7 @@ export interface components {
              * @description When the job reached a terminal state; absent while running.
              */
             finishedAt?: string;
-            /** @description What a finished job did, once it records a summary. A `scan` counts files: `audioFiles` (every audio file it visited) is `created`, `updated`, `sidecarsUpdated` (a lyrics, cue or cover change without the audio changing), `copies` (files that joined an item as another copy of its audio or another encoding of its recording), `unchanged` and `errored` together, and `filesSeen` is `audioFiles` and `skipped` (files that are not audio). `relinked` (moved or renamed) and `reread` (read in full rather than recognized by size and time) count among the audio files; `missing` counts items whose files are gone, `promoted` copies that took a gone file's place, `dropped` the records of gone files removed, and `walkErrors` entries the scan could not read, which no file count holds. `rootUnreachable` says a library's folder could not be reached, so nothing under it was marked missing, and `subPathGone` that the folder asked for was not there. For administrators, `runs` lists each library's own counts in the same words, with its `libraryPid` and `library` name. An `analyze` pass reports `analyzed`, `loudnessMeasured`, `measureFailed`, `skipped` and `errored`, with `fingerprintFallbacks` (files fpcalc could not read, fingerprinted another way that does not group with fpcalc's) and `fingerprintPartialReads` (fpcalc reads kept although they ended in an error, their fingerprint covering the span analyzed); an `enrich` pass the same tallies as the enrichment status's `lastRun`; an `organize` run `profile`, `moved`, `skipped`, `errored` and `sidecarsMoved`. A `set-kind` run reports `converted` (the items that changed kind in place), `absorbed` (each pid folded into another item, which no longer exists, mapped to the item that took it in, or to an empty string when that item is in a library the reader is not granted), `created` (the items a book split minted for its parts) and `writeBackFailures` (`filePid`, `reason`, and for administrators `path`); every pid is in its current form, and a change cut short reports what it did before it stopped. Absent while running and for kinds that record none. Shapes may grow fields. */
+            /** @description What a finished job did, once it records a summary. A `scan` counts files: `audioFiles` (every audio file it visited) is `created`, `updated`, `sidecarsUpdated` (a lyrics, cue or cover change without the audio changing), `copies` (files that joined an item as another copy of its audio or another encoding of its recording), `unchanged` and `errored` together, and `filesSeen` is `audioFiles` and `skipped` (files that are not audio). `relinked` (moved or renamed) and `reread` (read in full rather than recognized by size and time) count among the audio files; `missing` counts items whose files are gone, `promoted` copies that took a gone file's place, `dropped` the records of gone files removed, and `walkErrors` entries the scan could not read, which no file count holds. `rootUnreachable` says a library's folder could not be reached, so nothing under it was marked missing, and `subPathGone` that the folder asked for was not there. For administrators, `runs` lists each library's own counts in the same words, with its `libraryPid` and `library` name, and `rootsUnreachable` names the libraries whose folder could not be reached. An `analyze` pass reports `analyzed`, `loudnessMeasured`, `measureFailed`, `skipped` and `errored`, with `fingerprintFallbacks` (files fpcalc could not read, fingerprinted another way that does not group with fpcalc's) and `fingerprintPartialReads` (fpcalc reads kept although they ended in an error, their fingerprint covering the span analyzed); an `enrich` pass the same tallies as the enrichment status's `lastRun`; an `organize` run `profile` (absent when it laid several libraries out by their own), `moved`, `skipped` (files that did not move, in place or held back), `held` (of those, the moves held back), `errored`, `sidecarsMoved` and `dirsPruned` (folders the moves emptied and removed), and an `organize-undo` moving one back the same without `profile`. A `set-kind` run reports `converted` (the items that changed kind in place), `absorbed` (each pid folded into another item, which no longer exists, mapped to the item that took it in, or to an empty string when that item is in a library the reader is not granted), `created` (the items a book split minted for its parts) and `writeBackFailures` (`filePid`, `reason`, and for administrators `path`); every pid is in its current form, and a change cut short reports what it did before it stopped. A `remove-root` run reports `filesDetached` (the files the catalog let go of, which stay on disk), `itemsArchived` (items left with no file, kept until the folder is added again) and `trashRowsDropped` (the library's trash entries, whose files stay in its trash folder). Absent while running and for kinds that record none. Shapes may grow fields. */
             result?: {
                 [key: string]: unknown;
             };
@@ -5622,7 +5693,7 @@ export interface components {
         /** @description What a targeted job ran on; absent for a whole pass. A targeted job is announced only to whoever started it. */
         JobTarget: {
             /**
-             * @description `item`, `artist`, `release_group`, `album`, `library` or `trash`; new types may appear.
+             * @description `item`, `artist`, `release_group`, `album`, `library`, `trash` or `job` (the organize run an `organize-undo` undoes); new types may appear.
              * @example item
              */
             type: string;
@@ -5697,7 +5768,7 @@ export interface components {
             backupKeepBytes: number;
             /** @description Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention (the trash keeps entries until an administrator empties it). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. */
             trashRetentionDays?: number;
-            /** @description Clear finished tool tasks older than this many days on the scheduled prune; terminal rows only. 0 keeps them, and an unconfigured server answers 30 - so unlike `trashRetentionDays`, 0 here is a choice rather than the default. Optional on PUT (absent keeps the current value), always present in responses. */
+            /** @description Clear finished tool tasks older than this many days on the scheduled prune; terminal rows only. The same prune drops the Organizer's journal of runs older than this, after which a run can no longer be undone. 0 keeps both, and an unconfigured server answers 30 - so unlike `trashRetentionDays`, 0 here is a choice rather than the default. Optional on PUT (absent keeps the current value), always present in responses. */
             taskRetentionDays?: number;
         };
         /** @description Transcode session limits, enforced at the media proxy when a stream engages the streaming engine (direct-played originals never count). */
@@ -5862,7 +5933,7 @@ export interface components {
              * @example Album/01 Track.flac
              */
             name: string;
-            /** @description Why it was deleted: `user`, `prune`, or `permanent`. An open string. */
+            /** @description Why it was deleted: `user`, `prune` or `permanent`, or the file tool whose run took it (`book-merge`, `book-split`, `cue-split`). An open string. */
             reason: string;
             /**
              * Format: int64
@@ -6269,6 +6340,12 @@ export interface components {
             user?: components["schemas"]["User"];
             /** @description CSRF token for cookie-authenticated mutations. Present only when authenticated. */
             csrfToken?: string;
+            server?: components["schemas"]["SessionServer"];
+        };
+        /** @description Server-wide state every signed-in account is shown. Present only when authenticated. */
+        SessionServer: {
+            /** @description True while the server is in read-only mode: uploads, edits that write files and deletions are refused for every account. Turning the setting on or off marks every enabled account changed on its sync stream (the `account` event), so a client re-reads the session. */
+            readOnly: boolean;
         };
         /** @description Whether first-run setup is still waiting for an administrator. */
         BootstrapStatus: {
@@ -7121,7 +7198,7 @@ export interface components {
             label?: string;
             /** @description Items currently failing the rule. */
             failing: number;
-            /** @description Whether the bulk-fix endpoint can fix this rule on this install. */
+            /** @description Whether the fix endpoint can fix this rule on this install; a `path-mismatch` fix takes `itemPids`. */
             fixable: boolean;
             /** @description True while a fix for the rule is under way: a pass-backed fix from its start until its re-check lands, a task-backed one while its task is queued or running. Another fix for the rule answers `conflict` meanwhile. */
             fixing: boolean;
@@ -7175,7 +7252,7 @@ export interface components {
              * @example missing-art
              */
             rule: string;
-            /** @description Restrict to these items; absent fixes everything currently failing the rule. */
+            /** @description Restrict to these items; absent fixes everything currently failing the rule, which `path-mismatch` refuses. */
             itemPids?: string[];
         };
         /** @description The fix that started: exactly one of `jobPid` and `taskId` names where it can be followed. */
@@ -7598,6 +7675,19 @@ export interface components {
             entries: components["schemas"]["DeletePlanEntry"][];
             /** @description What the deletion did beside removing files, in sentences: a copy that took a deleted file's place, and a file it could not remove, which stayed and is not counted in `entries`. A whole-item delete names each under its item's name. Absent when there is nothing to say. */
             warnings?: string[];
+            /** @description Files moved to the trash. Absent from a plan. */
+            trashed?: number;
+            /** @description Files deleted outright, in `permanent` mode. Absent from a plan. */
+            deleted?: number;
+            /** @description Files the deletion tried to remove and could not, which stayed where they were; `entries` say whose. Absent from a plan. */
+            failed?: number;
+            /** @description Folders the deletion emptied and removed. Absent from a plan. */
+            dirsPruned?: number;
+            /**
+             * Format: int64
+             * @description Disk space the deletion freed: the files a `permanent` deletion removed. A move to the trash frees nothing until the trash is emptied. Absent from a plan.
+             */
+            reclaimedBytes?: number;
         };
         /** @description One item's part of a deletion. */
         DeletePlanEntry: {
@@ -7614,6 +7704,12 @@ export interface components {
             bytes: number;
             /** @description The files `files` counts, by name. Absent for an entry whose file counts under another track of its rip. */
             fileList?: components["schemas"]["DeletePlanFile"][];
+            /** @description Where the files `fileList` names are, in the same order, each relative to its library's root, so two files of one name in different folders read apart. Absent with `fileList`. */
+            paths?: string[];
+            /** @description Files of this item the deletion tried to remove and could not; they stayed, and `files` does not count them. Absent from a plan and when every file went. */
+            failed?: number;
+            /** @description Why the first of the `failed` files stayed, in words without the server's folders. */
+            error?: string;
             /** @description The item keeps a file after the deletion (a copy it holds, or one left in place), so it stays in the library rather than being archived. */
             itemSurvives?: boolean;
         };
@@ -8536,7 +8632,7 @@ export interface components {
             /** @description The server's own detail line. */
             body: string;
             /**
-             * @description What the row is about, when the event names something: the show for `feed-disabled` and `episode-arrived`, the episode for `episode-downloaded`, the playlist for `playlist-synced`, the review entry (`rv-`) for `import-completed`, the catalog job (`jb-`) for `job-finished` and `job-failed`, and the job or the tool task (`tk-`) that ran the fix for `health-fix-finished`. Absent for events that are about the server rather than an item, for `subscription-failed`, whose feed never became a show, and for `gpodder-device-removed`.
+             * @description What the row is about, when the event names something: the show for `feed-disabled` and `episode-arrived`, the episode for `episode-downloaded`, the playlist for `playlist-synced`, the review entry (`rv-`) for `import-completed`, the catalog job (`jb-`) for `job-finished` and `job-failed`, the tool task (`tk-`) for `tool-task-failed`, and the job or the tool task that ran the fix for `health-fix-finished`. Absent for events that are about the server rather than an item, for `subscription-failed`, whose feed never became a show, and for `gpodder-device-removed`.
              * @example pc-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             targetPid?: string;
@@ -8742,12 +8838,14 @@ export interface components {
             profile: string;
             /** @description Moves the pass would make in total. */
             totalActions: number;
-            /** @description Moves held back, whatever the cause (`heldByCode` says which). Not in `actions` or `totalActions`. */
+            /** @description Moves held back, by any cause: a read-only server, an occupied destination, a missing file, a cue rip, an untagged item (`heldByCode` says which). Not in `actions` or `totalActions`; a read-only library's files are left out instead, counted in `readOnlyLibraries`. */
             held: number;
-            /** @description `held` by hold code: `collision` (another move of the pass claims the destination), `occupied` (a file the pass does not move holds it), `occupied-case` (one named apart from it only by case or Unicode form stands beside it), `untagged`, `missing`, `virtual` (a cue rip's shared file), `book-held` (another part of the book is held) and `read-only` (the server or the library). A code with nothing held is absent. */
+            /** @description `held` by hold code: `collision` (another move of the pass claims the destination), `occupied` (a file the pass does not move holds it), `occupied-case` (one named apart from it only by case or Unicode form stands beside it), `untagged`, `missing`, `virtual` (a cue rip's shared file), `book-held` (another part of the book is held) and `read-only` (the server is read-only). A code with nothing held is absent. */
             heldByCode?: {
                 [key: string]: number;
             };
+            /** @description The first five hundred moves held back. */
+            holds?: components["schemas"]["OrganizeHold"][];
             /** @description Managed libraries left out because they are read-only. */
             readOnlyLibraries: number;
             /** @description The first five hundred actions. */
@@ -8764,20 +8862,93 @@ export interface components {
             /** @description Planned library-relative path. */
             to: string;
         };
+        /** @description One move held back, and why. */
+        OrganizeHold: {
+            /** @description The item whose file is held. Absent from an undo's holds, which name files by path. */
+            itemPid?: string;
+            /** @description Where the file is: relative to its library when the pass planned one library, otherwise the server's absolute path. */
+            from: string;
+            /** @description Where the move would put it, in the same form; absent when the pass has no place for it. */
+            to?: string;
+            /**
+             * @description Why it is held: the plan's codes (see `heldByCode`), and for an undo `moved-since` (the file moved again after the run) and `uncataloged` (the catalog no longer holds it).
+             * @enum {string}
+             */
+            code: "collision" | "occupied" | "occupied-case" | "untagged" | "missing" | "virtual" | "book-held" | "read-only" | "moved-since" | "uncataloged";
+            /** @description Why, in words: the catalog's own, or `read-only server` for a move the server's read-only mode holds. */
+            reason: string;
+        };
         /** @description The outcome of an applied organize pass. */
         OrganizeReport: {
+            /**
+             * @description The catalog job the pass ran as, which `/organize/undo` takes; empty when nothing was left to move and no job ran.
+             * @example jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            jobPid: string;
             /** @description Files moved. */
             moved: number;
             /** @description Files already in place. */
             skipped: number;
-            /** @description Files held back where they are, for any of the causes a plan's `held` counts. */
+            /** @description Files held back where they are, for any of the causes a plan's `held` counts, `read-only` here being a library made read-only after the plan. */
             held: number;
+            /** @description The first five hundred moves held back. */
+            holds?: components["schemas"]["OrganizeHold"][];
             /** @description Managed libraries left alone because they are read-only. */
             readOnlyLibraries: number;
             /** @description Files that could not move. */
             failed: number;
             /** @description The failures, path and reason each. */
             failures?: components["schemas"]["OrganizeFailure"][];
+            /** @description Folders the moves emptied and removed. */
+            dirsPruned?: number;
+        };
+        /** @description The run to undo. */
+        OrganizeUndoRequest: {
+            /**
+             * @description The organize run's job, as the history lists it.
+             * @example jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            jobPid: string;
+        };
+        /** @description A page of the organize runs the journal still holds. */
+        OrganizeHistory: {
+            /** @description The runs, newest first. */
+            batches: components["schemas"]["OrganizeBatch"][];
+            /** @description Cursor for the next, older page; absent on the last. */
+            nextCursor?: string;
+        };
+        /** @description One organize run, or an undo of one, and what its moves came to. */
+        OrganizeBatch: {
+            /**
+             * @description The run's catalog job.
+             * @example jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            jobPid: string;
+            /**
+             * @description An `organize` run, or an `organize-undo` of one.
+             * @enum {string}
+             */
+            kind: "organize" | "organize-undo";
+            /**
+             * @description The job's state, as `/jobs` reports it; clients treat an unknown value as not finished.
+             * @example done
+             */
+            state: string;
+            /**
+             * Format: date-time
+             * @description When the run started.
+             */
+            startedAt: string;
+            /** @description The profile the run laid out by: the one named, or the library's own when the run planned one managed library. Absent for an undo and for a run that laid several libraries out by their own. */
+            profile?: string;
+            /** @description Files the run moved. */
+            committed: number;
+            /** @description Moves that failed on disk, leaving the file where it was. */
+            rolledBack: number;
+            /** @description Moves a crash left between the disk and the catalog, which the next start settles. */
+            planned: number;
+            /** @description Whether `/organize/undo` takes the run now. */
+            undoable: boolean;
         };
         /** @description One file organize could not move. */
         OrganizeFailure: {
@@ -9107,7 +9278,7 @@ export interface components {
         /** @description Precomputed silence spans for one audio file, keyed to its audio essence and the upstream detector version. Spans are in the mapped file's own timeline (for a multi-file audiobook, the requested part's timeline, not the book's). */
         SkipMap: {
             /**
-             * @description `ready` (spans present), `pending` (analysis queued or running; poll again later), or `unavailable` (this item is not mapped: not spoken-word content, audio not fetched to the server yet, or the streaming engine cannot analyze). Open set; treat unknown values as `unavailable`.
+             * @description `ready` (spans present), `pending` (analysis queued or running; poll again later), or `unavailable` (this item is not mapped: not spoken-word content, audio not fetched to the server yet, or a server whose streaming engine, if it has one, runs no analysis). Open set; treat unknown values as `unavailable`.
              * @example ready
              */
             state: string;
@@ -11293,22 +11464,24 @@ export interface components {
              *
              *     `bookmarks` (`pid`, the book, and `bookmarks`, its whole current list: a mark missing from it was deleted); or `playlist` (`pid`; `playlist` absent when deleted or replaced under a new pid).
              *
-             *     Markers carry only `pid` and hydrate nothing: `review`, `upload`, `task` (a task was queued, started or ended; refetch that surface), `task-progress` (a task's progress moved; refetch it, though it is not news), `entity-state` (an artist or album was starred or rated), and `job` (the `jb-` catalog job ended, or, for a scan, analysis, enrichment, organize run or emptying the trash, was first seen, crossed another five percent of progress or changed its message, a message marked at most every fifteen seconds; refetch `GET /jobs` or `GET /jobs/{pid}`). `job` reaches administrators; a targeted job's, while it runs, only whoever started it.
+             *     Markers carry only `pid` and hydrate nothing: `review`, `upload`, `task` (a task was queued, started or ended; refetch that surface), `task-progress` (a task's progress moved; refetch it, though it is not news), `entity-state` (an artist or album was starred or rated), and `job` (the `jb-` catalog job ended, or, for a scan, analysis, enrichment, organize run, organize undo, library removal or emptying the trash, was first seen, crossed another five percent of progress or changed its message, a message marked at most every fifteen seconds; refetch `GET /jobs` or `GET /jobs/{pid}`). `job` reaches administrators; a targeted job's, while it runs, only whoever started it.
              *
              *     `health` carries no `pid`: the library's health moved (a sweep was queued, finished or failed, or a fix started or finished), so re-read `GET /library/health`. It reaches every signed-in account, since every account can read health.
              *
              *     `libraries` carries no `pid`: a library was added, restored or changed, from anywhere, so re-read `GET /libraries`.
              *
+             *     `server` carries no `pid`: what `GET /health` reports moved (the streaming engine went away or came back), so re-read it. It reaches every signed-in account.
+             *
              *     Further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended), `import-completed` (`pid` is the review entry that filed itself), `episode-downloaded` (`pid` is the episode whose enclosure the server finished fetching; it reaches every subscriber of the show, while the notification event reaches only the accounts that asked for the fetch), and `playlist-synced` (`pid` is the playlist whose sync run changed its membership, or whose scheduled syncing was suspended after repeated failures).
              *
              *     `notification` (`pid` is the inbox row that was written; refetch `GET /users/me/notifications`) rides every emit, whether or not the account has a delivery target for the event.
              *
-             *     `account` carries no `pid`: the caller's own roles or effective permissions changed, which is what `GET /auth/session` reports (roles plus the `uploadEnabled`, `managePodcasts` and `delete` booleans), so re-read it. The session itself keeps working; only what it may do moved.
+             *     `account` carries no `pid`: the caller's own roles or effective permissions changed, or the server's read-only mode was turned on or off. `GET /auth/session` reports both (roles plus the `uploadEnabled`, `managePodcasts` and `delete` booleans, and `server.readOnly`), so re-read it. The session itself keeps working; only what it may do, or what the server accepts, moved.
              * @example play-state
              */
             kind: string;
             /**
-             * @description The item, show, book, playlist, or job the event is about (absent for `prefs`, `account`, `health`, and `libraries`).
+             * @description The item, show, book, playlist, or job the event is about (absent for `prefs`, `account`, `health`, `libraries`, and `server`).
              * @example tr-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             pid?: string;
@@ -11363,6 +11536,23 @@ export interface components {
              *     ]
              */
             rejectedFormats?: string[];
+            /** @description The streaming engine as the server sees it now. Absent on servers older than the field. */
+            streaming?: components["schemas"]["StreamingEngineState"];
+            /** @description False when this server has podcasts turned off: every subscribe is refused, so clients hide the podcast entry points. Absent on servers older than the field. */
+            podcasts?: boolean;
+        };
+        /** @description Whether the streaming engine is set up, answering, and what it offers. Without it, originals play directly: no transcoding, no gapless queue timelines, no voice boost, and no file tools. */
+        StreamingEngineState: {
+            /** @description An engine URL is set. */
+            configured: boolean;
+            /** @description The engine answered its capabilities and is being probed. False while a configured engine is not reachable. */
+            connected: boolean;
+            /** @description It renders a queue as one gapless timeline. False while not connected. */
+            timelines: boolean;
+            /** @description It applies voice boost to spoken word. False while not connected. */
+            voiceBoost: boolean;
+            /** @description It runs the file tools (book merge and split, cue splits) and the silence analysis trimming reads. False while not connected. */
+            fileTools: boolean;
         };
         /** @description One background tool task. */
         ToolTask: {
@@ -11373,17 +11563,28 @@ export interface components {
             id: string;
             /** @description The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`, or an `import-` migration (`import-jellyfin`, `import-subsonic`, ...). A string, not a closed enum. */
             type: string;
-            /** @description `queued`, `running`, `done`, or `failed`. A string, not a closed enum. */
+            /** @description `queued`, `running`, `done`, `failed`, or `parked`: a book merge or split, or a CUE split, whose runs kept ending with the server. Parked is terminal and counts as failed: the task is not run again, the delete, Clear finished and the retention prune take it as they take a failed task, and until one does it keeps the book or rip it works on from another merge or split. A string, not a closed enum. */
             state: string;
             /** @description The book, track, or playlist the task was started from. */
             itemPid?: string;
+            /** @description What `itemPid` was called when the task was queued: a book merge's or split's book, a CUE split's album. Absent for other tasks. */
+            itemTitle?: string;
             /**
              * Format: double
              * @description Progress in percent when the engine reports it.
              */
             progressPct?: number;
-            /** @description Why the task failed, when `failed`. */
+            /** @description Why the task failed, when `failed`, or stopped, when `parked`, where it also says where each file the run made or moved is (new files waiting beside the book, originals in the trash) and what clearing the task does with new files still hidden. While a book merge or split, or a CUE split, is `running` it can say what the task waits out instead, in the server's words beside `waitReason`. */
             error?: string;
+            /** @description Set while a `running` book merge or split, or CUE split, waits to try again on its own, at `retryAt`: `catalog-busy` (another job holds the catalog), `catalog-maintenance`, `read-only` (a library it works in is flagged read-only), `storage-unwritable` (a folder refuses the server), `engine-unavailable`, `part-missing` (a file the catalog has is not where it says), `put-back-blocked` (a file going back from the trash cannot), `stopped` (the server stopped or the run ran out of time), or `other`. A task waits at most six hours in a row, then ends safely for how far it went. A string, not a closed enum. */
+            waitReason?: string;
+            /**
+             * Format: date-time
+             * @description When a waiting task tries again.
+             */
+            retryAt?: string;
+            /** @description True while a book merge's or split's sources are in the trash and its new files not yet the book: the book is missing from the library until the task finishes. */
+            bookInTrash?: boolean;
             /** @description What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition or playlist sync opened (entry pids). */
             resultPids?: string[];
             /**
@@ -11396,10 +11597,19 @@ export interface components {
              * @description When it reached a terminal state.
              */
             finishedAt?: string;
-            /** @description Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...). */
+            /** @description Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...); a `path-mismatch` fix also carries `moved` (the items it moved), `held` (by hold code) and `jobPids` (the organize jobs that moved them). */
             summary?: {
                 [key: string]: unknown;
             };
+        };
+        /** @description Which tasks a clear-finished sweep removes. */
+        ClearFinishedTasksRequest: {
+            /**
+             * @description `mine` clears the caller's own finished tasks. `all` clears every account's and is for administrators only.
+             * @default mine
+             * @enum {string}
+             */
+            scope: "mine" | "all";
         };
         /** @description The result of clearing finished tasks. */
         ToolTasksCleared: {
@@ -11408,6 +11618,11 @@ export interface components {
              * @example 4
              */
             deleted: number;
+            /**
+             * @description How many finished tasks stayed because what they left in the library could not be settled: a book merge's or split's hidden files that could not be named or removed. Each row's `error` says why.
+             * @example 0
+             */
+            kept: number;
         };
         /** @description One page of tool tasks. */
         ToolTaskPage: {
@@ -11437,7 +11652,7 @@ export interface components {
         /** @description Options for a CUE rip split. */
         CueSplitRequest: {
             /**
-             * @description Keep the source file and sheet instead of trashing them.
+             * @description Keep the source file and its sheet instead of moving them to the trash.
              * @default false
              */
             keepOriginals: boolean;
@@ -12071,6 +12286,28 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The request needs the streaming engine, which is configured but not reachable right now (code `feature-unavailable`, `params.feature` `streaming-engine`). Ask again after `Retry-After`. */
+        EngineAway: {
+            headers: {
+                /** @description Seconds before asking again. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Something the request needs is away for now and comes back on its own: the streaming engine, which is configured but not reachable right now (code `feature-unavailable`, `params.feature` `streaming-engine`, with `Retry-After`), or the catalog, handed to a maintenance operation (code `catalog-maintenance`). Ask again shortly. */
+        EngineAwayOrMaintenance: {
+            headers: {
+                /** @description Seconds before asking again, sent while the engine is away. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description The file's format is not accepted (code `unsupported-format`): the extension is outside the server's accepted set, or the audio did not decode, which carries `reason: unreadable`. A DRM-encrypted container (an Audible `aax`/`aaxc`) answers with the same status but code `drm-protected`, because that refusal is permanent - no format set can make the file playable - and must not read as a codec gap an operator could widen away. */
         UnsupportedFormat: {
             headers: {
@@ -12268,10 +12505,26 @@ export interface operations {
                     "application/json": components["schemas"]["LibraryCreated"];
                 };
             };
-            400: components["responses"]["InvalidRequest"];
+            /** @description The library was refused (code `invalid-request`): the name is missing or holds a path separator, the media is not one of the three, or the path is missing, relative, names no folder (without `allowAbsent`), names a file, names a folder the server cannot read or list or that does not answer in time, is to be managed and cannot be written by the server (not checked while the server is read-only), or overlaps an existing root, the inbox folders or the podcast download dir. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description The folder or the name is taken (code `conflict`): a library already holds that folder; a library, a root the configuration names, the podcast download dir or the streaming engine already goes by that name; or another create of that folder or name is under way. A folder nested in or around another root is `invalid-request` instead. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -12351,6 +12604,51 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    removeLibrary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The removal started. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description The podcast library, which follows the podcast download folder (code `invalid-request`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The removal was refused. `conflict`: the server's configuration names the library. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own. `read-only`: the server is in read-only mode. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -13123,7 +13421,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The restore was refused. `conflict`: the original path is occupied. `read-only`: the entry's library, or the whole server, is read-only. */
+            /** @description The restore was refused. `conflict`: the original path is occupied. `read-only`: the entry's library, or the whole server, is read-only. `storage-unwritable`: the folder the file goes back to refused the server's write (its permissions, or a read-only mount); the entry stays in the trash. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14226,7 +14524,15 @@ export interface operations {
                     "application/json": components["schemas"]["HealthFixResult"];
                 };
             };
-            400: components["responses"]["InvalidRequest"];
+            /** @description `invalid-request`: the rule has no fix on this server, an item pid is malformed, a fix names more than 1000 `itemPids`, or a `path-mismatch` fix names none. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             /** @description The fix was refused. `conflict`: an enrichment pass is running and the fix needs one, or the rule is being fixed already. `read-only`: the fix writes files and the server is read-only. */
@@ -14415,7 +14721,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The resolution was refused. `read-only`: a named encoding's library, or the whole server, is read-only. `catalog-busy`: another catalog job holds the file-mutation scope the move to the trash needs; retry when it ends. `conflict`: a move to the trash failed, and the message says how many. */
+            /** @description The resolution was refused. `read-only`: a named encoding's library, or the whole server, is read-only. `catalog-busy`: another catalog job holds the file-mutation scope the move to the trash needs; retry when it ends. `storage-unwritable`: the library's folder refused every move to the trash (its permissions, or a read-only mount), so nothing moved. `conflict`: some moves to the trash failed after others went, and the message says how many. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14835,7 +15141,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The delete was refused. `read-only`: the file's library, or the whole server, is in read-only mode. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own, so an unattended retry is worth something. */
+            /** @description The delete was refused. `read-only`: the file's library, or the whole server, is in read-only mode. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own, so an unattended retry is worth something. `storage-unwritable`: the library's folder refused every move (its permissions, or a read-only mount), so no file went. `conflict`: a cue rip's tracks changed between the plan and the delete, so nothing was deleted. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14873,7 +15179,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The delete was refused. `read-only`: the target library, or the whole server, is in read-only mode. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own, so an unattended retry is worth something. */
+            /** @description The delete was refused. `read-only`: the target library, or the whole server, is in read-only mode. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own, so an unattended retry is worth something. `storage-unwritable`: the library's folder refused every move (its permissions, or a read-only mount), so no file went. `conflict`: a cue rip's tracks changed between the plan and the delete, so nothing was deleted. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -16566,7 +16872,98 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            409: components["responses"]["ReadOnly"];
+            /** @description The pass was refused. `read-only`: the server is read-only. `catalog-busy`: another catalog job holds the file-mutation scope; retry when it ends. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    listOrganizeHistory: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor from a previous page's `nextCursor`. */
+                cursor?: string;
+                /** @description Maximum runs returned. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizeHistory"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    undoOrganize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizeUndoRequest"];
+            };
+        };
+        responses: {
+            /** @description What the undo did, in the words of an applied pass: `moved` counts the files moved back. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizeReport"];
+                };
+            };
+            /** @description `invalid-request`: the job is not an organize run or an undo of one. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description `not-found`: no such job, or its journal holds no committed move to undo (never one, or pruned). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The undo was refused. `read-only`: the server is read-only. `catalog-busy`: the run is still going, or another catalog job holds the file-mutation scope; retry when it ends. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -17013,7 +17410,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
-            503: components["responses"]["CatalogMaintenance"];
+            503: components["responses"]["EngineAwayOrMaintenance"];
         };
     };
     getWaveform: {
@@ -17193,6 +17590,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["PlaybackConflict"];
             501: components["responses"]["FeatureUnavailable"];
+            503: components["responses"]["EngineAway"];
         };
     };
     listPlaybackSessionHistory: {
@@ -17295,6 +17693,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["PlaybackConflict"];
             501: components["responses"]["FeatureUnavailable"];
+            503: components["responses"]["EngineAway"];
         };
     };
     createQueueTimeline: {
@@ -17334,6 +17733,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
             429: components["responses"]["TranscodeLimited"];
             501: components["responses"]["FeatureUnavailable"];
+            503: components["responses"]["EngineAway"];
         };
     };
     releaseQueueTimeline: {
@@ -19160,7 +19560,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The decision was refused. `conflict`: the entry is already decided, or part of its unit cannot enter the library (the message says why). `read-only`: the server is in read-only mode, or the library an upload or acquisition was staged for is read-only. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own, so the same decision is worth sending again. */
+            /** @description The decision was refused. `conflict`: the entry is already decided, or part of its unit cannot enter the library (the message says why). `read-only`: the server is in read-only mode, or the library an upload or acquisition was staged for is read-only. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own, so the same decision is worth sending again. `storage-unwritable`: the library folder a file was going into refused the write (its permissions, or a read-only mount); the decision stays unmade, the staged files stay staged, and the same decision lands once the folder is fixed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -19939,9 +20339,17 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The merge was refused before anything was queued. `conflict`, with `params.reason`: `single-file` (the book is already one file), `name-taken` (a file already holds the merged file's name; `params.name` and `params.folder` say which and where), `copy-elsewhere` (the book has a copy, `params.copy`, in `params.library`, which a merge that trashes the parts would leave as the book; merging with `keepOriginals` is not refused for it), `task-running` (a merge or split of the book is queued or running; `params.task` names it), `task-parked` (one stopped part way and is parked until it is cleared in Tasks; `params.task` names it) or `parts-in-trash` (a merge or split of the book that did not finish left some of its files in the trash, and none of its new files holds them, so a merge of what remains would leave them out; `params.count` says how many, `params.files` names the first few and `params.more` counts the rest; restoring them lifts the refusal). `read-only`: a library the merge writes in, or the whole server, is read-only. `storage-unwritable`: a folder the merge writes in, or the one its trash is made in, refused the server's write (its permissions, or a read-only mount). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             501: components["responses"]["FeatureUnavailable"];
-            503: components["responses"]["CatalogMaintenance"];
+            503: components["responses"]["EngineAwayOrMaintenance"];
         };
     };
     splitBook: {
@@ -19973,9 +20381,17 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The split was refused before anything was queued. `conflict`, with `params.reason`: `multi-file` (the book is already several files), `no-chapters` (it has none to split at), `no-cuts` (its chapter marks leave no point to cut at), `no-sample-rate` (its file declares none to place cuts by), `no-file`, `name-taken`, `copy-elsewhere`, `task-running`, `task-parked` or `parts-in-trash`, with the params mergeBook gives them. `read-only`: a library the split writes in, or the whole server, is read-only. `storage-unwritable`: a folder the split writes in, or the one its trash is made in, refused the server's write (its permissions, or a read-only mount). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             501: components["responses"]["FeatureUnavailable"];
-            503: components["responses"]["CatalogMaintenance"];
+            503: components["responses"]["EngineAwayOrMaintenance"];
         };
     };
     splitCueRip: {
@@ -20007,9 +20423,17 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The split was refused before anything was queued. `conflict`: the track is not cut from a rip by a cue sheet, or, with `params.reason`, `no-sheet` (the rip has no sheet of its own name beside it, the one the catalog carves it by), `task-running` (a split of the rip is queued or running) or `task-parked` (one stopped part way and is parked until it is cleared in Tasks), `params.task` naming it. `read-only`: the rip's library, or the whole server, is read-only. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             501: components["responses"]["FeatureUnavailable"];
-            503: components["responses"]["CatalogMaintenance"];
+            503: components["responses"]["EngineAwayOrMaintenance"];
         };
     };
     listToolTasks: {
@@ -20046,7 +20470,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClearFinishedTasksRequest"];
+            };
+        };
         responses: {
             /** @description How many tasks were deleted. */
             200: {
@@ -20057,7 +20485,9 @@ export interface operations {
                     "application/json": components["schemas"]["ToolTasksCleared"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getToolTask: {
@@ -20501,7 +20931,12 @@ export interface operations {
     };
     deleteUser: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description What becomes of the playlists the account owns. `transfer` (the default) hands its shared playlists to `transferTo` and deletes its private ones, which nobody else could see. A static playlist keeps its pid and entries, and a smart playlist whose rule reads only the catalog keeps its pid and its rule. A smart playlist whose rule reads the account's own state (stars, ratings, plays, played), or names one of its private playlists, is handed over as a static playlist of the tracks it held for the account, under the same name and visibility and a new pid, because its new owner's state would otherwise replace the account's, and every account's home pin of it follows to the new pid. `delete` deletes them all. */
+                playlists?: "transfer" | "delete";
+                /** @description The account that takes the shared playlists when `playlists` is `transfer`; the calling administrator when omitted. An unknown, disabled or pending account, the deleted account itself, and any value alongside `playlists=delete` are `invalid-request`. */
+                transferTo?: string;
+            };
             header?: never;
             path: {
                 /** @description User PID (e.g. `us-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -20518,6 +20953,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

@@ -74,7 +74,7 @@ func TestAuthorizeMediaFollowsTheAccount(t *testing.T) {
 		t.Errorf("a stream without the download right: %v", err)
 	}
 
-	if err := svc.DeleteAccount(ctx, id); err != nil {
+	if _, err := svc.DeleteAccount(ctx, nil, id, AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.AuthorizeMedia(ctx, stream); !errors.Is(err, auth.ErrMediaRevoked) {

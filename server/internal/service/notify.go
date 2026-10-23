@@ -59,6 +59,8 @@ var notifyEventCatalog = []NotifyEvent{
 		Description: "A library job you started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash."},
 	{Name: "job-failed", Scope: NotifyScopeUser,
 		Description: "A library job you started failed."},
+	{Name: "tool-task-failed", Scope: NotifyScopeUser,
+		Description: "A book merge or split, or a CUE split, you started failed, or stopped after its runs kept ending with the server."},
 	{Name: "health-fix-finished", Scope: NotifyScopeUser,
 		Description: "A health fix you started finished."},
 }
@@ -690,7 +692,7 @@ func (l *Library) notificationLink(event, targetPID string) string {
 		} else {
 			path = "/playlists/" + targetPID
 		}
-	case "job-finished", "job-failed":
+	case "job-finished", "job-failed", "tool-task-failed":
 		path = "/tasks"
 	case "health-fix-finished":
 		path = "/admin/health"

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -63,6 +64,27 @@ func TestCreateLibraryRuntime(t *testing.T) {
 	// A missing path is rejected up front.
 	resp = h.postJSON(t, "/api/v1/libraries", map[string]any{"name": "nopath"})
 	wantStatus(t, resp, 400, "missing path")
+
+	// A relative path is refused in WaxDeck's words, not the catalog's.
+	resp = h.postJSON(t, "/api/v1/libraries", map[string]any{"name": "rel", "path": "relative/path"})
+	if resp.StatusCode != 400 {
+		t.Fatalf("relative path status = %d, want 400", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); e.Code != "invalid-request" || e.Message != "the library path must be absolute" {
+		t.Fatalf("relative path answer = %+v, want it refused as not absolute", e)
+	}
+
+	// A folder mounted later registers when asked to.
+	later := filepath.Join(t.TempDir(), "later")
+	resp = h.postJSON(t, "/api/v1/libraries", map[string]any{"name": "later", "path": later})
+	wantStatus(t, resp, 400, "absent folder")
+	resp = h.postJSON(t, "/api/v1/libraries", map[string]any{"name": "later", "path": later, "allowAbsent": true})
+	if resp.StatusCode != 201 {
+		t.Fatalf("absent folder with allowAbsent status = %d, want 201", resp.StatusCode)
+	}
+	if created := decode[LibraryCreated](t, resp); created.Path == nil || *created.Path != later {
+		t.Fatalf("absent folder created at %v, want %s", created.Path, later)
+	}
 
 	// A non-admin cannot create a library.
 	resp = h.postJSON(t, "/api/v1/users", map[string]any{

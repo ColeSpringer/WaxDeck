@@ -145,6 +145,7 @@ func newTimelineBridge(t *testing.T) (*Bridge, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	connect(t, b)
 	b.SetTranscodeGate(&fakeGate{})
 	return b, path
 }
@@ -457,6 +458,7 @@ func TestTimelineForVirtualMemberWindows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	connect(t, b)
 	if !b.TimelineMemberWindowsSupported() {
 		t.Fatal("member windows not reported supported")
 	}
@@ -642,6 +644,7 @@ func TestTimelineStashSurvivesRestart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		connect(t, b)
 		b.SetTranscodeGate(&fakeGate{})
 		return b
 	}
@@ -1314,6 +1317,7 @@ func TestTimelineDamagedMemberIsUnrenderable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	connect(t, b)
 	_, err = b.TimelineFor(context.Background(), "us-alice",
 		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
 		TimelineOptions{})
@@ -1357,6 +1361,7 @@ func TestATimelineMintWhoseKeyIsRefusedIsTheServersTrouble(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			connect(t, b)
 			_, err = b.TimelineFor(context.Background(), "us-alice",
 				[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
 				TimelineOptions{})

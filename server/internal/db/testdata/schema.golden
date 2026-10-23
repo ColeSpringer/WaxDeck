@@ -253,6 +253,7 @@ table item_grants
   index item_grants_item|unique=0|partial=0|(item_pid)
 table job_origins
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column detail|TEXT|notnull=1|default=''|pk=0
   column pid|TEXT|notnull=0|default=<none>|pk=1
   column rule|TEXT|notnull=1|default=''|pk=0
   column settling_at_ns|INTEGER|notnull=1|default=0|pk=0
@@ -680,17 +681,27 @@ table tool_tasks
   column finished_at_ns|INTEGER|notnull=1|default=0|pk=0
   column id|TEXT|notnull=0|default=<none>|pk=1
   column item_pid|TEXT|notnull=1|default=<none>|pk=0
+  column item_title|TEXT|notnull=1|default=''|pk=0
   column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
+  column lock_key|TEXT|notnull=1|default=''|pk=0
   column params|TEXT|notnull=1|default='{}'|pk=0
   column progress_pct|REAL|notnull=1|default=0|pk=0
   column result_pids|TEXT|notnull=1|default='[]'|pk=0
+  column resumable|INTEGER|notnull=1|default=0|pk=0
   column state|TEXT|notnull=1|default='queued'|pk=0
   column summary|TEXT|notnull=1|default=''|pk=0
   column type|TEXT|notnull=1|default=<none>|pk=0
   column user_id|TEXT|notnull=1|default=''|pk=0
+  column wait_reason|TEXT|notnull=1|default=''|pk=0
   autoindex pk|unique=1|(id)
+  index tool_tasks_lock|unique=0|partial=1|(lock_key)
   index tool_tasks_state|unique=0|partial=0|(state,lease_until_ns)
   index tool_tasks_user|unique=0|partial=0|(user_id,created_at_ns DESC,id)
+table tool_trash
+  column book_pid|TEXT|notnull=1|default=<none>|pk=1
+  column orig_path|TEXT|notnull=1|default=<none>|pk=2
+  column task_id|TEXT|notnull=1|default=<none>|pk=0
+  autoindex pk|unique=1|(book_pid,orig_path)
 table transcript_cache
   column cues|TEXT|notnull=1|default=''|pk=0
   column episode_pid|TEXT|notnull=0|default=<none>|pk=1

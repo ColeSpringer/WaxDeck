@@ -6,12 +6,59 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../admin/admin_console.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../organize/organize_labels.dart';
+import '../providers.dart';
 import '../settings/settings_registry.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'health_controller.dart';
 import 'health_labels.dart';
+
+/// The rule whose fix moves files: the whole library's is an organize
+/// pass, and a fix of named items moves them as organize jobs.
+const _pathRule = 'path-mismatch';
+
+/// Starts one rule's fix, over [itemPids] or every failing item, and says
+/// where it runs or why it was refused.
+Future<void> _startFix(
+  BuildContext context,
+  WidgetRef ref,
+  String rule,
+  String name, {
+  List<String>? itemPids,
+}) async {
+  final l10n = context.l10n;
+  final messenger = ref.read(shellMessengerProvider.notifier);
+  final router = GoRouter.of(context);
+  try {
+    await ref
+        .read(healthFixesProvider.notifier)
+        .start(rule, itemPids: itemPids);
+    messenger.show(
+      l10n.healthFixStarted(name),
+      actionLabel: l10n.commonOpenTasks,
+      actionSemanticsId: SemanticsIds.openTasks,
+      onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+    );
+  } on WaxDeckApiException catch (e) {
+    if (e.code != 'conflict') {
+      messenger.show(explainError(l10n, e));
+      return;
+    }
+    // Refused while a pass holds the enrichment, or while the rule is
+    // being fixed already: the summary the refusal re-read says which.
+    final fixing =
+        context.mounted &&
+        (ref
+                .read(healthProvider)
+                .value
+                ?.rules
+                .any((r) => r.rule == rule && r.fixing) ??
+            false);
+    messenger.show(fixing ? l10n.healthFixRunning(name) : l10n.healthFixBusy);
+  }
+}
 
 /// The library health dashboard: the score headline, the per-rule
 /// failure counts with fixes, and the duplicate and quality-upgrade
@@ -23,37 +70,7 @@ class HealthScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     HealthRuleCount rule,
-  ) async {
-    final l10n = context.l10n;
-    final name = healthRuleLabel(l10n, rule);
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    final router = GoRouter.of(context);
-    try {
-      await ref.read(healthFixesProvider.notifier).start(rule.rule);
-      messenger.show(
-        l10n.healthFixStarted(name),
-        actionLabel: l10n.commonOpenTasks,
-        actionSemanticsId: SemanticsIds.openTasks,
-        onAction: () => router.pushInShell<void>(WaxRoute.tasks),
-      );
-    } on WaxDeckApiException catch (e) {
-      if (e.code != 'conflict') {
-        messenger.show(explainError(l10n, e));
-        return;
-      }
-      // Refused while a pass holds the enrichment, or while the rule is
-      // being fixed already: the summary the refusal re-read says which.
-      final fixing =
-          context.mounted &&
-          (ref
-                  .read(healthProvider)
-                  .value
-                  ?.rules
-                  .any((r) => r.rule == rule.rule && r.fixing) ??
-              false);
-      messenger.show(fixing ? l10n.healthFixRunning(name) : l10n.healthFixBusy);
-    }
-  }
+  ) => _startFix(context, ref, rule.rule, healthRuleLabel(context.l10n, rule));
 
   Future<void> _sweep(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
@@ -397,6 +414,16 @@ class _RuleTable extends ConsumerWidget {
       ],
       trailing: (context, rule) {
         if (fix == null || rule.failing == 0) return const SizedBox.shrink();
+        // Every misplaced file at once is an organize pass, previewed
+        // before anything moves and undoable after.
+        if (rule.fixable && rule.rule == _pathRule) {
+          return WaxIconButton(
+            glyph: WaxIcons.sort,
+            label: l10n.healthFixPreviewMoves,
+            semanticsId: SemanticsIds.healthFixPreview(rule.rule),
+            onPressed: () => context.go(WaxRoute.organizePreviewOwn),
+          );
+        }
         if (rule.fixable) {
           return Consumer(
             builder: (context, ref, _) => WaxIconButton(
@@ -658,10 +685,131 @@ class HealthIssuesScreen extends ConsumerWidget {
 
   final String rule;
 
+  /// Moves one misplaced item where its library's profile puts it, once
+  /// a dry run of it says where and the administrator agrees.
+  Future<void> _moveIntoPlace(
+    BuildContext context,
+    WidgetRef ref,
+    HealthIssue issue,
+  ) async {
+    // Held from the press until the fix starts or is declined, so a second
+    // tap meanwhile starts nothing.
+    final moving = ref.read(movingIssuesProvider.notifier);
+    if (!moving.start(issue.pid)) return;
+    try {
+      await _confirmMove(context, ref, issue);
+    } finally {
+      moving.end(issue.pid);
+    }
+  }
+
+  Future<void> _confirmMove(
+    BuildContext context,
+    WidgetRef ref,
+    HealthIssue issue,
+  ) async {
+    final l10n = context.l10n;
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final OrganizePlan plan;
+    try {
+      plan = await ref
+          .read(repositoryProvider)
+          .previewOrganize(itemPids: [issue.pid]);
+    } on WaxDeckApiException catch (e) {
+      messenger.show(explainError(l10n, e));
+      return;
+    }
+    if (!context.mounted) return;
+    if (plan.actions.isEmpty) {
+      // A library gone read-only since the sweep leaves the file out of
+      // the plan, out of place all the same.
+      final hold = plan.holds.firstOrNull;
+      messenger.show(switch (hold) {
+        OrganizeHold(:final code) => l10n.healthIssueFixHeld(
+          organizeHoldLabel(l10n, code, planned: true),
+        ),
+        null when plan.readOnlyLibraries > 0 => l10n.healthIssueFixHeld(
+          l10n.organizeHoldReadOnly,
+        ),
+        null => l10n.healthIssueFixInPlace,
+      });
+      return;
+    }
+    final colors = WaxColors.of(context);
+    // A book moves as all its parts, so each is named.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.healthIssueFixTitle),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              for (final move in plan.actions) ...<Widget>[
+                Text(
+                  l10n.organizeColumnFrom,
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                ),
+                Text(
+                  move.from,
+                  style: WaxType.monoData.copyWith(color: colors.textSecondary),
+                ),
+                const SizedBox(height: WaxSpace.s8),
+                Text(
+                  l10n.organizeColumnTo,
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                ),
+                Text(
+                  move.to,
+                  style: WaxType.monoData.copyWith(color: colors.accent),
+                ),
+                const SizedBox(height: WaxSpace.s12),
+              ],
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
+            semanticsId: SemanticsIds.confirmCancel,
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          WaxButton(
+            label: l10n.healthIssueFixAction,
+            semanticsId: SemanticsIds.healthIssueFixConfirm,
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await _startFix(
+      context,
+      ref,
+      rule,
+      healthRuleName(l10n, rule) ?? rule,
+      itemPids: [issue.pid],
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final issues = ref.watch(healthIssuesProvider(rule));
+    final moving = ref.watch(movingIssuesProvider);
+    // An administrator moves a misplaced file from its own row, while the
+    // install can fix the rule at all.
+    final movable =
+        rule == _pathRule &&
+        ref.watch(isAdminProvider) &&
+        (ref
+                .watch(healthProvider)
+                .value
+                ?.rules
+                .any((r) => r.rule == rule && r.fixable) ??
+            false);
     // The rule arrives as its own path segment, so the title is the
     // client's word for it rather than the wire token the table it was
     // opened from already stopped drawing.
@@ -707,7 +855,11 @@ class HealthIssuesScreen extends ConsumerWidget {
               ),
             AsyncData(:final value) => SliverPadding(
               padding: sizeClass.gutter,
-              sliver: _list(value),
+              sliver: _list(
+                value,
+                movable ? (issue) => _moveIntoPlace(context, ref, issue) : null,
+                moving,
+              ),
             ),
             AsyncError(:final error) => SliverFillRemaining(
               hasScrollBody: false,
@@ -727,9 +879,16 @@ class HealthIssuesScreen extends ConsumerWidget {
     );
   }
 
-  Widget _list(HealthIssuesState state) {
+  Widget _list(
+    HealthIssuesState state,
+    void Function(HealthIssue issue)? onMove,
+    Set<String> moving,
+  ) {
     return SliverList.builder(
       itemCount: state.items.length + (state.loadingMore ? 1 : 0),
+      // Keyed by item, so a row moves with its issue, node and identifiers
+      // with it, when a fixed one drops out above it.
+      findChildIndexCallback: indexByKey(state.items, _issueKey),
       itemBuilder: (context, index) => index >= state.items.length
           ? const Padding(
               padding: EdgeInsets.all(WaxSpace.s16),
@@ -741,7 +900,12 @@ class HealthIssuesScreen extends ConsumerWidget {
                 ),
               ),
             )
-          : _IssueRow(issue: state.items[index]),
+          : _IssueRow(
+              key: _issueKey(state.items[index]),
+              issue: state.items[index],
+              onMove: onMove,
+              moving: moving.contains(state.items[index].pid),
+            ),
     );
   }
 }
@@ -757,10 +921,23 @@ String _durationDetail(AppLocalizations l10n, HealthIssueDetail detail) {
   return l10n.healthDurationDetail(header, audio);
 }
 
+Key _issueKey(HealthIssue issue) => ValueKey(issue.pid);
+
 class _IssueRow extends StatelessWidget {
-  const _IssueRow({required this.issue});
+  const _IssueRow({
+    super.key,
+    required this.issue,
+    this.onMove,
+    this.moving = false,
+  });
 
   final HealthIssue issue;
+
+  /// Null where the row's file is not the administrator's to move.
+  final void Function(HealthIssue issue)? onMove;
+
+  /// A move of this row's file is under way.
+  final bool moving;
 
   @override
   Widget build(BuildContext context) {
@@ -812,6 +989,14 @@ class _IssueRow extends StatelessWidget {
                 ],
               ),
             ),
+            if (onMove case final move?)
+              WaxIconButton(
+                glyph: WaxIcons.sort,
+                label: l10n.healthIssueFix,
+                semanticsId: SemanticsIds.healthIssueFix(issue.pid),
+                busy: moving,
+                onPressed: moving ? null : () => move(issue),
+              ),
           ],
         ),
       ),

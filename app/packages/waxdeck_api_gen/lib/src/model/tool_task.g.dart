@@ -16,9 +16,17 @@ class _$ToolTask extends ToolTask {
   @override
   final String? itemPid;
   @override
+  final String? itemTitle;
+  @override
   final double? progressPct;
   @override
   final String? error;
+  @override
+  final String? waitReason;
+  @override
+  final DateTime? retryAt;
+  @override
+  final bool? bookInTrash;
   @override
   final BuiltList<String>? resultPids;
   @override
@@ -36,8 +44,12 @@ class _$ToolTask extends ToolTask {
     required this.type,
     required this.state,
     this.itemPid,
+    this.itemTitle,
     this.progressPct,
     this.error,
+    this.waitReason,
+    this.retryAt,
+    this.bookInTrash,
     this.resultPids,
     required this.createdAt,
     this.finishedAt,
@@ -58,8 +70,12 @@ class _$ToolTask extends ToolTask {
         type == other.type &&
         state == other.state &&
         itemPid == other.itemPid &&
+        itemTitle == other.itemTitle &&
         progressPct == other.progressPct &&
         error == other.error &&
+        waitReason == other.waitReason &&
+        retryAt == other.retryAt &&
+        bookInTrash == other.bookInTrash &&
         resultPids == other.resultPids &&
         createdAt == other.createdAt &&
         finishedAt == other.finishedAt &&
@@ -73,8 +89,12 @@ class _$ToolTask extends ToolTask {
     _$hash = $jc(_$hash, type.hashCode);
     _$hash = $jc(_$hash, state.hashCode);
     _$hash = $jc(_$hash, itemPid.hashCode);
+    _$hash = $jc(_$hash, itemTitle.hashCode);
     _$hash = $jc(_$hash, progressPct.hashCode);
     _$hash = $jc(_$hash, error.hashCode);
+    _$hash = $jc(_$hash, waitReason.hashCode);
+    _$hash = $jc(_$hash, retryAt.hashCode);
+    _$hash = $jc(_$hash, bookInTrash.hashCode);
     _$hash = $jc(_$hash, resultPids.hashCode);
     _$hash = $jc(_$hash, createdAt.hashCode);
     _$hash = $jc(_$hash, finishedAt.hashCode);
@@ -90,8 +110,12 @@ class _$ToolTask extends ToolTask {
           ..add('type', type)
           ..add('state', state)
           ..add('itemPid', itemPid)
+          ..add('itemTitle', itemTitle)
           ..add('progressPct', progressPct)
           ..add('error', error)
+          ..add('waitReason', waitReason)
+          ..add('retryAt', retryAt)
+          ..add('bookInTrash', bookInTrash)
           ..add('resultPids', resultPids)
           ..add('createdAt', createdAt)
           ..add('finishedAt', finishedAt)
@@ -119,6 +143,10 @@ class ToolTaskBuilder implements Builder<ToolTask, ToolTaskBuilder> {
   String? get itemPid => _$this._itemPid;
   set itemPid(String? itemPid) => _$this._itemPid = itemPid;
 
+  String? _itemTitle;
+  String? get itemTitle => _$this._itemTitle;
+  set itemTitle(String? itemTitle) => _$this._itemTitle = itemTitle;
+
   double? _progressPct;
   double? get progressPct => _$this._progressPct;
   set progressPct(double? progressPct) => _$this._progressPct = progressPct;
@@ -126,6 +154,18 @@ class ToolTaskBuilder implements Builder<ToolTask, ToolTaskBuilder> {
   String? _error;
   String? get error => _$this._error;
   set error(String? error) => _$this._error = error;
+
+  String? _waitReason;
+  String? get waitReason => _$this._waitReason;
+  set waitReason(String? waitReason) => _$this._waitReason = waitReason;
+
+  DateTime? _retryAt;
+  DateTime? get retryAt => _$this._retryAt;
+  set retryAt(DateTime? retryAt) => _$this._retryAt = retryAt;
+
+  bool? _bookInTrash;
+  bool? get bookInTrash => _$this._bookInTrash;
+  set bookInTrash(bool? bookInTrash) => _$this._bookInTrash = bookInTrash;
 
   ListBuilder<String>? _resultPids;
   ListBuilder<String> get resultPids =>
@@ -158,8 +198,12 @@ class ToolTaskBuilder implements Builder<ToolTask, ToolTaskBuilder> {
       _type = $v.type;
       _state = $v.state;
       _itemPid = $v.itemPid;
+      _itemTitle = $v.itemTitle;
       _progressPct = $v.progressPct;
       _error = $v.error;
+      _waitReason = $v.waitReason;
+      _retryAt = $v.retryAt;
+      _bookInTrash = $v.bookInTrash;
       _resultPids = $v.resultPids?.toBuilder();
       _createdAt = $v.createdAt;
       _finishedAt = $v.finishedAt;
@@ -200,8 +244,12 @@ class ToolTaskBuilder implements Builder<ToolTask, ToolTaskBuilder> {
               'state',
             ),
             itemPid: itemPid,
+            itemTitle: itemTitle,
             progressPct: progressPct,
             error: error,
+            waitReason: waitReason,
+            retryAt: retryAt,
+            bookInTrash: bookInTrash,
             resultPids: _resultPids?.build(),
             createdAt: BuiltValueNullFieldError.checkNotNull(
               createdAt,

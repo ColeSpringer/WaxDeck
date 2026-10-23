@@ -20,12 +20,13 @@ paths:
         `backup-failed`, `catalog-reset`, `episode-arrived`,
         `episode-downloaded`, `feed-disabled`, `subscription-failed`,
         `gpodder-device-removed`, `review-ready`, `import-completed`,
-        `playlist-synced`, `job-finished`, `job-failed`, and
-        `health-fix-finished`. The last three reach
-        the administrator who started the work: a catalog job (a scan,
+        `playlist-synced`, `job-finished`, `job-failed`,
+        `tool-task-failed`, and `health-fix-finished`. The last four
+        reach the account that started the work: a catalog job (a scan,
         an analysis, an enrichment or organize run, emptying the
-        trash) finished or failed, or a health fix finished. Work the
-        server started on its own schedule notifies nobody.
+        trash) finished or failed, a book merge or split or a CUE split
+        failed or stopped for good (parked), or a health fix finished.
+        Work the server started on its own schedule notifies nobody.
         `catalog-reset` says the server built a new catalog because the
         old one's schema was another release's; its body counts the
         libraries added from the console, which the audit log names.
@@ -614,9 +615,9 @@ components:
             show for `feed-disabled` and `episode-arrived`, the episode
             for `episode-downloaded`, the playlist for `playlist-synced`,
             the review entry (`rv-`) for `import-completed`, the catalog
-            job (`jb-`) for `job-finished` and `job-failed`, and the job
-            or the tool task (`tk-`) that ran the fix for
-            `health-fix-finished`. Absent for events that are about the
+            job (`jb-`) for `job-finished` and `job-failed`, the tool task
+            (`tk-`) for `tool-task-failed`, and the job or the tool task
+            that ran the fix for `health-fix-finished`. Absent for events that are about the
             server rather than an item, for `subscription-failed`, whose
             feed never became a show, and for `gpodder-device-removed`.
           example: pc-01JZX5N8QW3F4V9T2B7KD3M9R6

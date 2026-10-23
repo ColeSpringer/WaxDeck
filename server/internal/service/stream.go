@@ -26,7 +26,10 @@ import (
 // FillLoudness rather than making the whole library pay a second query
 // per play.
 func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, error) {
-	src, err := l.streamSource(ctx, apiItemPID, filePID)
+	_, src, f, err := l.streamItem(ctx, apiItemPID, filePID)
+	if err == nil && src.SpokenWord && f.EssenceHash != "" {
+		l.fillLoudness(ctx, &src)
+	}
 	if KindOf(err) == KindMaintenance {
 		// The engine reads no service kinds; its sentinel is how it tells
 		// a catalog handed off for a moment from an item that is gone.
@@ -35,10 +38,34 @@ func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) 
 	return src, err
 }
 
-func (l *Library) streamSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, error) {
+// StreamDownloadSource is what the download route serves a stream token
+// from, off one lookup: the stream source, which says whether the token's
+// stream is the original's bytes, and the file holding them. An item in
+// parts needs filePID, as DownloadSource does.
+func (l *Library) StreamDownloadSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, DownloadFile, error) {
+	it, src, f, err := l.streamItem(ctx, apiItemPID, filePID)
+	if err != nil {
+		return flow.Source{}, DownloadFile{}, err
+	}
+	if it.Kind == model.KindBook && filePID == "" {
+		bd, err := l.lib.Book(ctx, it.PID)
+		if err != nil {
+			return flow.Source{}, DownloadFile{}, classify(err)
+		}
+		if len(bd.Files) > 1 {
+			return flow.Source{}, DownloadFile{}, errInvalid("this item has multiple files; pass f")
+		}
+	}
+	return src, downloadFileOf(f), nil
+}
+
+// streamItem resolves an item, the source a stream of it reads (all of it
+// but the loudness voice boost derives its gain from), and the file
+// holding that source.
+func (l *Library) streamItem(ctx context.Context, apiItemPID, filePID string) (*model.ItemView, flow.Source, *model.File, error) {
 	it, err := l.getItem(ctx, apiItemPID)
 	if err != nil {
-		return flow.Source{}, err
+		return nil, flow.Source{}, nil, err
 	}
 
 	// A podcast episode without its audio has no local bytes, and a
@@ -48,7 +75,7 @@ func (l *Library) streamSource(ctx context.Context, apiItemPID, filePID string) 
 	// instead belongs one layer up, at each site that turns an item into
 	// a URL. ErrEpisodeNotFetched is what those sites match on.
 	if unfetchedEpisode(it) {
-		return flow.Source{}, notFetchedEpisode()
+		return nil, flow.Source{}, nil, notFetchedEpisode()
 	}
 
 	src := flow.Source{
@@ -64,26 +91,26 @@ func (l *Library) streamSource(ctx context.Context, apiItemPID, filePID string) 
 		// to this book or the request resolves nothing.
 		bd, err := l.lib.Book(ctx, it.PID)
 		if err != nil {
-			return flow.Source{}, classify(err)
+			return nil, flow.Source{}, nil, classify(err)
 		}
 		part, ok := bookPartByFile(bd, filePID)
 		if !ok {
-			return flow.Source{}, errNotFound("no such part for book " + apiItemPID)
+			return nil, flow.Source{}, nil, errNotFound("no such part for book " + apiItemPID)
 		}
 		f, err = l.fileByPID(ctx, model.PID(filePID))
 		if err != nil {
-			return flow.Source{}, err
+			return nil, flow.Source{}, nil, err
 		}
 		src.Path = string(f.Path)
 		src.DurationMS = part.DurationMS
 	} else {
 		loc, err := l.paths.Locate(ctx, it.PID)
 		if err != nil {
-			return flow.Source{}, classify(err)
+			return nil, flow.Source{}, nil, classify(err)
 		}
 		from, to, err := loc.Span()
 		if err != nil {
-			return flow.Source{}, classify(err)
+			return nil, flow.Source{}, nil, classify(err)
 		}
 		src.Path = loc.Path
 		src.Virtual = loc.Virtual
@@ -91,11 +118,11 @@ func (l *Library) streamSource(ctx context.Context, apiItemPID, filePID string) 
 		src.ToSample = to
 		f, err = l.fileByPID(ctx, loc.FilePID)
 		if err != nil {
-			return flow.Source{}, err
+			return nil, flow.Source{}, nil, err
 		}
 	}
-	l.attachFile(ctx, &src, f)
-	return src, nil
+	fileFacts(&src, f)
+	return it, src, f, nil
 }
 
 // attachFile fills the half of a source that comes off the backing
@@ -106,14 +133,20 @@ func (l *Library) streamSource(ctx context.Context, apiItemPID, filePID string) 
 // (timeline leveling) is rare enough to ask for it by hash rather than
 // to make the whole library pay a second query per play.
 func (l *Library) attachFile(ctx context.Context, src *flow.Source, f *model.File) {
+	fileFacts(src, f)
+	if src.SpokenWord && f.EssenceHash != "" {
+		l.fillLoudness(ctx, src)
+	}
+}
+
+// fileFacts fills the half of a source that comes off the backing file
+// row.
+func fileFacts(src *flow.Source, f *model.File) {
 	src.Codec, src.Container = fileFormat(f, src.Codec, src.Container)
 	src.Size = f.Size
 	src.MTimeNS = f.MTimeNS
 	src.EssenceHash = f.EssenceHash
 	src.BitrateKbps = f.Bitrate
-	if src.SpokenWord && f.EssenceHash != "" {
-		l.fillLoudness(ctx, src)
-	}
 }
 
 // fileFormat answers a file's own codec and container where the scan read

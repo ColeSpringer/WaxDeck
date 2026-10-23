@@ -1,10 +1,10 @@
 // Audiobooks: the hub, a book, and the player's spoken face.
 
-import { Locator } from '@playwright/test';
+import { Locator, expect } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough } from '../gestures';
+import { chooseFromMenu, clickThrough, clickToward, wheelIntoReach } from '../gestures';
 
 export class Books extends Surface {
   /// A book's card on the hub.
@@ -28,10 +28,25 @@ export class Books extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.chapter(index)));
   }
 
-  /// Open a book from the hub.
+  /// Open a book from the hub. The grid builds only the cards near the
+  /// view, and the continue row landing above it can push a card out of
+  /// reach after it was found, so each try wheels the hub toward it.
   async open(pid: string): Promise<void> {
-    await this.card(pid).waitFor({ timeout: T.nav });
-    await clickThrough(this.card(pid), this.resume());
+    const page = this.ctx.page;
+    const hub = page.locator(sem(SemanticsIds.booksHub));
+    const card = this.card(pid);
+    await hub.waitFor({ timeout: T.nav });
+    await expect(async () => {
+      if (!(await card.isVisible())) {
+        const box = await hub.boundingBox();
+        expect(box, 'the hub reports a box to wheel over').toBeTruthy();
+        await page.mouse.move(box!.x + box!.width / 2, (page.viewportSize()?.height ?? 720) / 2);
+        await page.mouse.wheel(0, 400);
+        await expect(card).toBeVisible({ timeout: 1_000 });
+      }
+      await wheelIntoReach(page, card);
+      await clickToward(card, { shows: this.resume() });
+    }).toPass({ timeout: T.nav });
   }
 
   /// Resume, which starts playback in the dock. Settles on the deck

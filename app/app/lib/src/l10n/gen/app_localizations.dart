@@ -189,6 +189,12 @@ abstract class AppLocalizations {
   /// **'Versions'**
   String get aboutVersionsTitle;
 
+  /// One change an audit event recorded, above its stored detail: the field's wire name, then its value before and after. The names and values are wire tokens and stay as they are; the arrow between them is the only thing a translation may move.
+  ///
+  /// In en, this message translates to:
+  /// **'{field}: {from} -> {to}'**
+  String adminAuditChange(String field, String from, String to);
+
   /// Empty state of the audit log, saying what will fill it.
   ///
   /// In en, this message translates to:
@@ -1443,6 +1449,12 @@ abstract class AppLocalizations {
   /// **'No invites yet'**
   String get adminInvitesEmpty;
 
+  /// Header of the libraries table's column holding each library's menu, and the label of that row on a library's card.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions'**
+  String get adminLibrariesColumnActions;
+
   /// Column heading on the Libraries table: whether a scan names a library's untagged files from their folders (the artist folder and the album folder).
   ///
   /// In en, this message translates to:
@@ -1515,11 +1527,35 @@ abstract class AppLocalizations {
   /// **'Libraries'**
   String get adminLibrariesTitle;
 
+  /// Line under the add form's switch for a folder that is not there yet, such as a drive mounted later.
+  ///
+  /// In en, this message translates to:
+  /// **'Register the path now; it is scanned once the folder is there.'**
+  String get adminLibraryAbsentHelp;
+
+  /// Switch in the add form that registers a path whose folder is not there yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder mounted later'**
+  String get adminLibraryAbsentTitle;
+
+  /// Accessible name of the menu holding what can be done with one library. {name} is the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions for {name}'**
+  String adminLibraryActions(String name);
+
   /// Heading over the form that registers a new root.
   ///
   /// In en, this message translates to:
   /// **'Add a library'**
   String get adminLibraryAddGroup;
+
+  /// Caption on a library the server's configuration names, which only a configuration change removes.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured on the server'**
+  String get adminLibraryConfigured;
 
   /// Accessible name of the menu choosing what a new library holds.
   ///
@@ -1737,6 +1773,42 @@ abstract class AppLocalizations {
   /// **'Read-only: {name}'**
   String adminLibraryReadOnlyLabel(String name);
 
+  /// Menu row that takes a library out of the catalog. Its files stay on disk.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove library'**
+  String get adminLibraryRemove;
+
+  /// Confirm button of the remove-library dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get adminLibraryRemoveAction;
+
+  /// Body of the remove-library dialog, which asks for the library's name typed back.
+  ///
+  /// In en, this message translates to:
+  /// **'Its files stay on disk. The catalog forgets the library; items with no other copy are archived and come back if the folder is added again. Type the library\'s name to confirm.'**
+  String get adminLibraryRemoveBody;
+
+  /// Why the remove row is off for a library the server's configuration names. WAXDECK_LIBRARY_ROOTS is a setting's name; keep it as is.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured on the server; remove it from WAXDECK_LIBRARY_ROOTS first'**
+  String get adminLibraryRemoveConfigured;
+
+  /// Title of the remove-library dialog. {name} is the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove \"{name}\"?'**
+  String adminLibraryRemoveTitle(String name);
+
+  /// Message once a library's removal started; it runs as a job the Tasks screen lists.
+  ///
+  /// In en, this message translates to:
+  /// **'Removing \"{name}\"; follow it in Tasks'**
+  String adminLibraryRemoving(String name);
+
   /// Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural. Also titles the confirm dialog the button opens.
   ///
   /// In en, this message translates to:
@@ -1778,6 +1850,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'unnamed on this filesystem'**
   String get adminLibraryUnnamedPath;
+
+  /// Caption on a library whose folder was not there at its last scan, such as a drive not mounted. Its items stay listed.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder not reachable'**
+  String get adminLibraryUnreachable;
+
+  /// Caption on a managed library whose folder the server cannot write to, so uploads, organize moves and deletes into it fail.
+  ///
+  /// In en, this message translates to:
+  /// **'Not writable by the server'**
+  String get adminLibraryUnwritable;
 
   /// Line under the account picker in the import form, saying what is written where.
   ///
@@ -1964,12 +2048,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tasks'**
   String get adminOpenTasks;
-
-  /// Banner across the console while read-only mode is on, because every refusal elsewhere says only that something was refused.
-  ///
-  /// In en, this message translates to:
-  /// **'Read-only mode is on. Uploads, edits, and deletes are refused server-wide.'**
-  String get adminReadOnlyBanner;
 
   /// Highlighted line in the staged-restore dialog, saying when the restore happens.
   ///
@@ -2583,6 +2661,30 @@ abstract class AppLocalizations {
   /// **'Could not load the share links'**
   String get adminSharesLoadError;
 
+  /// Streaming engine tile value: the engine answers.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get adminStreamingConnected;
+
+  /// Caption under the streaming engine tile while the engine is unreachable: playback goes on with the original files.
+  ///
+  /// In en, this message translates to:
+  /// **'Originals play directly meanwhile'**
+  String get adminStreamingDirect;
+
+  /// Streaming engine tile value: the server runs without one (no engine URL is set).
+  ///
+  /// In en, this message translates to:
+  /// **'Not configured'**
+  String get adminStreamingNotConfigured;
+
+  /// Streaming engine tile value: an engine is configured and is not answering; the server retries it and plays originals directly meanwhile.
+  ///
+  /// In en, this message translates to:
+  /// **'Unreachable'**
+  String get adminStreamingUnreachable;
+
   /// Line under the artwork-cache heading, saying what the cache is and what clearing it costs.
   ///
   /// In en, this message translates to:
@@ -2781,6 +2883,12 @@ abstract class AppLocalizations {
   /// **'Similarity coverage'**
   String get adminTileSimilarity;
 
+  /// Label of the dashboard tile that says whether the server's streaming engine answers.
+  ///
+  /// In en, this message translates to:
+  /// **'Streaming engine'**
+  String get adminTileStreaming;
+
   /// Caption of the similarity tile, counting tracks that have been analyzed. Embedding is what the analysis produces.
   ///
   /// In en, this message translates to:
@@ -2906,6 +3014,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Purged {name}, reclaimed {size}'**
   String adminTrashPurged(String name, String size);
+
+  /// Reason for a book's part a book merge moved to the trash, the merged file holding its audio. Lower case: it fills a table cell rather than starting a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'book merge'**
+  String get adminTrashReasonBookMerge;
+
+  /// Reason for a book's file a book split moved to the trash, its pieces holding its audio. Lower case: it fills a table cell rather than starting a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'book split'**
+  String get adminTrashReasonBookSplit;
+
+  /// Reason for an album rip a CUE split moved to the trash once its tracks were real files. CUE is the sheet format's name, so it keeps its capitals.
+  ///
+  /// In en, this message translates to:
+  /// **'CUE split'**
+  String get adminTrashReasonCueSplit;
 
   /// Reason for a deletion that was meant to be final. Lower case: it fills a table cell rather than starting a sentence.
   ///
@@ -3042,8 +3168,32 @@ abstract class AppLocalizations {
   /// Body of the delete-account dialog. {username} is the account being deleted.
   ///
   /// In en, this message translates to:
-  /// **'{username} is removed for good, along with its sessions and preferences. Library files are untouched.'**
+  /// **'{username} is removed for good, along with its sessions, preferences and share links, which stop working. Library files are untouched.'**
   String adminUserDeleteBody(String username);
+
+  /// Choice in the delete-account dialog: every playlist the account owns is deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete their playlists'**
+  String get adminUserDeletePlaylistsDelete;
+
+  /// Line under the choice that deletes the account's playlists, saying what it costs the people the playlists were shared with.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared and private alike. Anyone they shared a playlist with loses it.'**
+  String get adminUserDeletePlaylistsDeleteHelp;
+
+  /// Choice in the delete-account dialog, and the default: the account's shared playlists become the administrator's who deletes it.
+  ///
+  /// In en, this message translates to:
+  /// **'Hand their shared playlists to me'**
+  String get adminUserDeletePlaylistsTransfer;
+
+  /// Line under the choice that hands the account's shared playlists to the administrator, saying what happens to the rest.
+  ///
+  /// In en, this message translates to:
+  /// **'They keep their entries and stay shared. A smart playlist that depends on their stars, ratings, plays or private playlists becomes a fixed list of its tracks. Their private playlists are deleted.'**
+  String get adminUserDeletePlaylistsTransferHelp;
 
   /// Title of the dialog confirming an account deletion.
   ///
@@ -4533,6 +4683,36 @@ abstract class AppLocalizations {
   /// **'Merge into one chaptered file'**
   String get bookMerge;
 
+  /// Confirming button of the dialog that merges a book's files into one.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge'**
+  String get bookMergeAction;
+
+  /// Body of the dialog confirming a book merge: where the result goes, that positions survive, and what happens to the parts.
+  ///
+  /// In en, this message translates to:
+  /// **'The parts are joined into one chaptered file beside them, in the same library; every listener\'s position carries over. The original files move to the trash unless you keep them.'**
+  String get bookMergeBody;
+
+  /// Switch in the merge dialog that keeps the book's parts instead of moving them to the trash; the merged copy then gets its own folder beside them.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the original files'**
+  String get bookMergeKeep;
+
+  /// Help under the merge dialog's keep switch: where the merged copy goes when the parts stay.
+  ///
+  /// In en, this message translates to:
+  /// **'The merged copy goes into a folder of its own beside them'**
+  String get bookMergeKeepHelp;
+
+  /// Title of the dialog confirming a book merge. {count} is how many files the book is now.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge {count} files into one?'**
+  String bookMergeTitle(int count);
+
   /// Accessible name of a book's overflow menu.
   ///
   /// In en, this message translates to:
@@ -4712,6 +4892,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Split at chapters'**
   String get bookSplit;
+
+  /// Confirming button of the dialog that splits a book at its chapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Split'**
+  String get bookSplitAction;
+
+  /// Body of the dialog confirming a book split: where the pieces go and what happens to the original file.
+  ///
+  /// In en, this message translates to:
+  /// **'One file per chapter is written beside the book. The original moves to the trash unless you keep it.'**
+  String get bookSplitBody;
+
+  /// Switch in the split dialog that keeps the book's file instead of moving it to the trash; the pieces then get their own folder beside it.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the original file'**
+  String get bookSplitKeep;
+
+  /// Help under the split dialog's keep switch: where the pieces go when the original stays.
+  ///
+  /// In en, this message translates to:
+  /// **'The pieces go into a folder of their own beside it'**
+  String get bookSplitKeepHelp;
+
+  /// Title of the dialog confirming a book split. {count} is how many chapters, so how many files it makes.
+  ///
+  /// In en, this message translates to:
+  /// **'Split at {count} chapters?'**
+  String bookSplitTitle(int count);
 
   /// Row in a book's overflow putting the listener back at the beginning.
   ///
@@ -5679,6 +5889,66 @@ abstract class AppLocalizations {
   /// **'{seconds}s'**
   String durationSecondsShort(int seconds);
 
+  /// Error sentence for a book merge or split refused with `conflict` and the params' reason copy-elsewhere, when the copy's library has no name to give.
+  ///
+  /// In en, this message translates to:
+  /// **'This book has a copy at {copy}, which would be left as the book. Delete the copy, or keep the originals.'**
+  String errorBookToolCopyElsewhere(String copy);
+
+  /// Error sentence for a book merge or split refused with `conflict` and the params' reason copy-elsewhere: the copy's place and its library.
+  ///
+  /// In en, this message translates to:
+  /// **'This book has a copy at {copy} in the {library} library, which would be left as the book. Delete the copy, or keep the originals.'**
+  String errorBookToolCopyElsewhereIn(String copy, String library);
+
+  /// Error sentence for a book split refused with `conflict` and the params' reason multi-file.
+  ///
+  /// In en, this message translates to:
+  /// **'This book is already split into several files. Merge it first to split it again.'**
+  String get errorBookToolMultiFile;
+
+  /// Error sentence for a book merge or split refused with `conflict` and the params' reason name-taken: a file already holds the name the new file would take.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is already in {folder}. Move it away, then try again.'**
+  String errorBookToolNameTaken(String name, String folder);
+
+  /// Error sentence for a book split refused with `conflict` and the params' reason no-chapters.
+  ///
+  /// In en, this message translates to:
+  /// **'This book has no chapters to split at.'**
+  String get errorBookToolNoChapters;
+
+  /// Error sentence for a book split refused with `conflict` and the params' reason no-cuts: every chapter mark falls at the start, or on another.
+  ///
+  /// In en, this message translates to:
+  /// **'This book\'s chapter marks leave nowhere to cut it.'**
+  String get errorBookToolNoCuts;
+
+  /// Error sentence for a book split refused with `conflict` and the params' reason no-file.
+  ///
+  /// In en, this message translates to:
+  /// **'This book has no file to split.'**
+  String get errorBookToolNoFile;
+
+  /// Error sentence for a book split refused with `conflict` and the params' reason no-sample-rate.
+  ///
+  /// In en, this message translates to:
+  /// **'This book\'s file does not say its sample rate, so its chapters cannot be cut exactly.'**
+  String get errorBookToolNoSampleRate;
+
+  /// A merge or split refused because an earlier one that did not finish left some of the book's files in the trash, which none of its new files holds: a merge of what remains would leave them out. {files} names the first few by their place in their library, and {more} counts the rest (zero when all are named).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 of this book\'s files went} other{{count} of this book\'s files went}} to the trash with a merge or split that did not finish: {files}{more, plural, =0{} other{, and {more} more}}. Restore {count, plural, =1{it} other{them}} from the trash, then merge or split the book again.'**
+  String errorBookToolPartsInTrash(int count, String files, int more);
+
+  /// Error sentence for a book merge refused with `conflict` and the params' reason single-file: the book is one file already.
+  ///
+  /// In en, this message translates to:
+  /// **'This book is already one file, so there is nothing to merge.'**
+  String get errorBookToolSingleFile;
+
   /// Error sentence for the spec code `catalog-busy`: a file-moving request cannot start yet, and this one clears on its own.
   ///
   /// In en, this message translates to:
@@ -5702,6 +5972,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This track is part of a larger file that holds other tracks too, so it can only be deleted together with them.'**
   String get errorCueRipDelete;
+
+  /// Error sentence for a CUE split refused with `conflict` and the params' reason no-sheet: the album file has no .cue of the same name next to it. CUE is the sheet format's name, so it keeps its capitals.
+  ///
+  /// In en, this message translates to:
+  /// **'The file this track is cut from has no CUE sheet of its own name beside it, so there is nothing to split it by.'**
+  String get errorCueSplitNoSheet;
 
   /// Error sentence for the spec code `directory-unavailable`, such as the radio station directory.
   ///
@@ -5862,7 +6138,7 @@ abstract class AppLocalizations {
   /// Error sentence for the spec code `read-only`: reads and playback keep working.
   ///
   /// In en, this message translates to:
-  /// **'The library is read-only right now, so nothing can be changed.'**
+  /// **'The server or this library is read-only right now, so nothing can be changed.'**
   String get errorReadOnly;
 
   /// Error sentence for the spec code `service-unreachable`, such as a scrobbling provider.
@@ -5883,11 +6159,23 @@ abstract class AppLocalizations {
   /// **'The server has no room for this right now. Ask whoever runs it.'**
   String get errorStorageFull;
 
+  /// Error sentence for the spec code `storage-unwritable`: a library folder refused the server's write, for its permissions or a read-only mount, so nothing changed.
+  ///
+  /// In en, this message translates to:
+  /// **'The server cannot write to that library\'s folder, so nothing was changed. Check the folder\'s ownership and permissions.'**
+  String get errorStorageUnwritable;
+
   /// Error sentence for the spec code `stream-stale`: a minted media URL no longer matches the file it points at.
   ///
   /// In en, this message translates to:
   /// **'This file changed on the server. Open it again to play it.'**
   String get errorStreamStale;
+
+  /// Error sentence for `feature-unavailable` when the params name the feature streaming-engine: a request only the streaming engine serves (a queue rendered as one stream, a stream with voice boost, a format or a bitrate, a book merge or split, a CUE split) while the server cannot reach its engine. Temporary: the server retries the engine in the background.
+  ///
+  /// In en, this message translates to:
+  /// **'The streaming engine is not reachable right now. Originals still play; transcoding, gapless playback, voice boost and merging or splitting files wait for it.'**
+  String get errorStreamingEngine;
 
   /// Error sentence for the spec code `sync-reset`: the local copy predates the change history the server kept.
   ///
@@ -5900,6 +6188,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The device did not answer in time. Try again.'**
   String get errorTimeout;
+
+  /// Clearing a finished book merge or split was refused: its new files, still hidden, could not take their names or be removed in their folder, so the task stays (holding its book) until they can. {cause} is the system's reason, as the server gives it.
+  ///
+  /// In en, this message translates to:
+  /// **'This task\'s new files in {folder} could not be named or removed ({cause}), so the task stays. Fix the folder, then clear it again.'**
+  String errorToolOutputsHidden(String folder, String cause);
+
+  /// Error sentence for a file tool refused with `conflict` and the params' reason task-parked: an earlier merge or split of the same book, or split of the same rip, stopped part way and is parked, holding it until it is cleared in Tasks. Waiting does not help.
+  ///
+  /// In en, this message translates to:
+  /// **'An earlier merge or split of this stopped and needs attention. Clear it in Tasks, then try again.'**
+  String get errorToolTaskParked;
+
+  /// Error sentence for a file tool refused with `conflict` and the params' reason task-running: another merge or split of the same book, or split of the same rip, has not finished.
+  ///
+  /// In en, this message translates to:
+  /// **'A merge or split of this is still at work. Try again once it has finished.'**
+  String get errorToolTaskRunning;
 
   /// Error sentence for the spec code `transcode-limited`.
   ///
@@ -6201,6 +6507,12 @@ abstract class AppLocalizations {
   /// **'An enrichment pass is already running. Fix this when it ends.'**
   String get healthFixBusy;
 
+  /// The path rule's control in the rules table: opens Organize with a dry run of every move, where the whole library's paths are fixed.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview moves'**
+  String get healthFixPreviewMoves;
+
   /// Accessible name of the button that runs a health rule's bulk fix. {rule} is that rule's own name.
   ///
   /// In en, this message translates to:
@@ -6224,6 +6536,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Genre outside the canonical tree'**
   String get healthGenreWhitelist;
+
+  /// On one misplaced file's row: moves it where its library's profile puts it, after a confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Move into place'**
+  String get healthIssueFix;
+
+  /// Confirms moving one file where the profile puts it.
+  ///
+  /// In en, this message translates to:
+  /// **'Move'**
+  String get healthIssueFixAction;
+
+  /// Said in place of the confirmation when the dry run holds the file back; the reason is why, as the Organize screen words it.
+  ///
+  /// In en, this message translates to:
+  /// **'This file cannot move: {reason}'**
+  String healthIssueFixHeld(String reason);
+
+  /// Said in place of the confirmation when the dry run finds nothing to move for the file.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is already where the profile puts it.'**
+  String get healthIssueFixInPlace;
+
+  /// Title of the confirmation before one file moves; under it, where the file is now and where it moves to.
+  ///
+  /// In en, this message translates to:
+  /// **'Move this file where the profile puts it?'**
+  String get healthIssueFixTitle;
 
   /// Empty state of one rule's list of failing items.
   ///
@@ -6813,11 +7155,11 @@ abstract class AppLocalizations {
   /// **'Delete'**
   String get libraryDeleteAction;
 
-  /// Accessible name of the overflow control offering to delete an item's files.
+  /// Snackbar when an album's delete is asked for an album with more tracks than one delete can name; nothing is deleted. {max} is that limit.
   ///
   /// In en, this message translates to:
-  /// **'Delete files'**
-  String get libraryDeleteFilesLabel;
+  /// **'This album has more than {max} tracks, too many to delete in one go.'**
+  String libraryDeleteAlbumTooLarge(int max);
 
   /// Row in an item's overflow menu that opens the delete dialog. The ellipsis says a dialog follows.
   ///
@@ -6873,11 +7215,47 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Deleted 1 file for good} other{Deleted {count} files for good}}'**
   String libraryDeletePermanentDone(int count);
 
+  /// Snackbar line after a permanent deletion some of whose files the server could not remove; they stayed where they were.
+  ///
+  /// In en, this message translates to:
+  /// **'{failed} of {total} files could not be deleted'**
+  String libraryDeletePermanentPartial(int failed, int total);
+
   /// What the dry run found, shown in the delete dialog before anything moves. {size} is the total on disk, already formatted.
   ///
   /// In en, this message translates to:
   /// **'{count, plural, =1{This removes 1 file, {size}.} other{This removes {count} files, {size}.}}'**
   String libraryDeletePreview(int count, String size);
+
+  /// What a screen reader hears for the delete dialog's file list: how many files, then each by its place in its library.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file} other{{count} files}}: {list}'**
+  String libraryDeletePreviewFiles(int count, String list);
+
+  /// Button offering to delete the tracks asked for together with every other track their shared files hold, after a delete naming only some of a file's tracks was refused. The ellipsis says the delete dialog follows.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete all {count} tracks...'**
+  String libraryDeleteRipAction(int count);
+
+  /// Body of the dialog shown when a delete names only some tracks of a CUE rip: how many more tracks share a file with the ones picked and would go with them. Said of the extra tracks, since among several picked tracks only some may share a file; extra is never zero.
+  ///
+  /// In en, this message translates to:
+  /// **'{extra, plural, =1{1 more track is} other{{extra} more tracks are}} cut from the same file as {chosen, plural, =1{the track you picked} other{tracks you picked}}, and tracks cut from one file are deleted together or not at all.'**
+  String libraryDeleteRipShared(int chosen, int extra);
+
+  /// Title of the dialog offering to delete, with the tracks chosen, every other track their shared files hold, after a delete of only some of them was refused.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the other tracks too?'**
+  String get libraryDeleteRipTitle;
+
+  /// Snackbar when the tracks picked and the others that share their files are more than one delete may name.
+  ///
+  /// In en, this message translates to:
+  /// **'With the tracks that share their files, this is more than {max} tracks, too many to delete in one go.'**
+  String libraryDeleteRipTooMany(int max);
 
   /// Title of the dialog confirming that an item's files are deleted.
   ///
@@ -6890,6 +7268,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Moved 1 file to the trash} other{Moved {count} files to the trash}}'**
   String libraryDeleteTrashDone(int count);
+
+  /// Snackbar line after a delete some of whose files the server could not move to the trash; they stayed where they were.
+  ///
+  /// In en, this message translates to:
+  /// **'{failed} of {total} files could not be moved to the trash'**
+  String libraryDeleteTrashPartial(int failed, int total);
 
   /// Facts sheet row label: when the item entered the library.
   ///
@@ -9225,6 +9609,18 @@ abstract class AppLocalizations {
   /// **'Podcast subscriptions not changed'**
   String get notifSubscriptionFailedTitle;
 
+  /// What the tool-task-failed notification is about, in a delivery target's event checklist.
+  ///
+  /// In en, this message translates to:
+  /// **'A book merge or split, or a CUE split, you started failed, or stopped after its runs kept ending with the server.'**
+  String get notifToolTaskFailedHelp;
+
+  /// Heading of the notification that a book merge or split, or a CUE split, the reader started failed or stopped and needs attention. The line under it says which and why.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool task failed'**
+  String get notifToolTaskFailedTitle;
+
   /// Runs the move. Both the confirming button and the button that opens the confirmation.
   ///
   /// In en, this message translates to:
@@ -9249,6 +9645,12 @@ abstract class AppLocalizations {
   /// **'Moves to'**
   String get organizeColumnTo;
 
+  /// Column heading for why a move is held back.
+  ///
+  /// In en, this message translates to:
+  /// **'Why'**
+  String get organizeColumnWhy;
+
   /// Body of the typed confirmation before files are moved.
   ///
   /// In en, this message translates to:
@@ -9266,6 +9668,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Apply organize profile?'**
   String get organizeConfirmTitle;
+
+  /// Under a finished run: source folders its moves left empty, which it removed.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 emptied folder removed} other{{count} emptied folders removed}}'**
+  String organizeDirsPruned(int count);
 
   /// Drops the dry run on screen without moving anything.
   ///
@@ -9314,6 +9722,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.'**
   String get organizeHint;
+
+  /// Button under the organize history that lists the next, older page of runs. Shown while the server holds older ones.
+  ///
+  /// In en, this message translates to:
+  /// **'Show older runs'**
+  String get organizeHistoryMore;
+
+  /// Overline of the list of runs: the scheduled prune drops a run's journal, and its undo, after the task retention window.
+  ///
+  /// In en, this message translates to:
+  /// **'Every run can be undone while its journal lasts'**
+  String get organizeHistoryOverline;
+
+  /// One organize run in the history: how many files it moved, and when it started.
+  ///
+  /// In en, this message translates to:
+  /// **'Organize - {moved} moved - {when}'**
+  String organizeHistoryRow(int moved, String when);
+
+  /// Heading over the organize runs the server can still undo.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get organizeHistoryTitle;
+
+  /// One undo of a run in the history: how many files it moved back, and when it started.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo - {moved} moved back - {when}'**
+  String organizeHistoryUndoRow(int moved, String when);
+
+  /// Why a move is held back: a book moves whole, and another of its parts cannot move.
+  ///
+  /// In en, this message translates to:
+  /// **'Another part of its book is held'**
+  String get organizeHoldBookHeld;
+
+  /// Why a move is held back: another move of the same run claims the place first.
+  ///
+  /// In en, this message translates to:
+  /// **'Another file in this run takes the destination'**
+  String get organizeHoldCollision;
+
+  /// Why a move is held back: the catalog's file is gone from the disk.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is not on disk'**
+  String get organizeHoldMissing;
+
+  /// Why an undo leaves a file where it is: it moved again after the run being undone.
+  ///
+  /// In en, this message translates to:
+  /// **'Moved again since that run'**
+  String get organizeHoldMovedSince;
+
+  /// Why a move is held back: a file the run does not move already holds the place.
+  ///
+  /// In en, this message translates to:
+  /// **'The destination is already taken'**
+  String get organizeHoldOccupied;
+
+  /// Why a move is held back: a file whose name differs from the destination only by letter case or accents sits in the folder.
+  ///
+  /// In en, this message translates to:
+  /// **'A file named the same except for case stands beside it'**
+  String get organizeHoldOccupiedCase;
+
+  /// Why a run or an undo held a file back: its library is read-only.
+  ///
+  /// In en, this message translates to:
+  /// **'The library is read-only'**
+  String get organizeHoldReadOnly;
+
+  /// Why a dry run holds a move back: the whole server is read-only.
+  ///
+  /// In en, this message translates to:
+  /// **'The server is read-only'**
+  String get organizeHoldServerReadOnly;
+
+  /// Why an undo leaves a file where it is: the catalog dropped the file after the run.
+  ///
+  /// In en, this message translates to:
+  /// **'The catalog no longer holds the file'**
+  String get organizeHoldUncataloged;
+
+  /// Why a move is held back: the item has no artist, album artist or album for the profile to file it under.
+  ///
+  /// In en, this message translates to:
+  /// **'No artist or album to file it under'**
+  String get organizeHoldUntagged;
+
+  /// Why a move is held back: the file is one cue rip carrying several tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'A cue rip\'s shared file stays where it is'**
+  String get organizeHoldVirtual;
+
+  /// Heading over the moves the dry run holds back, each with why.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 move held back} other{{count} moves held back}}'**
+  String organizeHoldsTitle(int count);
 
   /// Title of the error state when the profile list would not load.
   ///
@@ -9560,6 +10070,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Organize files'**
   String get organizeTitle;
+
+  /// A run's control in the history: moves the files it moved back where it found them, behind a typed confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo moves'**
+  String get organizeUndo;
+
+  /// Body of the typed confirmation before a run is undone.
+  ///
+  /// In en, this message translates to:
+  /// **'Every file it moved goes back where it was found, with its sidecars; a file moved again since stays where it is.'**
+  String get organizeUndoConfirmMessage;
+
+  /// Title of the typed confirmation before a run is undone.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo this run?'**
+  String get organizeUndoConfirmTitle;
+
+  /// The word typed to confirm an undo; typed as shown, so keep it one plain word.
+  ///
+  /// In en, this message translates to:
+  /// **'UNDO'**
+  String get organizeUndoWord;
+
+  /// Said when an undo ends: how many files went back where the run found them.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file moved back} other{{count} files moved back}}'**
+  String organizeUndone(int count);
 
   /// Button that opens the metadata editor to write lyrics.
   ///
@@ -15489,6 +16029,18 @@ abstract class AppLocalizations {
   /// **'Playback endpoints'**
   String get settingsEndpointsTitle;
 
+  /// Help line under the voice boost or silence trimming default, whose switch is hidden, when the server's streaming engine answers but does not offer that feature (voice boost, or the silence analysis trimming reads). No full stop.
+  ///
+  /// In en, this message translates to:
+  /// **'This server\'s streaming engine doesn\'t offer this'**
+  String get settingsEngineLacksThis;
+
+  /// Help line under the gapless, voice boost and silence trimming switches while the server's streaming engine is configured but not answering. Temporary: the server retries it. No full stop.
+  ///
+  /// In en, this message translates to:
+  /// **'The streaming engine is unreachable right now'**
+  String get settingsEngineUnreachable;
+
   /// The line under the Appearance setting stored on the account rather than on this device: the language.
   ///
   /// In en, this message translates to:
@@ -15812,6 +16364,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Match the system'**
   String get settingsMatchTheSystem;
+
+  /// Help line under the voice boost and silence trimming defaults, whose switches are hidden, on a server that runs without a streaming engine. No full stop.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs the streaming engine, which this server runs without'**
+  String get settingsNeedsEngine;
 
   /// Comma-separated search keywords for the "Notification targets" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16911,6 +17469,12 @@ abstract class AppLocalizations {
   /// **'gapless, crossfade, seam, stream, browser'**
   String get settingsWebGaplessKeywords;
 
+  /// Help line under the browser's gapless switch, which is hidden, on a server that runs without a streaming engine. No full stop, like every setting's help.
+  ///
+  /// In en, this message translates to:
+  /// **'This server runs without a streaming engine, which is what renders a queue as one stream'**
+  String get settingsWebGaplessNoEngine;
+
   /// Name of the "Gapless playback" setting, drawn on its own row and in settings search. Web only.
   ///
   /// In en, this message translates to:
@@ -17438,6 +18002,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Radio station'**
   String get shellPaletteStationDetail;
+
+  /// Banner across the shell, for every signed-in account, while the server-wide read-only switch is on.
+  ///
+  /// In en, this message translates to:
+  /// **'This server is read-only right now: uploads, edits that write files and deletions are paused.'**
+  String get shellReadOnlyBanner;
 
   /// Banner across the shell while the live connection is being re-established.
   ///
@@ -18058,11 +18628,47 @@ abstract class AppLocalizations {
   /// **'Top tracks'**
   String get statsYearTopTracks;
 
-  /// Button that removes every finished task from the list at once.
+  /// Line on a book merge or split task whose sources are in the trash and whose new files are not yet the book: the book is missing from the library until the task finishes.
+  ///
+  /// In en, this message translates to:
+  /// **'The book\'s files are in the trash until this finishes.'**
+  String get toolsBookInTrash;
+
+  /// Confirm button of the dialog that asks before clearing every account's finished tasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get toolsClearAllAction;
+
+  /// Body of the dialog an administrator confirms before clearing every account's finished tasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished and failed task receipts of every account go, reports they have not read included. Running tasks stay.'**
+  String get toolsClearAllBody;
+
+  /// Title of the dialog an administrator confirms before clearing every account's finished tasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear every member\'s finished tasks?'**
+  String get toolsClearAllTitle;
+
+  /// Label of the Tasks screen's control that clears the signed-in account's finished tasks at once; for an administrator it opens a menu of the two sweeps.
   ///
   /// In en, this message translates to:
   /// **'Clear finished'**
   String get toolsClearFinished;
+
+  /// Menu row, for an administrator, that clears every account's finished tasks after a confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear everyone\'s finished tasks'**
+  String get toolsClearFinishedAll;
+
+  /// Menu row, for an administrator, that clears only their own finished tasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear my finished tasks'**
+  String get toolsClearFinishedMine;
 
   /// Counter in a finished scan's result: files that brought new items. Lower case: it sits in a comma-separated run of counters.
   ///
@@ -18075,6 +18681,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'analyzed {count}'**
   String toolsCountAnalyzed(int count);
+
+  /// Counter in a finished library removal's result: items with no copy in another library, archived with their play state until the folder is added again. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'archived {count}'**
+  String toolsCountArchived(int count);
 
   /// Counter in a finished kind change's result: items that changed kind or were made as its parts. Lower case: it sits in a comma-separated run of counters.
   ///
@@ -18093,6 +18705,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'covers {count}'**
   String toolsCountCovers(int count);
+
+  /// Counter in a finished library removal's result: files the catalog let go of, which stay on disk. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'detached {count}'**
+  String toolsCountDetached(int count);
 
   /// Counter in a finished job's result: files it could not read or write. Lower case: it sits in a comma-separated run of counters.
   ///
@@ -18124,6 +18742,18 @@ abstract class AppLocalizations {
   /// **'folded {count}'**
   String toolsCountFolded(int count);
 
+  /// Counter in a finished organize run's result: source folders its moves left empty, which it removed. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'folders removed {count}'**
+  String toolsCountFoldersRemoved(int count);
+
+  /// Counter in a finished path fix's result: items it held back, for any cause. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} held'**
+  String toolsCountHeld(int count);
+
   /// Counter in a finished enrichment's result: tracks some source answered lyrics for. Lower case: it sits in a comma-separated run of counters.
   ///
   /// In en, this message translates to:
@@ -18142,6 +18772,12 @@ abstract class AppLocalizations {
   /// **'moved {count}'**
   String toolsCountMoved(int count);
 
+  /// Counter in a finished path fix's result: how many of the items it tried it moved into place. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'moved {moved} of {attempted}'**
+  String toolsCountMovedOf(int moved, int attempted);
+
   /// Counter in a finished kind change's result: files the change could not be written into. Lower case: it sits in a comma-separated run of counters.
   ///
   /// In en, this message translates to:
@@ -18159,6 +18795,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'skipped {count}'**
   String toolsCountSkipped(int count);
+
+  /// Counter in a finished library removal's result: the library's trash entries that went with it, their files staying in its trash folder. Shown only when there were any. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'trash entries dropped {count}'**
+  String toolsCountTrashEntriesDropped(int count);
 
   /// Counter in a finished scan's result: entries in a library folder the scan could not read (a folder without permission, say). Lower case: it sits in a comma-separated run of counters.
   ///
@@ -18238,11 +18880,23 @@ abstract class AppLocalizations {
   /// **'Organize'**
   String get toolsJobOrganize;
 
+  /// Name of a catalog job that moves an organize run's files back where the run found them.
+  ///
+  /// In en, this message translates to:
+  /// **'Organize undo'**
+  String get toolsJobOrganizeUndo;
+
   /// Name of a catalog job that permanently deletes one trashed file.
   ///
   /// In en, this message translates to:
   /// **'Purge from the trash'**
   String get toolsJobPurgeTrash;
+
+  /// Name of a catalog job that takes a library out of the catalog, leaving its files on disk.
+  ///
+  /// In en, this message translates to:
+  /// **'Library removal'**
+  String get toolsJobRemoveRoot;
 
   /// Name of a catalog job that restores files from the trash.
   ///
@@ -18316,6 +18970,18 @@ abstract class AppLocalizations {
   /// **'{library}: folder not reachable'**
   String toolsScanRunUnreachable(String library);
 
+  /// Opens a task's account (why it failed or stopped, and where its files are) past its first lines.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all'**
+  String get toolsShowAll;
+
+  /// Folds a task's opened account back to its first lines.
+  ///
+  /// In en, this message translates to:
+  /// **'Show less'**
+  String get toolsShowLess;
+
   /// State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language.
   ///
   /// In en, this message translates to:
@@ -18340,6 +19006,12 @@ abstract class AppLocalizations {
   /// **'Failed'**
   String get toolsStateFailed;
 
+  /// State of a book merge or split, or a CUE split, whose runs kept ending with the server. It counts as failed: it is not run again, it is dismissed and cleared like a failed task, and until then its book takes no other merge or split. Its error line says why and where each of its files is.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get toolsStateParked;
+
   /// State of a task waiting its turn.
   ///
   /// In en, this message translates to:
@@ -18357,6 +19029,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Running · {percent}%'**
   String toolsStateRunningPct(int percent);
+
+  /// State of a task in flight that is waiting out a passing failure and tries again on its own; a line under it says why.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get toolsStateWaiting;
 
   /// Headline counter from a task's report, counting listening records it carried across. Lower case: it sits in a comma-separated run of counters.
   ///
@@ -18448,11 +19126,23 @@ abstract class AppLocalizations {
   /// **'Playlist sync'**
   String get toolsTaskPlaylistSync;
 
+  /// A tool task row's title: what the task does, then the title of the book or album it works on, as it was when the task was queued.
+  ///
+  /// In en, this message translates to:
+  /// **'{task}: {title}'**
+  String toolsTaskTitled(String task, String title);
+
   /// Message after finished tasks were swept, saying how many went.
   ///
   /// In en, this message translates to:
   /// **'{count, plural, =1{Cleared 1 task} other{Cleared {count} tasks}}'**
   String toolsTasksCleared(int count);
+
+  /// After Clear finished: how many finished tasks stayed because files they left in the library could not be named or removed; each such row says why and what to fix.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 task kept: its files could not be moved; see its row} other{{count} tasks kept: their files could not be moved; see each row}}'**
+  String toolsTasksKept(int count);
 
   /// Heading over the tool tasks list when the catalog's jobs are listed above it.
   ///
@@ -18465,6 +19155,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tool tasks'**
   String get toolsTitle;
+
+  /// Why a waiting task waits: another catalog job holds the catalog.
+  ///
+  /// In en, this message translates to:
+  /// **'Another job holds the catalog; this carries on once it is free.'**
+  String get toolsWaitCatalogBusy;
+
+  /// Why a waiting task waits: the catalog is suspended for maintenance (a backup or restore).
+  ///
+  /// In en, this message translates to:
+  /// **'The catalog is under maintenance; this carries on once that is done.'**
+  String get toolsWaitCatalogMaintenance;
+
+  /// Why a waiting task waits: the engine that cuts or joins audio is not available.
+  ///
+  /// In en, this message translates to:
+  /// **'The audio engine is not available; this carries on once it is back.'**
+  String get toolsWaitEngineUnavailable;
+
+  /// When a waiting task tries again, as a time of day: a countdown would be wrong as soon as the screen stood still. {time} is the local time, such as 3:04 PM.
+  ///
+  /// In en, this message translates to:
+  /// **'Next try at {time}'**
+  String toolsWaitNextTry(String time);
+
+  /// Why a waiting task waits, when the cause has no sentence of its own; the server's words follow.
+  ///
+  /// In en, this message translates to:
+  /// **'Something passing got in the way; this tries again on its own.'**
+  String get toolsWaitOther;
+
+  /// Why a book merge or split waits: one of the book's files is missing from where the catalog has it.
+  ///
+  /// In en, this message translates to:
+  /// **'A file of the book is not where the catalog has it. If it does not come back, this puts back what it moved and stops.'**
+  String get toolsWaitPartMissing;
+
+  /// Why a book merge or split waits: undoing, it cannot put a file back from the trash.
+  ///
+  /// In en, this message translates to:
+  /// **'A file cannot go back from the trash: its place is taken or its folder refuses the server. Clear the place or fix the folder and this carries on.'**
+  String get toolsWaitPutBackBlocked;
+
+  /// Why a waiting task waits: a library it works in, or the whole server, is in read-only mode.
+  ///
+  /// In en, this message translates to:
+  /// **'A library this works in is read-only. Turn read-only off for it, or for the server, and this carries on.'**
+  String get toolsWaitReadOnly;
+
+  /// Why a waiting task waits: the server stopped, or the run ran out of time, part way through; the sentence names both, as the reason does.
+  ///
+  /// In en, this message translates to:
+  /// **'This was cut short, by the server stopping or by running out of time; it carries on where it was.'**
+  String get toolsWaitStopped;
+
+  /// Why a waiting task waits: a library folder refuses the server's writes.
+  ///
+  /// In en, this message translates to:
+  /// **'A folder this writes to refuses the server. Fix the folder\'s ownership and permissions and this carries on.'**
+  String get toolsWaitStorageUnwritable;
+
+  /// A waiting task whose next try has come: the worker takes it up within moments.
+  ///
+  /// In en, this message translates to:
+  /// **'Trying again now'**
+  String get toolsWaitTryingNow;
 
   /// A track's tempo. BPM is beats per minute, which is written the same way in most languages.
   ///

@@ -18,6 +18,9 @@ part 'delete_plan_entry.g.dart';
 /// * [files] - Files deleted (or to delete). A cue rip's file counts once, under one of its tracks. 
 /// * [bytes] - Bytes reclaimed (or to reclaim).
 /// * [fileList] - The files `files` counts, by name. Absent for an entry whose file counts under another track of its rip. 
+/// * [paths] - Where the files `fileList` names are, in the same order, each relative to its library's root, so two files of one name in different folders read apart. Absent with `fileList`. 
+/// * [failed] - Files of this item the deletion tried to remove and could not; they stayed, and `files` does not count them. Absent from a plan and when every file went. 
+/// * [error] - Why the first of the `failed` files stayed, in words without the server's folders. 
 /// * [itemSurvives] - The item keeps a file after the deletion (a copy it holds, or one left in place), so it stays in the library rather than being archived. 
 @BuiltValue()
 abstract class DeletePlanEntry implements Built<DeletePlanEntry, DeletePlanEntryBuilder> {
@@ -40,6 +43,18 @@ abstract class DeletePlanEntry implements Built<DeletePlanEntry, DeletePlanEntry
   /// The files `files` counts, by name. Absent for an entry whose file counts under another track of its rip. 
   @BuiltValueField(wireName: r'fileList')
   BuiltList<DeletePlanFile>? get fileList;
+
+  /// Where the files `fileList` names are, in the same order, each relative to its library's root, so two files of one name in different folders read apart. Absent with `fileList`. 
+  @BuiltValueField(wireName: r'paths')
+  BuiltList<String>? get paths;
+
+  /// Files of this item the deletion tried to remove and could not; they stayed, and `files` does not count them. Absent from a plan and when every file went. 
+  @BuiltValueField(wireName: r'failed')
+  int? get failed;
+
+  /// Why the first of the `failed` files stayed, in words without the server's folders. 
+  @BuiltValueField(wireName: r'error')
+  String? get error;
 
   /// The item keeps a file after the deletion (a copy it holds, or one left in place), so it stays in the library rather than being archived. 
   @BuiltValueField(wireName: r'itemSurvives')
@@ -95,6 +110,27 @@ class _$DeletePlanEntrySerializer implements PrimitiveSerializer<DeletePlanEntry
       yield serializers.serialize(
         object.fileList,
         specifiedType: const FullType(BuiltList, [FullType(DeletePlanFile)]),
+      );
+    }
+    if (object.paths != null) {
+      yield r'paths';
+      yield serializers.serialize(
+        object.paths,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
+    if (object.failed != null) {
+      yield r'failed';
+      yield serializers.serialize(
+        object.failed,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.error != null) {
+      yield r'error';
+      yield serializers.serialize(
+        object.error,
+        specifiedType: const FullType(String),
       );
     }
     if (object.itemSurvives != null) {
@@ -163,6 +199,30 @@ class _$DeletePlanEntrySerializer implements PrimitiveSerializer<DeletePlanEntry
           ) as BuiltList<DeletePlanFile>?;
           if (valueDes == null) continue;
           result.fileList.replace(valueDes);
+          break;
+        case r'paths':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
+          result.paths.replace(valueDes);
+          break;
+        case r'failed':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.failed = valueDes;
+          break;
+        case r'error':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.error = valueDes;
           break;
         case r'itemSurvives':
           final valueDes = serializers.deserialize(

@@ -45,6 +45,10 @@ final signupEnabledProvider = FutureProvider<bool>(
 /// friends flip the state on success and rethrow the structured API error
 /// on failure so forms can show it.
 class AuthController extends AsyncNotifier<SessionState> {
+  /// Moves at every sign-in and sign-out: a session read asked before one
+  /// answers for the account it was asked about, and is dropped.
+  var _account = 0;
+
   @override
   Future<SessionState> build() async {
     // No server, no probe: an unconfigured native build answers signed
@@ -107,8 +111,13 @@ class AuthController extends AsyncNotifier<SessionState> {
   /// one request.
   Future<void> refreshSession() async {
     final repo = ref.read(repositoryProvider);
+    final asked = _account;
     try {
-      state = AsyncData(await repo.getSession());
+      final session = await repo.getSession();
+      // A sign-out or a new account can end this controller mid-read, or
+      // land while it is out: either way the answer is not this account's.
+      if (!ref.mounted || asked != _account) return;
+      state = AsyncData(session);
     } on WaxDeckApiException {
       // Nothing to show and nothing to unwind: the 401 path is the
       // session layer's own, and any other failure just means the
@@ -117,10 +126,14 @@ class AuthController extends AsyncNotifier<SessionState> {
   }
 
   Future<void> _adopt(LoginResult result) async {
+    _account++;
     if (!kIsWeb) {
       await ref.read(credentialStoreProvider).writeToken(result.token);
     }
     state = AsyncData(SessionState(authenticated: true, user: result.user));
+    // The sign-in answer names the account and no more; the server's own
+    // state (read-only) arrives with the session.
+    unawaited(refreshSession());
   }
 
   Future<void> login({
@@ -190,6 +203,7 @@ class AuthController extends AsyncNotifier<SessionState> {
   /// Drops the local session without calling the server, for when the
   /// server side is already gone (the current session was revoked).
   Future<void> signOutLocally() async {
+    _account++;
     ref.read(repositoryProvider).authToken = null;
     if (!kIsWeb) {
       await ref.read(credentialStoreProvider).clearToken();
@@ -242,4 +256,12 @@ final authControllerProvider =
 /// instead. Null while signed out.
 final signedInAccountProvider = Provider<String?>(
   (ref) => ref.watch(authControllerProvider).value?.user?.id,
+);
+
+/// Whether the server says it is read-only, as of the last session read.
+///
+/// The account marker the server sends when the switch flips is what
+/// re-reads the session, so this follows without a poll.
+final serverReadOnlyProvider = Provider<bool>(
+  (ref) => ref.watch(authControllerProvider).value?.serverReadOnly ?? false,
 );

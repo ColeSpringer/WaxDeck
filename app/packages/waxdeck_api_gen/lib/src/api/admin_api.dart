@@ -391,7 +391,7 @@ class AdminApi {
   }
 
   /// Create a library at runtime
-  /// Registers a new library root without a server restart. The path is validated (an existing folder, absolute, and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries &#x60;streamingWarning&#x60; saying so, rather than reporting a plain success. &#x60;name&#x60; is the display name and the WaxFlow root name the same directory is served under. Administrators only. 
+  /// Registers a new library root without a server restart. The path is validated (absolute; an existing folder the server can read, or with &#x60;allowAbsent&#x60; one mounted later; writable by the server when the library is managed; and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries &#x60;streamingWarning&#x60; saying so, rather than reporting a plain success. &#x60;name&#x60; is the display name and the WaxFlow root name the same directory is served under. Administrators only. 
   ///
   /// Parameters:
   /// * [libraryCreate] 
@@ -2023,7 +2023,7 @@ class AdminApi {
   }
 
   /// List recent catalog jobs
-  /// Recent catalog jobs, newest first: &#x60;limit&#x60; of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (&#x60;set-kind&#x60;), which lists with its result. The &#x60;job&#x60; sync marker says when to read again. Administrators only. 
+  /// Recent catalog jobs, newest first: &#x60;limit&#x60; of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (&#x60;set-kind&#x60;), an organize undo (&#x60;organize-undo&#x60;) and a library removal (&#x60;remove-root&#x60;), which list with their result. The &#x60;job&#x60; sync marker says when to read again. Administrators only. 
   ///
   /// Parameters:
   /// * [limit] - Maximum jobs returned.
@@ -3201,6 +3201,92 @@ class AdminApi {
     }
 
     return Response<TranscodingLimits>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Remove a library
+  /// Takes the library out of the catalog and answers the job doing it. The files stay on disk: an item with a copy in another library carries on from that copy, and one with no other copy is archived with its play state and playlist entries and comes back when the folder is added again. The library&#39;s trash entries go, their files staying in its trash folder. Once the job has taken the library out of the catalog, its name, the account and invite grants naming it, and the streaming engine&#39;s mount of it go too, and the removal is audited as &#x60;library.remove&#x60;. A job stopped before that leaves the library in the catalog with its name, grants and mount, and removing it again finishes the job. Files its finished batches had let go of come back with a scan of the library, which the server starts once the job ends; a job a restart cut short is left to the startup scan when one runs, and one ending while another catalog job runs, to the library&#39;s next scan. A library the server&#39;s configuration names (&#x60;configured&#x60;) is &#x60;conflict&#x60;: every start registers it again, so it is taken out of &#x60;WAXDECK_LIBRARY_ROOTS&#x60; first. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [Job] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<Job>> removeLibrary({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/libraries/{pid}'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'DELETE',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    Job? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(Job),
+      ) as Job;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<Job>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

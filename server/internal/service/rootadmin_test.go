@@ -28,11 +28,13 @@ import (
 // fakeFlowRoots stands in for the bridge: it records what the service
 // taught it and answers the reload however the test needs.
 type fakeFlowRoots struct {
-	mu      sync.Mutex
-	names   []string
-	syncErr error
+	mu        sync.Mutex
+	names     []string
+	syncErr   error
+	removeErr error
 
-	synced []Root
+	synced  []Root
+	removed []string
 }
 
 func (f *fakeFlowRoots) RootNames() []string {
@@ -49,6 +51,16 @@ func (f *fakeFlowRoots) SyncRoot(_ context.Context, name, path string) error {
 		f.names = append(f.names, name)
 	}
 	return f.syncErr
+}
+
+func (f *fakeFlowRoots) RemoveRoot(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.removed = append(f.removed, name)
+	if f.removeErr == nil {
+		f.names = slices.DeleteFunc(f.names, func(n string) bool { return n == name })
+	}
+	return f.removeErr
 }
 
 // taught reports whether the bridge was taught name at path.
@@ -781,7 +793,7 @@ func TestALibraryNeedsAFolderThatIsThere(t *testing.T) {
 			t.Errorf("creating at %s = %v, want invalid saying %q", c.path, err, c.want)
 		}
 	}
-	// A taken name is the answer before the folder is looked at.
+	// A taken name is the answer, whatever the folder.
 	taken := svc.libraryRoots()[0].Name
 	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: taken, Path: filepath.Join(dir, "absent")}); KindOf(err) != KindConflict {
 		t.Errorf("a taken name at a missing folder = %v, want a conflict", err)

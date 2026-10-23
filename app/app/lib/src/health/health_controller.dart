@@ -25,14 +25,14 @@ class HealthFixes extends Notifier<Set<String>> {
   @override
   Set<String> build() => const {};
 
-  /// Starts the fix for every failing item of one rule, answering where
-  /// it runs.
-  Future<HealthFixStart> start(String rule) async {
+  /// Starts the fix for one rule, over [itemPids] or every failing item,
+  /// answering where it runs.
+  Future<HealthFixStart> start(String rule, {List<String>? itemPids}) async {
     state = {...state, rule};
     try {
       final started = await ref
           .read(repositoryProvider)
-          .fixHealthIssues(rule: rule);
+          .fixHealthIssues(rule: rule, itemPids: itemPids);
       if (ref.mounted) {
         ref.invalidate(
           started.jobPid != null ? adminJobsProvider : toolTasksProvider,
@@ -69,6 +69,26 @@ Future<void> refreshedSummary(Ref ref) {
 
 final healthFixesProvider = NotifierProvider<HealthFixes, Set<String>>(
   HealthFixes.new,
+);
+
+/// The issues whose "Move into place" is under way, from its dry run until
+/// the fix starts or the administrator declines it.
+class MovingIssues extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  /// Marks [pid] as moving; false when it already was.
+  bool start(String pid) {
+    if (state.contains(pid)) return false;
+    state = {...state, pid};
+    return true;
+  }
+
+  void end(String pid) => state = {...state}..remove(pid);
+}
+
+final movingIssuesProvider = NotifierProvider<MovingIssues, Set<String>>(
+  MovingIssues.new,
 );
 
 /// Whether one rule's fix is on its way or under way: a request this

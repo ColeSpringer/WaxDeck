@@ -46,7 +46,7 @@ void main() {
   final catalog = _specCatalog();
 
   test('the spec still names the whole catalog', () {
-    expect(catalog, hasLength(15));
+    expect(catalog, hasLength(16));
   });
 
   for (final MapEntry(key: locale, value: l10n) in <String, AppLocalizations>{

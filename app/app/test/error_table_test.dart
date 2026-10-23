@@ -139,6 +139,17 @@ void main() {
       expect(explainError(es, podcasts), es.errorPodcastsOff);
       expect(explainRefusal(en, podcasts), en.errorPodcastsOff);
 
+      // The engine being away is the server's state too, and passes.
+      const engine = WaxDeckApiException(
+        code: 'feature-unavailable',
+        message: _serverMessage,
+        statusCode: 503,
+        params: <String, String>{'feature': 'streaming-engine'},
+      );
+      expect(explainError(en, engine), en.errorStreamingEngine);
+      expect(explainError(es, engine), es.errorStreamingEngine);
+      expect(explainRefusal(en, engine), en.errorStreamingEngine);
+
       // A feature named by a newer server is still a feature-unavailable.
       const later = WaxDeckApiException(
         code: 'feature-unavailable',
@@ -173,6 +184,138 @@ void main() {
       );
       expect(explainError(en, later), en.errorInvalidRequest);
       expect(explainRefusal(en, later), _serverMessage);
+    });
+
+    test('conflict is refined by a file tool refusal\'s reason', () {
+      WaxDeckApiException refusal(Map<String, String> params) =>
+          WaxDeckApiException(
+            code: 'conflict',
+            message: _serverMessage,
+            params: params,
+          );
+      for (final (reason, sentence) in [
+        ('single-file', en.errorBookToolSingleFile),
+        ('multi-file', en.errorBookToolMultiFile),
+        ('no-chapters', en.errorBookToolNoChapters),
+        ('no-cuts', en.errorBookToolNoCuts),
+        ('no-sample-rate', en.errorBookToolNoSampleRate),
+        ('no-file', en.errorBookToolNoFile),
+        ('no-sheet', en.errorCueSplitNoSheet),
+        ('task-running', en.errorToolTaskRunning),
+        ('task-parked', en.errorToolTaskParked),
+      ]) {
+        expect(explainError(en, refusal({'reason': reason})), sentence);
+      }
+      // A parked task holds the book until it is dismissed, which is the
+      // word its row's button carries.
+      expect(
+        explainError(es, refusal({'reason': 'task-parked'})),
+        allOf(es.errorToolTaskParked, contains('Descártala en Tareas')),
+      );
+      expect(
+        explainError(
+          en,
+          refusal({'reason': 'name-taken', 'name': 'B.m4b', 'folder': 'A/B'}),
+        ),
+        en.errorBookToolNameTaken('B.m4b', 'A/B'),
+      );
+      expect(
+        explainError(
+          es,
+          refusal({
+            'reason': 'copy-elsewhere',
+            'copy': 'A/B/1.m4b',
+            'library': 'Spare',
+          }),
+        ),
+        es.errorBookToolCopyElsewhereIn('A/B/1.m4b', 'Spare'),
+      );
+      expect(
+        explainError(
+          en,
+          refusal({
+            'reason': 'copy-elsewhere',
+            'copy': 'A/B/1.m4b',
+            'library': '',
+          }),
+        ),
+        en.errorBookToolCopyElsewhere('A/B/1.m4b'),
+      );
+      // Files a merge or split that did not finish left in the trash: a
+      // few named, the rest counted, the number agreeing, and how to
+      // finish what it started.
+      WaxDeckApiException inTrash(String count, String files, String more) =>
+          refusal({
+            'reason': 'parts-in-trash',
+            'count': count,
+            'files': files,
+            'more': more,
+          });
+      expect(
+        explainError(en, inTrash('2', 'A/B/1.m4b, A/B/2.m4b', '0')),
+        "2 of this book's files went to the trash with a merge or split "
+        'that did not finish: A/B/1.m4b, A/B/2.m4b. Restore them from the '
+        'trash, then merge or split the book again.',
+      );
+      expect(
+        explainError(en, inTrash('1', 'A/B/1.m4b', '0')),
+        "1 of this book's files went to the trash with a merge or split "
+        'that did not finish: A/B/1.m4b. Restore it from the trash, then '
+        'merge or split the book again.',
+      );
+      final five = [for (var i = 1; i <= 5; i++) 'A/B/$i.m4b'].join(', ');
+      expect(
+        explainError(en, inTrash('60', five, '55')),
+        "60 of this book's files went to the trash with a merge or split "
+        'that did not finish: $five, and 55 more. Restore them from the '
+        'trash, then merge or split the book again.',
+      );
+      expect(
+        explainError(es, inTrash('1', 'A/B/1.m4b', '0')),
+        '1 de los archivos de este libro fue a la papelera con una fusión o '
+        'división que no terminó: A/B/1.m4b. Restáuralo desde la papelera y '
+        'vuelve a fusionar o dividir el libro.',
+      );
+      expect(
+        explainError(es, inTrash('60', five, '55')),
+        '60 de los archivos de este libro fueron a la papelera con una '
+        'fusión o división que no terminó: $five y 55 más. Restáuralos '
+        'desde la papelera y vuelve a fusionar o dividir el libro.',
+      );
+      // A clear that could not give a task's hidden files their names.
+      expect(
+        explainError(
+          en,
+          refusal({
+            'reason': 'outputs-hidden',
+            'folder': 'Ada/Book',
+            'cause': 'permission denied',
+          }),
+        ),
+        "This task's new files in Ada/Book could not be named or removed "
+        '(permission denied), so the task stays. Fix the folder, then clear '
+        'it again.',
+      );
+      expect(
+        explainError(
+          es,
+          refusal({
+            'reason': 'outputs-hidden',
+            'folder': 'Ada/Book',
+            'cause': 'permission denied',
+          }),
+        ),
+        'Los archivos nuevos de esta tarea en Ada/Book no se pudieron '
+        'nombrar ni quitar (permission denied), así que la tarea se queda. '
+        'Arregla la carpeta y vuelve a borrarla.',
+      );
+      // A conflict with no reason, or one this client does not know, is
+      // the plain one.
+      expect(explainError(en, refusal({})), en.errorConflict);
+      expect(
+        explainError(en, refusal({'reason': 'holo-projection'})),
+        en.errorConflict,
+      );
     });
 
     test('unsupported-format is refined by its reason', () {

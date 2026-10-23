@@ -144,6 +144,7 @@ func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequest
 		TotalActions:      plan.TotalActions,
 		Held:              plan.Held,
 		HeldByCode:        ptr(plan.HeldByCode),
+		Holds:             organizeHoldsJSON(plan.Holds),
 		ReadOnlyLibraries: plan.ReadOnlyLibraries,
 		TagWrite:          ptr(plan.TagWrite),
 		Actions:           make([]OrganizeAction, 0, len(plan.Actions)),
@@ -152,6 +153,25 @@ func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequest
 		out.Actions = append(out.Actions, OrganizeAction{ItemPid: a.ItemPID, From: a.From, To: a.To})
 	}
 	return PreviewOrganize200JSONResponse(out), nil
+}
+
+// organizeHoldsJSON is a plan's or a report's holds, absent when none.
+func organizeHoldsJSON(holds []service.OrganizeHoldDTO) *[]OrganizeHold {
+	if len(holds) == 0 {
+		return nil
+	}
+	out := make([]OrganizeHold, 0, len(holds))
+	for _, h := range holds {
+		hold := OrganizeHold{From: h.From, Code: OrganizeHoldCode(h.Code), Reason: h.Reason}
+		if h.ItemPID != "" {
+			hold.ItemPid = ptr(h.ItemPID)
+		}
+		if h.To != "" {
+			hold.To = ptr(h.To)
+		}
+		out = append(out, hold)
+	}
+	return &out
 }
 
 func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObject) (ApplyOrganizeResponseObject, error) {
@@ -168,16 +188,23 @@ func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObje
 	}
 	rep, err := s.svc.ApplyOrganize(ctx, uc, deref(req.Body.Profile), pids)
 	if err != nil {
-		switch service.KindOf(err) {
+		switch k := service.KindOf(err); k {
 		case service.KindInvalid:
 			return ApplyOrganize400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		case service.KindForbidden:
 			return ApplyOrganize403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindReadOnly, service.KindCatalogBusy:
+			return ApplyOrganize409JSONResponse(errObj(string(k), err.Error())), nil
 		}
 		return nil, err
 	}
-	out := OrganizeReport{Moved: rep.Moved, Skipped: rep.Skipped, Held: rep.Held,
-		ReadOnlyLibraries: rep.ReadOnlyLibraries, Failed: rep.Failed}
+	return ApplyOrganize200JSONResponse(organizeReportJSON(rep)), nil
+}
+
+func organizeReportJSON(rep service.OrganizeReportDTO) OrganizeReport {
+	out := OrganizeReport{JobPid: rep.JobPID, Moved: rep.Moved, Skipped: rep.Skipped, Held: rep.Held,
+		Holds: organizeHoldsJSON(rep.Holds), ReadOnlyLibraries: rep.ReadOnlyLibraries, Failed: rep.Failed,
+		DirsPruned: ptr(rep.DirsPruned)}
 	if len(rep.Failures) > 0 {
 		failures := make([]OrganizeFailure, 0, len(rep.Failures))
 		for _, f := range rep.Failures {
@@ -185,5 +212,64 @@ func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObje
 		}
 		out.Failures = ptr(failures)
 	}
-	return ApplyOrganize200JSONResponse(out), nil
+	return out
+}
+
+func (s *Server) ListOrganizeHistory(ctx context.Context, req ListOrganizeHistoryRequestObject) (ListOrganizeHistoryResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limit, ok := pageLimit(req.Params.Limit, 20, 100)
+	if !ok {
+		return ListOrganizeHistory400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 100"))}, nil
+	}
+	runs, next, err := s.svc.OrganizeHistory(ctx, uc, deref(req.Params.Cursor), limit)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindForbidden:
+			return ListOrganizeHistory403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindInvalid:
+			return ListOrganizeHistory400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	out := OrganizeHistory{Batches: make([]OrganizeBatch, 0, len(runs))}
+	for _, r := range runs {
+		b := OrganizeBatch{JobPid: r.JobPID, Kind: OrganizeBatchKind(r.Kind), State: r.State, StartedAt: r.StartedAt,
+			Committed: r.Committed, RolledBack: r.RolledBack, Planned: r.Planned, Undoable: r.Undoable}
+		if r.Profile != "" {
+			b.Profile = ptr(r.Profile)
+		}
+		out.Batches = append(out.Batches, b)
+	}
+	if next != "" {
+		out.NextCursor = ptr(next)
+	}
+	return ListOrganizeHistory200JSONResponse(out), nil
+}
+
+func (s *Server) UndoOrganize(ctx context.Context, req UndoOrganizeRequestObject) (UndoOrganizeResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return UndoOrganize400JSONResponse(errObj("invalid-request", "an undo body is required")), nil
+	}
+	rep, err := s.svc.UndoOrganize(ctx, uc, req.Body.JobPid)
+	if err != nil {
+		switch k := service.KindOf(err); k {
+		case service.KindInvalid:
+			return UndoOrganize400JSONResponse(errObj("invalid-request", err.Error())), nil
+		case service.KindForbidden:
+			return UndoOrganize403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindNotFound:
+			return UndoOrganize404JSONResponse(errObj("not-found", err.Error())), nil
+		case service.KindReadOnly, service.KindCatalogBusy:
+			return UndoOrganize409JSONResponse(errObj(string(k), err.Error())), nil
+		}
+		return nil, err
+	}
+	return UndoOrganize200JSONResponse(organizeReportJSON(rep)), nil
 }

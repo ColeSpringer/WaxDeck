@@ -14,6 +14,8 @@ class ServerHealth {
     required this.apiVersion,
     this.uploadFormats,
     this.rejectedFormats,
+    this.streaming,
+    this.podcasts,
   });
 
   final String status;
@@ -30,7 +32,44 @@ class ServerHealth {
   /// containers). Null on servers older than the field.
   final List<String>? rejectedFormats;
 
+  /// The streaming engine as the server sees it now. Null on servers
+  /// older than the field.
+  final ServerStreaming? streaming;
+
+  /// False when the server has podcasts turned off: every subscribe is
+  /// refused, so the podcast entry points are hidden. Null on servers
+  /// older than the field.
+  final bool? podcasts;
+
   bool get ok => status == 'ok';
+}
+
+/// The streaming engine's state (`/health.streaming`): whether one is
+/// set up, whether it answers, and what it offers while it does. Without
+/// it originals play directly.
+class ServerStreaming {
+  const ServerStreaming({
+    required this.configured,
+    required this.connected,
+    this.timelines = false,
+    this.voiceBoost = false,
+    this.fileTools = false,
+  });
+
+  /// An engine is set up on this server.
+  final bool configured;
+
+  /// It answers; false while a configured one is away.
+  final bool connected;
+
+  /// It renders a queue as one gapless timeline.
+  final bool timelines;
+
+  /// It applies voice boost.
+  final bool voiceBoost;
+
+  /// It runs the file tools and the silence analysis trimming reads.
+  final bool fileTools;
 }
 
 /// Structured API error (the spec's `Error` schema), thrown by the client.
@@ -236,10 +275,19 @@ class LoginResult {
 
 /// Whether the caller is authenticated, and as whom.
 class SessionState {
-  const SessionState({required this.authenticated, this.user});
+  const SessionState({
+    required this.authenticated,
+    this.user,
+    this.serverReadOnly = false,
+  });
 
   final bool authenticated;
   final WaxDeckUser? user;
+
+  /// The server-wide read-only switch as of this read: uploads, edits that
+  /// write files and deletions are refused for every account. False when
+  /// the read carries no `server` object, as a signed-out probe does not.
+  final bool serverReadOnly;
 }
 
 /// Whether the server is waiting for its first administrator account.
@@ -4391,6 +4439,9 @@ class LibraryInfo {
     this.folderFallback = false,
     this.managed = false,
     this.profile,
+    this.configured = false,
+    this.unreachable = false,
+    this.writable,
   });
 
   final String pid;
@@ -4434,6 +4485,17 @@ class LibraryInfo {
   /// false when another job was running, so the root waits for the next
   /// one. Null on a listed library.
   final bool? scanStarted;
+
+  /// The server's configuration names the library, so it is removed
+  /// there first.
+  final bool configured;
+
+  /// The library's folder was not there at its last scan.
+  final bool unreachable;
+
+  /// For a managed library, whether the server could write to its
+  /// folder when last checked; null on an in-place one.
+  final bool? writable;
 }
 
 /// One genre in the canonical vocabulary: its display spelling, the
@@ -4636,6 +4698,33 @@ class OrganizeAction {
   final String to;
 }
 
+/// One move held back, and why.
+class OrganizeHold {
+  const OrganizeHold({
+    this.itemPid,
+    required this.from,
+    this.to,
+    required this.code,
+    required this.reason,
+  });
+
+  /// The item whose file is held; null on an undo's holds, which name
+  /// files by path.
+  final String? itemPid;
+  final String from;
+
+  /// Where the move would put it; null when the pass has no place for it.
+  final String? to;
+
+  /// The hold code in wire spelling (`occupied`, `untagged`, `read-only`,
+  /// ..., and an undo's `moved-since` and `uncataloged`); empty for one
+  /// this build does not know.
+  final String code;
+
+  /// The catalog's own words for it.
+  final String reason;
+}
+
 /// A dry-run organize plan.
 class OrganizePlan {
   const OrganizePlan({
@@ -4643,6 +4732,7 @@ class OrganizePlan {
     required this.totalActions,
     this.held = 0,
     this.heldByCode = const {},
+    this.holds = const [],
     this.readOnlyLibraries = 0,
     this.actions = const [],
     this.tagWrite = false,
@@ -4660,6 +4750,9 @@ class OrganizePlan {
   /// `untagged` and the rest the server names.
   final Map<String, int> heldByCode;
 
+  /// The first of the [held] moves, each with why.
+  final List<OrganizeHold> holds;
+
   /// Managed libraries left out because they are read-only.
   final int readOnlyLibraries;
   final List<OrganizeAction> actions;
@@ -4674,17 +4767,22 @@ class OrganizeFailure {
   final String reason;
 }
 
-/// Outcome of an applied organize run.
+/// Outcome of an applied organize run, or of an undo of one.
 class OrganizeReport {
   const OrganizeReport({
+    this.jobPid = '',
     required this.moved,
     required this.skipped,
     this.held = 0,
+    this.holds = const [],
     this.readOnlyLibraries = 0,
     required this.failed,
     this.failures = const [],
+    this.dirsPruned = 0,
   });
 
+  /// The catalog job it ran as; empty when nothing was left to move.
+  final String jobPid;
   final int moved;
 
   /// Files already in place.
@@ -4692,11 +4790,68 @@ class OrganizeReport {
 
   /// Files held back where they are, for any cause.
   final int held;
+  final List<OrganizeHold> holds;
 
   /// Managed libraries left alone because they are read-only.
   final int readOnlyLibraries;
   final int failed;
   final List<OrganizeFailure> failures;
+
+  /// Folders the moves emptied and removed.
+  final int dirsPruned;
+}
+
+/// One organize run, or an undo of one, whose moves the catalog's
+/// journal still holds.
+class OrganizeBatch {
+  const OrganizeBatch({
+    required this.jobPid,
+    required this.kind,
+    required this.state,
+    required this.startedAt,
+    this.profile,
+    this.committed = 0,
+    this.rolledBack = 0,
+    this.planned = 0,
+    this.undoable = false,
+  });
+
+  final String jobPid;
+
+  /// `organize`, or `organize-undo` for an undo of one.
+  final String kind;
+  final String state;
+  final DateTime startedAt;
+
+  /// The profile an organize run laid out by; null for an undo.
+  final String? profile;
+
+  /// Files the run moved.
+  final int committed;
+
+  /// Moves that failed on disk, leaving the file where it was.
+  final int rolledBack;
+
+  /// Moves a crash left half made, which the server's next start settles.
+  final int planned;
+
+  /// Whether an undo takes the run now.
+  final bool undoable;
+
+  bool get isUndo => kind == 'organize-undo';
+}
+
+/// A page of the organize runs the server's journal still holds, newest
+/// first.
+class OrganizeHistoryPage {
+  const OrganizeHistoryPage({required this.runs, this.nextCursor});
+
+  final List<OrganizeBatch> runs;
+
+  /// The cursor of the next, older page; null on the last.
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
 }
 
 /// One long-running library tool task.
@@ -4706,12 +4861,16 @@ class ToolTask {
     required this.type,
     required this.state,
     this.itemPid,
+    this.itemTitle,
     this.progressPct,
     this.error,
     this.resultPids = const [],
     required this.createdAt,
     this.finishedAt,
     this.summary,
+    this.waitReason,
+    this.retryAt,
+    this.bookInTrash = false,
   });
 
   final String id;
@@ -4719,9 +4878,15 @@ class ToolTask {
   /// `book-merge`, `book-split`, or `cue-split`. Open vocabulary.
   final String type;
 
-  /// `queued`, `running`, `done`, or `failed`. Open vocabulary.
+  /// `queued`, `running`, `done`, `failed`, or `parked` (stopped for good
+  /// after its runs kept ending with the server, which counts as failed).
+  /// Open vocabulary.
   final String state;
   final String? itemPid;
+
+  /// What [itemPid] was called when the task was queued, for a task
+  /// that works on one titled item.
+  final String? itemTitle;
   final double? progressPct;
   final String? error;
 
@@ -4733,6 +4898,34 @@ class ToolTask {
   /// Task-type-specific outcome counters (a migration's matched and
   /// unmatched counts, for example), once finished.
   final Map<String, Object?>? summary;
+
+  /// Why a `running` task is waiting to try again on its own
+  /// (`catalog-busy`, `read-only`, `storage-unwritable`, ...), with
+  /// [error] saying it in the server's words; null while it works.
+  /// Open vocabulary.
+  final String? waitReason;
+
+  /// When a waiting task tries again.
+  final DateTime? retryAt;
+
+  /// Whether a book merge's or split's sources are in the trash and its
+  /// new files not yet the book: the book is missing until it finishes.
+  final bool bookInTrash;
+
+  /// Whether the task has ended: done, failed, or parked. A finished task
+  /// is dismissed and swept like any other, and a parked one holds its
+  /// book or rip from another merge or split until it is.
+  bool get finished =>
+      state == 'done' || state == 'failed' || state == 'parked';
+}
+
+/// What clearing finished tool tasks did: how many went, and how many
+/// stayed because files they left could not be moved (each row says why).
+class ToolTasksCleared {
+  const ToolTasksCleared({required this.deleted, this.kept = 0});
+
+  final int deleted;
+  final int kept;
 }
 
 /// One keyset-paginated page of tool tasks.
@@ -5655,7 +5848,10 @@ class DeletePlanEntry {
     required this.files,
     required this.bytes,
     this.fileList = const [],
+    this.paths = const [],
     this.itemSurvives = false,
+    this.failed = 0,
+    this.error,
   });
 
   final String pid;
@@ -5667,9 +5863,18 @@ class DeletePlanEntry {
   /// file counts under another.
   final List<DeletePlanFile> fileList;
 
+  /// Where the files [fileList] names are, in the same order, each
+  /// relative to its library's root.
+  final List<String> paths;
+
   /// The item keeps a file after the deletion (a copy, or one left in
   /// place), so it stays in the library.
   final bool itemSurvives;
+
+  /// Files of the item an applied deletion could not remove, which
+  /// [files] does not count, and why the first of them stayed.
+  final int failed;
+  final String? error;
 }
 
 /// One file a deletion removes (or would remove).
@@ -5698,6 +5903,11 @@ class DeleteItemsResult {
     required this.mode,
     this.entries = const [],
     this.warnings = const [],
+    this.trashed = 0,
+    this.deleted = 0,
+    this.failed = 0,
+    this.dirsPruned = 0,
+    this.reclaimedBytes = 0,
   });
 
   /// False for a dry run: [entries] is the plan, nothing was touched.
@@ -5710,6 +5920,18 @@ class DeleteItemsResult {
   /// What the deletion did beside removing files, in the server's
   /// sentences: a copy that took a deleted file's place.
   final List<String> warnings;
+
+  /// An applied deletion's totals, zero on a plan: files moved to the
+  /// trash, deleted outright, and tried and left where they were.
+  final int trashed;
+  final int deleted;
+  final int failed;
+
+  /// Folders the deletion emptied and removed.
+  final int dirsPruned;
+
+  /// Disk space a permanent deletion freed.
+  final int reclaimedBytes;
 
   int get totalFiles => entries.fold(0, (sum, e) => sum + e.files);
   int get totalBytes => entries.fold(0, (sum, e) => sum + e.bytes);

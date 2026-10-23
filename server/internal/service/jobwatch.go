@@ -41,6 +41,7 @@ const (
 // delete, a restore, an upload's imports) announce only their end.
 var jobProgressKinds = map[string]bool{
 	"scan": true, "enrich": true, "organize": true, "analyze": true, "empty-trash": true,
+	"organize-undo": true, "remove-root": true,
 }
 
 // jobWatch holds the jobs the feed saw change since they were last read,
@@ -348,10 +349,13 @@ func (l *Library) announceJobs(ctx context.Context, seen map[model.PID]jobSeen, 
 		if j.State == model.JobRunning {
 			continue
 		}
+		l.noteScanReach(ctx, &j)
+		l.noteRefusedMoves(&j)
 		// Most jobs have no one to tell: an upload's imports, deletes,
 		// the scheduler's own runs. Only a pass's pictures matter then,
-		// and a kind change's pids, which WaxDeck's own rows follow.
-		if j.Kind == "enrich" || j.Kind == "set-kind" || l.jobHasOrigin(ctx, j.PID) {
+		// a kind change's pids, which WaxDeck's own rows follow, and a
+		// removed library, whose name and grants WaxDeck keeps.
+		if j.Kind == "enrich" || j.Kind == "set-kind" || j.Kind == "remove-root" || l.jobHasOrigin(ctx, j.PID) {
 			l.settleLater(func(ctx context.Context) { l.onJobFinished(ctx, &j) })
 		}
 	}
@@ -446,6 +450,11 @@ func (l *Library) onJobFinished(ctx context.Context, j *model.Job) {
 		}
 		return
 	}
+	// A removal no origin records, the CLI's, has no one to tell either.
+	if j.Kind == "remove-root" && !l.jobHasOrigin(ctx, j.PID) {
+		l.settleUnrecordedRemoval(ctx, j)
+		return
+	}
 	if j.Kind == "enrich" && j.Result != "" {
 		var res enrich.Result
 		if json.Unmarshal([]byte(j.Result), &res) == nil && (res.ArtFetched > 0 || res.AuxArtFetched > 0) {
@@ -460,24 +469,32 @@ func (l *Library) onJobFinished(ctx context.Context, j *model.Job) {
 // whose record failed is followed all the same. A job that ended before
 // the record landed is settled here: the follower found no one to tell.
 func (l *Library) adoptJob(ctx context.Context, pid model.PID, userID, rule string) {
+	_ = l.adoptJobWith(ctx, wdb.JobOrigin{PID: string(pid), UserID: userID, Rule: rule})
+}
+
+// adoptJobWith is adoptJob for an origin carrying more, answering whether
+// it was recorded.
+func (l *Library) adoptJobWith(ctx context.Context, o wdb.JobOrigin) error {
 	ctx = context.WithoutCancel(ctx)
-	err := l.db.InsertJobOrigin(ctx, wdb.JobOrigin{
-		PID: string(pid), UserID: userID, Rule: rule, CreatedAtNS: time.Now().UnixNano(),
-	})
+	o.CreatedAtNS = time.Now().UnixNano()
+	err := l.db.InsertJobOrigin(ctx, o)
+	pid := model.PID(o.PID)
 	l.followJob(pid)
 	if err != nil {
-		l.log.Warn("recording who started a job", "job", string(pid), "err", err)
-		return
+		l.log.Warn("recording who started a job", "job", o.PID, "err", err)
+		return err
 	}
 	if j, err := l.lib.Job(ctx, pid); err == nil && j.State != model.JobRunning {
 		l.settleLater(func(ctx context.Context) { l.settleJobOrigin(ctx, j) })
 	}
+	return nil
 }
 
 // settleJobOrigin tells whoever started an ended job about it, once: the
 // follower and the starter may both get here, and one claims the origin.
 // The origin goes once the end is told, so a stop in between leaves it
-// for the next start.
+// for the next start, and an organize run's audit row goes in with that
+// drop, so a settle repeated then records the run once.
 func (l *Library) settleJobOrigin(ctx context.Context, j *model.Job) {
 	o, err := l.db.ClaimJobOrigin(context.WithoutCancel(ctx), string(j.PID), time.Now().UnixNano(), l.openedAtNS)
 	if err != nil {
@@ -492,18 +509,30 @@ func (l *Library) settleJobOrigin(ctx context.Context, j *model.Job) {
 	if j.Kind == "set-kind" && l.followKindChange(ctx, j) != nil {
 		return
 	}
+	removed, err := l.followRootRemoval(ctx, j, o)
+	if err != nil {
+		l.log.Warn("following up a library's removal; the next start repeats it", "job", string(j.PID), "err", err)
+		return
+	}
 	if o.Rule != "" {
 		l.finishHealthFixJob(ctx, o, jobDTO(j))
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
+	audit := l.finishOrganizeJob(ctx, o, j)
 	// An origin of no one's only kept a follow-up; there is nobody to tell.
 	if o.UserID != "" {
 		ended := []Job{jobDTO(j)}
 		l.nameJobTargets(ctx, ended)
+		if removed {
+			// The library went, however its job ended.
+			ended[0].State = string(model.JobDone)
+		}
 		l.notifyJobEnd(ctx, o.UserID, ended[0])
 	}
-	l.dropJobOrigin(ctx, o.PID)
+	if err := l.db.SettleJobOrigin(ctx, o.PID, audit); err != nil && !errors.Is(err, wdb.ErrNotFound) {
+		l.log.Warn("dropping a told job's origin", "job", o.PID, "err", err)
+	}
 }
 
 // dropJobOrigin forgets an origin whose job's end has been told.
@@ -580,6 +609,7 @@ func jobDTO(j *model.Job) Job {
 var jobTargetPrefixes = map[string]string{
 	"item": PrefixTrack, "artist": PrefixArtist, "release_group": PrefixReleaseGroup,
 	"album": PrefixAlbum, "library": PrefixLibrary, "trash": PrefixTrash,
+	"job": PrefixJob,
 }
 
 // nameJobTargets names the jobs' targets and a scan's runs, and gives an
@@ -633,12 +663,18 @@ func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
 					t.Name = r.Name
 				}
 			}
+			if t.Name == "" {
+				t.Name = l.removals.name(bare)
+			}
+			if t.Name == "" {
+				t.Name = l.removedLibraryName(ctx, t.PID)
+			}
 		case "trash":
 			if trashed == nil {
 				trashed = map[model.PID]string{}
 				if entries, err := l.lib.Trash(ctx, true, 0); err == nil {
 					for _, e := range entries {
-						trashed[e.PID] = e.OrigDisplay
+						trashed[e.PID] = l.trashEntryName(e)
 					}
 				}
 			}
@@ -647,11 +683,12 @@ func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
 	}
 }
 
-// nameScanRuns names each library a scan walked from the root table:
-// WaxBin names a run by its root's path, which is not every reader's to
-// see.
+// nameScanRuns names each library a scan walked from the root table, and
+// the ones whose folder it could not reach: WaxBin names a run by its
+// root's path, which is not every reader's to see.
 func (l *Library) nameScanRuns(s *ScanTallyDTO) {
 	roots := l.libraryRoots()
+	s.RootsUnreachable = nil
 	for i := range s.Runs {
 		run := &s.Runs[i]
 		_, bare, ok := parseAPIPID(run.LibraryPID)
@@ -663,6 +700,9 @@ func (l *Library) nameScanRuns(s *ScanTallyDTO) {
 				run.Library = r.Name
 			}
 		}
+		if run.RootUnreachable && run.Library != "" {
+			s.RootsUnreachable = append(s.RootsUnreachable, run.Library)
+		}
 	}
 }
 
@@ -672,11 +712,11 @@ func sortJobsNewestFirst(jobs []Job) {
 }
 
 // organizeTally is what an organize run did, in files: skipped is what
-// did not move, in place or held back.
+// did not move, in place or held back, and held the second of those.
 func organizeTally(profile string, r *organize.Report) *OrganizeTallyDTO {
 	return &OrganizeTallyDTO{
-		Profile: profile, Moved: r.Moved, Skipped: r.Skipped + r.Held,
-		Errored: r.Errored, SidecarsMoved: r.SidecarsMoved,
+		Profile: profile, Moved: r.Moved, Skipped: r.Skipped + r.Held, Held: r.Held,
+		Errored: r.Errored, SidecarsMoved: r.SidecarsMoved, DirsPruned: r.DirsPruned,
 	}
 }
 
@@ -728,7 +768,7 @@ func (j *Job) readResult(raw string) {
 		if json.Unmarshal([]byte(raw), &r) == nil {
 			j.Enrich = lastRunFrom(r, 0)
 		}
-	case "organize":
+	case "organize", "organize-undo":
 		var r organize.RunResult
 		if json.Unmarshal([]byte(raw), &r) == nil {
 			j.Organize = organizeTally(r.Profile, &r.Report)
@@ -736,5 +776,12 @@ func (j *Job) readResult(raw string) {
 	case "set-kind":
 		// Bare pids; nameJobTargets gives each its current prefix.
 		j.SetKind = kindTally(raw)
+	case "remove-root":
+		var r model.RemoveRootReport
+		if json.Unmarshal([]byte(raw), &r) == nil {
+			j.RemoveRoot = &RemoveRootTallyDTO{
+				FilesDetached: r.FilesDetached, ItemsArchived: r.ItemsArchived, TrashRowsDropped: r.TrashRowsDropped,
+			}
+		}
 	}
 }
