@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -274,12 +273,14 @@ func (l *Library) guardAcquireHost(ctx context.Context, host string) error {
 	if l.allowPrivateFeedHosts {
 		return nil
 	}
-	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	// Stricter than the write-time courtesy check (hostResolvesPrivate)
+	// over the same lookup: a name that does not resolve is refused here.
+	ips, err := l.hostAddrs(ctx, host)
 	if err != nil {
 		return errInvalid("the url's host does not resolve")
 	}
-	for _, a := range addrs {
-		if privateIP(a.IP) || a.IP.IsMulticast() {
+	for _, ip := range ips {
+		if privateIP(ip) || ip.IsMulticast() {
 			return errInvalid("the url points at a private or internal address")
 		}
 	}

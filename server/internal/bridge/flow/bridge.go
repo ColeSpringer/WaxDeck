@@ -951,12 +951,6 @@ func (b *Bridge) AddRoot(name, path string) {
 	b.roots = roots
 }
 
-// removeRoot drops a root the sidecar refused, so the bridge's table
-// stays what the sidecar can actually serve.
-func (b *Bridge) removeRoot(name string) {
-	b.applyRoots(nil, []string{name})
-}
-
 // SyncRoot teaches the bridge a library root created at runtime and
 // brings the sidecar to the same set (ChangeRoots). A nil error means
 // streaming from the new root works now, or, while the engine is away or

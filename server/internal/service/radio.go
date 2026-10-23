@@ -163,14 +163,16 @@ func (l *Library) DeleteRadioStation(ctx context.Context, apiStationPID string) 
 }
 
 // RadioStreamSource resolves a station's stream URL for the proxy,
-// re-validating the URL policy at fetch time (the row may predate a
-// policy change).
+// re-checking its shape at fetch time (the row may predate a policy
+// change). Its address is not resolved here: the proxy's client refuses
+// a private one as it dials, and RadioDialRefusal says so in the words
+// the save-time check uses.
 func (l *Library) RadioStreamSource(ctx context.Context, apiStationPID string) (string, error) {
 	row, err := l.radioStationRow(ctx, apiStationPID)
 	if err != nil {
 		return "", err
 	}
-	if err := l.validateStreamURL(row.StreamURL); err != nil {
+	if _, err := streamURLShape(row.StreamURL); err != nil {
 		return "", err
 	}
 	// Kept as the stream opens, the one moment the proxy asks: a picture
@@ -1316,7 +1318,7 @@ func (l *Library) validateStationEdit(ctx context.Context, edit RadioStationEdit
 	if name == "" {
 		return wdb.RadioStation{}, errInvalid("a station needs a name")
 	}
-	if err := l.validateStreamURL(edit.StreamURL); err != nil {
+	if err := l.validateStreamURL(ctx, edit.StreamURL); err != nil {
 		return wdb.RadioStation{}, err
 	}
 	for _, aux := range []string{edit.HomepageURL, edit.LogoURL} {
@@ -1335,21 +1337,46 @@ func (l *Library) validateStationEdit(ctx context.Context, edit RadioStationEdit
 	}, nil
 }
 
+// privateStationRefusal is the stream URL policy's refusal of a private
+// address, said the same when a station is saved and when the proxy's
+// dial is refused.
+const privateStationRefusal = "the stream URL resolves to a private address; the server does not allow private-range stations"
+
 // validateStreamURL enforces the stream URL policy: http or https,
 // and no private-range destinations unless the server allows LAN
 // stations. The name is resolved here as a write-time courtesy; the
 // dial-time guard on the proxy client is the real boundary.
-func (l *Library) validateStreamURL(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return errInvalid("the stream URL must be http or https")
+func (l *Library) validateStreamURL(ctx context.Context, raw string) error {
+	u, err := streamURLShape(raw)
+	if err != nil {
+		return err
 	}
 	if l.allowPrivateRadioHosts {
 		return nil
 	}
 	// Best effort: an unresolvable name fails at fetch time instead.
-	if hostResolvesPrivate(u.Hostname()) {
-		return errInvalid("the stream URL resolves to a private address; the server does not allow private-range stations")
+	if l.hostResolvesPrivate(ctx, u.Hostname()) {
+		return errInvalid(privateStationRefusal)
+	}
+	return nil
+}
+
+// streamURLShape is the half of the stream URL policy a URL carries on
+// its face: http or https, naming a host.
+func streamURLShape(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, errInvalid("the stream URL must be http or https")
+	}
+	return u, nil
+}
+
+// RadioDialRefusal is the stream URL policy's refusal a proxied
+// station fetch failed on, or nil: the radio client refuses a private
+// address as it dials, which reads as the save-time refusal does.
+func RadioDialRefusal(err error) error {
+	if errors.Is(err, errPrivateAddress) {
+		return errInvalid(privateStationRefusal)
 	}
 	return nil
 }

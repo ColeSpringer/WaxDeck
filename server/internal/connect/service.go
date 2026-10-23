@@ -295,7 +295,6 @@ func (s *Service) Run(ctx context.Context) error {
 // transfer's source would be let go unstopped, playing beside its
 // target - and later ones are refused.
 func (s *Service) release() {
-	ctx := context.Background()
 	s.mu.Lock()
 	s.stopped = true
 	for s.driving > 0 {
@@ -303,7 +302,7 @@ func (s *Service) release() {
 	}
 	for _, sess := range s.sessions {
 		if sess.driver != nil {
-			s.endSessionLocked(ctx, sess, false)
+			s.endSessionLocked(sess, false)
 		}
 	}
 	s.mu.Unlock()
@@ -638,12 +637,14 @@ func (s *Service) CreateSession(ctx context.Context, userID, userName string, re
 		return Session{}, err
 	}
 	defer s.endDriving()
-	if err := s.loadOnDevice(ctx, sess, ep, entries, req.Index, req.PositionMS, req.Play); err != nil {
+	loaded, err := s.loadOnDevice(ctx, sess.ownerID, ep, entries, req.Index, req.PositionMS, req.Play)
+	if err != nil {
 		return Session{}, err
 	}
+	s.attachDriver(sess, loaded)
 	// The rate is the driver's own setting rather than part of a load.
-	if rate != 1 && sess.driver != nil {
-		if err := sess.driver.SetRate(ctx, rate); err != nil {
+	if rate != 1 {
+		if err := loaded.driver.SetRate(ctx, rate); err != nil {
 			s.cfg.Logger.Warn("applying handoff rate", "err", err)
 		}
 	}
@@ -679,7 +680,7 @@ func (s *Service) endHandoffSource(ctx context.Context, userID, endpointID, keep
 		s.mu.Unlock()
 		return
 	}
-	s.endSessionLocked(ctx, old, true)
+	s.endSessionLocked(old, true)
 	s.mu.Unlock()
 	// The same two the deliberate end does, and for the same reasons:
 	// the row leaves the live map synchronously while the teardown's
@@ -698,7 +699,7 @@ func (s *Service) adoptSession(ctx context.Context, sess *session) Session {
 	s.mu.Lock()
 	if oldID, ok := s.byEndpoint[sess.endpointID]; ok && oldID != sess.id {
 		if old, ok := s.sessions[oldID]; ok {
-			s.endSessionLocked(ctx, old, false)
+			s.endSessionLocked(old, false)
 		}
 	}
 	s.sessions[sess.id] = sess
@@ -720,11 +721,21 @@ func entryPIDs(entries []QueueEntry) []string {
 	return out
 }
 
+// loadedDevice is a device a queue was just loaded onto, bound to no
+// session yet: its driver, and the mapping that reads its reports back
+// as queue positions.
+type loadedDevice struct {
+	driver     Driver
+	load       deviceLoad
+	mediaIndex int
+}
+
 // loadOnDevice dials the endpoint's driver and loads media, trying
 // the advertise bases in order (the first base the device actually
 // accepts wins; a cast device that cannot fetch HTTPS falls to the
-// LAN base).
-func (s *Service) loadOnDevice(ctx context.Context, sess *session, ep Endpoint, entries []QueueEntry, index int, positionMS int64, play bool) error {
+// LAN base). The device comes back unbound: binding it is the
+// caller's, under the lock that decides the session is still there.
+func (s *Service) loadOnDevice(ctx context.Context, ownerID string, ep Endpoint, entries []QueueEntry, index int, positionMS int64, play bool) (loadedDevice, error) {
 	// A probe already has the device and is about to load over
 	// anything put there now, then silence it. Both paths that reach
 	// here - a fresh session and a transfer - are refused for the few
@@ -733,46 +744,42 @@ func (s *Service) loadOnDevice(ctx context.Context, sess *session, ep Endpoint, 
 	probing := s.probing[ep.ID]
 	s.mu.Unlock()
 	if probing {
-		return fmt.Errorf("%w: a connection check is running on %s", ErrEndpointBusy, ep.Name)
+		return loadedDevice{}, fmt.Errorf("%w: a connection check is running on %s", ErrEndpointBusy, ep.Name)
 	}
 	dial, ok := s.reg.dialer(ep.ID)
 	if !ok {
-		return ErrEndpointOffline
+		return loadedDevice{}, ErrEndpointOffline
 	}
 	driver, err := dial(ctx)
 	if err != nil {
 		s.reg.MarkDeviceOffline(ep.ID)
-		return fmt.Errorf("%w: %v", ErrEndpointOffline, err)
+		return loadedDevice{}, fmt.Errorf("%w: %v", ErrEndpointOffline, err)
 	}
 
 	bases := s.cfg.Bases.forKind(ep.Kind)
 	if len(bases) == 0 {
 		driver.Close()
-		return InvalidError{Msg: "no advertise base is configured for casting"}
+		return loadedDevice{}, InvalidError{Msg: "no advertise base is configured for casting"}
 	}
 	ttl := mediaTTL(entries)
 	var lastErr error
 	for _, base := range bases {
-		rendered, err := s.renderQueue(ctx, sess.ownerID, ep, driver, entries, base, ttl)
+		rendered, err := s.renderQueue(ctx, ownerID, ep, driver, entries, base, ttl)
 		if err != nil {
 			// The queue itself is unplayable here, which no other base
 			// would change.
 			driver.Close()
-			return err
+			return loadedDevice{}, err
 		}
-		if err := s.driveLoad(ctx, sess, driver, rendered, index, positionMS, play); err != nil {
+		mediaIndex, err := loadRendering(ctx, driver, rendered, index, positionMS, play)
+		if err != nil {
 			lastErr = err
 			continue
 		}
-		lastErr = nil
-		break
+		return loadedDevice{driver: driver, load: rendered, mediaIndex: mediaIndex}, nil
 	}
-	if lastErr != nil {
-		driver.Close()
-		return fmt.Errorf("%w: %v", ErrEndpointOffline, lastErr)
-	}
-	s.attachDriver(sess, driver)
-	return nil
+	driver.Close()
+	return loadedDevice{}, fmt.Errorf("%w: %v", ErrEndpointOffline, lastErr)
 }
 
 // deviceLoad is one advertise base's rendering of a queue: either the
@@ -808,8 +815,8 @@ func (s *Service) renderQueue(ctx context.Context, ownerID string, ep Endpoint, 
 // when the device takes it, records how to read that device's reports
 // back as queue positions.
 func (s *Service) driveLoad(ctx context.Context, sess *session, driver Driver, d deviceLoad, index int, positionMS int64, play bool) error {
-	items, mediaIdx, inMediaMS := d.at(index, positionMS)
-	if err := driver.Load(ctx, items, mediaIdx, inMediaMS, play); err != nil {
+	mediaIdx, err := loadRendering(ctx, driver, d, index, positionMS, play)
+	if err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -818,6 +825,16 @@ func (s *Service) driveLoad(ctx context.Context, sess *session, driver Driver, d
 	sess.mediaIndex = mediaIdx
 	s.mu.Unlock()
 	return nil
+}
+
+// loadRendering hands a rendering to the device at a queue position and
+// answers which of its items that position falls in.
+func loadRendering(ctx context.Context, driver Driver, d deviceLoad, index int, positionMS int64, play bool) (int, error) {
+	items, mediaIdx, inMediaMS := d.at(index, positionMS)
+	if err := driver.Load(ctx, items, mediaIdx, inMediaMS, play); err != nil {
+		return 0, err
+	}
+	return mediaIdx, nil
 }
 
 // at resolves the driver arguments for a position in queue terms: what
@@ -888,21 +905,35 @@ func timelineLocate(tm *TimelineMedia, absMS int64) (int, int64) {
 	return idx, absMS - offsetMS
 }
 
-// attachDriver binds a live driver to the session and starts its
-// event pump under supervision.
-func (s *Service) attachDriver(sess *session, driver Driver) {
-	pumpCtx, cancel := context.WithCancel(context.Background())
-	// The session can already be reachable here (a transfer loads onto
-	// a live session), so the field writes take the lock like every
-	// reader does.
+// attachDriver binds a loaded device to a session nothing can reach
+// yet and starts its event pump.
+func (s *Service) attachDriver(sess *session, loaded loadedDevice) {
 	s.mu.Lock()
-	sess.driver = driver
-	sess.driverCancel = cancel
-	s.driverGen[sess.id]++
-	gen := s.driverGen[sess.id]
+	pumpCtx, gen := s.bindDeviceLocked(sess, loaded)
 	s.mu.Unlock()
-	name := fmt.Sprintf("session-pump-%s-%d", sess.id, gen)
-	s.cfg.Group.GoOnce(pumpCtx, name, func(ctx context.Context) error {
+	s.startPump(pumpCtx, sess.id, gen, loaded.driver)
+}
+
+// bindDeviceLocked makes a loaded device the session's driver, its
+// reports read through the load's mapping under a new generation that
+// fences the previous driver's pump. Callers hold s.mu, and start the
+// pump once they let it go.
+func (s *Service) bindDeviceLocked(sess *session, loaded loadedDevice) (context.Context, int) {
+	pumpCtx, cancel := context.WithCancel(context.Background())
+	sess.driver = loaded.driver
+	sess.driverCancel = cancel
+	sess.timeline = loaded.load.tm
+	sess.slots = loaded.load.slots
+	sess.mediaIndex = loaded.mediaIndex
+	s.driverGen[sess.id]++
+	return pumpCtx, s.driverGen[sess.id]
+}
+
+// startPump feeds a bound driver's events to its session under
+// supervision, until the driver closes or the session lets it go.
+func (s *Service) startPump(ctx context.Context, sessionID string, gen int, driver Driver) {
+	name := fmt.Sprintf("session-pump-%s-%d", sessionID, gen)
+	s.cfg.Group.GoOnce(ctx, name, func(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
@@ -911,7 +942,7 @@ func (s *Service) attachDriver(sess *session, driver Driver) {
 				if !ok {
 					return nil
 				}
-				s.onDriverEvent(sess.id, gen, ev)
+				s.onDriverEvent(sessionID, gen, ev)
 			}
 		}
 	})
@@ -1064,6 +1095,7 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 	oldAuthority := sess.authority
 	s.mu.Unlock()
 
+	var loaded loadedDevice
 	if target.Kind == KindClient {
 		s.markLoadPending(target.ID, sessionID)
 		if err := s.loadOnClient(ctx, sessionID, entryPIDs(entries), target.ID, index, positionMS, play, rate, repeat); err != nil {
@@ -1071,7 +1103,8 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 			return Session{}, err
 		}
 	} else {
-		if err := s.loadOnDevice(ctx, sess, target, entries, index, positionMS, play); err != nil {
+		var err error
+		if loaded, err = s.loadOnDevice(ctx, sess.ownerID, target, entries, index, positionMS, play); err != nil {
 			return Session{}, err
 		}
 	}
@@ -1081,17 +1114,29 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 	// report must fall into the ended-endpoint grace, never back onto
 	// the session it would clobber.
 	s.mu.Lock()
+	if sess.ended {
+		// It ended while the target loaded - an End, its device going
+		// offline, that device's fatal report - and the end let the
+		// source go. Bound now, the target would play on under a session
+		// nothing can reach.
+		delete(s.pendingLoads, target.ID)
+		s.mu.Unlock()
+		s.releaseTransferTarget(ctx, sessionID, target, loaded.driver)
+		return Session{}, ErrNotFound
+	}
 	if s.byEndpoint[oldEndpoint] == sess.id {
 		delete(s.byEndpoint, oldEndpoint)
 	}
 	s.recentEnds[oldEndpoint] = endMark{sessionID: sess.id, at: s.cfg.Now()}
 	if oldID, ok := s.byEndpoint[target.ID]; ok && oldID != sess.id {
 		if old, ok := s.sessions[oldID]; ok {
-			s.endSessionLocked(ctx, old, false)
+			s.endSessionLocked(old, false)
 		}
 	}
 	sess.endpointID = target.ID
 	s.byEndpoint[target.ID] = sess.id
+	var pumpCtx context.Context
+	var gen int
 	if target.Kind == KindClient {
 		sess.authority = AuthorityMirror
 		sess.driver = nil
@@ -1106,6 +1151,7 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 		s.driverGen[sess.id]++
 	} else {
 		sess.authority = AuthorityRemote
+		pumpCtx, gen = s.bindDeviceLocked(sess, loaded)
 	}
 	sess.q.Index = index
 	sess.q.PositionMS = positionMS
@@ -1115,6 +1161,9 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 	snap := s.snapshotLocked(sess)
 	delete(s.pendingLoads, target.ID)
 	s.mu.Unlock()
+	if loaded.driver != nil {
+		s.startPump(pumpCtx, sess.id, gen, loaded.driver)
+	}
 
 	// The target is playing and owns the session; quiesce the source.
 	if oldDriver != nil {
@@ -1145,6 +1194,27 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 	return snap, nil
 }
 
+// releaseTransferTarget lets go of the target a transfer loaded for a
+// session that ended meanwhile: a device is stopped and its driver
+// closed, a client is told to stop.
+func (s *Service) releaseTransferTarget(ctx context.Context, sessionID string, target Endpoint, driver Driver) {
+	if driver != nil {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := driver.Stop(stopCtx); err != nil {
+			s.cfg.Logger.Warn("stopping an ended session's transfer target", "err", err)
+		}
+		cancel()
+		driver.Close()
+		return
+	}
+	if link, ok := s.reg.link(target.ID); ok {
+		stop := wireEndpointCommand{Type: "endpoint-cmd", SessionID: sessionID, Verb: "stop"}
+		if _, err := s.routeToLink(ctx, link, stop); err != nil {
+			s.cfg.Logger.Warn("stopping an ended session's transfer target client", "err", err)
+		}
+	}
+}
+
 func currentPID(snap Session) string {
 	if snap.Index >= 0 && snap.Index < len(snap.Entries) {
 		return snap.Entries[snap.Index].PID
@@ -1160,7 +1230,7 @@ func (s *Service) End(ctx context.Context, userID, sessionID string) error {
 		s.mu.Unlock()
 		return ErrNotFound
 	}
-	s.endSessionLocked(ctx, sess, true)
+	s.endSessionLocked(sess, true)
 	s.mu.Unlock()
 	// The teardown persists too, but from a supervised goroutine, and
 	// the session leaves the live map synchronously - so between the
@@ -1177,7 +1247,7 @@ func (s *Service) End(ctx context.Context, userID, sessionID string) error {
 // endSessionLocked tears a session down: stops remote playback (async
 // where it can block), notifies watchers terminally, and keeps the
 // final row as history. Callers hold s.mu.
-func (s *Service) endSessionLocked(ctx context.Context, sess *session, stopPlayback bool) {
+func (s *Service) endSessionLocked(sess *session, stopPlayback bool) {
 	if sess.ended {
 		return
 	}

@@ -1365,7 +1365,7 @@ func (l *Library) applyUpgradeDelete(ctx context.Context, plan *trash.Plan, item
 		return upgradeRun{}, err
 	}
 	run := upgradeRun{plan: plan, rep: rep, stayed: stayed}
-	if refused := l.deletionRefused(ctx, plan, rep, stayed); refused != nil {
+	if refused := l.deletionRefused(plan, rep, stayed); refused != nil {
 		return run, refused
 	}
 	if left := rep.Errored + rep.Skipped; left > 0 {

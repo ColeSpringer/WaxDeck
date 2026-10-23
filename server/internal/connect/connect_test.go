@@ -605,6 +605,118 @@ func TestShutdownWaitsOutTransfer(t *testing.T) {
 	}
 }
 
+// TestASessionEndedMidTransferBindsNothing: a session that ends while
+// its transfer loads the target - an End, its device going offline, that
+// device's fatal report - is not brought back by the load landing. The
+// transfer answers not-found, and the target is stopped and let go
+// rather than left playing a session nothing can reach.
+func TestASessionEndedMidTransferBindsNothing(t *testing.T) {
+	for name, end := range map[string]func(t *testing.T, svc *Service, sessionID, sourceEp string, source *fakeDriver){
+		"ended": func(t *testing.T, svc *Service, sessionID, _ string, _ *fakeDriver) {
+			if err := svc.End(context.Background(), "us-alice", sessionID); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"source offline": func(_ *testing.T, svc *Service, _, sourceEp string, _ *fakeDriver) {
+			svc.EndpointOffline(context.Background(), sourceEp)
+		},
+		"source died": func(t *testing.T, svc *Service, sessionID, _ string, source *fakeDriver) {
+			source.events <- DriverEvent{Fatal: true, Err: errors.New("the device went away")}
+			waitFor(t, func() bool {
+				_, err := svc.Session("us-alice", sessionID)
+				return errors.Is(err, ErrNotFound)
+			})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, _, source := newTestService(t)
+			bg := context.Background()
+			sourceEp := deviceEndpointID(t, svc, "us-alice")
+			moving, err := svc.CreateSession(bg, "us-alice", "Alice", SessionRequest{EndpointID: sourceEp, PIDs: []string{"tr-one"}, Play: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := newLoadGate()
+			targetEp := deviceOnline(t, svc, "cast-dev-2", target)
+			moved := make(chan error, 1)
+			go func() {
+				_, err := svc.Transfer(bg, "us-alice", moving.ID, targetEp)
+				moved <- err
+			}()
+			target.waitReached(t)
+			end(t, svc, moving.ID, sourceEp, source)
+			close(target.proceed)
+
+			if err := <-moved; !errors.Is(err, ErrNotFound) {
+				t.Fatalf("transfer = %v, want not-found for a session that ended under it", err)
+			}
+			waitFor(t, func() bool { return target.isClosed() && source.isClosed() })
+			target.mu.Lock()
+			stopped := slices.Contains(target.verbs, "stop")
+			target.mu.Unlock()
+			if !stopped {
+				t.Fatal("the target was let go still playing the ended session")
+			}
+			svc.mu.Lock()
+			_, bound := svc.byEndpoint[targetEp]
+			_, fenced := svc.driverGen[moving.ID]
+			svc.mu.Unlock()
+			if bound || fenced {
+				t.Fatalf("the ended session holds the target (bound %v, driver generation %v)", bound, fenced)
+			}
+		})
+	}
+}
+
+// TestASessionEndedMidTransferStopsTheClient: an end landing while a
+// client loads the transferred queue leaves the client told to stop,
+// rather than playing on a session the server let go.
+func TestASessionEndedMidTransferStopsTheClient(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+	moving, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one"}, Play: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var sent []string
+	link := NewClientLink("us-alice", "Alice", "se-us-alice", "Phone", func(v any) bool {
+		cmd, ok := v.(wireEndpointCommand)
+		if !ok {
+			return true
+		}
+		mu.Lock()
+		sent = append(sent, cmd.Verb)
+		mu.Unlock()
+		if cmd.Verb == "load" {
+			if err := svc.End(context.Background(), "us-alice", moving.ID); err != nil {
+				t.Error(err)
+			}
+		}
+		svc.HandleCommandResult(cmd.ID, true, "", "")
+		return true
+	})
+	svc.HandleRegister(link, "Phone", true, true)
+	phone := clientEndpointID(link.SessionID)
+
+	if _, err := svc.Transfer(ctx, "us-alice", moving.ID, phone); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("transfer = %v, want not-found for a session that ended under it", err)
+	}
+	mu.Lock()
+	got := slices.Clone(sent)
+	mu.Unlock()
+	if !slices.Equal(got, []string{"load", "stop"}) {
+		t.Fatalf("the client was sent %v, want its load and then a stop", got)
+	}
+	svc.mu.Lock()
+	_, bound := svc.byEndpoint[phone]
+	_, pending := svc.pendingLoads[phone]
+	svc.mu.Unlock()
+	if bound || pending {
+		t.Fatalf("the ended session holds the client (bound %v, load pending %v)", bound, pending)
+	}
+}
+
 // TestShutdownReleasesDevicesWhileRunRestarts: the release hangs off
 // Run's context rather than Run's loop, so a Run that panicked and is
 // waiting out its restart when the server stops still lets devices go.

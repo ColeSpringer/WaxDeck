@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -106,5 +107,65 @@ func TestASubscribeRefusesANAT64PrivateLiteral(t *testing.T) {
 		if refusedNAT64Host(rawURL) {
 			t.Errorf("%s is refused at the door", rawURL)
 		}
+	}
+}
+
+// Wherever a user points the server at a host - a station, a
+// ListenBrainz server, a notification target - the write-time check reads
+// a name by what the resolver answers for it, under the request's own
+// context, and a URL naming only a port as this machine: both are refused
+// with the friendly sentence before the dial-time guard has to.
+func TestTheWriteTimeCheckRefusesWhatResolvesPrivate(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newAdminFixture(t)
+	type requestKey struct{}
+	ctx = context.WithValue(ctx, requestKey{}, "the request")
+	svc.lookupHost = func(ctx context.Context, host string) ([]net.IPAddr, error) {
+		if ctx.Value(requestKey{}) == nil {
+			t.Errorf("%s was resolved outside the request's context", host)
+		}
+		if host == "lan.example" {
+			return []net.IPAddr{{IP: net.ParseIP("192.168.1.20")}}, nil
+		}
+		return []net.IPAddr{{IP: net.ParseIP("192.0.2.1")}}, nil
+	}
+	for _, host := range []string{"lan.example", ":8000"} {
+		writes := map[string]error{}
+		_, writes["a station"] = svc.CreateRadioStation(ctx, uc, RadioStationEdit{Name: "Station", StreamURL: "http://" + host + "/stream"})
+		_, writes["a ListenBrainz server"] = svc.ConnectListenBrainz(ctx, uc, "token", "http://"+host+"/")
+		_, writes["a webhook"] = svc.CreateMyNotificationTarget(ctx, uc, NotificationTargetInput{
+			Kind: "webhook", Config: []byte(`{"url":"http://` + host + `/hook"}`), EnabledEvents: []string{},
+		})
+		for what, err := range writes {
+			if KindOf(err) != KindInvalid || !strings.Contains(err.Error(), "private address") {
+				t.Errorf("%s at %q: %v, want the private-address refusal", what, host, err)
+			}
+		}
+	}
+	if _, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{Name: "Public", StreamURL: "http://radio.example/stream"}); err != nil {
+		t.Fatalf("a station at a public name: %v", err)
+	}
+}
+
+// The proxy's fetch re-checks a station's URL without resolving it: the
+// radio client judges the address as it dials.
+func TestARadioStreamSourceResolvesNothing(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newAdminFixture(t)
+	var lookups atomic.Int64
+	svc.lookupHost = func(context.Context, string) ([]net.IPAddr, error) {
+		lookups.Add(1)
+		return []net.IPAddr{{IP: net.ParseIP("192.0.2.1")}}, nil
+	}
+	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{Name: "Public", StreamURL: "http://radio.example/stream"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := lookups.Load()
+	if _, err := svc.RadioStreamSource(ctx, station.PID); err != nil {
+		t.Fatal(err)
+	}
+	if n := lookups.Load() - saved; n != 0 {
+		t.Fatalf("the stream source resolved the station's host %d times, want none", n)
 	}
 }

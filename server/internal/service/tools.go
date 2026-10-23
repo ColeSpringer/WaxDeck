@@ -20,7 +20,6 @@ import (
 	"github.com/colespringer/waxbin"
 	waxart "github.com/colespringer/waxbin/art"
 	"github.com/colespringer/waxbin/identity"
-	"github.com/colespringer/waxbin/inbox"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/scan"
@@ -1466,30 +1465,6 @@ func (l *Library) probeToolFolders(dirs ...string) error {
 	return nil
 }
 
-// resolveToolImport finds the item an applied plan produced for one
-// staged path, through the plan action's essence (the same pattern the
-// upload import uses).
-func (l *Library) resolveToolImport(ctx context.Context, plan *inbox.Plan, src string) (model.PID, error) {
-	essence := ""
-	for _, a := range plan.Actions {
-		if a.Src == src {
-			essence = a.Essence
-			break
-		}
-	}
-	if essence == "" {
-		return "", fmt.Errorf("%w: no essence recorded for %s", errToolPermanent, filepath.Base(src))
-	}
-	it, _, err := l.lib.ResolveRef(ctx, model.PortableRef{Essence: essence})
-	if err != nil {
-		return "", classify(err)
-	}
-	if it == nil {
-		return "", fmt.Errorf("%w: imported piece %s did not resolve", errToolPermanent, filepath.Base(src))
-	}
-	return it.PID, nil
-}
-
 // toolPosition is one account's saved place in an item, with the time
 // the catalog last recorded progress there. The carry writes the place
 // back at that time rather than now, so a merged or split book keeps
@@ -1608,8 +1583,9 @@ func (l *Library) trashRip(ctx context.Context, file model.PID) error {
 
 // trashSyncedItems moves the tracks a mirror sync dropped to the trash
 // and answers the items a file of which stayed: a run that moved nothing
-// and failed is refused as a delete is, and a copy a read-only library
-// holds keeps its item, as a delete leaves one.
+// and failed is refused as a delete is, and a file the plan skips (a copy
+// a read-only library holds, one under no known root) keeps its item, as
+// a delete leaves one.
 func (l *Library) trashSyncedItems(ctx context.Context, pids []model.PID) (map[model.PID]bool, error) {
 	plan, err := l.lib.PlanDeletePIDs(ctx, pids, model.DeleteTrash)
 	if err != nil {
@@ -1619,12 +1595,12 @@ func (l *Library) trashSyncedItems(ctx context.Context, pids []model.PID) (map[m
 	if err != nil {
 		return nil, err
 	}
-	if refused := l.deletionRefused(ctx, plan, rep, stayedFiles); refused != nil {
+	if refused := l.deletionRefused(plan, rep, stayedFiles); refused != nil {
 		return nil, refused
 	}
 	stayed := map[model.PID]bool{}
 	for _, a := range plan.Actions {
-		if _, ok := stayedFiles[a.FilePID]; ok {
+		if _, ok := stayedFiles[a.FilePID]; ok || a.Skip {
 			stayed[a.ItemPID] = true
 		}
 	}

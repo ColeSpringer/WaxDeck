@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -174,6 +176,23 @@ func TestSOAPFault(t *testing.T) {
 	}
 	if upnp.Code != 401 {
 		t.Errorf("fault code = %d, want 401", upnp.Code)
+	}
+}
+
+// A renderer answering an error status with a page rather than an
+// envelope is reported by its status, not by the parse of a page that
+// was never XML.
+func TestSOAPErrorStatusWithoutAnEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, "<html><body><h1>Service Unavailable<br></h1></body></html>")
+	}))
+	t.Cleanup(srv.Close)
+	httpc := &http.Client{Timeout: 5 * time.Second}
+	_, err := soapCall(context.Background(), httpc, srv.URL, svcAVTransport, "Play", nil)
+	if err == nil || !strings.Contains(err.Error(), "status 503") {
+		t.Fatalf("soapCall = %v, want the 503 named", err)
 	}
 }
 

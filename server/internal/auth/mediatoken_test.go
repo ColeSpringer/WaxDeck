@@ -74,7 +74,7 @@ func TestMediaTokenRejections(t *testing.T) {
 		"tampered body":   {"x" + token, streamWant()},
 		"another key":     {foreign, streamWant()},
 		"expired":         {expired, streamWant()},
-		"tampered cred":   {retokenize(t, m, token, "se:se-01JZX5N8QW3F4V9T2B7KDEXAMPL", "se:se-SOMEBODYELSE"), streamWant()},
+		"tampered cred":   {retokenize(t, token, "se:se-01JZX5N8QW3F4V9T2B7KDEXAMPL", "se:se-SOMEBODYELSE"), streamWant()},
 		"version 1 token": {v1Token(testMediaSecret, "us-1", "tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE"), streamWant()},
 	}
 	for name, c := range cases {
@@ -105,7 +105,7 @@ func TestMediaTokenPurposeSetsAndAnyPID(t *testing.T) {
 
 // retokenize swaps one payload field and re-encodes the token with the
 // original signature: what an attacker editing a token can produce.
-func retokenize(t *testing.T, m *MediaTokens, token, from, to string) string {
+func retokenize(t *testing.T, token, from, to string) string {
 	t.Helper()
 	body, sig, _ := strings.Cut(token, ".")
 	raw, err := base64.RawURLEncoding.DecodeString(body)

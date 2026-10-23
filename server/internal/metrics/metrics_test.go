@@ -252,7 +252,7 @@ func TestCollectorIdentity(t *testing.T) {
 	if r.Counter("c_total", "help") != r.Counter("c_total", "other help") {
 		t.Error("Counter with same name returned a different collector")
 	}
-	if r.Gauge("g", "") != r.Gauge("g", "") {
+	if a, b := r.Gauge("g", ""), r.Gauge("g", ""); a != b {
 		t.Error("Gauge with same name returned a different collector")
 	}
 	if r.Histogram("h", "", nil) != r.Histogram("h", "", []float64{1, 2}) {
@@ -262,7 +262,7 @@ func TestCollectorIdentity(t *testing.T) {
 	if cv != r.CounterVec("cv_total", "", []string{"a", "b"}) {
 		t.Error("CounterVec with same name and labels returned a different vec")
 	}
-	if cv.With("1", "2") != cv.With("1", "2") {
+	if a, b := cv.With("1", "2"), cv.With("1", "2"); a != b {
 		t.Error("CounterVec.With with same values returned a different child")
 	}
 	if cv.With("1", "2") == cv.With("1", "3") {
@@ -272,7 +272,7 @@ func TestCollectorIdentity(t *testing.T) {
 	if hv != r.HistogramVec("hv_seconds", "", []string{"a"}, nil) {
 		t.Error("HistogramVec with same name and labels returned a different vec")
 	}
-	if hv.With("x") != hv.With("x") {
+	if a, b := hv.With("x"), hv.With("x"); a != b {
 		t.Error("HistogramVec.With with same values returned a different child")
 	}
 	// Every child shares the family's bounds, which is what makes the

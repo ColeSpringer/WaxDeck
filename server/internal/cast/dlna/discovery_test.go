@@ -184,6 +184,18 @@ func TestDiscoveryStaticPlaceholderThenName(t *testing.T) {
 	if !ann.wentOffline("pe-" + loc) {
 		t.Error("location-keyed endpoint not retired after udn learned")
 	}
+
+	// Named now, the device is not described again, and it keeps the
+	// UDN it gave: going back to its location would retire the endpoint
+	// a session may be casting to, and list the device twice once SSDP
+	// hears it under that UDN.
+	sweep(ctx, cfg, nopLogger{}, devices)
+	if ann.wentOffline("pe-uuid:bedroom-radio") {
+		t.Error("the udn-keyed endpoint was retired on the sweep after it was learned")
+	}
+	if call := ann.online[len(ann.online)-1]; call.DeviceKey != "uuid:bedroom-radio" {
+		t.Errorf("the sweep after the udn was learned announced %q", call.DeviceKey)
+	}
 }
 
 func TestDiscoveryOfflineAfterMisses(t *testing.T) {

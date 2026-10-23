@@ -118,6 +118,9 @@ func kindWalkHolders(t *testing.T, ctx context.Context, svc *Library, s string) 
 			}
 			out = append(out, v)
 		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
 		return out
 	}
 	quote := func(name string) string { return `"` + strings.ReplaceAll(name, `"`, `""`) + `"` }

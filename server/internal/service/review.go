@@ -371,8 +371,8 @@ func (l *Library) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action
 			warnings = append(warnings, fmt.Sprintf(
 				"%d of the files already entered the library and stay there", landed))
 		}
-		if err := l.discardEntryFiles(ctx, &e, uc); err != nil {
-			return ReviewEntryDTO{}, nil, err
+		if err := l.discardEntryFiles(ctx, &e); err != nil {
+			return ReviewEntryDTO{}, warnings, err
 		}
 		e.Status = reviewDiscarded
 		e.DecidedAtNS = time.Now().UnixNano()
@@ -443,8 +443,10 @@ func (l *Library) writeBackWarning(f waxbin.WriteBackFailure) string {
 }
 
 // discardEntryFiles removes an import entry's staged files and marks
-// the backing uploads discarded.
-func (l *Library) discardEntryFiles(ctx context.Context, e *wdb.ReviewEntry, uc *UserCtx) error {
+// the backing uploads discarded. An upload it cannot mark fails the
+// discard, which leaves the entry undecided: a retry finds the row still
+// staged, its files already gone, and marks it.
+func (l *Library) discardEntryFiles(ctx context.Context, e *wdb.ReviewEntry) error {
 	if e.Origin != reviewOriginUpload && e.Origin != reviewOriginAcquire {
 		return errInvalid("only upload and acquisition entries hold discardable files")
 	}
@@ -461,7 +463,7 @@ func (l *Library) discardEntryFiles(ctx context.Context, e *wdb.ReviewEntry, uc 
 		}
 		u.State = uploadDiscarded
 		if err := l.db.UpdateUpload(ctx, u); err != nil {
-			l.log.Warn("marking upload discarded", "upload", u.ID, "err", err)
+			return &Error{Kind: KindInternal, Err: err}
 		}
 		l.emitUserEvent(ctx, u.UserID, eventUpload, u.ID)
 	}

@@ -630,6 +630,45 @@ func TestDiscardAfterAPartialLandingKeepsWhatLanded(t *testing.T) {
 	h.itemTitled(t, h.token, "Twin Track")
 }
 
+// A discard whose upload cannot be marked discarded fails as a whole,
+// rather than leaving a row that says staged over files that are gone:
+// the entry stays undecided, and the discard tried again lands.
+func TestADiscardThatCannotMarkItsUploadFails(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	paths, err := fixtures.Generate(t.TempDir(), batchTrackSpec("passing", "Passing Through", "Not Kept", "Beacon Row", "1", 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := uploadFile(t, h, h.token, paths[0], "music", "")
+	drainMatches(t, h)
+	ctx := context.Background()
+	if _, err := h.store.Writer().ExecContext(ctx, `CREATE TRIGGER refuse_discard BEFORE UPDATE OF state ON uploads
+		WHEN NEW.state = 'discarded' BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`); err != nil {
+		t.Fatal(err)
+	}
+	resp := h.postJSON(t, "/api/v1/review/queue/"+*up.ReviewEntryId+"/decide", map[string]any{"action": "discard"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("discard status = %d, want 500 for an upload it could not mark", resp.StatusCode)
+	}
+	if row, err := h.store.UploadByID(ctx, up.Id); err != nil || row.State != "staged" {
+		t.Fatalf("upload = %+v (%v), want it still staged", row, err)
+	}
+	if e := getReview(t, h, *up.ReviewEntryId); e.Status == "discarded" {
+		t.Fatal("the entry reads discarded over an upload still staged")
+	}
+
+	if _, err := h.store.Writer().ExecContext(ctx, `DROP TRIGGER refuse_discard`); err != nil {
+		t.Fatal(err)
+	}
+	wantStatus(t, h.postJSON(t, "/api/v1/review/queue/"+*up.ReviewEntryId+"/decide",
+		map[string]any{"action": "discard"}), 200, "the discard tried again")
+	if u := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+up.Id, h.token)); u.State != "discarded" {
+		t.Fatalf("upload = %s after the retry, want discarded", u.State)
+	}
+}
+
 // TestUploadPermissionsAndQuota covers the grant and the quota gates.
 func TestUploadPermissionsAndQuota(t *testing.T) {
 	t.Parallel()

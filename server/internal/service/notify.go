@@ -212,7 +212,7 @@ func (l *Library) ListMyNotificationTargets(ctx context.Context, uc *UserCtx) ([
 
 // CreateServerNotificationTarget stores a server-scope target.
 func (l *Library) CreateServerNotificationTarget(ctx context.Context, in NotificationTargetInput) (NotificationTarget, error) {
-	row, err := l.buildNotificationTarget(in, NotifyScopeServer, "", false)
+	row, err := l.buildNotificationTarget(ctx, in, NotifyScopeServer, "", false)
 	if err != nil {
 		return NotificationTarget{}, err
 	}
@@ -221,7 +221,7 @@ func (l *Library) CreateServerNotificationTarget(ctx context.Context, in Notific
 
 // CreateMyNotificationTarget stores a personal target for the caller.
 func (l *Library) CreateMyNotificationTarget(ctx context.Context, uc *UserCtx, in NotificationTargetInput) (NotificationTarget, error) {
-	row, err := l.buildNotificationTarget(in, NotifyScopeUser, uc.ID, uc.Admin)
+	row, err := l.buildNotificationTarget(ctx, in, NotifyScopeUser, uc.ID, uc.Admin)
 	if err != nil {
 		return NotificationTarget{}, err
 	}
@@ -270,7 +270,7 @@ func (l *Library) updateNotificationTarget(ctx context.Context, row wdb.Notifica
 	// The kind is fixed at creation; the input's kind rides along only
 	// on create, so rebuild against the stored one.
 	in.Kind = row.Kind
-	built, err := l.buildNotificationTarget(in, row.Scope, row.UserID, ownerIsAdmin)
+	built, err := l.buildNotificationTarget(ctx, in, row.Scope, row.UserID, ownerIsAdmin)
 	if err != nil {
 		return NotificationTarget{}, err
 	}
@@ -391,7 +391,7 @@ func (l *Library) notificationTargetRow(ctx context.Context, apiPID string) (wdb
 // scope rules: server targets take server-scope events; user targets
 // take user-scope events, plus server-scope events when the owner is
 // an administrator.
-func (l *Library) buildNotificationTarget(in NotificationTargetInput, scope, ownerID string, ownerIsAdmin bool) (wdb.NotificationTarget, error) {
+func (l *Library) buildNotificationTarget(ctx context.Context, in NotificationTargetInput, scope, ownerID string, ownerIsAdmin bool) (wdb.NotificationTarget, error) {
 	provider, ok := notify.ByKind(in.Kind)
 	if !ok {
 		return wdb.NotificationTarget{}, errInvalid("unknown notification kind " + in.Kind)
@@ -407,9 +407,11 @@ func (l *Library) buildNotificationTarget(in NotificationTargetInput, scope, own
 		return wdb.NotificationTarget{}, errInvalid(err.Error())
 	}
 	// Write-time courtesy check with the friendly message; the
-	// dial-time guard on the delivery client is the boundary.
+	// dial-time guard on the delivery client is the boundary. Every
+	// guarded kind names its host, so an empty one is a URL naming only
+	// a port, which dials this machine.
 	if scope == NotifyScopeUser && guardedNotifyKinds[in.Kind] &&
-		!l.allowPrivateNotifyHosts && userHost != "" && hostResolvesPrivate(userHost) {
+		!l.allowPrivateNotifyHosts && l.hostResolvesPrivate(ctx, userHost) {
 		return wdb.NotificationTarget{}, errInvalid("the destination resolves to a private address; the server does not allow private notification hosts")
 	}
 	events, err := validateEnabledEvents(in.EnabledEvents, scope, ownerIsAdmin)
@@ -918,7 +920,7 @@ func (l *Library) RegisterPushEndpoint(ctx context.Context, uc *UserCtx, endpoin
 	if err != nil {
 		return PushRegistration{}, false, &Error{Kind: KindInternal, Err: err}
 	}
-	row, err := l.buildNotificationTarget(NotificationTargetInput{
+	row, err := l.buildNotificationTarget(ctx, NotificationTargetInput{
 		Kind:          notify.KindUnifiedPush,
 		Label:         label,
 		Config:        json.RawMessage(raw),

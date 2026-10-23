@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/oklog/ulid/v2"
 
+	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/providers"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -136,6 +138,42 @@ func TestRadioStationCrud(t *testing.T) {
 		t.Fatalf("second delete status = %d, want 404", resp.StatusCode)
 	}
 	resp.Body.Close()
+}
+
+// A station saved before the server stopped allowing LAN stations is
+// refused when it plays, in the words its save would now meet: the
+// proxy's client refuses the private address as it dials, and nothing
+// reaches the station.
+func TestAStationThatPredatesThePolicyIsRefusedAtItsDial(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	var reached atomic.Bool
+	station := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached.Store(true)
+		w.Header().Set("Content-Type", "audio/mpeg")
+	}))
+	t.Cleanup(station.Close)
+	id := ulid.Make().String()
+	if err := h.store.CreateRadioStation(context.Background(), db.RadioStation{
+		ID: id, Name: "Old Loop", StreamURL: station.URL + "/stream", CreatedAtNS: time.Now().UnixNano(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pi := decode[RadioPlayInfo](t, get(t, h.ts, "/api/v1/radio/stations/rs-"+id+"/play-info", h.token))
+	resp, err := http.Get(h.ts.URL + pi.Url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		resp.Body.Close()
+		t.Fatalf("stream status = %d, want 400", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); e.Code != "invalid-request" || !strings.Contains(e.Message, "private address") {
+		t.Fatalf("stream refusal = %+v, want the private-address sentence", e)
+	}
+	if reached.Load() {
+		t.Fatal("the proxy reached a private station")
+	}
 }
 
 // The relay is where radio listening is measured: nothing on the other

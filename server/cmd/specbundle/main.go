@@ -418,7 +418,7 @@ func assemble(rootBody []string, frags []*fragment) string {
 		b.WriteString("\ncomponents:\n")
 		for _, kind := range kindOrder {
 			if bodies, ok := kindBodies[kind]; ok {
-				b.WriteString("  " + kind + ":\n")
+				fmt.Fprintf(&b, "  %s:\n", kind)
 				writeBodies(&b, bodies)
 			}
 		}

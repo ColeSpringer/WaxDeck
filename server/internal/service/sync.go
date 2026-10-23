@@ -791,7 +791,7 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		return CatalogSnapshotPage{}, err
 	}
 	for _, it := range visible {
-		entry, ok := l.itemSyncEntry(ctx, uc, subs, nil, eps, it)
+		entry, ok := l.itemSyncEntry(ctx, subs, nil, eps, it)
 		if !ok || entry.Op == syncOpDelete {
 			// A fresh mirror has nothing to tombstone, so an archived
 			// item is simply absent here rather than one delete per
@@ -866,7 +866,7 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 // delta would tombstone correctly for a running client and still hand a
 // fresh mirror every trashed item on first sync, shedding them only if
 // some later change happened to touch that pid.
-func (l *Library) itemSyncEntry(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, restorable func() map[string]bool, eps episodeBatch, it *model.ItemView) (CatalogSyncEntry, bool) {
+func (l *Library) itemSyncEntry(ctx context.Context, subs *subscriptionFilter, restorable func() map[string]bool, eps episodeBatch, it *model.ItemView) (CatalogSyncEntry, bool) {
 	if archived(it) {
 		// Archiving emits OpUpdate, not OpDelete (the item survives so a
 		// restore can find it), so a mirror following the change log would
@@ -1100,7 +1100,7 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			})
 			continue
 		}
-		if entry, ok := l.itemSyncEntry(ctx, uc, subs, restorable, eps, it); ok {
+		if entry, ok := l.itemSyncEntry(ctx, subs, restorable, eps, it); ok {
 			out.Entries = append(out.Entries, entry)
 		}
 	}

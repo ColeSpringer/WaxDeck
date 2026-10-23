@@ -42,13 +42,11 @@ func soapCall(ctx context.Context, httpc *http.Client, controlURL, serviceType, 
 	var body strings.Builder
 	body.WriteString(`<?xml version="1.0" encoding="utf-8"?>`)
 	body.WriteString(`<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>`)
-	body.WriteString(`<u:` + action + ` xmlns:u="` + serviceType + `">`)
+	fmt.Fprintf(&body, `<u:%s xmlns:u="%s">`, action, serviceType)
 	for _, a := range args {
-		body.WriteString("<" + a.Name + ">")
-		body.WriteString(xmlEscape(a.Value))
-		body.WriteString("</" + a.Name + ">")
+		fmt.Fprintf(&body, "<%s>%s</%s>", a.Name, xmlEscape(a.Value), a.Name)
 	}
-	body.WriteString(`</u:` + action + `></s:Body></s:Envelope>`)
+	fmt.Fprintf(&body, `</u:%s></s:Body></s:Envelope>`, action)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, controlURL, strings.NewReader(body.String()))
 	if err != nil {
@@ -62,15 +60,17 @@ func soapCall(ctx context.Context, httpc *http.Client, controlURL, serviceType, 
 	}
 	defer resp.Body.Close()
 
+	// A fault rides an error status, so it is read first; any other
+	// error status is the answer whatever its body is, since a renderer
+	// in trouble often sends a page that was never XML.
 	out, fault, err := parseSOAPResponse(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, fmt.Errorf("dlna: %s: parsing response: %w", action, err)
-	}
-	if fault != nil {
+	switch {
+	case fault != nil:
 		return nil, fmt.Errorf("dlna: %s: %w", action, fault)
-	}
-	if resp.StatusCode != http.StatusOK {
+	case resp.StatusCode != http.StatusOK:
 		return nil, fmt.Errorf("dlna: %s: status %d", action, resp.StatusCode)
+	case err != nil:
+		return nil, fmt.Errorf("dlna: %s: parsing response: %w", action, err)
 	}
 	return out, nil
 }
@@ -136,20 +136,20 @@ func xmlEscape(s string) string {
 func didlLite(item connect.MediaItem) string {
 	var b strings.Builder
 	b.WriteString(`<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">`)
-	b.WriteString(`<item id="` + xmlEscape(item.PID) + `" parentID="0" restricted="1">`)
-	b.WriteString(`<dc:title>` + xmlEscape(item.Title) + `</dc:title>`)
+	fmt.Fprintf(&b, `<item id="%s" parentID="0" restricted="1">`, xmlEscape(item.PID))
+	fmt.Fprintf(&b, `<dc:title>%s</dc:title>`, xmlEscape(item.Title))
 	if item.Artist != "" {
-		b.WriteString(`<upnp:artist>` + xmlEscape(item.Artist) + `</upnp:artist>`)
+		fmt.Fprintf(&b, `<upnp:artist>%s</upnp:artist>`, xmlEscape(item.Artist))
 	}
 	b.WriteString(`<upnp:class>object.item.audioItem.musicTrack</upnp:class>`)
 	if item.ArtURL != "" {
-		b.WriteString(`<upnp:albumArtURI>` + xmlEscape(item.ArtURL) + `</upnp:albumArtURI>`)
+		fmt.Fprintf(&b, `<upnp:albumArtURI>%s</upnp:albumArtURI>`, xmlEscape(item.ArtURL))
 	}
-	b.WriteString(`<res protocolInfo="http-get:*:` + xmlEscape(item.MimeType) + `:*"`)
+	fmt.Fprintf(&b, `<res protocolInfo="http-get:*:%s:*"`, xmlEscape(item.MimeType))
 	if item.DurationMS > 0 {
-		b.WriteString(` duration="` + formatHMS(item.DurationMS) + `"`)
+		fmt.Fprintf(&b, ` duration="%s"`, formatHMS(item.DurationMS))
 	}
-	b.WriteString(`>` + xmlEscape(item.URL) + `</res>`)
+	fmt.Fprintf(&b, `>%s</res>`, xmlEscape(item.URL))
 	b.WriteString(`</item></DIDL-Lite>`)
 	return b.String()
 }

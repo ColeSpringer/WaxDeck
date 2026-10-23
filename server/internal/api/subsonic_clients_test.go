@@ -225,7 +225,7 @@ func TestSubsonicClientDSubEditsAPlaylist(t *testing.T) {
 	var songs strings.Builder
 	var want []string
 	for _, it := range page.Items[:4] {
-		songs.WriteString("&songId=" + url.QueryEscape(it.Pid))
+		fmt.Fprintf(&songs, "&songId=%s", url.QueryEscape(it.Pid))
 		want = append(want, it.Pid)
 	}
 	env := mustOK(t, h, secret, c, "createPlaylist.view", "&name=Road+Mix"+songs.String())

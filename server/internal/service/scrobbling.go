@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,22 +57,38 @@ func scrobbleHTTPClient(allowPrivate bool) *http.Client {
 	return &http.Client{Transport: guardedTransport(allowPrivate), Timeout: 15 * time.Second}
 }
 
-// hostResolvesPrivate reports whether a hostname or address literal
-// resolves to a private address. Unresolvable names read as
-// not-private: the dial-time guard still stands at fetch, this only
-// shapes the write-time error.
-func hostResolvesPrivate(host string) bool {
+// hostAddrs is a host's addresses: a literal as itself, a name as the
+// resolver answers it under ctx.
+func (l *Library) hostAddrs(ctx context.Context, host string) ([]net.IP, error) {
 	if ip := net.ParseIP(host); ip != nil {
-		return privateIP(ip)
+		return []net.IP{ip}, nil
 	}
-	if ips, err := net.LookupIP(host); err == nil {
-		for _, ip := range ips {
-			if privateIP(ip) {
-				return true
-			}
-		}
+	lookup := net.DefaultResolver.LookupIPAddr
+	if l.lookupHost != nil {
+		lookup = l.lookupHost
 	}
-	return false
+	addrs, err := lookup(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	ips := make([]net.IP, len(addrs))
+	for i, a := range addrs {
+		ips[i] = a.IP
+	}
+	return ips, nil
+}
+
+// hostResolvesPrivate reports whether a hostname or address literal
+// resolves to a private address. An empty one, a URL naming only a
+// port, is this machine to a dialer and reads as private. Unresolvable
+// names read as not-private: the dial-time guard still stands at fetch,
+// this only shapes the write-time error.
+func (l *Library) hostResolvesPrivate(ctx context.Context, host string) bool {
+	if host == "" {
+		return true
+	}
+	ips, err := l.hostAddrs(ctx, host)
+	return err == nil && slices.ContainsFunc(ips, privateIP)
 }
 
 // ListScrobblers reports the caller's connection slots.
@@ -119,7 +136,7 @@ func (l *Library) ConnectListenBrainz(ctx context.Context, uc *UserCtx, token, a
 		}
 		// Write-time courtesy check with the friendly message; the
 		// dial-time guard on the delivery client is the boundary.
-		if !l.allowPrivateScrobbleHosts && hostResolvesPrivate(u.Hostname()) {
+		if !l.allowPrivateScrobbleHosts && l.hostResolvesPrivate(ctx, u.Hostname()) {
 			return Scrobbler{}, errInvalid("apiUrl resolves to a private address; the server does not allow private scrobble hosts")
 		}
 	}

@@ -118,7 +118,7 @@ func TestParseChaptersDocStopsAtTheLimitWithoutReadingOn(t *testing.T) {
 func TestParseChaptersDocClipsLongTitles(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("\u00e9", 1000)
-	marks, err := parseChaptersDoc([]byte(fmt.Sprintf(`{"chapters":[{"startTime":0,"title":%q}]}`, long)), 0)
+	marks, err := parseChaptersDoc(fmt.Appendf(nil, `{"chapters":[{"startTime":0,"title":%q}]}`, long), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

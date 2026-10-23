@@ -109,6 +109,9 @@ func TestRemapItemsAfterAKindChange(t *testing.T) {
 			}
 			listens = append(listens, l)
 		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
 		rows.Close()
 		want := [][2]string{{book, "audiobook"}, {book, "audiobook"}, {other, "music"}}
 		for i := range want {
@@ -279,6 +282,9 @@ func TestAKindChangeMovesTasksAuditEntriesAndBookmarks(t *testing.T) {
 			}
 			bookmarks[user+" "+pid] = pos
 		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
 		rows.Close()
 		want := map[string]int64{
 			"us-1 bk-" + book: 1000, "us-1 tr-" + folded: 2000, "us-1 tr-" + split: 3000, "us-2 tr-" + split: 4000,
@@ -324,6 +330,9 @@ func TestARemapThatFailsLeavesNoMapTablesBehind(t *testing.T) {
 			t.Fatal(err)
 		}
 		left = append(left, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 	rows.Close()
 	if len(left) != 1 || left[0] != "remap_probe" {

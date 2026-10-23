@@ -1088,6 +1088,13 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 			if it == nil || archived(it) {
 				continue
 			}
+			// An item a read-only library holds is not the trash's to
+			// take, and the catalog refuses a plan that names one: its
+			// entry stays owed until the flag is lifted, rather than
+			// failing the run for every other entry.
+			if l.checkPathWritable(ctx, string(it.Path)) != nil {
+				continue
+			}
 			trashSeen[pid] = true
 			toTrash = append(toTrash, pid)
 			trashEntryIDs = append(trashEntryIDs, id)

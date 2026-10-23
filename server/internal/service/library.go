@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -307,6 +308,10 @@ type Library struct {
 	// start in a test, a busy catalog say; nil lets the start through.
 	// Nothing in the server sets it.
 	scanStartHook func() error
+	// lookupHost stands in for the resolver behind the server's own
+	// address checks (hostAddrs) in a test; nil asks the system's.
+	// Nothing in the server sets it.
+	lookupHost func(ctx context.Context, host string) ([]net.IPAddr, error)
 	// toolLeaseEvery is how often a run renews its task's lease; zero is
 	// toolLeaseRenew. A test shortens it.
 	toolLeaseEvery time.Duration

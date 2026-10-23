@@ -45,14 +45,6 @@ func shareOf(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, playl
 	return string(id)
 }
 
-func itemPIDsOf(items []ItemSummary) []string {
-	out := make([]string, 0, len(items))
-	for _, it := range items {
-		out = append(out, it.PID)
-	}
-	return out
-}
-
 // A shared smart playlist over a member's own stars, ratings or plays
 // shows its reader what that member holds, so handing it over as it
 // stands would show them the administrator's stars under the old name.

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -19,9 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/colespringer/waxflow"
 	"github.com/colespringer/waxflow/codec/mp3"
-	"github.com/colespringer/waxflow/container"
 
 	"github.com/colespringer/waxdeck/fixtures"
 
@@ -62,34 +59,6 @@ func mp3Frames(t *testing.T, b []byte) [][]byte {
 		off += h.Size()
 	}
 	return frames
-}
-
-// partAudio is a rendered part's audio frames: past its tag and its Info
-// frame.
-func partAudio(t *testing.T, part []byte) [][]byte {
-	t.Helper()
-	if string(part[:3]) != "ID3" {
-		t.Fatal("the rendered part carries no ID3v2 tag")
-	}
-	size := int(part[6])<<21 | int(part[7])<<14 | int(part[8])<<7 | int(part[9])
-	frames := mp3Frames(t, part[10+size:])
-	h, _ := mp3.ParseHeader(frames[0])
-	at := mp3.HeaderLen + h.SideInfoLen()
-	if string(frames[0][at:at+4]) != "Info" {
-		t.Fatal("the rendered part does not open with its Info frame")
-	}
-	return frames[1:]
-}
-
-// decodedSeconds is how long the engine's own decoder reads b to be.
-func decodedSeconds(t *testing.T, b []byte) float64 {
-	t.Helper()
-	res, err := waxflow.New().Transcode(context.Background(), container.BytesSource(b), "mp3",
-		io.Discard, waxflow.TranscodeOptions{Format: "wav"})
-	if err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	return float64(res.Samples) / float64(res.Format.Rate)
 }
 
 // partSpec is one part of a test book: what the catalog says of it.

@@ -102,7 +102,7 @@ func (s *Service) HandleCommand(ctx context.Context, link *ClientLink, sessionID
 			}
 			s.mu.Lock()
 			if live, ok := s.sessions[sessionID]; ok {
-				s.endSessionLocked(ctx, live, false)
+				s.endSessionLocked(live, false)
 			}
 			s.mu.Unlock()
 			s.cfg.InvalidatePlayer()
@@ -621,7 +621,7 @@ func (s *Service) OnDisconnect(ctx context.Context, link *ClientLink) {
 	delete(s.watchers, link)
 	if id, ok := s.byEndpoint[endpointID]; ok {
 		if sess, ok := s.sessions[id]; ok && sess.authority == AuthorityMirror {
-			s.endSessionLocked(ctx, sess, false)
+			s.endSessionLocked(sess, false)
 		}
 	}
 	s.mu.Unlock()
@@ -785,7 +785,7 @@ func (s *Service) onDriverEvent(sessionID string, gen int, ev DriverEvent) {
 	}
 	if ev.Fatal {
 		s.cfg.Logger.Warn("endpoint died mid-session", "session", sessionID, "err", ev.Err)
-		s.endSessionLocked(ctx, sess, false)
+		s.endSessionLocked(sess, false)
 		s.mu.Unlock()
 		s.cfg.InvalidatePlayer()
 		return
@@ -955,7 +955,7 @@ func (s *Service) EndpointOffline(ctx context.Context, endpointID string) {
 	s.mu.Lock()
 	if id, ok := s.byEndpoint[endpointID]; ok {
 		if sess, ok := s.sessions[id]; ok {
-			s.endSessionLocked(ctx, sess, false)
+			s.endSessionLocked(sess, false)
 		}
 	}
 	s.mu.Unlock()

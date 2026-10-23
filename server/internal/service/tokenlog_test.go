@@ -213,7 +213,9 @@ func TestTheAddressCutterLeavesNoPathBehind(t *testing.T) {
 		var b strings.Builder
 		for range 1 + rng.IntN(4) {
 			b.WriteString(pick(gaps))
-			b.WriteString(pick(schemes) + pick(hosts) + pick(tails))
+			b.WriteString(pick(schemes))
+			b.WriteString(pick(hosts))
+			b.WriteString(pick(tails))
 			b.WriteString(pick(gaps))
 		}
 		in := b.String()

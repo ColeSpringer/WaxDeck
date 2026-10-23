@@ -61,9 +61,10 @@ func TestAnAnswersResyncLeavesARefusalItsOwnEngineGave(t *testing.T) {
 	waitFor(t, func() bool { return slices.Contains(bridge.removedNames(), "marker") }, "the answer's re-sync to run")
 	// It holds the lock for its whole pass.
 	svc.flowSyncMu.Lock()
+	offers := bridge.offersOf("lib")
 	svc.flowSyncMu.Unlock()
-	if n := bridge.offersOf("lib"); n != 2 {
-		t.Fatalf("lib offered %d times, want twice: at the boot, and once after the answer", n)
+	if offers != 2 {
+		t.Fatalf("lib offered %d times, want twice: at the boot, and once after the answer", offers)
 	}
 
 	bridge.down()
@@ -85,7 +86,7 @@ func TestNothingIsRefusedWhileTheEngineIsAway(t *testing.T) {
 	})
 	configured := filepath.Join(dataDir, "configured")
 	configPath := filepath.Join(t.TempDir(), "waxflow.json")
-	if err := os.WriteFile(configPath, []byte(fmt.Sprintf(`{"roots":[{"name":"configured","path":%q}]}`, configured)), 0o644); err != nil {
+	if err := os.WriteFile(configPath, fmt.Appendf(nil, `{"roots":[{"name":"configured","path":%q}]}`, configured), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	sidecar, srv := newFakeSidecar(t, configPath, "")
@@ -167,8 +168,9 @@ func TestNothingIsRefusedWhileTheEngineIsAway(t *testing.T) {
 		return slices.Contains(names, "later") && slices.Contains(names, "talks")
 	}, "both offered and taken at the engine's answer")
 	svc.flowSyncMu.Lock()
+	reloaded := reloads() - before
 	svc.flowSyncMu.Unlock()
-	if n := reloads() - before; n != 2 {
-		t.Errorf("the answer reloaded %d times, want one offer of each", n)
+	if reloaded != 2 {
+		t.Errorf("the answer reloaded %d times, want one offer of each", reloaded)
 	}
 }

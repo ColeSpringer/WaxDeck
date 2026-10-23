@@ -338,7 +338,7 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 	if err != nil {
 		return DeleteItemsResultDTO{}, err
 	}
-	if refused := l.deletionRefused(ctx, plan, rep, stayed); refused != nil {
+	if refused := l.deletionRefused(plan, rep, stayed); refused != nil {
 		l.Audit(ctx, uc, "items.delete.refused", AuditTarget{Kind: "item"},
 			map[string]any{"mode": mode, "pids": apiPIDs, "error": refused.Msg})
 		return DeleteItemsResultDTO{}, refused
@@ -442,7 +442,7 @@ func (l *Library) DeleteItemFiles(ctx context.Context, uc *UserCtx, apiItemPID s
 	if err != nil {
 		return DeleteItemsResultDTO{}, err
 	}
-	if refused := l.deletionRefused(ctx, plan, rep, stayed); refused != nil {
+	if refused := l.deletionRefused(plan, rep, stayed); refused != nil {
 		l.Audit(ctx, uc, "items.delete-files.refused", AuditTarget{Kind: "item", PID: apiItemPID},
 			map[string]any{"mode": mode, "filePids": filePIDs, "error": refused.Msg})
 		return DeleteItemsResultDTO{}, refused
@@ -545,7 +545,7 @@ var errNothingDeleted = errors.New("nothing was deleted")
 // library's to fix, a library flagged read-only or a cue rip changed since
 // the plan is said as such, anything else is the server's. Nil once a
 // file went.
-func (l *Library) deletionRefused(ctx context.Context, plan *trash.Plan, rep *trash.Report, stayed map[model.PID]string) *Error {
+func (l *Library) deletionRefused(plan *trash.Plan, rep *trash.Report, stayed map[model.PID]string) *Error {
 	if rep.Trashed+rep.Deleted > 0 {
 		return nil
 	}

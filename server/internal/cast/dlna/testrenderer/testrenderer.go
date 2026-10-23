@@ -444,11 +444,11 @@ func writeResponse(w http.ResponseWriter, serviceType, action string, args [][2]
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="utf-8"?>`)
 	b.WriteString(`<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>`)
-	b.WriteString(`<u:` + action + `Response xmlns:u="` + serviceType + `">`)
+	fmt.Fprintf(&b, `<u:%sResponse xmlns:u="%s">`, action, serviceType)
 	for _, a := range args {
-		b.WriteString("<" + a[0] + ">" + escape(a[1]) + "</" + a[0] + ">")
+		fmt.Fprintf(&b, "<%s>%s</%s>", a[0], escape(a[1]), a[0])
 	}
-	b.WriteString(`</u:` + action + `Response></s:Body></s:Envelope>`)
+	fmt.Fprintf(&b, `</u:%sResponse></s:Body></s:Envelope>`, action)
 	w.Header().Set("Content-Type", `text/xml; charset="utf-8"`)
 	fmt.Fprint(w, b.String())
 }

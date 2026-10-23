@@ -49,7 +49,10 @@ type tracked struct {
 	deviceKey  string
 	name       string
 	named      bool
-	missed     int
+	// udn is the one the description revealed, for a device that came
+	// without one: a named device is not described again.
+	udn    string
+	missed int
 }
 
 // RunDiscovery sweeps for renderers until ctx ends, announcing finds
@@ -110,7 +113,7 @@ func sweep(ctx context.Context, cfg DiscoveryConfig, log Logger, devices map[str
 			devices[key] = st
 		}
 		st.missed = 0
-		announce(ctx, cfg, log, dev, key, st)
+		announce(ctx, cfg, log, dev, st)
 	}
 
 	for key, st := range devices {
@@ -133,10 +136,13 @@ func sweep(ctx context.Context, cfg DiscoveryConfig, log Logger, devices map[str
 // endpoint. The description is fetched once per device; a fetch
 // failure announces a placeholder so the endpoint exists now, and the
 // next sweep retries for the real name.
-func announce(ctx context.Context, cfg DiscoveryConfig, log Logger, dev Device, key string, st *tracked) {
+func announce(ctx context.Context, cfg DiscoveryConfig, log Logger, dev Device, st *tracked) {
 	name := st.name
 	named := st.named
 	udn := dev.UDN
+	if udn == "" {
+		udn = st.udn
+	}
 	if !named {
 		desc, err := fetchDescription(ctx, dev.Location)
 		if err != nil {
@@ -177,4 +183,5 @@ func announce(ctx context.Context, cfg DiscoveryConfig, log Logger, dev Device, 
 	st.deviceKey = deviceKey
 	st.name = name
 	st.named = named
+	st.udn = udn
 }

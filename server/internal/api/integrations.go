@@ -467,6 +467,10 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if refused := service.RadioDialRefusal(err); refused != nil {
+			writeError(w, http.StatusBadRequest, "invalid-request", kindMessage(refused, "the station URL is not allowed"))
+			return
+		}
 		writeError(w, http.StatusBadGateway, "service-unreachable", "the station could not be reached")
 		return
 	}
