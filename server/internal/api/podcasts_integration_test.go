@@ -1919,13 +1919,17 @@ func TestEnclosureRelayProbesAndDegrades(t *testing.T) {
 	h := newPodcastHarness(t)
 
 	// A host that answers every request whole, ignoring Range, and adds
-	// headers of its own to both shapes.
+	// headers of its own to both shapes. What it saw is written on its
+	// handler goroutines and read on this one, so it is locked.
+	var mu sync.Mutex
 	var sawRange, sawMethod string
 	feed := newFeedServer(t, 1)
 	files := http.FileServer(http.Dir(feed.dir))
 	feed.ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".mp3") {
+			mu.Lock()
 			sawRange, sawMethod = r.Header.Get("Range"), r.Method
+			mu.Unlock()
 			w.Header().Set("Set-Cookie", "host_session=leaked; Path=/")
 			w.Header().Set("X-Host-Tracker", "listener-42")
 			// Deliberately no 206 and no Accept-Ranges: the host does
@@ -1941,6 +1945,10 @@ func TestEnclosureRelayProbesAndDegrades(t *testing.T) {
 	ep := decode[EpisodePage](t, resp).Items[0]
 	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token)
 	relay := decode[PlayInfo](t, resp).Url
+	// play-info walks the chain in the background with a one-byte GET
+	// of its own, which this host answers whole too. Waited out, so the
+	// last request the host saw is the relay's and not the warm's.
+	waitForWarm(t, h)
 
 	// A range the host ignores degrades to a whole 200 rather than
 	// failing: play-info promised seekable as best effort, not as a fact.
@@ -1961,8 +1969,11 @@ func TestEnclosureRelayProbesAndDegrades(t *testing.T) {
 	if len(body) <= 10 {
 		t.Fatalf("the degraded answer served %d bytes, want the whole file", len(body))
 	}
-	if sawRange != "bytes=10-19" {
-		t.Errorf("the host saw Range %q, want the client's own", sawRange)
+	mu.Lock()
+	gotRange, gotMethod := sawRange, sawMethod
+	mu.Unlock()
+	if gotRange != "bytes=10-19" {
+		t.Errorf("the host saw Range %q, want the client's own", gotRange)
 	}
 	// The allowlist holds on this shape too, which the whole-file test
 	// alone would not show.
@@ -1972,8 +1983,8 @@ func TestEnclosureRelayProbesAndDegrades(t *testing.T) {
 		}
 	}
 
-	if sawMethod != http.MethodGet {
-		t.Errorf("the upstream request was %q", sawMethod)
+	if gotMethod != http.MethodGet {
+		t.Errorf("the upstream request was %q", gotMethod)
 	}
 }
 

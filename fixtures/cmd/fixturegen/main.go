@@ -1,13 +1,14 @@
 // Command fixturegen writes a synthesized fixture library to a
 // directory and prints the file list, one path per line.
 //
-//	fixturegen -out <dir> [-preset default|demo|conformance|upload|upload-folder|upload-workbench|saf-probe|cover|podcast|book|loose-book|misfiled-book|tool-books|all] [-base-url <url>]
+//	fixturegen -out <dir> [-preset default|demo|conformance|long|upload|upload-folder|upload-workbench|saf-probe|cover|podcast|book|loose-book|misfiled-book|tool-books|all] [-base-url <url>]
 package main
 
 import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/colespringer/waxdeck/fixtures"
 )
@@ -77,7 +78,7 @@ func run(out, preset, baseURL string, baseURLSet bool) error {
 		}
 		return err
 	case "all":
-		specs = append(fixtures.DefaultLibrary(), fixtures.DemoLibrary()...)
+		specs = slices.Concat(fixtures.DefaultLibrary(), fixtures.DemoLibrary(), fixtures.LongTrack())
 	case "podcast":
 		return generatePodcast(out, baseURL)
 	case "book":

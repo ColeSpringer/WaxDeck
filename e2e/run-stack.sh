@@ -21,9 +21,6 @@ mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,fe
 # Books in folders of their own, for a merge and a refused delete to act
 # on without reaching any other fixture's files.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/library" -preset tool-books >/dev/null)
-# A track long enough that a stream of it still arriving holds seconds of
-# play: the playback specs that hold or slow one.
-(cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/library" -preset long >/dev/null)
 # Source files for the manual-upload journey: outside the scanned
 # library, so they only ever enter it through the upload pipeline.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset upload >/dev/null)
