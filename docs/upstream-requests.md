@@ -458,6 +458,30 @@ note.
   the module in use and fails when the two differ, so a bump that adds a
   per-user field cannot pass unnoticed. Delete the table and the test
   when the call lands.
+- **A scan's rollup upkeep grows with the entities it touches.**
+  `PutScannedTrack` recomputes the touched artist's, release group's and
+  genres' rollups from the base tables inside each track's transaction,
+  so a write's cost grows with the size of the entities it joins, and a
+  first scan is quadratic in its biggest genre or artist. Measured at
+  the pinned build without the race detector: 20,000 tracks by one
+  artist in one genre take 624s through `PutScannedTrack`, the last at
+  52 ms each, against 78s when every track has its own. Wanted: one
+  refresh per touched entity per scan or batch of writes, keeping the
+  per-write recompute for single edits. Shipped workaround: none for
+  the scan. In tests, `bulkTracks` gives each track an artist of its own
+  and no genre, and `sameArtistTracks`, one artist and one genre for the
+  test about sharing them, carries the warning; drop the warning when
+  this lands.
+- **Each scanned file reads every file in its library.**
+  `fileByEssenceGoneTx` filters `file` on `essence_hash` and
+  `library_id`, and with no `ANALYZE` statistics SQLite plans it on
+  `file_library` rather than `file_essence`, so every write walks the
+  library's files and a first scan is quadratic in the library's size.
+  With every entity distinct, the per-track cost climbs from 2 ms to
+  6 ms over 20,000 tracks, more than half of it this lookup by the end.
+  Wanted: the lookup planned on `file_essence` (`INDEXED BY`, an
+  `(essence_hash, library_id)` index, or statistics). Shipped
+  workaround: none.
 
 ## WaxTap
 

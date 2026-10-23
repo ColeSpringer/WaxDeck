@@ -10,18 +10,31 @@ import (
 	"github.com/colespringer/waxdeck/fixtures"
 )
 
-// bulkTracks are short tracks numbered from to from+n by one artist in
-// one genre, titled from prefix so they sort together. Each number has a
-// length of its own, so no two are one recording to the scanner.
+// bulkTracks are short tracks numbered from to from+n, each by an artist
+// of its own and in no genre, titled from prefix so they sort together.
+// Each number has a length of its own, so no two are one recording to
+// the scanner.
 func bulkTracks(prefix string, from, n int) []fixtures.Spec {
 	specs := make([]fixtures.Spec, 0, n)
 	for i := from; i < from+n; i++ {
+		title := fmt.Sprintf("%s %04d", prefix, i)
 		specs = append(specs, fixtures.Spec{
 			Name:     fmt.Sprintf("%s%04d", strings.ToLower(prefix), i),
 			Codec:    fixtures.CodecFLAC,
 			Duration: 100*time.Millisecond + time.Duration(i)*100*time.Microsecond,
-			Tags:     map[string]string{"TITLE": fmt.Sprintf("%s %04d", prefix, i), "ARTIST": "Many Hands", "GENRE": "Bulk"},
+			Tags:     map[string]string{"TITLE": title, "ARTIST": title},
 		})
+	}
+	return specs
+}
+
+// sameArtistTracks are bulkTracks all by one artist in one genre. A
+// scanned track recounts the artist and genre it joins, so scanning
+// these is quadratic in n: use them only where the sharing is the point.
+func sameArtistTracks(prefix string, from, n int) []fixtures.Spec {
+	specs := bulkTracks(prefix, from, n)
+	for _, spec := range specs {
+		spec.Tags["ARTIST"], spec.Tags["GENRE"] = "Many Hands", "Bulk"
 	}
 	return specs
 }
@@ -32,7 +45,7 @@ func bulkTracks(prefix string, from, n int) []fixtures.Spec {
 func TestAMetadataMixDrawsFromTheCallersOwnLibraries(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixtureWith(t, catalogFixtureOptions{extra: func(t *testing.T, dir string) {
-		if _, err := fixtures.Generate(dir, bulkTracks("Aside", 0, 900)...); err != nil {
+		if _, err := fixtures.Generate(dir, sameArtistTracks("Aside", 0, 900)...); err != nil {
 			t.Fatal(err)
 		}
 	}})
@@ -41,7 +54,7 @@ func TestAMetadataMixDrawsFromTheCallersOwnLibraries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixtures.Generate(dir, bulkTracks("Zside", 900, 30)...); err != nil {
+	if _, err := fixtures.Generate(dir, sameArtistTracks("Zside", 900, 30)...); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(30 * time.Second); ; {

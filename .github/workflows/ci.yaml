@@ -153,12 +153,20 @@ jobs:
       # was in that state.
       - name: Item-query lint
         run: cd server && go run ./cmd/querylint ./...
-      # internal/api builds a full harness (fresh migrated DB, demo
-      # library, service stack) per test and once outgrew go test's
-      # default 10m per-package cap under -race. The harnesses are cheap
-      # now - test-weakened argon2, memoized fixture encodes, parallel
-      # tests - and the explicit cap stays as headroom rather than a
-      # requirement.
+      # internal/service and internal/api build a full harness (fresh
+      # migrated DB, catalog, service stack) per test and run for about
+      # ten minutes each under -race here, with modernc's checkptr
+      # exemption below: too close to go test's default 10m per-package
+      # cap, so the cap is set to twice that. The harnesses are kept
+      # cheap: test-weakened argon2, memoized fixture encodes, parallel
+      # tests.
+      #
+      # -race also turns on checkptr, which validates unsafe.Pointer
+      # conversions. modernc's transpiled SQLite makes them on nearly
+      # every row operation, and they cost these packages over a third of
+      # their CPU, so modernc builds without them here. sqlite-checkptr
+      # keeps them on the driver, where they catch something: Go memory
+      # handed to SQLite in place of a copy. Race detection is unaffected.
       #
       # Through tools/ci/go-test.sh, which mirrors the output to a file
       # and on failure names what failed where a reader looks first: an
@@ -167,7 +175,7 @@ jobs:
       # dump included, is the artifact below; the last such dump ran to
       # eight thousand lines with the one line that mattered inside it.
       - name: Test (race)
-        run: cd server && bash ../tools/ci/go-test.sh "$RUNNER_TEMP/go-test.log" -race -timeout 20m ./...
+        run: cd server && bash ../tools/ci/go-test.sh "$RUNNER_TEMP/go-test.log" -race -gcflags='modernc.org/...=-d=checkptr=0' -timeout 20m ./...
       - uses: actions/upload-artifact@v7
         if: failure() || cancelled()
         with:
@@ -175,6 +183,22 @@ jobs:
           path: ${{ runner.temp }}/go-test.log
           retention-days: 14
           if-no-files-found: ignore
+
+  # checkptr over the SQLite driver, which the race step above builds
+  # without. internal/db binds text and blobs on nearly every write, so a
+  # driver that hands SQLite Go memory rather than a copy faults here,
+  # when SQLite copies it into a row.
+  sqlite-checkptr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: server/go.sum
+      - name: Test internal/db (race, checkptr)
+        run: cd server && go test -race -timeout 5m ./internal/db/
 
   fixtures:
     runs-on: ubuntu-latest

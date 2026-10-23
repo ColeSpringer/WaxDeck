@@ -607,13 +607,7 @@ func TestHiddenBookmarkRowsHaveACeiling(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openPodcastFixture(t)
 	_, oldestFirst := followedFeed(t, ctx, svc, uc, "Long", wdb.SubsonicBookmarkCap+50)
-	for i, pid := range oldestFirst {
-		if err := svc.db.PutSubsonicBookmark(ctx, wdb.SubsonicBookmark{
-			UserID: uc.ID, ItemPID: pid, PositionMS: 1000, CreatedAtNS: int64(i + 1), UpdatedAtNS: int64(i + 1),
-		}, oldestFirst...); err != nil {
-			t.Fatal(err)
-		}
-	}
+	bookmarkOldestFirst(t, ctx, svc, uc, oldestFirst)
 	// The same account with no library: every row is hidden from it.
 	none := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID, Libraries: map[string]bool{}}
 	if marks, err := svc.SubsonicBookmarks(ctx, none); err != nil || len(marks) != 0 {
@@ -707,6 +701,22 @@ func followedFeed(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, 
 	return sub.Show.PID, pids
 }
 
+// bookmarkOldestFirst writes a bookmark on each pid in turn, oldest
+// first. Past the cap it counts the oldest rows out, standing in for rows
+// hidden from the account when they were saved; only as many as make
+// room, since the cap's count matches every row against each one.
+func bookmarkOldestFirst(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, pids []string) {
+	t.Helper()
+	for i, pid := range pids {
+		uncounted := pids[:max(0, i+1-wdb.SubsonicBookmarkCap)]
+		if err := svc.db.PutSubsonicBookmark(ctx, wdb.SubsonicBookmark{
+			UserID: uc.ID, ItemPID: pid, PositionMS: 1000, CreatedAtNS: int64(i + 1), UpdatedAtNS: int64(i + 1),
+		}, uncounted...); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // A listing whose follow-set read fails hides every episode, as it must,
 // and lets no row go on that say-so: the next listing finds them all.
 func TestAFailedReadLetsNoBookmarkRowGo(t *testing.T) {
@@ -714,18 +724,6 @@ func TestAFailedReadLetsNoBookmarkRowGo(t *testing.T) {
 	ctx, svc, uc, _ := openPodcastFixture(t)
 	_, alpha := followedFeed(t, ctx, svc, uc, "Alpha", 1000)
 	bravoShow, bravo := followedFeed(t, ctx, svc, uc, "Bravo", 400)
-	at := int64(0)
-	put := func(pids []string, uncounted ...string) {
-		t.Helper()
-		for _, pid := range pids {
-			at++
-			if err := svc.db.PutSubsonicBookmark(ctx, wdb.SubsonicBookmark{
-				UserID: uc.ID, ItemPID: pid, PositionMS: 1000, CreatedAtNS: at, UpdatedAtNS: at,
-			}, uncounted...); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
 	rows := func() int {
 		t.Helper()
 		held, err := svc.db.SubsonicBookmarks(ctx, uc.ID)
@@ -742,14 +740,12 @@ func TestAFailedReadLetsNoBookmarkRowGo(t *testing.T) {
 		}
 		return len(marks)
 	}
-	// What the API reaches: the cap filled, Bravo unfollowed, and the
-	// retry at the cap taking 400 more on Alpha beside Bravo's hidden rows.
-	put(alpha[:600])
-	put(bravo)
+	// What the API reaches when the cap fills, Bravo is unfollowed, and
+	// retries at the cap take 400 more on Alpha beside Bravo's hidden rows.
+	bookmarkOldestFirst(t, ctx, svc, uc, slices.Concat(alpha[:600], bravo, alpha[600:]))
 	if err := svc.Unsubscribe(ctx, uc, bravoShow, false); err != nil {
 		t.Fatal(err)
 	}
-	put(alpha[600:], bravo...)
 	if n, held := listed(), rows(); n != 1000 || held != 1400 {
 		t.Fatalf("a healthy listing = %d bookmarks over %d rows, want 1000 over 1400", n, held)
 	}
@@ -809,13 +805,7 @@ func TestAFailedLibraryListReadLetsNoBookmarkRowGo(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openPodcastFixture(t)
 	_, eps := followedFeed(t, ctx, svc, uc, "Granted", wdb.SubsonicBookmarkCap+50)
-	for i, pid := range eps {
-		if err := svc.db.PutSubsonicBookmark(ctx, wdb.SubsonicBookmark{
-			UserID: uc.ID, ItemPID: pid, PositionMS: 1000, CreatedAtNS: int64(i + 1), UpdatedAtNS: int64(i + 1),
-		}, eps...); err != nil {
-			t.Fatal(err)
-		}
-	}
+	bookmarkOldestFirst(t, ctx, svc, uc, eps)
 	rows := func() int {
 		t.Helper()
 		held, err := svc.db.SubsonicBookmarks(ctx, uc.ID)
