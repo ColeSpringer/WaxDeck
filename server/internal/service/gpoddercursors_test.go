@@ -113,14 +113,18 @@ func TestNoCursorPassesAWriteInFlight(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { tx.Rollback() })
-			stamp := time.Now().Unix()
+			started := time.Now().Unix()
 			wrote := make(chan error, 1)
 			go func() { wrote <- c.write(stalled{ctx: ctx, svc: svc, uc: uc, feed: feed, ep: eps[0].PID}) }()
 			time.Sleep(GpodderCursorLag + 1500*time.Millisecond)
+			stamp, held := svc.db.GpodderWriteInFlight(uc.ID)
 			_, _, cursor := read(0)
 			tx.Rollback()
 			if err := <-wrote; err != nil {
 				t.Fatal(err)
+			}
+			if !held || stamp < started {
+				t.Fatalf("the write's stamp in flight at the download = %d (held %v), want one at or after its start, %d", stamp, held, started)
 			}
 			if cursor >= stamp {
 				t.Errorf("the download answered %d with a write stamped %d in flight, want before it", cursor, stamp)
