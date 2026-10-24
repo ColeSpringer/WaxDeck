@@ -18,7 +18,7 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [10-23-26] Under Podcasts, the latest episodes section should also have the download and elipses options that you are shown when you click on the Podcast to go to its informational/episodes page.
 
-[10-23-26] If you start playing a podcast episode, then start playing a radio station, then hit the pause/stop button, the deck (and full screen) immediately show the podcast episode you were listening to before (paused). This also happens with music.
+[10-23-26] If you start playing a podcast episode, then start playing a radio station, then hit the pause/stop button, the deck (and full screen) immediately show the podcast episode you were listening to before (paused). This also happens with music. The dock / full screen seem to keep a history of type of audio played and reverts to the previous type upon a complete stop of the current audio type.
 
 [10-23-26] Can't clear Task history under the Tasks section.
 
