@@ -562,6 +562,10 @@ note.
   exported (`Master` and `Media`, or a `SegmentPlan` method that writes
   the media playlist). Shipped workaround: `fixtures/presentation.go`
   writes both in the engine's form, and its test pins their shape.
+- A merge that does not re-encode same-codec members, if WaxDeck keeps its "without re-encoding"
+  promise rather than documenting the transcode (BK-05).
+- Stop logging a client disconnect as WARN "live stream truncated" (PLAY-26 side note).
+- refuse legacy RIFF-wrapped WavPack streams if not supported.
 
 ## WaxLabel
 
