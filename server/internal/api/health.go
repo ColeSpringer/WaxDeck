@@ -189,7 +189,7 @@ func (s *Server) MergeDuplicates(ctx context.Context, req MergeDuplicatesRequest
 		}
 		return nil, err
 	}
-	return MergeDuplicates200JSONResponse(MergeResult{Merged: res.Merged, ChildrenMoved: res.ChildrenMoved}), nil
+	return MergeDuplicates200JSONResponse(MergeResult{Merged: res.Merged, ChildrenMoved: res.ChildrenMoved, Folds: res.Folds}), nil
 }
 
 func (s *Server) ListUpgrades(ctx context.Context, _ ListUpgradesRequestObject) (ListUpgradesResponseObject, error) {

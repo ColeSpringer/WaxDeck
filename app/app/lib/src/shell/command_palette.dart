@@ -321,16 +321,18 @@ class _CommandPaletteDialog extends ConsumerWidget {
 
   /// The hits, round-robin by kind: a flat cut over the concatenation
   /// keeps the head, so several matching artists would leave no room for
-  /// the album anybody was after.
+  /// the album anybody was after. The artist or album named as the query
+  /// leads, as it does the search screen, and is not taken twice.
   List<SearchHit> _hits(SearchResults? results) {
     if (results == null) return const <SearchHit>[];
     final byKind = <List<SearchHit>>[
       for (final kind in SearchHitKind.values) kind.from(results),
     ];
-    final taken = <SearchHit>[];
+    final top = topSearchHit(results);
+    final taken = <SearchHit>[?top];
     for (var depth = 0; depth < kPaletteHitsPerKind; depth++) {
       for (final hits in byKind) {
-        if (depth >= hits.length) continue;
+        if (depth >= hits.length || hits[depth].pid == top?.pid) continue;
         taken.add(hits[depth]);
         if (taken.length == kPaletteHitLimit) return taken;
       }

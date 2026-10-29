@@ -545,6 +545,9 @@ class ItemSummary {
     this.albumPid,
     this.trackNumber,
     this.discNumber,
+    this.sortKey,
+    this.artistSort,
+    this.artistSortKey,
     this.artUrl,
   });
 
@@ -575,11 +578,44 @@ class ItemSummary {
   final int? trackNumber;
   final int? discNumber;
 
+  /// The key the catalog files [title] under, so comparing keys as plain
+  /// strings orders titles as a listing does. What a client sorting its
+  /// own copy of a list orders by. Null for an empty title.
+  final String? sortKey;
+
+  /// The artist's sort spelling as the file or an edit states it
+  /// (`Beatles, The`), and an audiobook's author's. Null when none is
+  /// stated, which is most items. A spelling to show, not a key.
+  final String? artistSort;
+
+  /// The key the catalog files the artist (an audiobook's author) under,
+  /// made of the sort spelling where one is stated. What a client sorting
+  /// by artist orders by. Null with no artist, and for an episode.
+  final String? artistSortKey;
+
   final int durationMs;
 
   /// Artwork URL, already resolved against the client base URL so it can be
   /// loaded directly on any platform.
   final String? artUrl;
+
+  /// What a list orders [title] by: the catalog's [sortKey], or the
+  /// lowercase title for a row that carries none.
+  String get titleOrderKey {
+    final key = sortKey;
+    return key != null && key.isNotEmpty ? key : title.toLowerCase();
+  }
+
+  /// What a list orders [artist] by: the catalog's [artistSortKey], or for
+  /// a row that carries none the sort spelling where one is stated, else
+  /// the name as drawn, lowercase; empty with neither.
+  String get artistOrderKey {
+    final key = artistSortKey;
+    if (key != null && key.isNotEmpty) return key;
+    final spelling = artistSort;
+    if (spelling != null && spelling.isNotEmpty) return spelling.toLowerCase();
+    return (artist ?? '').toLowerCase();
+  }
 }
 
 /// Full detail for a single library item.
@@ -595,7 +631,13 @@ class ItemDetail extends ItemSummary {
     super.albumPid,
     super.trackNumber,
     super.discNumber,
+    super.sortKey,
+    super.artistSort,
+    super.artistSortKey,
     super.artUrl,
+    this.trackTotal,
+    this.discTotal,
+    this.partTotal,
     this.genres = const [],
     this.year,
     this.bpm,
@@ -609,6 +651,13 @@ class ItemDetail extends ItemSummary {
     this.isrc,
     this.artSource,
   });
+
+  /// What the file states beside [trackNumber] and [discNumber]: how many
+  /// tracks and discs the release holds. And for an audiobook, how many
+  /// parts its file says the book has. Null when none is stated.
+  final int? trackTotal;
+  final int? discTotal;
+  final int? partTotal;
 
   final List<String> genres;
   final int? year;
@@ -1150,6 +1199,7 @@ class SearchHit {
     required this.kind,
     required this.title,
     this.subtitle,
+    this.exact = false,
   });
 
   final String pid;
@@ -1159,6 +1209,10 @@ class SearchHit {
 
   final String title;
   final String? subtitle;
+
+  /// An artist or album whose own name is the query, which a screen can
+  /// lead with. False for every other hit.
+  final bool exact;
 }
 
 /// Search results grouped by kind, ranked within each group.
@@ -1575,6 +1629,7 @@ class EpisodeSummary extends ItemSummary {
     required super.durationMs,
     super.artist,
     super.album,
+    super.sortKey,
     super.artUrl,
     required this.showPid,
     this.season,
@@ -1662,6 +1717,7 @@ class EpisodeDetail extends EpisodeSummary {
     required super.durationMs,
     super.artist,
     super.album,
+    super.sortKey,
     super.artUrl,
     required super.showPid,
     super.season,
@@ -2338,6 +2394,38 @@ class M3uImportResult {
   final int matched;
   final int unmatched;
   final List<String> unmatchedPaths;
+}
+
+/// How one path line of an M3U8 document reads: an entry, the item of
+/// the line before it through a different path to it (another of its
+/// files, or another spelling of the same file), or nothing the caller
+/// can see.
+enum M3uLineOutcome { matched, merged, unmatched }
+
+/// One path line of an M3U8 document and what it matched; [item] is
+/// null on an unmatched line.
+class M3uPreviewLine {
+  const M3uPreviewLine({required this.path, required this.outcome, this.item});
+
+  final String path;
+  final M3uLineOutcome outcome;
+  final ItemSummary? item;
+}
+
+/// How an M3U8 document would import, every path line in document
+/// order.
+class M3uPreview {
+  const M3uPreview({
+    required this.matched,
+    required this.merged,
+    required this.unmatched,
+    this.lines = const [],
+  });
+
+  final int matched;
+  final int merged;
+  final int unmatched;
+  final List<M3uPreviewLine> lines;
 }
 
 /// One internet radio station in the shared library.
@@ -4569,10 +4657,65 @@ class DuplicateGroup {
 
 /// Outcome of a duplicate merge.
 class MergeOutcome {
-  const MergeOutcome({required this.merged, required this.childrenMoved});
+  const MergeOutcome({
+    required this.merged,
+    required this.childrenMoved,
+    this.folds = const [],
+  });
 
   final int merged;
   final int childrenMoved;
+
+  /// The keys the merge now folds into the survivor, one per loser.
+  final List<String> folds;
+}
+
+/// One name folded into an entity: a file still spelled that way files
+/// under it.
+class EntityFold {
+  const EntityFold({
+    required this.entityType,
+    required this.key,
+    required this.spelling,
+    required this.entityPid,
+    required this.entityName,
+    required this.createdAt,
+    this.facet,
+    this.folder,
+    this.library,
+  });
+
+  /// `album`, `artist`, `genre`, `release-group`, or `series`.
+  final String entityType;
+
+  /// The catalog's own handle for the name, which an unfold takes back.
+  /// Opaque: never parsed, never shown.
+  final String key;
+
+  /// The name as a person reads it.
+  final String spelling;
+
+  /// What tells apart two folds that spell alike: a genre fold's facet
+  /// (`genre` or `mood`), an album fold's folder within its library and
+  /// that library's name (no folder for an album at its library's top).
+  final String? facet;
+  final String? folder;
+  final String? library;
+
+  /// The entity the name files under, in the form its screen opens by.
+  final String entityPid;
+  final String entityName;
+  final DateTime createdAt;
+}
+
+/// One page of folded names, by type and then key.
+class EntityFoldPage {
+  const EntityFoldPage({required this.folds, this.nextCursor});
+
+  final List<EntityFold> folds;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
 }
 
 /// One item in a quality upgrade group.
@@ -4626,6 +4769,7 @@ class OrganizeProfile {
     this.audiobookTemplate = '',
     this.podcastTemplate = '',
     this.tagWrite = false,
+    this.compilationFolder,
     this.builtIn = false,
     this.sample = const OrganizeSample(),
     this.saved,
@@ -4638,6 +4782,10 @@ class OrganizeProfile {
 
   /// True when applying the profile also rewrites tags.
   final bool tagWrite;
+
+  /// Where compilations file: null for Various Artists, empty for each
+  /// one's own tagged album artist, otherwise that folder.
+  final String? compilationFolder;
 
   /// A built-in no saved profile overrides; it cannot be deleted.
   final bool builtIn;
@@ -4663,17 +4811,20 @@ class OrganizeTemplates {
   final String podcast;
 }
 
-/// Where a profile lays out a sample track, book and episode.
+/// Where a profile lays out a sample track, book, episode and
+/// compilation track.
 class OrganizeSample {
   const OrganizeSample({
     this.music = '',
     this.audiobook = '',
     this.podcast = '',
+    this.compilation = '',
   });
 
   final String music;
   final String audiobook;
   final String podcast;
+  final String compilation;
 }
 
 /// The server's organize profiles, and how many libraries they can lay
@@ -5825,6 +5976,55 @@ class ThumbnailPruneResult {
   final int freedBytes;
 }
 
+/// The catalog's derived data against a fresh recompute from its own
+/// rows: how many rows disagree, and how many unused rows a repair
+/// deletes.
+class CatalogConsistency {
+  const CatalogConsistency({
+    required this.itemsMissingFromSearch,
+    required this.orphanSearchRows,
+    required this.artistRollupDrift,
+    required this.genreRollupDrift,
+    required this.releaseGroupRollupDrift,
+    required this.sortKeyDrift,
+    required this.bookDurationDrift,
+    required this.bookIsbnKeyDrift,
+    required this.albumYearDrift,
+    required this.releaseYearDrift,
+    required this.playlistPositionDrift,
+    required this.orphanArtSources,
+    required this.orphanThumbnails,
+    required this.orphanTagProvenance,
+    required this.strandedTagRows,
+    required this.consistent,
+    required this.reclaimable,
+  });
+
+  final int itemsMissingFromSearch;
+  final int orphanSearchRows;
+  final int artistRollupDrift;
+  final int genreRollupDrift;
+  final int releaseGroupRollupDrift;
+  final int sortKeyDrift;
+  final int bookDurationDrift;
+  final int bookIsbnKeyDrift;
+  final int albumYearDrift;
+  final int releaseYearDrift;
+
+  /// Playlists numbered with gaps, which read in the same order either
+  /// way: not counted against [consistent].
+  final int playlistPositionDrift;
+
+  /// The unused rows a repair deletes: [reclaimable] when any is above
+  /// zero, and left out of [consistent].
+  final int orphanArtSources;
+  final int orphanThumbnails;
+  final int orphanTagProvenance;
+  final int strandedTagRows;
+  final bool consistent;
+  final bool reclaimable;
+}
+
 /// What one server-side migration import should carry over.
 class MigrationOptions {
   const MigrationOptions({
@@ -5849,6 +6049,7 @@ class DeletePlanEntry {
     required this.bytes,
     this.fileList = const [],
     this.paths = const [],
+    this.sidecars = const [],
     this.itemSurvives = false,
     this.failed = 0,
     this.error,
@@ -5866,6 +6067,11 @@ class DeletePlanEntry {
   /// Where the files [fileList] names are, in the same order, each
   /// relative to its library's root.
   final List<String> paths;
+
+  /// The covers, lyrics and other files named for those files that go
+  /// with them, each relative to its library's root. An applied delete
+  /// lists the ones that left.
+  final List<String> sidecars;
 
   /// The item keeps a file after the deletion (a copy, or one left in
   /// place), so it stays in the library.

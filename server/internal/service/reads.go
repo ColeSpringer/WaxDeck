@@ -515,6 +515,7 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 				Kind:     h.Kind,
 				Title:    h.Title,
 				Subtitle: h.Subtitle,
+				Exact:    h.Exact,
 			})
 		}
 		return truncate(out), nil
@@ -548,6 +549,7 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 				Kind:     h.Kind,
 				Title:    title,
 				Subtitle: subtitle,
+				Exact:    h.Exact,
 			})
 		}
 		return truncate(out)
@@ -686,6 +688,9 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 		ItemSummary: summary(it),
 		Year:        it.Year,
 		BPM:         it.BPM,
+		TrackTotal:  it.TrackTotal,
+		DiscTotal:   it.DiscTotal,
+		PartTotal:   it.PartTotal,
 		Codec:       it.Codec,
 		Container:   it.Container,
 		SampleRate:  it.SampleRate,

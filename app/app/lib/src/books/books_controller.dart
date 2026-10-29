@@ -215,7 +215,7 @@ final booksProvider = AsyncNotifierProvider<BooksController, BooksState>(
 );
 
 /// The authors on [books], each with how many they wrote, biggest first
-/// and alphabetical within a count.
+/// and in the order the catalog files them within a count.
 ///
 /// Built from the loaded listing rather than from the facet endpoint,
 /// which counts an author's music alongside their books (the bug P11
@@ -223,17 +223,22 @@ final booksProvider = AsyncNotifierProvider<BooksController, BooksState>(
 /// opened to an empty music list).
 List<({String name, int count})> bookAuthors(List<ItemSummary> books) {
   final counts = <String, int>{};
+  // What equal counts are put in order by: each author's artist key, as
+  // the author sort has it.
+  final keys = <String, String>{};
   for (final book in books) {
     final author = book.artist?.trim();
     if (author == null || author.isEmpty) continue;
     counts[author] = (counts[author] ?? 0) + 1;
+    keys.putIfAbsent(author, () => book.artistOrderKey);
   }
   final names = counts.keys.toList()
     ..sort((a, b) {
       final byCount = counts[b]!.compareTo(counts[a]!);
-      return byCount != 0
-          ? byCount
-          : a.toLowerCase().compareTo(b.toLowerCase());
+      if (byCount != 0) return byCount;
+      final byKey = keys[a]!.compareTo(keys[b]!);
+      // Names that differ in case alone share a key and keep one order.
+      return byKey != 0 ? byKey : a.compareTo(b);
     });
   return <({String name, int count})>[
     for (final name in names) (name: name, count: counts[name]!),
@@ -264,15 +269,20 @@ List<ItemSummary> arrangeBooks(
         })
           book,
   ];
-  int byTitle(ItemSummary a, ItemSummary b) =>
-      a.title.toLowerCase().compareTo(b.title.toLowerCase());
+  // The pid last, so books the catalog files under one key (it folds "The
+  // Hobbit" and "Hobbit" together) keep one order however pages arrived.
+  int byTitle(ItemSummary a, ItemSummary b) {
+    final byKey = a.titleOrderKey.compareTo(b.titleOrderKey);
+    return byKey != 0 ? byKey : a.pid.compareTo(b.pid);
+  }
+
   switch (view.sort) {
     case BookSort.title:
       out.sort(byTitle);
     case BookSort.author:
       out.sort((a, b) {
-        final left = a.artist?.toLowerCase() ?? '';
-        final right = b.artist?.toLowerCase() ?? '';
+        final left = a.artistOrderKey;
+        final right = b.artistOrderKey;
         // An unattributed book sorts last rather than first: an empty
         // string would win every comparison and lead the list.
         if (left.isEmpty != right.isEmpty) return left.isEmpty ? 1 : -1;

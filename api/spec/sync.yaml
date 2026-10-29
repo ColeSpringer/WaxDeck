@@ -30,11 +30,20 @@ paths:
         visibility grants invalidates their catalog cursors, so the next
         delta answers 410 `sync-reset` and the re-snapshot reflects the
         new grants. 410 likewise answers any cursor the server can no
-        longer serve contiguously (pruned change history, a rebuilt
-        catalog): drop the mirror and snapshot again. Snapshot-minted
+        longer serve contiguously: one behind its pruned change history,
+        one past the end of its history, one from a history it has since
+        rolled back (a full restore of the server), even once that history
+        has grown past the cursor again, one from a rebuilt catalog, and
+        one handed out before a catalog repair (`POST
+        /admin/catalog/repair`) that got past its first step, since what
+        the repair rewrites reaches no delta: drop the mirror and
+        snapshot again. Short of those, snapshot-minted
         cursors stay serviceable for at least the server's change
-        retention horizon. The WebSocket channel (`api/events.md`)
-        signals when to pull deltas; polling works without it.
+        retention horizon. A snapshot carries no tombstones, so a client
+        that re-mirrors learns which of the items it holds downloads for
+        are gone for good from `POST /sync/catalog/removed`. The
+        WebSocket channel (`api/events.md`) signals when to pull deltas;
+        polling works without it.
       tags: [sync]
       parameters:
         - name: since
@@ -76,6 +85,48 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /sync/catalog/removed:
+    post:
+      operationId: syncCatalogRemoved
+      summary: Which of these items are gone for good
+      description: >
+        Names, of the items asked about, those the server can never put
+        back: the question a snapshot cannot answer, since it lists only
+        what is present. It names an item the catalog still holds whose
+        audio was deleted outright, or that is in the trash with nothing
+        left to restore it from, which is when a `delete` tombstone for
+        it carries the `removed` reason (see the entry schema). An item
+        that is out of the caller's sight but could return (not granted,
+        a show not subscribed to) or is in the trash with its undo
+        journal is not named, so a device keeps what it downloaded of
+        it. Nor is a PID the catalog holds no row for, whether its item
+        was dropped or was never in this catalog (a download another
+        server gave the device): the device keeps those bytes. A PID
+        without an item prefix (an album's, an artist's), or no PID at
+        all, is never named. A POST because the PID list rides the body;
+        nothing changes server-side. The response repeats each named PID
+        as it was asked, in request order.
+      tags: [sync]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemovedItemsQuery"
+      responses:
+        "200":
+          description: The requested items that are gone for good.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemovedItemList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /sync/server:
     get:
       operationId: syncServer
@@ -98,7 +149,9 @@ paths:
         for other users' shared playlists (shared playlists are
         visible to everyone, so their changes reach every user's
         stream). A `since` the server can no longer serve contiguously
-        answers 410 `sync-reset`: re-mint and re-hydrate.
+        answers 410 `sync-reset`, as for the catalog: one behind the pruned
+        history, past its end, or from a history the server has since
+        rolled back. Re-mint and re-hydrate.
       tags: [sync]
       parameters:
         - name: since
@@ -136,8 +189,9 @@ components:
   responses:
     SyncReset:
       description: >
-        The sync cursor predates the retained change history or belongs to
-        a previous catalog generation (code `sync-reset`). Drop the local
+        The sync cursor predates the retained change history, lies past
+        its end or in a history the server has rolled back, or belongs to a
+        previous catalog generation (code `sync-reset`). Drop the local
         mirror and re-mirror from a fresh snapshot.
       content:
         application/json:
@@ -251,6 +305,36 @@ components:
             True when another delta page is already available; fetch it
             immediately with `since` set to this page's `nextSince`.
             Absent in snapshot mode (`nextCursor` plays that role).
+
+    RemovedItemsQuery:
+      type: object
+      description: The items to ask about.
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: >
+            Items a device holds downloads of from this server that its
+            latest snapshot did not list.
+          items:
+            type: string
+            example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    RemovedItemList:
+      type: object
+      description: The asked-about items that are gone for good.
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          description: >
+            The requested PIDs the server can never put back, as asked.
+            An item not named here may still return.
+          items:
+            type: string
+            example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     ServerSyncEvent:
       type: object

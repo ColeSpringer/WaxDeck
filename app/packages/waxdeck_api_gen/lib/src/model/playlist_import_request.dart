@@ -14,7 +14,7 @@ part 'playlist_import_request.g.dart';
 ///
 /// Properties:
 /// * [source_] - The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
-/// * [name] - Name for the created playlist. Defaults to a name found in the export, or `Imported playlist`. 
+/// * [name] - Name for the created playlist. Defaults to a name found in the export, or `Imported playlist`; a name found in the export past 200 characters is refused as one given here is. 
 /// * [payload] - The export file's text content (text sources).
 /// * [refs] - Portable refs (the `portable` source).
 @BuiltValue()
@@ -24,7 +24,7 @@ abstract class PlaylistImportRequest implements Built<PlaylistImportRequest, Pla
   PlaylistImportRequestSource_Enum get source_;
   // enum source_Enum {  spotify,  applemusic,  ytmusic,  csv,  text,  portable,  };
 
-  /// Name for the created playlist. Defaults to a name found in the export, or `Imported playlist`. 
+  /// Name for the created playlist. Defaults to a name found in the export, or `Imported playlist`; a name found in the export past 200 characters is refused as one given here is. 
   @BuiltValueField(wireName: r'name')
   String? get name;
 

@@ -224,16 +224,19 @@ class DuplicatesController extends AsyncNotifier<List<DuplicateGroup>> {
       ref.watch(repositoryProvider).listDuplicates();
 
   /// Lists again whatever the answer: a refusal can mean the group is
-  /// stale, which only a fresh read shows.
+  /// stale, which only a fresh read shows. A merge folds the losers'
+  /// names into the survivor, so the folded names are read again too.
   Future<MergeOutcome> merge(DuplicateGroup group) async {
     try {
-      return await ref
+      final outcome = await ref
           .read(repositoryProvider)
           .mergeDuplicates(
             entityType: group.entityType,
             survivorPid: group.survivor.pid,
             loserPids: [for (final loser in group.losers) loser.pid],
           );
+      if (ref.mounted) ref.invalidate(foldsProvider);
+      return outcome;
     } finally {
       if (ref.mounted) ref.invalidateSelf();
     }
@@ -243,6 +246,104 @@ class DuplicatesController extends AsyncNotifier<List<DuplicateGroup>> {
 final duplicatesProvider =
     AsyncNotifierProvider<DuplicatesController, List<DuplicateGroup>>(
       DuplicatesController.new,
+      retry: retryUnlessRefused,
+    );
+
+/// The folded names read so far, and where the next page starts.
+class FoldsState {
+  const FoldsState({
+    required this.folds,
+    this.nextCursor,
+    this.loadingMore = false,
+  });
+
+  final List<EntityFold> folds;
+  final String? nextCursor;
+  final bool loadingMore;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// The names merges and locked renames folded into an entry, a page at a
+/// time.
+class FoldsController extends AsyncNotifier<FoldsState> {
+  static const pageSize = 100;
+
+  var _generation = 0;
+
+  @override
+  Future<FoldsState> build() async {
+    _generation++;
+    final page = await ref
+        .watch(repositoryProvider)
+        .listEntityFolds(limit: pageSize);
+    return FoldsState(folds: page.folds, nextCursor: page.nextCursor);
+  }
+
+  /// Reads the next page. A failure keeps what was read, and the caller
+  /// says why.
+  Future<void> loadMore() async {
+    final current = state.value;
+    if (current == null || !current.hasMore || current.loadingMore) return;
+    final generation = _generation;
+    state = AsyncData(
+      FoldsState(
+        folds: current.folds,
+        nextCursor: current.nextCursor,
+        loadingMore: true,
+      ),
+    );
+    try {
+      final page = await ref
+          .read(repositoryProvider)
+          .listEntityFolds(cursor: current.nextCursor, limit: pageSize);
+      if (!ref.mounted || generation != _generation) return;
+      // Onto the rows as they stand now: one may have been dropped since.
+      final rows = state.value?.folds ?? current.folds;
+      state = AsyncData(
+        FoldsState(
+          folds: [...rows, ...page.folds],
+          nextCursor: page.nextCursor,
+        ),
+      );
+    } catch (_) {
+      if (ref.mounted && generation == _generation) {
+        final rows = state.value?.folds ?? current.folds;
+        state = AsyncData(
+          FoldsState(folds: rows, nextCursor: current.nextCursor),
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// Drops a name the server no longer folds, keeping every other row
+  /// read so far and where the next page starts. Rows run out while more
+  /// remain only after a page's worth of unfolds; the next page then
+  /// comes in their place.
+  Future<void> drop(EntityFold fold) async {
+    final current = state.value;
+    if (current == null) return;
+    final rows = [
+      for (final f in current.folds)
+        if (f.entityType != fold.entityType || f.key != fold.key) f,
+    ];
+    state = AsyncData(
+      FoldsState(
+        folds: rows,
+        nextCursor: current.nextCursor,
+        loadingMore: current.loadingMore,
+      ),
+    );
+    if (rows.isEmpty && current.hasMore) await loadMore();
+  }
+}
+
+/// Read afresh on each visit: merges elsewhere (a book's series) and
+/// locked renames in the editor fold names too.
+final foldsProvider =
+    AsyncNotifierProvider.autoDispose<FoldsController, FoldsState>(
+      FoldsController.new,
       retry: retryUnlessRefused,
     );
 

@@ -768,6 +768,232 @@
   "@adminEnrichmentWalkColumn": {
     "description": "Column header naming what a pass walked over."
   },
+  "adminFoldsAlreadyUnfolded": "That name was unfolded already",
+  "@adminFoldsAlreadyUnfolded": {
+    "description": "Message when an unfold finds the name no longer folded, another session having unfolded it first; the list is read again."
+  },
+  "adminFoldsApartOf": "{apart}, {index} of {count}",
+  "@adminFoldsApartOf": {
+    "description": "What tells a folded name apart, numbered in the listing's order where folds of one spelling still read alike: copies of one release folded by the same merge whose files have since left their folders.",
+    "placeholders": {
+      "apart": {
+        "type": "String",
+        "example": "Folded Oct 1, 2026 9:30 AM"
+      },
+      "index": {
+        "type": "int",
+        "example": "2"
+      },
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "adminFoldsColumnFilesUnder": "Files under",
+  "@adminFoldsColumnFilesUnder": {
+    "description": "Column heading in the folded names list: the entry a folded name files under."
+  },
+  "adminFoldsColumnSince": "Folded",
+  "@adminFoldsColumnSince": {
+    "description": "Column heading in the folded names list: when the name was folded."
+  },
+  "adminFoldsColumnSpelling": "Spelling",
+  "@adminFoldsColumnSpelling": {
+    "description": "Column heading in the folded names list: the folded name as the catalog matches it."
+  },
+  "adminFoldsEmptyMessage": "A merge folds the names it does away with into the entry it keeps, so files still spelled the old way file under it.",
+  "@adminFoldsEmptyMessage": {
+    "description": "Empty state of the folded names section, saying where folded names come from."
+  },
+  "adminFoldsEmptyTitle": "No folded names",
+  "@adminFoldsEmptyTitle": {
+    "description": "Empty state of the folded names section."
+  },
+  "adminFoldsEntry": "{name} ({kind})",
+  "@adminFoldsEntry": {
+    "description": "The entry a folded name files under, as a row of the folded names list reads it out: its name and what kind of entry it is.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "The Beatles"
+      },
+      "kind": {
+        "type": "String",
+        "example": "Artist"
+      }
+    }
+  },
+  "adminFoldsError": "Could not load folded names",
+  "@adminFoldsError": {
+    "description": "Title of the error state when the folded names could not be read."
+  },
+  "adminFoldsFoldedAt": "Folded {when}",
+  "@adminFoldsFoldedAt": {
+    "description": "When an album's name was folded, telling apart copies of one release that no file places in a folder any longer (their files have moved, or two folders read alike to the catalog).",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "Oct 1, 2026 9:30 AM"
+      }
+    }
+  },
+  "adminFoldsGroupAlbum": "Albums",
+  "@adminFoldsGroupAlbum": {
+    "description": "Heading over the folded names that file under an album."
+  },
+  "adminFoldsGroupArtist": "Artists",
+  "@adminFoldsGroupArtist": {
+    "description": "Heading over the folded names that file under an artist."
+  },
+  "adminFoldsGroupGenre": "Genres",
+  "@adminFoldsGroupGenre": {
+    "description": "Heading over the folded names that file under a genre."
+  },
+  "adminFoldsGroupReleaseGroup": "Release groups",
+  "@adminFoldsGroupReleaseGroup": {
+    "description": "Heading over the folded names that file under a release group."
+  },
+  "adminFoldsGroupSeries": "Series",
+  "@adminFoldsGroupSeries": {
+    "description": "Heading over the folded names that file under a book series."
+  },
+  "adminFoldsInFolder": "In {folder} in {library}",
+  "@adminFoldsInFolder": {
+    "description": "An album fold's folder, as a path within its library, and that library's name, telling apart copies of one release in different folders.",
+    "placeholders": {
+      "folder": {
+        "type": "String",
+        "example": "Joni/Blue Again"
+      },
+      "library": {
+        "type": "String",
+        "example": "Music"
+      }
+    }
+  },
+  "adminFoldsInLibrary": "At the top of {library}",
+  "@adminFoldsInLibrary": {
+    "description": "Where an album fold's files sit when they are in the top folder of their library, named.",
+    "placeholders": {
+      "library": {
+        "type": "String",
+        "example": "Music"
+      }
+    }
+  },
+  "adminFoldsKindAlbum": "Album",
+  "@adminFoldsKindAlbum": {
+    "description": "Kind of entry a folded name files under: an album."
+  },
+  "adminFoldsKindArtist": "Artist",
+  "@adminFoldsKindArtist": {
+    "description": "Kind of entry a folded name files under: an artist."
+  },
+  "adminFoldsKindGenre": "Genre",
+  "@adminFoldsKindGenre": {
+    "description": "Kind of entry a folded name files under: a genre. Also marks a genre fold apart from a mood fold of the same spelling."
+  },
+  "adminFoldsKindMood": "Mood",
+  "@adminFoldsKindMood": {
+    "description": "Kind of entry a folded name files under: a mood, the genre vocabulary's other facet. Also marks a mood fold apart from a genre fold of the same spelling."
+  },
+  "adminFoldsKindReleaseGroup": "Release group",
+  "@adminFoldsKindReleaseGroup": {
+    "description": "Kind of entry a folded name files under: a release group."
+  },
+  "adminFoldsKindSeries": "Series",
+  "@adminFoldsKindSeries": {
+    "description": "Kind of entry a folded name files under: a book series."
+  },
+  "adminFoldsMerged": "{count, plural, =1{1 spelling now files under {survivor}} other{{count} spellings now file under {survivor}}}",
+  "@adminFoldsMerged": {
+    "description": "Second line of the message after a merge: how many names the merge folded into the entry it kept.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      },
+      "survivor": {
+        "type": "String",
+        "example": "The Beatles"
+      }
+    }
+  },
+  "adminFoldsOverline": "Old spellings that file under another name",
+  "@adminFoldsOverline": {
+    "description": "Line above the Folded names heading, saying what a folded name is."
+  },
+  "adminFoldsQuoted": "\"{spelling}\"",
+  "@adminFoldsQuoted": {
+    "description": "A folded name quoted, as the unfold button, its dialog and its message name it.",
+    "placeholders": {
+      "spelling": {
+        "type": "String",
+        "example": "beatles"
+      }
+    }
+  },
+  "adminFoldsQuotedApart": "\"{spelling}\" ({apart})",
+  "@adminFoldsQuotedApart": {
+    "description": "A folded name quoted, with what tells it apart from another fold of the same spelling (its folder and library, its facet, or when it was folded), as the unfold button, its dialog and its message name it.",
+    "placeholders": {
+      "spelling": {
+        "type": "String",
+        "example": "joni - blue"
+      },
+      "apart": {
+        "type": "String",
+        "example": "In Joni/Blue Again in Music"
+      }
+    }
+  },
+  "adminFoldsTitle": "Folded names",
+  "@adminFoldsTitle": {
+    "description": "Heading of the Health section listing the names merges folded into an entry."
+  },
+  "adminFoldsUnfold": "Unfold {fold}",
+  "@adminFoldsUnfold": {
+    "description": "Label of a folded name's unfold button. {fold} is the name quoted (adminFoldsQuoted or adminFoldsQuotedApart).",
+    "placeholders": {
+      "fold": {
+        "type": "String",
+        "example": "\"beatles\""
+      }
+    }
+  },
+  "adminFoldsUnfoldAction": "Unfold",
+  "@adminFoldsUnfoldAction": {
+    "description": "Confirm button of the unfold dialog."
+  },
+  "adminFoldsUnfoldBody": "Files spelled {fold} that the library reads as new or changed (added, moved, replaced or retagged) are filed under their own name again. The ones \"{name}\" holds already stay with it, even through a rescan with Re-read unchanged files, until they change or move.",
+  "@adminFoldsUnfoldBody": {
+    "description": "Body of the unfold dialog: which files an unfold moves (those the library reads as new or changed), and that the ones already filed stay, a rescan with the re-read option (adminLibraryRescanForce) included. {fold} is the name quoted (adminFoldsQuoted).",
+    "placeholders": {
+      "fold": {
+        "type": "String",
+        "example": "\"beatles\""
+      },
+      "name": {
+        "type": "String",
+        "example": "The Beatles"
+      }
+    }
+  },
+  "adminFoldsUnfoldTitle": "Unfold this name?",
+  "@adminFoldsUnfoldTitle": {
+    "description": "Title of the dialog confirming that a folded name is unfolded."
+  },
+  "adminFoldsUnfolded": "{fold} is unfolded",
+  "@adminFoldsUnfolded": {
+    "description": "Message after a name was unfolded: the fold is gone, and no file moved. {fold} is the name quoted (adminFoldsQuoted or adminFoldsQuotedApart).",
+    "placeholders": {
+      "fold": {
+        "type": "String",
+        "example": "\"beatles\""
+      }
+    }
+  },
   "adminForbiddenMessage": "The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.",
   "@adminForbiddenMessage": {
     "description": "Body of the refusal an account without the role gets at a console location it followed a link to."
@@ -5195,6 +5421,132 @@
   "@errorWindowedTrack": {
     "description": "Error sentence for `feature-unavailable` when the params name the feature as windowed-track."
   },
+  "healthCatalogAlbumYears": "Album years out of date",
+  "@healthCatalogAlbumYears": {
+    "description": "Row of the catalog check counting albums whose year is not the one their tracks give."
+  },
+  "healthCatalogArtistTotals": "Artist totals out of date",
+  "@healthCatalogArtistTotals": {
+    "description": "Row of the catalog check counting artists whose stored track and album totals differ from a recount."
+  },
+  "healthCatalogBlurb": "Compares what the catalog keeps beside your files (the search index, totals, sort keys and years) with a fresh count from its own records. Rarely needed: a catalog the server built fresh reads consistent.",
+  "@healthCatalogBlurb": {
+    "description": "Explanation under the Catalog check heading, saying what the check compares and that it is seldom needed."
+  },
+  "healthCatalogBookIsbnKeys": "Book ISBN keys out of date",
+  "@healthCatalogBookIsbnKeys": {
+    "description": "Row of the catalog check counting books whose stored ISBN match key is not the one their ISBN gives."
+  },
+  "healthCatalogBookLengths": "Book lengths out of date",
+  "@healthCatalogBookLengths": {
+    "description": "Row of the catalog check counting books whose stored length differs from the sum of their parts."
+  },
+  "healthCatalogCheckedAt": "Checked {stamp}",
+  "@healthCatalogCheckedAt": {
+    "description": "Under a catalog check's result, when it was read, so a result kept on screen says how old it is. {stamp} is an already-formatted date and time.",
+    "placeholders": {
+      "stamp": {
+        "type": "String",
+        "example": "Aug 12, 2026 3:04 PM"
+      }
+    }
+  },
+  "healthCatalogClean": "Consistent: nothing out of step.",
+  "@healthCatalogClean": {
+    "description": "Result of a catalog check that found nothing out of step and nothing to tidy."
+  },
+  "healthCatalogDrift": "Out of step. A repair recomputes what is listed below.",
+  "@healthCatalogDrift": {
+    "description": "Result of a catalog check that found derived data out of step with the catalog's records; the counts follow."
+  },
+  "healthCatalogGenreTotals": "Genre totals out of date",
+  "@healthCatalogGenreTotals": {
+    "description": "Row of the catalog check counting genres whose stored totals differ from a recount."
+  },
+  "healthCatalogMissingFromSearch": "Items search cannot find",
+  "@healthCatalogMissingFromSearch": {
+    "description": "Row of the catalog check counting items with no search index entry."
+  },
+  "healthCatalogOrphanSearchRows": "Search entries with no item",
+  "@healthCatalogOrphanSearchRows": {
+    "description": "Row of the catalog check counting search index entries whose item is gone."
+  },
+  "healthCatalogOverline": "Search, totals, sort keys and years",
+  "@healthCatalogOverline": {
+    "description": "Line above the Catalog check heading, naming what the check covers."
+  },
+  "healthCatalogPlaylistNumbering": "Playlists numbered with gaps",
+  "@healthCatalogPlaylistNumbering": {
+    "description": "Row of the catalog check counting playlists whose entry positions have gaps; their order reads the same either way."
+  },
+  "healthCatalogRefusedTagRows": "Tags under names no longer accepted",
+  "@healthCatalogRefusedTagRows": {
+    "description": "Row of the catalog check counting custom-tag rows under a tag name the catalog stopped accepting, which nothing can reach."
+  },
+  "healthCatalogReleaseGroupTotals": "Release group totals out of date",
+  "@healthCatalogReleaseGroupTotals": {
+    "description": "Row of the catalog check counting release groups whose stored totals differ from a recount."
+  },
+  "healthCatalogReleaseYears": "Release years out of date",
+  "@healthCatalogReleaseYears": {
+    "description": "Row of the catalog check counting items whose release year differs from their track's or book's year."
+  },
+  "healthCatalogRepair": "Repair",
+  "@healthCatalogRepair": {
+    "description": "Button that repairs the catalog's derived data, on the Catalog check section and in its confirm dialog."
+  },
+  "healthCatalogRepairBody": "The repair recounts what the check counts from the catalog's own records and deletes what nothing uses. It holds the catalog's write lock while it writes, so edits and scans wait for it. Your files are not touched.",
+  "@healthCatalogRepairBody": {
+    "description": "Body of the dialog confirming a catalog repair: what it does, that it holds up writes while it runs, and that it leaves the media files alone."
+  },
+  "healthCatalogRepairRunning": "A repair is already running. Follow it in Tasks.",
+  "@healthCatalogRepairRunning": {
+    "description": "Message when a catalog repair was refused because one is already queued or running; the message offers the Tasks screen."
+  },
+  "healthCatalogRepairSpoken": "Repair the catalog",
+  "@healthCatalogRepairSpoken": {
+    "description": "What a screen reader hears for the Repair button, which needs its subject when reached on its own."
+  },
+  "healthCatalogRepairStarted": "Repair started. Follow it in Tasks.",
+  "@healthCatalogRepairStarted": {
+    "description": "Message after a catalog repair was queued; it runs in the background and the message offers the Tasks screen."
+  },
+  "healthCatalogRepairTitle": "Repair the catalog?",
+  "@healthCatalogRepairTitle": {
+    "description": "Title of the dialog confirming a catalog repair."
+  },
+  "healthCatalogReservedTagRecords": "Tag records under reserved names",
+  "@healthCatalogReservedTagRecords": {
+    "description": "Row of the catalog check counting custom-tag edit records under a name the catalog has since reserved, which nothing can read."
+  },
+  "healthCatalogSortKeys": "Names sorting out of place",
+  "@healthCatalogSortKeys": {
+    "description": "Row of the catalog check counting names whose stored sort key is not the one the catalog generates now."
+  },
+  "healthCatalogTidy": "Consistent. A repair tidies what is listed below.",
+  "@healthCatalogTidy": {
+    "description": "Result of a catalog check that found nothing out of step but unused rows or playlist gaps a repair clears; the counts follow."
+  },
+  "healthCatalogTitle": "Catalog check",
+  "@healthCatalogTitle": {
+    "description": "Heading over the section that checks and repairs what the catalog derives from its own records."
+  },
+  "healthCatalogUnusedImages": "Unused images",
+  "@healthCatalogUnusedImages": {
+    "description": "Row of the catalog check counting stored images no entity uses."
+  },
+  "healthCatalogUnusedThumbnails": "Unused thumbnails",
+  "@healthCatalogUnusedThumbnails": {
+    "description": "Row of the catalog check counting cached thumbnails of images no entity uses."
+  },
+  "healthCatalogVerify": "Verify",
+  "@healthCatalogVerify": {
+    "description": "Button that runs the catalog check and shows what it found."
+  },
+  "healthCatalogVerifySpoken": "Verify the catalog",
+  "@healthCatalogVerifySpoken": {
+    "description": "What a screen reader hears for the Verify button, which needs its subject when reached on its own."
+  },
   "healthColumnAbsorbs": "Absorbs",
   "@healthColumnAbsorbs": {
     "description": "Column heading for the entities a merge folds into the survivor."
@@ -6094,6 +6446,19 @@
       }
     }
   },
+  "libraryDeletePreviewSidecars": "{count, plural, =1{1 sidecar} other{{count} sidecars}}: {list}",
+  "@libraryDeletePreviewSidecars": {
+    "description": "What a screen reader hears for the delete dialog's sidecar list: how many covers, lyrics and other files named for the deleted files go with them, then each by its place in its library.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "list": {
+        "type": "String",
+        "example": "Hum Collective/Shell Songs/01 - Hell Shell.lrc, Hum Collective/Shell Songs/01 - Hell Shell.jpg"
+      }
+    }
+  },
   "libraryDeleteRipAction": "Delete all {count} tracks...",
   "@libraryDeleteRipAction": {
     "description": "Button offering to delete the tracks asked for together with every other track their shared files hold, after a delete naming only some of a file's tracks was refused. The ellipsis says the delete dialog follows.",
@@ -6129,6 +6494,16 @@
       "max": {
         "type": "int",
         "example": "500"
+      }
+    }
+  },
+  "libraryDeleteSidecarsHeading": "{count, plural, =1{Also removes 1 sidecar:} other{Also removes {count} sidecars:}}",
+  "@libraryDeleteSidecarsHeading": {
+    "description": "Line over the delete dialog's list of sidecars: the covers, lyrics and other small files named for the files being deleted, which go with them. Said once, over the list.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
       }
     }
   },
@@ -6179,6 +6554,10 @@
   "@libraryFactsContainer": {
     "description": "Facts sheet row label: the file format holding the audio."
   },
+  "libraryFactsDisc": "Disc",
+  "@libraryFactsDisc": {
+    "description": "Facts sheet row label: which disc of the release the track is on."
+  },
   "libraryFactsDuration": "Length",
   "@libraryFactsDuration": {
     "description": "Facts sheet row label: how long the item runs."
@@ -6211,6 +6590,24 @@
   "@libraryFactsNeverPlayed": {
     "description": "Value of the last-played row for an item the reader has never finished."
   },
+  "libraryFactsNumberOf": "{number} of {total}",
+  "@libraryFactsNumberOf": {
+    "description": "Value of a facts sheet row that says a position and how many there are: track 3 of 12, disc 1 of 2.",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "libraryFactsParts": "Parts",
+  "@libraryFactsParts": {
+    "description": "Facts sheet row label: how many parts the audiobook's file says the book has."
+  },
   "libraryFactsPlayCount": "Plays",
   "@libraryFactsPlayCount": {
     "description": "Facts sheet row label: how many times the reader has played the item."
@@ -6222,6 +6619,10 @@
   "libraryFactsTitle": "Details",
   "@libraryFactsTitle": {
     "description": "Heading of the sheet listing one item's facts."
+  },
+  "libraryFactsTrack": "Track",
+  "@libraryFactsTrack": {
+    "description": "Facts sheet row label: the track's number on its disc."
   },
   "libraryFactsYear": "Year",
   "@libraryFactsYear": {
@@ -8327,6 +8728,22 @@
   "@organizeProfileAudiobookLabel": {
     "description": "Field for the path template of audiobooks."
   },
+  "organizeProfileCompilationHelp": "Various Artists unless set; empty files compilations under their tagged album artist",
+  "@organizeProfileCompilationHelp": {
+    "description": "Help under the profile editor's compilation folder field: what an unset field and an emptied one do."
+  },
+  "organizeProfileCompilationLabel": "Compilation folder",
+  "@organizeProfileCompilationLabel": {
+    "description": "Label of the profile editor field naming the folder compilations file under, which the tag write also gives them as album artist."
+  },
+  "organizeProfileCompilationOwn": "Each one's tagged album artist",
+  "@organizeProfileCompilationOwn": {
+    "description": "Hint in the compilation folder field once it is emptied: each compilation then files under its own tagged album artist."
+  },
+  "organizeProfileCompilationUnset": "Various Artists",
+  "@organizeProfileCompilationUnset": {
+    "description": "Hint in the compilation folder field while it is unset: the folder compilations then file under, spelled as the catalog writes it on disk, so it is not translated."
+  },
   "organizeProfileDelete": "Delete profile",
   "@organizeProfileDelete": {
     "description": "Button in the profile editor that deletes the profile."
@@ -8410,6 +8827,16 @@
       "path": {
         "type": "String",
         "example": "Author/Title/Title.m4b"
+      }
+    }
+  },
+  "organizeProfileSampleCompilation": "Compilation: {path}",
+  "@organizeProfileSampleCompilation": {
+    "description": "Sample path of a track of a compilation.",
+    "placeholders": {
+      "path": {
+        "type": "String",
+        "example": "Various Artists/Album (2023)/1-04 - Title.flac"
       }
     }
   },
@@ -9473,7 +9900,7 @@
   },
   "playlistImportCheck": "Check",
   "@playlistImportCheck": {
-    "description": "Button in the NSP import sheet that asks the server what the pasted document would lose, before anything is imported."
+    "description": "Button in the NSP and M3U import sheets that asks the server, before anything is imported, what the pasted document would lose (NSP) or what each of its lines matches (M3U)."
   },
   "playlistImportComplete": "Import complete",
   "@playlistImportComplete": {
@@ -9730,6 +10157,59 @@
   "playlistLoadError": "Could not load this playlist",
   "@playlistLoadError": {
     "description": "Title of the error state when one playlist could not be read."
+  },
+  "playlistM3uPreviewChecking": "Checking each line of the file. A long one takes a while.",
+  "@playlistM3uPreviewChecking": {
+    "description": "Shown beside a spinner while the server checks each line of a pasted M3U file, which for a long file can take tens of seconds."
+  },
+  "playlistM3uPreviewCounts": "{matched, plural, =1{1 line becomes an entry} other{{matched} lines become entries}}{merged, plural, =0{} =1{, 1 joins the entry before it} other{, {merged} join the entry before them}}{unmatched, plural, =0{} =1{, 1 has no match in the library} other{, {unmatched} have no match in the library}}.",
+  "@playlistM3uPreviewCounts": {
+    "description": "Line above the lines of a pasted M3U file once it is checked, before anything is imported: how many lines become playlist entries, how many name the same item as the line before them through a different path to it (another of its files, such as a book's next part or a copy, or another spelling of the same file) and so add no entry, and how many match nothing the person can see.",
+    "placeholders": {
+      "matched": {
+        "type": "int"
+      },
+      "merged": {
+        "type": "int"
+      },
+      "unmatched": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistM3uPreviewImporting": "Importing the playlist. A long file takes a while.",
+  "@playlistM3uPreviewImporting": {
+    "description": "Shown beside a spinner while a checked M3U file is imported as a playlist, which for a long file can take tens of seconds."
+  },
+  "playlistM3uPreviewItem": "{artist} - {title}",
+  "@playlistM3uPreviewItem": {
+    "description": "A checked M3U line's match, by its artist and title.",
+    "placeholders": {
+      "artist": {
+        "type": "String",
+        "example": "The Bree Trio"
+      },
+      "title": {
+        "type": "String",
+        "example": "Prancing Pony Blues"
+      }
+    }
+  },
+  "playlistM3uPreviewMatched": "Entry",
+  "@playlistM3uPreviewMatched": {
+    "description": "Label on a checked M3U line that becomes a playlist entry; its match is named under it."
+  },
+  "playlistM3uPreviewMerged": "Joins the entry before it",
+  "@playlistM3uPreviewMerged": {
+    "description": "Label on a checked M3U line that names the same item as the line before it through a different path to it (another of its files, such as a book's next part or a copy, or another spelling of the same file), so it adds no entry; the item is named under it."
+  },
+  "playlistM3uPreviewStillImporting": "This file is still being imported. It can be imported again once that finishes.",
+  "@playlistM3uPreviewStillImporting": {
+    "description": "Shown under a checked M3U file, with Import held off, when an import of the same file started earlier (perhaps from a dialog since closed) has not finished."
+  },
+  "playlistM3uPreviewUnmatched": "No match in the library",
+  "@playlistM3uPreviewUnmatched": {
+    "description": "Label on a checked M3U line that matches nothing the person can see; the line's path is shown under it."
   },
   "playlistMakePrivate": "Make private",
   "@playlistMakePrivate": {
@@ -13537,6 +14017,10 @@
   "@searchTitle": {
     "description": "Title of the search screen."
   },
+  "searchTopResult": "Top result",
+  "@searchTopResult": {
+    "description": "Heading over the one artist or album whose name is the search, shown above the result groups."
+  },
   "searchTruncated": "There are more matches than fit here. Refine your search to narrow them down.",
   "@searchTruncated": {
     "description": "Note under the results when the server capped how many it answered with."
@@ -16149,6 +16633,16 @@
       }
     }
   },
+  "toolsCountEntriesRemoved": "empty entries removed {count}",
+  "@toolsCountEntriesRemoved": {
+    "description": "Counter in a finished catalog repair's result: artists, albums, genres and the like left with no items, which it deleted. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "toolsCountErrored": "errored {count}",
   "@toolsCountErrored": {
     "description": "Counter in a finished job's result: files it could not read or write. Lower case: it sits in a comma-separated run of counters.",
@@ -16285,6 +16779,26 @@
       }
     }
   },
+  "toolsCountReclaimed": "unused rows reclaimed {count}",
+  "@toolsCountReclaimed": {
+    "description": "Counter in a finished catalog repair's result: images, thumbnails and tag records nothing used, which it deleted. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "40"
+      }
+    }
+  },
+  "toolsCountSearchRows": "search rows rebuilt {count}",
+  "@toolsCountSearchRows": {
+    "description": "Counter in a finished catalog repair's result: search index entries it wrote or dropped. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "toolsCountSkipped": "skipped {count}",
   "@toolsCountSkipped": {
     "description": "Counter in a finished job's or fix's result: items left alone. Lower case: it sits in a comma-separated run of counters.",
@@ -16292,6 +16806,16 @@
       "count": {
         "type": "int",
         "example": "2"
+      }
+    }
+  },
+  "toolsCountSortKeys": "sort keys rewritten {count}",
+  "@toolsCountSortKeys": {
+    "description": "Counter in a finished catalog repair's result: names whose sort key it rewrote, which moves where they list. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "6"
       }
     }
   },
@@ -16527,6 +17051,20 @@
   "@toolsStateWaiting": {
     "description": "State of a task in flight that is waiting out a passing failure and tries again on its own; a line under it says why."
   },
+  "toolsSummaryConsistent": "consistent",
+  "@toolsSummaryConsistent": {
+    "description": "Last part of a finished catalog repair's result: the check it ran after found nothing out of step. Lower case: it sits in a comma-separated run of counters."
+  },
+  "toolsSummaryDriftLeft": "still out of step {count}",
+  "@toolsSummaryDriftLeft": {
+    "description": "Last part of a finished catalog repair's result: rows the check it ran after still found out of step. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "toolsSummaryListens": "listens {count}",
   "@toolsSummaryListens": {
     "description": "Headline counter from a task's report, counting listening records it carried across. Lower case: it sits in a comma-separated run of counters.",
@@ -16554,6 +17092,16 @@
       "count": {
         "type": "String",
         "example": "84"
+      }
+    }
+  },
+  "toolsSummaryTied": "tied {count}",
+  "@toolsSummaryTied": {
+    "description": "Headline counter from an import's report, counting matched entries whose recording the library holds more than once with nothing to tell the copies apart, so the import took one of the copies. Part of the matched count, not beside it. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "4"
       }
     }
   },
@@ -16590,6 +17138,10 @@
   "toolsTaskBookSplit": "Book split",
   "@toolsTaskBookSplit": {
     "description": "Name of the task that breaks one audiobook into its parts."
+  },
+  "toolsTaskCatalogRepair": "Catalog repair",
+  "@toolsTaskCatalogRepair": {
+    "description": "Name of the task that recomputes what the catalog derives from its own records and deletes what nothing uses."
   },
   "toolsTaskCueSplit": "CUE split",
   "@toolsTaskCueSplit": {

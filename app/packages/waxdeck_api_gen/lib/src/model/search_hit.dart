@@ -15,6 +15,7 @@ part 'search_hit.g.dart';
 /// * [kind] - What the hit is (`artist`, `album`, `track`, `book`, `episode`).
 /// * [title] - Display title.
 /// * [subtitle] - Context line (artist for a track, author for a book).
+/// * [exact] - True on an artist or album whose own name is the query, ignoring case, accents, punctuation and spacing (`jayz` finds `Jay-Z`), so a client can lead with it. Absent on every other hit. 
 @BuiltValue()
 abstract class SearchHit implements Built<SearchHit, SearchHitBuilder> {
   /// Type-prefixed ULID of the hit.
@@ -32,6 +33,10 @@ abstract class SearchHit implements Built<SearchHit, SearchHitBuilder> {
   /// Context line (artist for a track, author for a book).
   @BuiltValueField(wireName: r'subtitle')
   String? get subtitle;
+
+  /// True on an artist or album whose own name is the query, ignoring case, accents, punctuation and spacing (`jayz` finds `Jay-Z`), so a client can lead with it. Absent on every other hit. 
+  @BuiltValueField(wireName: r'exact')
+  bool? get exact;
 
   SearchHit._();
 
@@ -76,6 +81,13 @@ class _$SearchHitSerializer implements PrimitiveSerializer<SearchHit> {
       yield serializers.serialize(
         object.subtitle,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.exact != null) {
+      yield r'exact';
+      yield serializers.serialize(
+        object.exact,
+        specifiedType: const FullType(bool),
       );
     }
   }
@@ -129,6 +141,14 @@ class _$SearchHitSerializer implements PrimitiveSerializer<SearchHit> {
           ) as String?;
           if (valueDes == null) continue;
           result.subtitle = valueDes;
+          break;
+        case r'exact':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.exact = valueDes;
           break;
         default:
           unhandled.add(key);

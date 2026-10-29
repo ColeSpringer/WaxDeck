@@ -214,8 +214,9 @@ func trashEmptyDTO(rep *waxbin.EmptyReport) TrashEmptyDTO {
 }
 
 // DeletePlanDTO is one item's share of a deletion: the files it loses,
-// by name and by path in their library, whether it keeps one, and how
-// many of its files a run could not remove and why.
+// by name and by path in their library, the sidecars that go with them
+// by path, whether it keeps one, and how many of its files a run could
+// not remove and why.
 type DeletePlanDTO struct {
 	PID          string
 	Name         string
@@ -223,6 +224,7 @@ type DeletePlanDTO struct {
 	Bytes        int64
 	FileList     []DeletePlanFileDTO
 	Paths        []string
+	Sidecars     []string
 	ItemSurvives bool
 	Failed       int
 	Error        string
@@ -594,14 +596,17 @@ func failedFiles(rep *trash.Report) map[model.PID]bool {
 // libraryPath is where a planned file is, relative to its library's root
 // and in forward slashes; its name alone where the plan carries no root,
 // so the server's folders never reach the caller.
-func libraryPath(a trash.Action) string {
-	if a.Root != "" {
-		rel, err := filepath.Rel(a.Root, a.Src)
+func libraryPath(a trash.Action) string { return pathBelow(a.Root, a.Src) }
+
+// pathBelow is a path relative to root, as libraryPath says it.
+func pathBelow(root, path string) string {
+	if root != "" {
+		rel, err := filepath.Rel(root, path)
 		if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return filepath.ToSlash(rel)
 		}
 	}
-	return filepath.Base(a.Src)
+	return filepath.Base(path)
 }
 
 // failureCause is the innermost reason of an error's text, the part
@@ -684,14 +689,20 @@ func planRefusal(err error, carved bool) error {
 
 // deletion is what a delete knows of the items it names: their API pids
 // and names, every file behind each, seen or not, and the size of each
-// file the plan takes, measured at its first report, before the apply
-// moves it.
+// file the plan takes and the sidecars that go with it, measured at the
+// first report, before the apply moves them.
 type deletion struct {
 	uc      *UserCtx
 	names   map[model.PID]string
 	apiPIDs map[model.PID]string
 	files   map[model.PID]map[model.PID]model.ItemFileRef
 	sizes   map[model.PID]int64
+	// sidecars is plan.Sidecars(), per action.
+	sidecars [][]string
+	read     bool
+	// applied is set once the plan has run, after which a sidecar is
+	// reported only if it has left where the plan found it.
+	applied bool
 }
 
 func newDeletion(uc *UserCtx) *deletion {
@@ -743,6 +754,9 @@ func (d *deletion) entries(plan *trash.Plan) []DeletePlanDTO {
 // skipped or staying file holds survives, and one the run failed to
 // remove counts against its item with why.
 func (d *deletion) entriesWithout(plan *trash.Plan, stayed map[model.PID]string, failed map[model.PID]bool) []DeletePlanDTO {
+	if !d.read {
+		d.sidecars, d.read = plan.Sidecars(), true
+	}
 	perItem := map[model.PID]*DeletePlanDTO{}
 	var order []model.PID
 	going := map[model.PID]bool{}
@@ -759,7 +773,7 @@ func (d *deletion) entriesWithout(plan *trash.Plan, stayed map[model.PID]string,
 		}
 		return dto
 	}
-	for _, a := range plan.Actions {
+	for i, a := range plan.Actions {
 		if why, ok := stayed[a.FilePID]; a.Skip || ok {
 			kept[a.ItemPID] = true
 			for _, track := range a.Tracks {
@@ -777,6 +791,12 @@ func (d *deletion) entriesWithout(plan *trash.Plan, stayed map[model.PID]string,
 		going[a.FilePID] = true
 		dto := entry(a.ItemPID, a.Src)
 		dto.Paths = append(dto.Paths, libraryPath(a))
+		for _, sidecar := range d.sidecars[i] {
+			if d.applied && !goneFromDisk(sidecar) {
+				continue
+			}
+			dto.Sidecars = append(dto.Sidecars, pathBelow(a.Root, sidecar))
+		}
 		f := DeletePlanFileDTO{FilePID: string(a.FilePID), Name: filepath.Base(a.Src), Role: d.files[a.ItemPID][a.FilePID].Role}
 		size, measured := d.sizes[a.FilePID]
 		if !measured {
@@ -814,9 +834,8 @@ func (d *deletion) settle(out *DeleteItemsResultDTO, plan *trash.Plan, rep *tras
 	out.Applied = true
 	out.Trashed, out.Deleted, out.Failed = rep.Trashed, rep.Deleted, rep.Errored
 	out.DirsPruned, out.ReclaimedBytes = rep.DirsPruned, rep.ReclaimedBytes
-	if len(stayed) > 0 {
-		out.Entries = d.entriesWithout(plan, stayed, failedFiles(rep))
-	}
+	d.applied = true
+	out.Entries = d.entriesWithout(plan, stayed, failedFiles(rep))
 	for _, a := range plan.Actions {
 		why, ok := stayed[a.FilePID]
 		if !ok {
@@ -828,6 +847,14 @@ func (d *deletion) settle(out *DeleteItemsResultDTO, plan *trash.Plan, rep *tras
 		}
 		out.Warnings = append(out.Warnings, w)
 	}
+}
+
+// goneFromDisk reports whether nothing is at path any more, which is how
+// a sidecar the run took reads: moved into the trash or deleted. A
+// sidecar it left, or one that cannot be told apart, is not gone.
+func goneFromDisk(path string) bool {
+	_, err := os.Lstat(path)
+	return errors.Is(err, os.ErrNotExist)
 }
 
 // stayedWarning says what became of a planned file the delete reports

@@ -63,6 +63,24 @@ func (s *Server) SyncCatalog(ctx context.Context, req SyncCatalogRequestObject) 
 	return SyncCatalog200JSONResponse(out), nil
 }
 
+func (s *Server) SyncCatalogRemoved(ctx context.Context, req SyncCatalogRemovedRequestObject) (SyncCatalogRemovedResponseObject, error) {
+	if _, _, err := s.requireUserCtx(ctx); err != nil {
+		return nil, err
+	}
+	var asked []string
+	if req.Body != nil {
+		asked = req.Body.Pids
+	}
+	pids, err := s.svc.RemovedItems(ctx, asked)
+	if err != nil {
+		if service.KindOf(err) == service.KindInvalid {
+			return SyncCatalogRemoved400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return SyncCatalogRemoved200JSONResponse(RemovedItemList{Pids: pids}), nil
+}
+
 func catalogEntriesJSON(entries []service.CatalogSyncEntry) []CatalogSyncEntry {
 	out := make([]CatalogSyncEntry, 0, len(entries))
 	for _, e := range entries {

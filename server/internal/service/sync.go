@@ -303,6 +303,10 @@ const (
 	syncKeyServerGen     = "server_gen"
 	syncKeyGrantEpoch    = "grant_epoch:"  // + user id
 	syncKeyShowPrivate   = "show_private:" // + bare show pid; sticky
+
+	// syncKeyCatalogResyncOwed names the catalog repair that owes every
+	// client a catalog reset it has not given yet.
+	syncKeyCatalogResyncOwed = "catalog_resync_owed"
 )
 
 // initSync loads or establishes the stream identities. The catalog
@@ -385,6 +389,29 @@ func (l *Library) initSync(ctx context.Context) error {
 	}
 	l.feed.mu.Unlock()
 	return nil
+}
+
+// mintCatalogGeneration retires every catalog cursor handed out so far,
+// for a change to what mirrors hold that the change log has no row for:
+// each answers sync-reset at its next delta, so its client snapshots the
+// catalog again, and connected clients are nudged to pull at once. The
+// feed's position stands.
+func (l *Library) mintCatalogGeneration(ctx context.Context) {
+	l.resetMu.Lock()
+	defer l.resetMu.Unlock()
+	l.feed.mu.Lock()
+	gen := ulid.Make().String()
+	l.feed.gen = gen
+	l.feed.mints++
+	mints := l.feed.mints
+	l.feed.mu.Unlock()
+	if err := l.persistGeneration(ctx, gen, mints); err != nil {
+		l.log.Warn("persisting the catalog generation", "err", err)
+	}
+	select {
+	case l.catalogWake <- struct{}{}:
+	default:
+	}
 }
 
 // runCatalogFeed is the change-feed consumer: it subscribes before
@@ -577,30 +604,55 @@ func (l *Library) emitUserEvent(ctx context.Context, userID, kind, itemPID strin
 
 // --- cursors -----------------------------------------------------------------
 
-// encodeCatalogCursor binds generation, grant epoch, and position.
-func encodeCatalogCursor(gen string, epoch, seq int64) string {
-	raw := fmt.Sprintf("c1|%s|%d|%d", gen, epoch, seq)
+// encodeCatalogCursor binds generation, grant epoch, and position: the
+// change row the cursor stands on, and that row's time, which tells it
+// from another row a log put back to an earlier copy numbers the same. A
+// zero ts stands on no row.
+func encodeCatalogCursor(gen string, epoch, seq, ts int64) string {
+	raw := fmt.Sprintf("c2|%s|%d|%d|%d", gen, epoch, seq, ts)
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
-func decodeCatalogCursor(s string) (gen string, epoch, seq int64, ok bool) {
+// catalogCursor is a decoded catalog cursor. One from before cursors
+// carried their row's time is not stamped, and serves nothing.
+type catalogCursor struct {
+	gen            string
+	epoch, seq, ts int64
+	stamped        bool
+}
+
+func decodeCatalogCursor(s string) (catalogCursor, bool) {
 	raw, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
-		return "", 0, 0, false
+		return catalogCursor{}, false
 	}
 	parts := strings.Split(string(raw), "|")
-	if len(parts) != 4 || parts[0] != "c1" {
-		return "", 0, 0, false
+	c := catalogCursor{stamped: len(parts) == 5 && parts[0] == "c2"}
+	if !c.stamped && (len(parts) != 4 || parts[0] != "c1") {
+		return catalogCursor{}, false
 	}
-	epoch, err = strconv.ParseInt(parts[2], 10, 64)
-	if err != nil {
-		return "", 0, 0, false
+	nums, ok := cursorInts(parts[2:])
+	if !ok {
+		return catalogCursor{}, false
 	}
-	seq, err = strconv.ParseInt(parts[3], 10, 64)
-	if err != nil {
-		return "", 0, 0, false
+	c.gen, c.epoch, c.seq = parts[1], nums[0], nums[1]
+	if c.stamped {
+		c.ts = nums[2]
 	}
-	return parts[1], epoch, seq, true
+	return c, true
+}
+
+// cursorInts parses a cursor's numeric fields.
+func cursorInts(fields []string) ([]int64, bool) {
+	out := make([]int64, len(fields))
+	for i, f := range fields {
+		n, err := strconv.ParseInt(f, 10, 64)
+		if err != nil {
+			return nil, false
+		}
+		out[i] = n
+	}
+	return out, true
 }
 
 // encodeSnapshotCursor wraps an item-phase snapshot page cursor: the
@@ -633,7 +685,7 @@ func decodeSnapshotCursor(s string) (since string, next read.Cursor, afterShow s
 			return "", "", "", false, false
 		}
 		since, afterShow = rest[:i], rest[i+1:]
-		if _, _, _, valid := decodeCatalogCursor(since); !valid {
+		if _, valid := decodeCatalogCursor(since); !valid {
 			return "", "", "", false, false
 		}
 		return since, "", afterShow, false, true
@@ -649,31 +701,47 @@ func decodeSnapshotCursor(s string) (since string, next read.Cursor, afterShow s
 		return "", "", "", false, false
 	}
 	since, next = rest[:i], read.Cursor(rest[i+1:])
-	if _, _, _, valid := decodeCatalogCursor(since); !valid {
+	if _, valid := decodeCatalogCursor(since); !valid {
 		return "", "", "", false, false
 	}
 	return since, next, "", true, true
 }
 
-func encodeServerCursor(gen string, id int64) string {
-	raw := fmt.Sprintf("s1|%s|%d", gen, id)
+// encodeServerCursor binds the stream's generation and position: the
+// event the cursor stands on, and when it was written, which tells it from
+// another event a log put back to an earlier copy numbers the same. A zero
+// at stands on no event.
+func encodeServerCursor(gen string, id, at int64) string {
+	raw := fmt.Sprintf("s2|%s|%d|%d", gen, id, at)
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
-func decodeServerCursor(s string) (gen string, id int64, ok bool) {
+// serverCursor is a decoded server cursor, stamped as a catalogCursor is.
+type serverCursor struct {
+	gen     string
+	id, at  int64
+	stamped bool
+}
+
+func decodeServerCursor(s string) (serverCursor, bool) {
 	raw, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
-		return "", 0, false
+		return serverCursor{}, false
 	}
 	parts := strings.Split(string(raw), "|")
-	if len(parts) != 3 || parts[0] != "s1" {
-		return "", 0, false
+	c := serverCursor{stamped: len(parts) == 4 && parts[0] == "s2"}
+	if !c.stamped && (len(parts) != 3 || parts[0] != "s1") {
+		return serverCursor{}, false
 	}
-	id, err = strconv.ParseInt(parts[2], 10, 64)
-	if err != nil {
-		return "", 0, false
+	nums, ok := cursorInts(parts[2:])
+	if !ok {
+		return serverCursor{}, false
 	}
-	return parts[1], id, true
+	c.gen, c.id = parts[1], nums[0]
+	if c.stamped {
+		c.at = nums[1]
+	}
+	return c, true
 }
 
 // grantEpoch reads the user's current visibility epoch (0 until ever
@@ -736,9 +804,9 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 			return CatalogSnapshotPage{}, err
 		}
 		l.feed.mu.Lock()
-		gen, tail := l.feed.gen, l.feed.tail
+		gen, tail, tailTS := l.feed.gen, l.feed.tail, l.feed.tailTS
 		l.feed.mu.Unlock()
-		since = encodeCatalogCursor(gen, epoch, tail)
+		since = encodeCatalogCursor(gen, epoch, tail, tailTS)
 	} else {
 		var ok bool
 		since, inner, afterShow, showsDone, ok = decodeSnapshotCursor(cursor)
@@ -905,7 +973,7 @@ func syncEpisodeViews(views []*model.ItemView) []*model.ItemView {
 // that carry an item out of the caller's visibility both become
 // tombstones; a tombstone for an item never mirrored is a client no-op.
 func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since string, limit int) (CatalogDelta, error) {
-	gen, epoch, seq, ok := decodeCatalogCursor(since)
+	c, ok := decodeCatalogCursor(since)
 	if !ok {
 		return CatalogDelta{}, errInvalid("malformed sync cursor")
 	}
@@ -916,8 +984,18 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	l.feed.mu.Lock()
 	curGen, floor := l.feed.gen, l.feed.floor
 	l.feed.mu.Unlock()
-	if gen != curGen || epoch != curEpoch || seq < floor {
+	if !c.stamped || c.gen != curGen || c.epoch != curEpoch || c.seq < floor {
 		return CatalogDelta{}, ErrSyncReset
+	}
+	seq, ts := c.seq, c.ts
+	// The row a cursor stands on must still be the row it stood on: a log
+	// put back to an earlier copy, a full restore of the server, numbers its
+	// rows again. Read from the row before it, the first row back is that
+	// row. A cursor at the floor stands on a row a prune took, and a zero ts
+	// on none, so neither is asked.
+	standing := c.ts != 0 && c.seq > floor
+	if standing {
+		seq--
 	}
 
 	// Collect up to limit distinct entities' latest ops, tracking the
@@ -935,17 +1013,26 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	for !budgetHit {
 		rows, err := l.lib.Changes(ctx, seq)
 		if waxerr.CodeOf(err) == waxerr.CodeNotFound {
+			// Behind what a prune kept, or past the log's head: a catalog
+			// replaced, or a log put back to an earlier copy.
 			return CatalogDelta{}, ErrSyncReset
 		}
 		if err != nil {
 			return CatalogDelta{}, classify(err)
+		}
+		if standing {
+			standing = false
+			if len(rows) == 0 || rows[0].Seq != c.seq || rows[0].TS != c.ts {
+				return CatalogDelta{}, ErrSyncReset
+			}
+			seq, rows = c.seq, rows[1:]
 		}
 		if len(rows) == 0 {
 			break
 		}
 		for _, ch := range rows {
 			if ch.EntityType != "item" && ch.EntityType != "podcast" {
-				seq = ch.Seq
+				seq, ts = ch.Seq, ch.TS
 				continue
 			}
 			key := deltaKey{kind: ch.EntityType, pid: ch.EntityPID}
@@ -957,13 +1044,13 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 				order = append(order, key)
 			}
 			ops[key] = string(ch.Op)
-			seq = ch.Seq
+			seq, ts = ch.Seq, ch.TS
 		}
 	}
 
 	out := CatalogDelta{
 		Entries:   make([]CatalogSyncEntry, 0, len(order)),
-		NextSince: encodeCatalogCursor(curGen, curEpoch, seq),
+		NextSince: encodeCatalogCursor(curGen, curEpoch, seq, ts),
 		More:      budgetHit,
 	}
 	if len(order) == 0 {
@@ -1107,6 +1194,74 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	return out, nil
 }
 
+// MaxRemovedAsk is the most pids one RemovedItems call takes, the page a
+// device restoring its downloads asks the play states in as well.
+const MaxRemovedAsk = 500
+
+// RemovedItems names, of the items asked about, those the catalog holds
+// archived with nothing left to restore them from: the delta's `removed`
+// for a row it still has. It is for a client whose snapshot carries no
+// tombstones. The journal read is the delta's own (one that cannot be read
+// names nothing), and the answer does not depend on who asks; an item
+// merely out of the caller's sight is not named. Nor is a pid the catalog
+// holds no row for: it may be one dropped here or one never minted here (a
+// device holding another server's downloads), and that ambiguity keeps
+// bytes. A pid without an item prefix, or no pid at all, is skipped.
+// Answers repeat each pid as it was asked, once, in request order. An ask
+// of no pids or of more than MaxRemovedAsk is refused.
+func (l *Library) RemovedItems(ctx context.Context, apiPIDs []string) ([]string, error) {
+	switch {
+	case len(apiPIDs) == 0:
+		return nil, errInvalid("pids must not be empty")
+	case len(apiPIDs) > MaxRemovedAsk:
+		return nil, errInvalid(fmt.Sprintf("at most %d pids per request", MaxRemovedAsk))
+	}
+	type ask struct {
+		api string
+		pid model.PID
+	}
+	var asks []ask
+	var pids []model.PID
+	seen := make(map[string]bool, len(apiPIDs))
+	queried := make(map[model.PID]bool, len(apiPIDs))
+	for _, api := range apiPIDs {
+		prefix, pid, ok := parseAPIPID(api)
+		if !ok || !itemPrefix(prefix) || seen[api] {
+			continue
+		}
+		seen[api] = true
+		asks = append(asks, ask{api: api, pid: pid})
+		if !queried[pid] {
+			queried[pid] = true
+			pids = append(pids, pid)
+		}
+	}
+	out := make([]string, 0, len(asks))
+	if len(asks) == 0 {
+		return out, nil
+	}
+	views, err := l.lib.GetMany(ctx, pids)
+	if err != nil {
+		return nil, classify(err)
+	}
+	byPID := make(map[model.PID]*model.ItemView, len(views))
+	var inTrash []model.PID
+	for _, v := range views {
+		byPID[v.PID] = v
+		if archived(v) {
+			inTrash = append(inTrash, v.PID)
+		}
+	}
+	restorable := l.restorableItems(ctx, inTrash)
+	for _, a := range asks {
+		v := byPID[a.pid]
+		if archived(v) && tombstoneReason(restorable, v.PID) == syncReasonRemoved {
+			out = append(out, a.api)
+		}
+	}
+	return out, nil
+}
+
 // PruneCatalogChanges trims the catalog change log to the newest keep
 // rows and raises the served floor accordingly. Cursors below the new
 // floor answer sync-reset from then on.
@@ -1131,17 +1286,17 @@ func (l *Library) PruneCatalogChanges(ctx context.Context, keep int) (int, error
 
 // MintServerCursor returns a fresh cursor at the stream's current tail.
 func (l *Library) MintServerCursor(ctx context.Context) (string, error) {
-	tail, err := l.db.LatestEventID(ctx)
+	tail, at, err := l.db.LatestEvent(ctx)
 	if err != nil {
 		return "", &Error{Kind: KindInternal, Err: err}
 	}
-	return encodeServerCursor(l.serverGen, tail), nil
+	return encodeServerCursor(l.serverGen, tail, at), nil
 }
 
 // SyncServerDelta serves the caller's state changes after the cursor,
 // coalesced per item within the page, hydrated fresh at read time.
 func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string, limit int) (ServerDelta, error) {
-	gen, id, ok := decodeServerCursor(since)
+	c, ok := decodeServerCursor(since)
 	if !ok {
 		return ServerDelta{}, errInvalid("malformed sync cursor")
 	}
@@ -1149,26 +1304,37 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 	if err != nil {
 		return ServerDelta{}, &Error{Kind: KindInternal, Err: err}
 	}
-	tail, err := l.db.LatestEventID(ctx)
+	tail, tailAt, err := l.db.LatestEvent(ctx)
 	if err != nil {
 		return ServerDelta{}, &Error{Kind: KindInternal, Err: err}
 	}
-	if gen != l.serverGen || id < floor || id > tail {
+	if !c.stamped || c.gen != l.serverGen || c.id < floor || c.id > tail {
 		return ServerDelta{}, ErrSyncReset
 	}
-	events, more, err := l.db.EventsSince(ctx, uc.ID, id, limit)
+	// The event a cursor stands on must still be the one it stood on, as
+	// for the catalog cursor: a log put back to an earlier copy numbers its
+	// events again.
+	if c.at != 0 && c.id > floor {
+		at, found, err := l.db.EventWrittenAt(ctx, c.id)
+		if err != nil {
+			return ServerDelta{}, &Error{Kind: KindInternal, Err: err}
+		}
+		if !found || at != c.at {
+			return ServerDelta{}, ErrSyncReset
+		}
+	}
+	events, more, err := l.db.EventsSince(ctx, uc.ID, c.id, limit)
 	if err != nil {
 		return ServerDelta{}, &Error{Kind: KindInternal, Err: err}
 	}
-	next := id
+	next, nextAt := tail, tailAt
 	if len(events) > 0 {
-		next = events[len(events)-1].ID
-	} else {
-		// No events for this user past id; the cursor can jump to the
-		// stream tail so later reads scan nothing twice.
-		next = tail
+		last := events[len(events)-1]
+		next, nextAt = last.ID, last.WrittenAtNS
 	}
-	out := ServerDelta{NextSince: encodeServerCursor(l.serverGen, next), More: more}
+	// With no events for this user past the cursor, it jumps to the stream
+	// tail so later reads scan nothing twice.
+	out := ServerDelta{NextSince: encodeServerCursor(l.serverGen, next, nextAt), More: more}
 
 	// Resolve every play-state event's state in one batch up front rather
 	// than one Playback().State read per event as the loop hydrates.

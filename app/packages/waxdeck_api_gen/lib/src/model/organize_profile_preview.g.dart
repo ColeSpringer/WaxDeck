@@ -17,6 +17,8 @@ class _$OrganizeProfilePreview extends OrganizeProfilePreview {
   final String? podcastTemplate;
   @override
   final bool? tagWrite;
+  @override
+  final String? compilationFolder;
 
   factory _$OrganizeProfilePreview([
     void Function(OrganizeProfilePreviewBuilder)? updates,
@@ -28,6 +30,7 @@ class _$OrganizeProfilePreview extends OrganizeProfilePreview {
     this.audiobookTemplate,
     this.podcastTemplate,
     this.tagWrite,
+    this.compilationFolder,
   }) : super._();
   @override
   OrganizeProfilePreview rebuild(
@@ -46,7 +49,8 @@ class _$OrganizeProfilePreview extends OrganizeProfilePreview {
         musicTemplate == other.musicTemplate &&
         audiobookTemplate == other.audiobookTemplate &&
         podcastTemplate == other.podcastTemplate &&
-        tagWrite == other.tagWrite;
+        tagWrite == other.tagWrite &&
+        compilationFolder == other.compilationFolder;
   }
 
   @override
@@ -57,6 +61,7 @@ class _$OrganizeProfilePreview extends OrganizeProfilePreview {
     _$hash = $jc(_$hash, audiobookTemplate.hashCode);
     _$hash = $jc(_$hash, podcastTemplate.hashCode);
     _$hash = $jc(_$hash, tagWrite.hashCode);
+    _$hash = $jc(_$hash, compilationFolder.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -68,7 +73,8 @@ class _$OrganizeProfilePreview extends OrganizeProfilePreview {
           ..add('musicTemplate', musicTemplate)
           ..add('audiobookTemplate', audiobookTemplate)
           ..add('podcastTemplate', podcastTemplate)
-          ..add('tagWrite', tagWrite))
+          ..add('tagWrite', tagWrite)
+          ..add('compilationFolder', compilationFolder))
         .toString();
   }
 }
@@ -100,6 +106,11 @@ class OrganizeProfilePreviewBuilder
   bool? get tagWrite => _$this._tagWrite;
   set tagWrite(bool? tagWrite) => _$this._tagWrite = tagWrite;
 
+  String? _compilationFolder;
+  String? get compilationFolder => _$this._compilationFolder;
+  set compilationFolder(String? compilationFolder) =>
+      _$this._compilationFolder = compilationFolder;
+
   OrganizeProfilePreviewBuilder() {
     OrganizeProfilePreview._defaults(this);
   }
@@ -112,6 +123,7 @@ class OrganizeProfilePreviewBuilder
       _audiobookTemplate = $v.audiobookTemplate;
       _podcastTemplate = $v.podcastTemplate;
       _tagWrite = $v.tagWrite;
+      _compilationFolder = $v.compilationFolder;
       _$v = null;
     }
     return this;
@@ -139,6 +151,7 @@ class OrganizeProfilePreviewBuilder
           audiobookTemplate: audiobookTemplate,
           podcastTemplate: podcastTemplate,
           tagWrite: tagWrite,
+          compilationFolder: compilationFolder,
         );
     replace(_$result);
     return _$result;

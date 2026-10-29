@@ -14,6 +14,7 @@ import 'package:waxdeck_api_gen/src/model/admin_settings.dart';
 import 'package:waxdeck_api_gen/src/model/audit_event_page.dart';
 import 'package:waxdeck_api_gen/src/model/backup.dart';
 import 'package:waxdeck_api_gen/src/model/backup_list.dart';
+import 'package:waxdeck_api_gen/src/model/catalog_consistency.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_cache_prune_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_cache_prune_result.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_cache_report.dart';
@@ -497,7 +498,7 @@ class AdminApi {
   }
 
   /// Import listening state from another server
-  /// Starts a migration import as a background task and answers with the tool task to follow (type &#x60;import-&lt;source&gt;&#x60;; the finished task&#39;s &#x60;summary&#x60; carries the report: what matched, what did not, and what was written). Sources: &#x60;navidrome&#x60; and &#x60;subsonic&#x60; pull stars, ratings, play counts, and bookmarks from a running server over its Subsonic API (&#x60;serverUrl&#x60; + &#x60;username&#x60; + &#x60;password&#x60;); &#x60;audiobookshelf&#x60; pulls book progress over its REST API (&#x60;serverUrl&#x60; + &#x60;token&#x60;); &#x60;jellyfin&#x60; pulls favourites, play counts and positions over its REST API (&#x60;serverUrl&#x60; + &#x60;username&#x60; with either &#x60;password&#x60; or an API key in &#x60;token&#x60;); &#x60;lastfm&#x60; and &#x60;listenbrainz&#x60; pull scrobbling history for a &#x60;username&#x60;; and &#x60;spotify&#x60; reads an account data export uploaded first (&#x60;exportId&#x60;). Podcast subscriptions migrate via the existing OPML import. Items are matched through the portable-ref ladder (identifiers, then fingerprints, then descriptive metadata); play history lands as import-source listen sessions with deterministic idempotency ids, so re-running an import never doubles anything. Last.fm, ListenBrainz and Spotify carry a time per play, so their history lands at the times it happened; the sources that report only a play count are spread backwards a week apart. Imported listens are never forwarded to connected scrobblers. &#x60;dryRun&#x60; matches and reports without writing. A URL must resolve to a global address unless the server allows private fetches. Credentials are held only for the task&#39;s duration. Administrators only. 
+  /// Starts a migration import as a background task and answers with the tool task to follow (type &#x60;import-&lt;source&gt;&#x60;; the finished task&#39;s &#x60;summary&#x60; carries the report: what matched, what did not, and what was written). Sources: &#x60;navidrome&#x60; and &#x60;subsonic&#x60; pull stars, ratings, play counts, and bookmarks from a running server over its Subsonic API (&#x60;serverUrl&#x60; + &#x60;username&#x60; + &#x60;password&#x60;); &#x60;audiobookshelf&#x60; pulls book progress over its REST API (&#x60;serverUrl&#x60; + &#x60;token&#x60;); &#x60;jellyfin&#x60; pulls favourites, play counts and positions over its REST API (&#x60;serverUrl&#x60; + &#x60;username&#x60; with either &#x60;password&#x60; or an API key in &#x60;token&#x60;); &#x60;lastfm&#x60; and &#x60;listenbrainz&#x60; pull scrobbling history for a &#x60;username&#x60;; and &#x60;spotify&#x60; reads an account data export uploaded first (&#x60;exportId&#x60;). Podcast subscriptions migrate via the existing OPML import. Items are matched through the portable-ref ladder (identifiers, then fingerprints, then descriptive metadata); play history lands as import-source listen sessions with deterministic idempotency ids, so re-running an import never doubles anything. An entry naming a recording the library holds more than once, with nothing in it to tell the copies apart, matches the present copy with the lowest id, and the summary counts it under &#x60;ties&#x60;. Last.fm, ListenBrainz and Spotify carry a time per play, so their history lands at the times it happened; the sources that report only a play count are spread backwards a week apart. Imported listens are never forwarded to connected scrobblers. &#x60;dryRun&#x60; matches and reports without writing. A URL must resolve to a global address unless the server allows private fetches. Credentials are held only for the task&#39;s duration. Administrators only. 
   ///
   /// Parameters:
   /// * [migrationCreate] 
@@ -1045,6 +1046,90 @@ class AdminApi {
     }
 
     return Response<Backup>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Check the catalog&#39;s derived data
+  /// Recomputes what the catalog keeps derived from its own rows (the artist, genre and release-group totals, sort keys, book lengths and ISBN keys, album and release years, playlist positions) and counts the rows that disagree; checks the search index for coverage, counting the present items it has no entry for and the entries with no item (an entry&#39;s content is not read); and counts the stored images, thumbnails and custom-tag rows nothing uses, which a repair deletes. Artists, albums, release groups, genres and series with no items are not counted; a repair has a step of its own for them. Read-only, so it runs beside scans and edits. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [CatalogConsistency] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<CatalogConsistency>> getCatalogConsistency({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/catalog/consistency';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    CatalogConsistency? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(CatalogConsistency),
+      ) as CatalogConsistency;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<CatalogConsistency>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -3287,6 +3372,90 @@ class AdminApi {
     }
 
     return Response<Job>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Repair the catalog&#39;s derived data
+  /// Queues a &#x60;catalog-repair&#x60; task that recomputes everything the check counts, in this order: the totals, book lengths and ISBN keys, album and release years and playlist positions; the sort keys; the artists, albums, release groups, genres and series with no items (deleted when an earlier repair found them so at least a day before, otherwise noted for the next one); the images and thumbnails nothing uses; the custom-tag rows under keys the catalog no longer takes; the search index, whose entries are rewritten where their content went stale as well as added where missing and dropped where orphaned. It then checks again, and the finished task&#39;s &#x60;summary&#x60; says what each step did and what the check counted after (see &#x60;ToolTask&#x60;), and in &#x60;runs&#x60; what each run of the task did: the steps it finished, in order, with &#x60;error&#x60; saying why a run stopped short and &#x60;handedOff&#x60; marking one a catalog hand-off cut short. It holds the catalog&#39;s write lock while it writes, so edits and scans wait for it. It runs beside the other tool tasks, but one at a time with health fixes, which can run as long. Each run has six hours. A run cut short for a reason that may pass (an error, its time running out, the server stopping) is followed by one that starts after the last step a run finished, since every step recomputes from the catalog&#39;s own rows, three attempts in all. A run a catalog hand-off cuts short waits the hand-off out without spending an attempt, and the next starts over. A step the catalog refuses ends the repair as failed, and so does a third attempt that fails. It writes no file in any library, so it runs on a read-only server too. The release years a repair puts back, and the sort keys it rewrites other than an item&#39;s own, reach no sync delta, so a repair that got past its first step makes every client re-mirror the catalog once, when it ends: every catalog sync cursor handed out before then answers 410 &#x60;sync-reset&#x60; at its next use, and connected clients are told to pull at once. One at a time: &#x60;conflict&#x60; while one is queued or running. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ToolTask] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ToolTask>> repairCatalog({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/catalog/repair';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ToolTask? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ToolTask),
+      ) as ToolTask;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ToolTask>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

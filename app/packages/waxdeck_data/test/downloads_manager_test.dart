@@ -52,6 +52,21 @@ class FakeTransferEngine implements TransferEnginePort {
   /// asserts against bookkeeping the manager has finished.
   Future<void> Function()? settle;
 
+  /// Held open, [describe] waits on it: the manager's chain stops there.
+  Completer<void>? describeGate;
+
+  /// Run inside [cancel], as a writer outside the manager's chain would
+  /// land: something taken up while a free is under way.
+  Future<void> Function()? onCancel;
+
+  /// The directory finished files land in, when the test has one; null, as
+  /// for an engine with none. Asking for it is a call, once it is set.
+  String? mediaDir;
+
+  /// Held open, [mediaDirectory] waits on it: the manager's chain stops
+  /// there.
+  Completer<void>? mediaGate;
+
   var _next = 0;
 
   @override
@@ -66,6 +81,13 @@ class FakeTransferEngine implements TransferEnginePort {
   }
 
   @override
+  Future<String?> mediaDirectory() async {
+    if (mediaGate case final gate?) await gate.future;
+    if (mediaDir != null) calls.add('media');
+    return mediaDir;
+  }
+
+  @override
   Future<void> recover() async {
     calls.add('recover');
     recovered++;
@@ -73,6 +95,7 @@ class FakeTransferEngine implements TransferEnginePort {
 
   @override
   Future<void> describe(TransferGroup group) async {
+    if (describeGate case final gate?) await gate.future;
     calls.add('describe:${group.id}');
     described.add(group);
   }
@@ -100,7 +123,10 @@ class FakeTransferEngine implements TransferEnginePort {
   }
 
   @override
-  Future<void> cancel(List<String> taskIds) async => canceled.addAll(taskIds);
+  Future<void> cancel(List<String> taskIds) async {
+    canceled.addAll(taskIds);
+    if (onCancel case final hook?) await hook();
+  }
 
   @override
   Future<NotificationPermission> notificationPermission() async => permission;
@@ -211,6 +237,7 @@ Future<void> _pending(
   String pid,
   int index, {
   String state = 'pending',
+  String? server,
 }) => db
     .into(db.downloadRecords)
     .insert(
@@ -223,8 +250,35 @@ Future<void> _pending(
         localPath: '',
         sizeBytes: 1,
         state: state,
+        server: Value(server),
       ),
     );
+
+/// A finished record for one file, its bytes in a file of its own.
+Future<File> _complete(
+  MirrorDatabase db,
+  Directory dir,
+  String pid,
+  int index,
+  String essence,
+) async {
+  final file = File('${dir.path}/$essence.m4b')..writeAsStringSync('audio');
+  await db
+      .into(db.downloadRecords)
+      .insertOnConflictUpdate(
+        DownloadRecordsCompanion.insert(
+          pid: pid,
+          fileIndex: index,
+          essenceHash: essence,
+          etag: '1-1',
+          fileName: '$essence.m4b',
+          localPath: file.path,
+          sizeBytes: 5,
+          state: 'complete',
+        ),
+      );
+  return file;
+}
 
 /// A gate a test opens and shuts.
 class _FakeGate implements TransferGate {
@@ -296,7 +350,10 @@ void main() {
   /// Before the default download-info's URLs expire.
   var now = DateTime.utc(2026, 7, 29, 12);
 
-  BackgroundDownloadManager build({int maxRunning = 3}) {
+  BackgroundDownloadManager build({
+    int maxRunning = 3,
+    bool Function(List<File> files)? foldsCase,
+  }) {
     final built = BackgroundDownloadManager(
       db: db,
       repository: () => repo,
@@ -306,6 +363,7 @@ void main() {
       clock: () => now,
       maxRunning: maxRunning,
       timer: timers.call,
+      foldsCase: foldsCase,
     );
     engine.settle = () => built.settled;
     gate.settle = () => built.settled;
@@ -378,6 +436,81 @@ void main() {
       await land(engine.ids.single, 'ess0.m4b');
 
       expect(engine.started.map((r) => r.fileName), ['ess0.m4b', 'ess1.m4b']);
+    });
+
+    test('a server change partway through an item keeps what landed, and '
+        'back on the first server the rest comes', () async {
+      final first = repo
+        ..baseUrl = 'http://first.test'
+        ..infoByPid[_book] = _info(_book, parts: 2);
+      await manager.download(_book);
+      await land(engine.ids.single, 'ess0.m4b');
+      final landed = File('${tmp.path}/ess0.m4b');
+      expect(engine.started.map((r) => r.fileName), ['ess0.m4b', 'ess1.m4b']);
+
+      // "Change server": the second part's URL expires there, and the
+      // fresh read goes to a server that never had the item.
+      repo = _DownloadRepository()..baseUrl = 'http://second.test';
+      manager.serverChanged();
+      await engine.report(
+        engine.ids.last,
+        state: TransferState.failed,
+        httpStatus: 401,
+      );
+      await manager.settled;
+
+      expect(repo.fetched, [_book], reason: 'the read went to the new server');
+      expect(await states(), ['complete', 'pending']);
+      expect(landed.existsSync(), isTrue);
+      // It waits for another server rather than asking this one again.
+      expect(repo.removedAsked, isEmpty, reason: 'the rows name the first');
+      expect(timers.pending.where((t) => t.isActive), isEmpty);
+
+      // Back on the first server, the item is read there, and the second
+      // part goes on at the fresh URL.
+      repo = first;
+      manager.serverChanged();
+      await manager.settled;
+
+      expect(first.fetched, [_book, _book]);
+      expect(engine.resumed, [engine.ids.last]);
+      expect(engine.resumedWith, [first.infoByPid[_book]!.files[1].url]);
+      expect(await states(), ['complete', 'pending']);
+    });
+
+    test('a refusal from the server the item came from still gives it '
+        'up', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 2);
+      await manager.download(_book);
+      await land(engine.ids.single, 'ess0.m4b');
+      repo.infoByPid.remove(_book);
+      await engine.report(
+        engine.ids.last,
+        state: TransferState.failed,
+        httpStatus: 401,
+      );
+      await manager.settled;
+
+      expect(await db.select(db.downloadRecords).get(), isEmpty);
+    });
+
+    test('records the server each file came from', () async {
+      Future<List<String?>> servers() async => [
+        for (final row in await db.select(db.downloadRecords).get()) row.server,
+      ];
+      repo
+        ..baseUrl = 'http://first.test'
+        ..infoByPid[_book] = _info(_book, parts: 2);
+      await manager.download(_book);
+      await completeAll(_book);
+      expect(await servers(), ['http://first.test', 'http://first.test']);
+
+      // Asked for again where another address answers for the same item:
+      // the bytes on disk stand, and the records name the one that answered.
+      repo.baseUrl = 'http://second.test';
+      await manager.download(_book);
+      expect(engine.started, hasLength(2), reason: 'nothing is fetched again');
+      expect(await servers(), ['http://second.test', 'http://second.test']);
     });
 
     test('names a file safely from a structured essence hash', () async {
@@ -497,6 +630,116 @@ void main() {
 
       expect(await db.select(db.downloadRecords).get(), isEmpty);
       expect(seen.single.failed, isTrue);
+    });
+  });
+
+  group('a not-found from a server the rows do not name', () {
+    Iterable<_FakeTimer> waiting() => timers.pending.where((t) => t.isActive);
+
+    /// An item a previous run left part-way, its first file on disk, its
+    /// rows naming [server] (none: written before rows named one).
+    Future<File> partWay({String? server}) async {
+      final landed = await _complete(db, tmp, _book, 0, 'ess0');
+      await _pending(db, _book, 1);
+      await (db.update(db.downloadRecords)..where((t) => t.pid.equals(_book)))
+          .write(DownloadRecordsCompanion(server: Value(server)));
+      return landed;
+    }
+
+    group('with rows that name no server', () {
+      test(
+        'gives the item up once that server names it gone for good',
+        () async {
+          final landed = await partWay();
+          repo.removedForGood.add(_book);
+
+          await manager.recover();
+          await manager.settled;
+
+          expect(repo.removedAsked, [
+            [_book],
+          ]);
+          expect(await db.select(db.downloadRecords).get(), isEmpty);
+          expect(landed.existsSync(), isFalse);
+          expect(waiting(), isEmpty);
+        },
+      );
+
+      test('parks one it does not name, read again by nothing on this '
+          'server', () async {
+        final landed = await partWay();
+
+        await manager.recover();
+        await manager.settled;
+        // A new connection is not another server.
+        await gate.move(open: false);
+        await gate.move(open: true);
+        await manager.settled;
+
+        expect(repo.fetched, [_book]);
+        expect(repo.removedAsked, [
+          [_book],
+        ]);
+        expect(waiting(), isEmpty, reason: 'no timer asks again');
+        expect(await states(), ['complete', 'pending']);
+        expect(landed.existsSync(), isTrue);
+      });
+
+      test('reads it again at the next start', () async {
+        await partWay();
+        await manager.recover();
+        await manager.settled;
+
+        // Back in this server's sight by the next launch.
+        repo.infoByPid[_book] = _info(_book, parts: 2);
+        manager.dispose();
+        engine = FakeTransferEngine();
+        manager = build();
+        await manager.recover();
+        await manager.settled;
+
+        expect(repo.fetched, [_book, _book]);
+        expect(engine.started.map((r) => r.fileName), ['ess1.m4b']);
+      });
+
+      test('reads it again once the app reaches another server', () async {
+        await partWay();
+        await manager.recover();
+        await manager.settled;
+
+        final other = _DownloadRepository()
+          ..baseUrl = 'http://other.test'
+          ..infoByPid[_book] = _info(_book, parts: 2);
+        repo = other;
+        manager.serverChanged();
+        await manager.settled;
+
+        expect(other.fetched, [_book]);
+        expect(engine.started.map((r) => r.fileName), ['ess1.m4b']);
+        expect(
+          {for (final r in await db.select(db.downloadRecords).get()) r.server},
+          {'http://other.test'},
+          reason: 'the server that answered owns the rows',
+        );
+      });
+    });
+
+    test('parks an item whose rows name another address, never asking '
+        'about it and never deleting it', () async {
+      final landed = await partWay(server: 'http://elsewhere.test');
+      repo.removedForGood.add(_book);
+
+      await manager.recover();
+      await manager.settled;
+      await gate.move(open: false);
+      await gate.move(open: true);
+      await manager.settled;
+
+      expect(repo.fetched, [_book]);
+      expect(repo.removedAsked, isEmpty);
+      expect(waiting(), isEmpty);
+      expect(await states(), ['complete', 'pending']);
+      expect(landed.existsSync(), isTrue);
     });
   });
 
@@ -1153,7 +1396,7 @@ void main() {
     });
 
     test('a pending record the server no longer has is dropped', () async {
-      await _pending(db, _book, 0);
+      await _pending(db, _book, 0, server: repo.baseUrl);
 
       await manager.recover();
       await manager.settled;
@@ -1306,6 +1549,557 @@ void main() {
 
       expect(engine.started, hasLength(1));
       expect(engine.permissionRequests, 0);
+    });
+
+    test('a transfer whose free is owed is not fetched again', () async {
+      // The commit that dropped the item promised to free what is held and
+      // a kill came first: resuming would fetch for an item the server has
+      // taken away, ahead of the free that ends it.
+      await _pending(db, _book, 0);
+      await db.transaction(() => PendingFrees(db).condemn(_book));
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(repo.fetched, isEmpty);
+      expect(engine.started, isEmpty);
+    });
+
+    test('the plugin lets go of a transfer whose free is owed', () async {
+      await _pending(db, _book, 0);
+      await db.transaction(() => PendingFrees(db).condemn(_book));
+      engine.tracked = const [
+        TrackedTransfer(taskId: 'old-0', pid: _book, fileName: 'ess0.m4b'),
+      ];
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(engine.canceled, ['old-0']);
+      expect(engine.resumed, isEmpty);
+    });
+
+    test('a transfer whose item the mirror lists again is picked up', () async {
+      await _pending(db, _book, 0);
+      await db.transaction(() => PendingFrees(db).condemn(_book));
+      await db
+          .into(db.mirrorItems)
+          .insert(
+            MirrorItemsCompanion.insert(
+              pid: _book,
+              ulid: _book.substring(3),
+              mediaType: 'audiobook',
+              title: 'The Book',
+              durationMs: 1,
+              sortKey: 'book',
+            ),
+          );
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(engine.started.single.fileName, 'ess0.m4b');
+    });
+  });
+
+  group('freeOwed', () {
+    Future<void> promise(String pid) =>
+        db.transaction(() => PendingFrees(db).condemn(pid));
+
+    test('takes the files the promise lists and answers its covers', () async {
+      final f0 = await _complete(db, tmp, _book, 0, 'ess0');
+      final f1 = await _complete(db, tmp, _book, 1, 'ess1');
+      await db
+          .into(db.artworkPins)
+          .insert(
+            ArtworkPinsCompanion.insert(
+              pid: _book,
+              sizePx: 300,
+              artUrl: '/art',
+              etag: 'a',
+              localPath: '/art/book.img',
+              sizeBytes: 1,
+              pinnedAt: DateTime.utc(2026, 10, 1),
+            ),
+          );
+      await promise(_book);
+
+      final pins = await manager.freeOwed(_book);
+
+      expect(pins!.map((p) => p.sizePx), [300]);
+      expect(f0.existsSync(), isFalse);
+      expect(f1.existsSync(), isFalse);
+      expect(await db.select(db.downloadRecords).get(), isEmpty);
+      // The covers are the artwork store's: the promise holds until they go.
+      expect(await db.select(db.artworkPins).get(), hasLength(1));
+      expect(await PendingFrees(db).settle(_book), isFalse);
+    });
+
+    test('owed nothing, it frees nothing', () async {
+      final file = await _complete(db, tmp, _book, 0, 'ess0');
+
+      expect(await manager.freeOwed(_book), isNull);
+
+      expect(file.existsSync(), isTrue);
+      expect(await db.select(db.downloadRecords).get(), hasLength(1));
+    });
+
+    test('a pid the mirror lists again keeps every byte', () async {
+      final file = await _complete(db, tmp, _book, 0, 'ess0');
+      await promise(_book);
+      await db
+          .into(db.mirrorItems)
+          .insert(
+            MirrorItemsCompanion.insert(
+              pid: _book,
+              ulid: _book.substring(3),
+              mediaType: 'audiobook',
+              title: 'The Book',
+              durationMs: 1,
+              sortKey: 'book',
+            ),
+          );
+
+      expect(await manager.freeOwed(_book), isNull);
+
+      expect(file.existsSync(), isTrue);
+      expect(await db.select(db.downloadRecords).get(), hasLength(1));
+    });
+
+    test(
+      'a request queued ahead of it is seen by it, and keeps the lot',
+      () async {
+        // The gap between a check made outside the chain and a delete made
+        // inside it: a request already waiting writes its rows first.
+        final f0 = await _complete(db, tmp, _book, 0, 'ess0');
+        await promise(_book);
+        repo
+          ..infoByPid[_track] = _info(_track, parts: 1)
+          ..infoByPid[_book] = _info(_book, parts: 2);
+        engine.describeGate = Completer<void>();
+        final holding = manager.download(_track);
+        await pumpEventQueue();
+        final request = manager.download(_book);
+        await pumpEventQueue();
+        final freeing = manager.freeOwed(_book);
+        await pumpEventQueue();
+
+        engine.describeGate!.complete();
+        await Future.wait([holding, request]);
+        final freed = await freeing;
+
+        // Its second file is a new row, taken up after the commit, so the
+        // free finds the pid no longer owed and takes nothing of it.
+        expect(freed, isNull);
+        expect(f0.existsSync(), isTrue);
+        expect(
+          (await db.select(db.downloadRecords).get())
+              .where((r) => r.pid == _book)
+              .map((r) => r.fileIndex),
+          unorderedEquals([0, 1]),
+        );
+        expect(engine.canceled, isEmpty);
+        expect(await PendingFrees(db).due(), isEmpty, reason: 'forgotten');
+      },
+    );
+
+    test(
+      'a file taken up after the check is not deleted with the rest',
+      () async {
+        // A writer outside the chain (a kind change moving a download in)
+        // can land between the decision and the delete: the free takes the
+        // rows the promise lists, and no others.
+        repo.infoByPid[_book] = _info(_book, parts: 1);
+        await manager.download(_book);
+        expect(engine.started, hasLength(1));
+        await promise(_book);
+        final late = File('${tmp.path}/late.m4b')..writeAsStringSync('late');
+        engine.onCancel = () => db
+            .into(db.downloadRecords)
+            .insert(
+              DownloadRecordsCompanion.insert(
+                pid: _book,
+                fileIndex: 5,
+                essenceHash: 'late',
+                etag: '1-1',
+                fileName: 'late.m4b',
+                localPath: late.path,
+                sizeBytes: 4,
+                state: 'complete',
+              ),
+            );
+
+        final pins = await manager.freeOwed(_book);
+
+        expect(pins, isEmpty);
+        expect(engine.canceled, ['task-0'], reason: 'its transfer is stopped');
+        final rows = await db.select(db.downloadRecords).get();
+        expect(rows.map((r) => r.fileIndex), [5]);
+        expect(late.existsSync(), isTrue);
+      },
+    );
+
+    test('a download that landed after the commit is still freed', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      await promise(_book);
+      // It finishes before the free comes round.
+      final landed = File('${tmp.path}/ess0.m4b')..writeAsStringSync('b');
+      await engine.report(
+        'task-0',
+        state: TransferState.complete,
+        path: landed.path,
+        pid: _book,
+        fileName: 'ess0.m4b',
+      );
+      expect(await manager.isComplete(_book), isTrue);
+
+      final pins = await manager.freeOwed(_book);
+
+      expect(pins, isEmpty);
+      expect(await manager.isComplete(_book), isFalse);
+      expect(await db.select(db.downloadRecords).get(), isEmpty);
+      expect(await PendingFrees(db).settle(_book), isTrue);
+    });
+
+    test('a transfer that finished while the app was down is unlinked by '
+        'the free', () async {
+      // The commit promised the free while the transfer was going, the run
+      // ended before the free, and the plugin finished the file with no
+      // one to say so: it sits where the plugin puts it, and no row names
+      // it until recovery has read the plugin's record.
+      await _pending(db, _book, 0);
+      await promise(_book);
+      final file = File('${tmp.path}/ess0.m4b')..writeAsStringSync('audio');
+      engine.tracked = [
+        TrackedTransfer(
+          taskId: 'old-0',
+          pid: _book,
+          fileName: 'ess0.m4b',
+          state: TransferState.complete,
+          path: file.path,
+        ),
+      ];
+
+      final said = <DownloadProgress>[];
+      final sub = manager.progress.listen(said.add);
+      addTearDown(sub.cancel);
+
+      await manager.recover();
+      await manager.settled;
+      final pins = await manager.freeOwed(_book);
+
+      expect(pins, isEmpty);
+      expect(file.existsSync(), isFalse, reason: 'no file left behind');
+      expect(await db.select(db.downloadRecords).get(), isEmpty);
+      expect(await PendingFrees(db).settle(_book), isTrue);
+      // Not resumed, the plugin's record goes with the other strays, and
+      // no screen is told an item that is going has arrived.
+      expect(repo.fetched, isEmpty);
+      expect(engine.canceled, ['old-0']);
+      expect(said.where((p) => p.complete), isEmpty);
+    });
+
+    test('a file another pid holds stays for it', () async {
+      await _complete(db, tmp, _book, 0, 'shared');
+      final theirs = await _complete(db, tmp, _track, 0, 'shared');
+      await promise(_book);
+
+      await manager.freeOwed(_book);
+
+      final rows = await db.select(db.downloadRecords).get();
+      expect(rows.map((r) => r.pid), [_track]);
+      expect(theirs.existsSync(), isTrue, reason: 'still referenced');
+    });
+  });
+
+  group('the media sweep', () {
+    late Directory media;
+
+    setUp(() {
+      media = Directory('${tmp.path}/media')..createSync();
+      engine.mediaDir = media.path;
+    });
+
+    File put(String name, {Directory? in_}) =>
+        File('${(in_ ?? media).path}/$name')..writeAsStringSync('bytes');
+
+    Future<void> record(String pid, int index, File file) => db
+        .into(db.downloadRecords)
+        .insert(
+          DownloadRecordsCompanion.insert(
+            pid: pid,
+            fileIndex: index,
+            essenceHash: 'ess$index',
+            etag: '1-1',
+            fileName: 'ess$index.m4b',
+            localPath: file.path,
+            sizeBytes: 5,
+            state: 'complete',
+          ),
+        );
+
+    List<String> left() =>
+        media
+            .listSync()
+            .map((e) => e.uri.pathSegments.where((s) => s.isNotEmpty).last)
+            .toList()
+          ..sort();
+
+    test('removes a file no record names', () async {
+      final kept = put('ess0.m4b');
+      await record(_book, 0, kept);
+      put('orphan.m4b');
+      put('another.flac');
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(left(), ['ess0.m4b']);
+    });
+
+    test('keeps a file a record names, whether or not it holds the path '
+        'yet', () async {
+      await record(_book, 0, put('ess0.m4b'));
+      // A transfer that finished and has not been landed: its row is
+      // there, naming the destination it was started for, and its path is
+      // not.
+      await _pending(db, _track, 1);
+      put('ess1.m4b');
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(left(), ['ess0.m4b', 'ess1.m4b']);
+    });
+
+    test('keeps a file a record names by its path alone', () async {
+      // A record written under another naming: its destination name is not
+      // the file's, its path is.
+      final legacy = put('older-name.m4b');
+      await db
+          .into(db.downloadRecords)
+          .insert(
+            DownloadRecordsCompanion.insert(
+              pid: _book,
+              fileIndex: 0,
+              essenceHash: 'ess0',
+              etag: '1-1',
+              fileName: 'ess0.m4b',
+              localPath: legacy.path,
+              sizeBytes: 5,
+              state: 'complete',
+            ),
+          );
+      put('orphan.m4b');
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(left(), ['older-name.m4b']);
+    });
+
+    /// The row of an item downloaded under [fileName], at [path].
+    Future<void> recordAs(String pid, String fileName, String path) => db
+        .into(db.downloadRecords)
+        .insert(
+          DownloadRecordsCompanion.insert(
+            pid: pid,
+            fileIndex: 0,
+            essenceHash: 'ess0',
+            etag: '1-1',
+            fileName: fileName,
+            localPath: path,
+            sizeBytes: 5,
+            state: 'complete',
+          ),
+        );
+
+    test('where names differing in case are one file, keeps the file a '
+        'record names in another case', () async {
+      // Two items of one recording, each named with the extension as the
+      // server spells it, hold one file there, in the spelling of the
+      // transfer that made it. The first item's row went with it, and the
+      // file stayed for the second, whose row spells it otherwise.
+      final shared = put('ess0.flac');
+      await recordAs(_track, 'ess0.FLAC', '${media.path}/ess0.FLAC');
+      manager.dispose();
+      manager = build(foldsCase: (_) => true);
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(shared.existsSync(), isTrue);
+    });
+
+    test('where they are two files, the one no record names goes', () async {
+      final played = put('ess0.FLAC');
+      await recordAs(_track, 'ess0.FLAC', played.path);
+      // What the removed item left: its own file, by its own spelling.
+      final left0 = put('ess0.flac');
+      if (FileSystemEntity.identicalSync(played.path, left0.path)) {
+        markTestSkipped('this filesystem folds case');
+        return;
+      }
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(left(), ['ess0.FLAC']);
+    });
+
+    test('keeps what a live transfer is writing', () async {
+      await _pending(db, _book, 1);
+      put('ess1.m4b');
+      // Where the plugin falls back to when it cannot keep its temporary
+      // file elsewhere, hidden or not, beside the destination.
+      put('.com.bbflight.background_downloader123456');
+      put('com.bbflight.background_downloader654321');
+      put('orphan.m4b');
+      engine.tracked = const [
+        TrackedTransfer(taskId: 'old-0', pid: _book, fileName: 'ess1.m4b'),
+      ];
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(left(), [
+        '.com.bbflight.background_downloader123456',
+        'com.bbflight.background_downloader654321',
+        'ess1.m4b',
+      ]);
+    });
+
+    test('keeps anything outside the media directory, and a directory in '
+        'it', () async {
+      final outside = put('orphan.m4b', in_: tmp);
+      final nested = Directory('${media.path}/nested')..createSync();
+      final inner = put('inner.m4b', in_: nested);
+      Directory('${media.path}/empty').createSync();
+      put('orphan.m4b');
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(outside.existsSync(), isTrue);
+      expect(inner.existsSync(), isTrue);
+      expect(left(), ['empty', 'nested']);
+    });
+
+    test('a directory that is not there is no error', () async {
+      engine.mediaDir = '${tmp.path}/never-made';
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(engine.recovered, 1, reason: 'the start went on');
+    });
+
+    test('an engine with no directory is not asked to sweep', () async {
+      engine.mediaDir = null;
+      put('orphan.m4b');
+
+      await manager.recover();
+      await manager.settled;
+
+      expect(left(), ['orphan.m4b']);
+      expect(engine.calls, isNot(contains('media')));
+    });
+
+    test('runs once per start', () async {
+      put('first.m4b');
+      await manager.recover();
+      await manager.settled;
+      expect(left(), isEmpty);
+
+      // Later in the run the directory is no longer quiet: a completion
+      // can be waiting to be landed.
+      put('later.m4b');
+      await manager.recover();
+      await manager.settled;
+
+      expect(left(), ['later.m4b']);
+    });
+
+    test('runs ahead of anything that could write, and holds the rest of '
+        'the manager back', () async {
+      repo.infoByPid[_track] = _info(_track, parts: 1);
+      await _pending(db, _book, 0);
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      engine.mediaGate = Completer<void>();
+
+      final recovering = manager.recover();
+      await pumpEventQueue();
+      // A request and a free arrive while the directory is being read.
+      final downloading = manager.download(_track);
+      final freeing = manager.freeOwed(_track);
+      await pumpEventQueue();
+      expect(engine.started, isEmpty, reason: 'nothing writes meanwhile');
+      expect(engine.recovered, 0, reason: 'nor has the plugin started');
+
+      engine.mediaGate!.complete();
+      await Future.wait([recovering, downloading, freeing]);
+      await manager.settled;
+
+      final order = engine.calls;
+      expect(order.indexOf('media'), lessThan(order.indexOf('recover')));
+      expect(
+        order.indexOf('media'),
+        lessThan(order.indexWhere((c) => c.startsWith('start:'))),
+      );
+    });
+
+    test('a finished file an owed pid left is named by its row until the '
+        'free unlinks it', () async {
+      await _pending(db, _book, 0);
+      await db.transaction(() => PendingFrees(db).condemn(_book));
+      final file = put('ess0.m4b');
+      engine.tracked = [
+        TrackedTransfer(
+          taskId: 'old-0',
+          pid: _book,
+          fileName: 'ess0.m4b',
+          state: TransferState.complete,
+          path: file.path,
+        ),
+      ];
+
+      await manager.recover();
+      await manager.settled;
+      expect(file.existsSync(), isTrue, reason: 'a row names it');
+      await manager.freeOwed(_book);
+
+      expect(left(), isEmpty);
+    });
+
+    test('a completion that landed after its row was gone is swept at the '
+        'next start', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      // The listener removes it, and the transfer finishes anyway: the
+      // plugin puts the file in place, and its event finds no row.
+      await manager.remove(_book);
+      final stranded = put('ess0.m4b');
+      await engine.report(
+        'task-0',
+        state: TransferState.complete,
+        path: stranded.path,
+        pid: _book,
+        fileName: 'ess0.m4b',
+      );
+      expect(stranded.existsSync(), isTrue, reason: 'nothing names it');
+      expect(await db.select(db.downloadRecords).get(), isEmpty);
+
+      // The next start.
+      manager.dispose();
+      engine = FakeTransferEngine()..mediaDir = media.path;
+      manager = build();
+      await manager.recover();
+      await manager.settled;
+
+      expect(stranded.existsSync(), isFalse);
     });
   });
 

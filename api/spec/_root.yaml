@@ -90,6 +90,9 @@ info:
       carries the current one. Other prefixes are strict.
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
+    - A JSON request body larger than 24 MiB is refused with
+      `invalid-request`; a raw body (an upload's bytes, an archive, an
+      export, an image) is bounded by its own operation instead.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
       string; currently defined codes: `invalid-request`, `unauthenticated`,
       `forbidden`, `not-found`, `conflict`, `internal`, `rate-limited` (too
@@ -193,7 +196,8 @@ info:
       the trash, `files`, the first few of them, and `more`, how many
       `files` leaves out; and `single-file`, `multi-file`,
       `no-chapters`, `no-cuts`, `no-sample-rate`, `no-file` or
-      `no-sheet`); a
+      `no-sheet`); a catalog repair refused while one is queued or
+      running carries `reason: task-running`, with `task`; a
       tool task whose clear could not name or remove its hidden files
       carries `reason: outputs-hidden`, with `folder` and `cause`, and
       stays. Under `unsupported-format`,

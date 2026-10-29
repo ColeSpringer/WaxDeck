@@ -69,6 +69,15 @@ abstract mixin class EpisodeSummaryBuilder implements ItemSummaryBuilder {
   int? get discNumber;
   set discNumber(covariant int? discNumber);
 
+  String? get sortKey;
+  set sortKey(covariant String? sortKey);
+
+  String? get artistSort;
+  set artistSort(covariant String? artistSort);
+
+  String? get artistSortKey;
+  set artistSortKey(covariant String? artistSortKey);
+
   int? get durationMs;
   set durationMs(covariant int? durationMs);
 
@@ -118,6 +127,12 @@ class _$$EpisodeSummary extends $EpisodeSummary {
   @override
   final int? discNumber;
   @override
+  final String? sortKey;
+  @override
+  final String? artistSort;
+  @override
+  final String? artistSortKey;
+  @override
   final int durationMs;
   @override
   final String? artUrl;
@@ -146,6 +161,9 @@ class _$$EpisodeSummary extends $EpisodeSummary {
     this.albumPid,
     this.trackNumber,
     this.discNumber,
+    this.sortKey,
+    this.artistSort,
+    this.artistSortKey,
     required this.durationMs,
     this.artUrl,
   }) : super._();
@@ -180,6 +198,9 @@ class _$$EpisodeSummary extends $EpisodeSummary {
         albumPid == other.albumPid &&
         trackNumber == other.trackNumber &&
         discNumber == other.discNumber &&
+        sortKey == other.sortKey &&
+        artistSort == other.artistSort &&
+        artistSortKey == other.artistSortKey &&
         durationMs == other.durationMs &&
         artUrl == other.artUrl;
   }
@@ -207,6 +228,9 @@ class _$$EpisodeSummary extends $EpisodeSummary {
     _$hash = $jc(_$hash, albumPid.hashCode);
     _$hash = $jc(_$hash, trackNumber.hashCode);
     _$hash = $jc(_$hash, discNumber.hashCode);
+    _$hash = $jc(_$hash, sortKey.hashCode);
+    _$hash = $jc(_$hash, artistSort.hashCode);
+    _$hash = $jc(_$hash, artistSortKey.hashCode);
     _$hash = $jc(_$hash, durationMs.hashCode);
     _$hash = $jc(_$hash, artUrl.hashCode);
     _$hash = $jf(_$hash);
@@ -236,6 +260,9 @@ class _$$EpisodeSummary extends $EpisodeSummary {
           ..add('albumPid', albumPid)
           ..add('trackNumber', trackNumber)
           ..add('discNumber', discNumber)
+          ..add('sortKey', sortKey)
+          ..add('artistSort', artistSort)
+          ..add('artistSortKey', artistSortKey)
           ..add('durationMs', durationMs)
           ..add('artUrl', artUrl))
         .toString();
@@ -337,6 +364,20 @@ class $EpisodeSummaryBuilder
   int? get discNumber => _$this._discNumber;
   set discNumber(covariant int? discNumber) => _$this._discNumber = discNumber;
 
+  String? _sortKey;
+  String? get sortKey => _$this._sortKey;
+  set sortKey(covariant String? sortKey) => _$this._sortKey = sortKey;
+
+  String? _artistSort;
+  String? get artistSort => _$this._artistSort;
+  set artistSort(covariant String? artistSort) =>
+      _$this._artistSort = artistSort;
+
+  String? _artistSortKey;
+  String? get artistSortKey => _$this._artistSortKey;
+  set artistSortKey(covariant String? artistSortKey) =>
+      _$this._artistSortKey = artistSortKey;
+
   int? _durationMs;
   int? get durationMs => _$this._durationMs;
   set durationMs(covariant int? durationMs) => _$this._durationMs = durationMs;
@@ -372,6 +413,9 @@ class $EpisodeSummaryBuilder
       _albumPid = $v.albumPid;
       _trackNumber = $v.trackNumber;
       _discNumber = $v.discNumber;
+      _sortKey = $v.sortKey;
+      _artistSort = $v.artistSort;
+      _artistSortKey = $v.artistSortKey;
       _durationMs = $v.durationMs;
       _artUrl = $v.artUrl;
       _$v = null;
@@ -440,6 +484,9 @@ class $EpisodeSummaryBuilder
           albumPid: albumPid,
           trackNumber: trackNumber,
           discNumber: discNumber,
+          sortKey: sortKey,
+          artistSort: artistSort,
+          artistSortKey: artistSortKey,
           durationMs: BuiltValueNullFieldError.checkNotNull(
             durationMs,
             r'$EpisodeSummary',

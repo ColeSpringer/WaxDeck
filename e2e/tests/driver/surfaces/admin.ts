@@ -5,9 +5,16 @@ import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
 import { DEST } from '../nav';
-import { rectAtRest, typeOnce, wheelIntoReach } from '../gestures';
+import { rectAtRest, typeOnce, wheelIntoReach, wheelIntoView } from '../gestures';
 
 export class Admin extends Surface {
+  /// Wheel a control of the console to where a click lands on it. A row
+  /// below the fold publishes no node until it is wheeled into being.
+  async intoView(target: Locator): Promise<void> {
+    if (!(await target.isVisible())) await wheelIntoView(this.ctx.page, target);
+    await wheelIntoReach(this.ctx.page, target);
+  }
+
   /// Import an archive through the backups screen's own control. The
   /// chooser event is armed before the click: a native dialog is not a
   /// page element, and there is no second chance once it is up.

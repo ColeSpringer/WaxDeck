@@ -327,6 +327,44 @@ attached to:
   as it would when one expires, and a podcast client signs in again
   (with a new app password where the database was recreated).
 
+## Catalog check and repair
+
+The catalog keeps some values derived from its own records: the search
+index, the artist, genre and release-group totals, sort keys, book
+lengths and ISBN keys, album and release years, and playlist positions.
+**Catalog check**, at the end of the Health screen (administrators
+only), compares each with a fresh count and lists what disagrees (for
+the search index, the items it has no entry for and the entries with no
+item), beside the unused rows a repair deletes (images and thumbnails
+nothing uses, tag records nothing can reach). **Repair** asks first,
+then queues a `catalog-repair` task you follow in Tasks: it recomputes
+what the check counts, deletes artists, albums, release groups, genres
+and series left with no items (once a repair at least a day earlier
+found them so), deletes the unused rows, rebuilds the search index
+(stale entries included), and checks again. Its row says what it
+rewrote and how the catalog read after, and the audit log records it as
+`catalog.repair`. One runs at a time, and it holds the catalog's write
+lock while it writes, so edits and scans wait for it. It shares its
+worker with health fixes, which can run as long, so one waits for the
+other, while other tasks go on beside them. A run may take up to six
+hours on a large catalog. One cut short for a reason that may pass (an
+error, its time running out, the server stopping) is followed by
+another that picks up after the last step it finished, three attempts
+in all; one a maintenance hand-off cuts short waits it out and starts
+over. A step the catalog refuses, or a third failed attempt, ends the
+repair as failed. The task's summary lists the steps each run finished.
+It writes no file in your libraries,
+so it runs on a read-only server too. The release years and sort keys a
+repair rewrites order what devices list and reach them no other way, so
+when a repair that got past its first step ends, every device
+re-mirrors the catalog once: at once if it is connected, otherwise when
+it next syncs. A catalog the
+server built fresh reads consistent and stays so, which makes a repair
+rarely needed: after an upgrade that kept the catalog, or after
+something other than the server wrote to it. The same check and repair
+are `GET /api/v1/admin/catalog/consistency` and
+`POST /api/v1/admin/catalog/repair`.
+
 ## Scheduled jobs
 
 Five schedules, each a five-field cron expression in server-local
@@ -389,7 +427,14 @@ un-archived), and empties the trash permanently, reporting the space
 reclaimed and how many entries read-only libraries kept. Deleting
 items - from an item's page, a track's or a book's menu, or a whole
 album from its overflow - previews what will be deleted (each file by
-its place in its library, and the bytes) before anything moves. A move the
+its place in its library, the covers, lyrics and other files named for
+it that go with it, and the bytes) before anything moves. A cover or
+lyrics file that another file of the same name still uses stays, and
+goes with the last of them. A delete that leaves a folder in a managed
+library holding only covers, notes and other companions removes the
+folder with them, and the preview does not list those: a trash delete
+keeps them in the trash, a permanent delete removes them for good. An
+in-place library keeps its companions, and their folder. A move the
 library's folder refuses (its permissions, or a read-only mount) is
 reported, never recorded as done: the file stays, a delete that moved
 nothing is refused and audited as refused, and one that moved some
@@ -780,14 +825,16 @@ scrobbler - the history has usually been scrobbled once already.
 
 A dry run matches and reports without writing anything; the finished
 task's summary shows what matched, what did not, and what was
-written. Credentials for the source server are used for the run and
-sealed at rest.
+written. An entry naming a recording the library holds more than once,
+with nothing in it to tell the copies apart, lands on the present copy
+with the lowest id, and the summary counts it as a tie. Credentials for
+the source server are used for the run and sealed at rest.
 
 ## Catalog jobs and tasks
 
 The tasks screen shows background work: file tooling, acquisitions,
-migration imports (with their reports), health fixes, and, for an
-administrator, the catalog's own jobs (scans, analysis, enrichment,
+migration imports (with their reports), health fixes, catalog repairs,
+and, for an administrator, the catalog's own jobs (scans, analysis, enrichment,
 organize runs and their undos, library removals, emptying the trash)
 with their progress and, once they end, what they did. A running job
 is listed however many newer ones came after it; finished per-item jobs

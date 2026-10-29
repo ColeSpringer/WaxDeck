@@ -189,6 +189,166 @@ void main() {
     );
   });
 
+  testWidgets('the preview names the sidecars that go with the files', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+      items: [testItem('tr-1')],
+    );
+    repo.deletePlansByPid['tr-1'] = const DeletePlanEntry(
+      pid: 'tr-1',
+      name: 'Prancing Pony Blues',
+      files: 1,
+      bytes: 4613734,
+      paths: ['Hum Collective/Shell Songs/01 - Prancing Pony Blues.m4a'],
+      sidecars: [
+        'Hum Collective/Shell Songs/01 - Prancing Pony Blues.lrc',
+        'Hum Collective/Shell Songs/01 - Prancing Pony Blues.jpg',
+      ],
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await _delete(tester);
+
+    expect(find.text('Also removes 2 sidecars:'), findsOneWidget);
+    for (final (i, path) in repo.deletePlansByPid['tr-1']!.sidecars.indexed) {
+      expect(find.text(path), findsOneWidget);
+      expect(find.byKey(ValueKey('$i:$path')), findsOneWidget);
+    }
+    // Under the files, not among them.
+    expect(
+      tester.getTopLeft(find.text('Also removes 2 sidecars:')).dy,
+      greaterThan(
+        tester
+            .getTopLeft(
+              find.text(
+                'Hum Collective/Shell Songs/01 - Prancing Pony Blues.m4a',
+              ),
+            )
+            .dy,
+      ),
+    );
+    expect(
+      find.bySemanticsLabel(
+        '2 sidecars: '
+        'Hum Collective/Shell Songs/01 - Prancing Pony Blues.lrc, '
+        'Hum Collective/Shell Songs/01 - Prancing Pony Blues.jpg',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteSidecars),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('sidecars of several items are one list, capped like files', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+      items: [testItem('tr-1'), testItem('tr-2')],
+    );
+    repo.deletePlansByPid['tr-1'] = DeletePlanEntry(
+      pid: 'tr-1',
+      files: 1,
+      bytes: 1024,
+      paths: const ['Album/01.flac'],
+      sidecars: [for (var i = 1; i <= 4; i++) 'Album/01-$i.jpg'],
+    );
+    repo.deletePlansByPid['tr-2'] = DeletePlanEntry(
+      pid: 'tr-2',
+      files: 1,
+      bytes: 1024,
+      paths: const ['Album/02.flac'],
+      sidecars: [for (var i = 1; i <= 3; i++) 'Album/02-$i.jpg'],
+    );
+    await tester.pumpWidget(_host(repo, pids: const ['tr-1', 'tr-2']));
+    await tester.pumpAndSettle();
+
+    await _delete(tester);
+
+    expect(find.text('Also removes 7 sidecars:'), findsOneWidget);
+    expect(find.text('Album/01-1.jpg'), findsOneWidget);
+    expect(find.text('Album/02-1.jpg'), findsOneWidget);
+    expect(find.text('Album/02-2.jpg'), findsNothing);
+    // The five sidecars named make no room for a sixth; the count is said
+    // once, drawn and spoken.
+    expect(find.text('and 2 more files'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        '7 sidecars: Album/01-1.jpg, Album/01-2.jpg, Album/01-3.jpg, '
+        'Album/01-4.jpg, Album/02-1.jpg, and 2 more files',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('one path in two libraries is two rows, not a clash', (
+    tester,
+  ) async {
+    // An item and its copy in a second library laid out alike send the same
+    // relative path twice, for the files and for their sidecars.
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+      items: [testItem('tr-1'), testItem('tr-2')],
+    );
+    for (final pid in ['tr-1', 'tr-2']) {
+      repo.deletePlansByPid[pid] = DeletePlanEntry(
+        pid: pid,
+        files: 1,
+        bytes: 1024,
+        paths: const ['Album/01.flac'],
+        sidecars: const ['Album/01.lrc'],
+      );
+    }
+    await tester.pumpWidget(_host(repo, pids: const ['tr-1', 'tr-2']));
+    await tester.pumpAndSettle();
+
+    await _delete(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Album/01.flac'), findsNWidgets(2));
+    expect(find.text('Album/01.lrc'), findsNWidgets(2));
+    expect(find.text('Also removes 2 sidecars:'), findsOneWidget);
+  });
+
+  testWidgets('a plan with no sidecars says nothing of them', (tester) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+      items: [testItem('tr-1')],
+    );
+    repo.deletePlansByPid['tr-1'] = const DeletePlanEntry(
+      pid: 'tr-1',
+      files: 1,
+      bytes: 1024,
+      paths: ['Album/01.flac'],
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await _delete(tester);
+
+    expect(find.textContaining('sidecar'), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteSidecars),
+      findsNothing,
+    );
+  });
+
+  test('the sidecar line reads in Spanish too', () {
+    expect(
+      AppLocalizationsEs().libraryDeleteSidecarsHeading(1),
+      'También elimina 1 archivo acompañante:',
+    );
+    expect(
+      AppLocalizationsEs().libraryDeleteSidecarsHeading(3),
+      'También elimina 3 archivos acompañantes:',
+    );
+  });
+
   testWidgets('a refused delete says the folder is unwritable', (tester) async {
     final repo = FakeRepository(
       sessionState: const SessionState(authenticated: true, user: _admin),

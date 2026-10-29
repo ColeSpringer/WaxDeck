@@ -346,6 +346,12 @@ abstract final class SemanticsIds {
   static const String adminDiagnostics = 'admin-diagnostics';
   static const String adminHealth = 'admin-health';
   static const String adminHealthRule = 'admin-health-rule';
+  static const String catalogCheck = 'catalog-check';
+  static const String catalogCheckRepair = 'catalog-check-repair';
+  static const String catalogCheckRepairConfirm =
+      'catalog-check-repair-confirm';
+  static const String catalogCheckResult = 'catalog-check-result';
+  static const String catalogCheckVerify = 'catalog-check-verify';
   static String diagnosticCode(Object code) => 'diagnostic-code-$code';
   static String diagnosticDetail(Object path) => 'diagnostic-detail-$path';
   static String diagnosticRow(Object path) => 'diagnostic-row-$path';
@@ -354,6 +360,14 @@ abstract final class SemanticsIds {
   static String duplicateGroup(Object pid) => 'duplicate-group-$pid';
   static String duplicateMerge(Object pid) => 'duplicate-merge-$pid';
   static const String duplicatesRetry = 'duplicates-retry';
+  static String foldDetail(Object type, Object key) => 'fold-detail-$type-$key';
+  static String foldGroup(Object type) => 'fold-group-$type';
+  static String foldRow(Object type, Object key) => 'fold-row-$type-$key';
+  static String foldUnfold(Object type, Object key) => 'fold-unfold-$type-$key';
+  static const String foldUnfoldConfirm = 'fold-unfold-confirm';
+  static const String foldsMore = 'folds-more';
+  static const String foldsRetry = 'folds-retry';
+  static const String foldsSection = 'folds-section';
   static String health(Object rule) => 'health-rule-$rule';
   static String healthFix(Object rule) => 'health-fix-$rule';
   static String healthFixBlocked(Object rule) => 'health-fix-blocked-$rule';
@@ -404,6 +418,7 @@ abstract final class SemanticsIds {
   static String itemDeleteMode(Object mode) => 'item-delete-mode-$mode';
   static const String itemDeletePaths = 'item-delete-paths';
   static const String itemDeleteRip = 'item-delete-rip';
+  static const String itemDeleteSidecars = 'item-delete-sidecars';
   static const String itemFactsError = 'item-facts-error';
   static String itemFactsRow(Object key) => 'item-facts-$key';
   static String itemFactsSheet(Object pid) => 'item-facts-sheet-$pid';
@@ -562,6 +577,8 @@ abstract final class SemanticsIds {
   static const String organizePlan = 'organize-plan';
   static const String organizePreview = 'organize-preview';
   static const String organizeProfileAudiobook = 'organize-profile-audiobook';
+  static const String organizeProfileCompilation =
+      'organize-profile-compilation';
   static String organizeProfileDelete(Object name) =>
       'organize-profile-delete-$name';
   static const String organizeProfileDeleteConfirm =
@@ -712,6 +729,11 @@ abstract final class SemanticsIds {
   static const String playlistImportRun = 'playlist-import-run';
   static String playlistImportSource(Object source) =>
       'playlist-import-source-$source';
+  static const String playlistM3uCheck = 'playlist-m3u-check';
+  static const String playlistM3uImport = 'playlist-m3u-import';
+  static const String playlistM3uPreview = 'playlist-m3u-preview';
+  static String playlistM3uPreviewRow(Object index) =>
+      'playlist-m3u-preview-$index';
   static String playlistMore(Object pid) => 'playlist-more-$pid';
   static const String playlistNameField = 'playlist-name-field';
   static const String playlistOverflow = 'playlist-overflow';
@@ -905,6 +927,8 @@ abstract final class SemanticsIds {
   static String searchRecentRemove(Object index) =>
       'search-recent-remove-$index';
   static String searchShowAll(Object kind) => 'search-show-all-$kind';
+  static const String searchTopResult = 'search-top-result';
+  static const String searchTopResultMore = 'search-top-result-more';
   static const String searchTruncated = 'search-truncated';
 
   // settings: Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.

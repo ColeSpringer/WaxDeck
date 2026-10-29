@@ -179,6 +179,147 @@ void main() {
       expect(find.text('That is not a URL'), findsOneWidget);
     });
 
+    testWidgets('holds its text to a bound counted in code points', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _host(
+          WaxTextField(label: 'Name', controller: controller, maxCharacters: 4),
+          height: 80,
+        ),
+      );
+      await tester.enterText(find.byType(TextField), 'abcdef');
+      expect(controller.text, 'abcd');
+      // Three letters each carrying a combining accent: three graphemes,
+      // six code points, which a grapheme count would let through.
+      controller.clear();
+      await tester.enterText(
+        find.byType(TextField),
+        String.fromCharCodes([0x65, 0x301, 0x65, 0x301, 0x65, 0x301]),
+      );
+      expect(controller.text.runes.length, 4);
+    });
+
+    // A bound of four, and the edits the platform's input method sends.
+    Future<TextEditingController> bounded(WidgetTester tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _host(
+          WaxTextField(label: 'Name', controller: controller, maxCharacters: 4),
+          height: 80,
+        ),
+      );
+      await tester.showKeyboard(find.byType(TextField));
+      return controller;
+    }
+
+    Future<void> send(WidgetTester tester, TextEditingValue value) async {
+      tester.testTextInput.updateEditingValue(value);
+      await tester.pump();
+    }
+
+    const composingFive = TextEditingValue(
+      text: 'abcde',
+      selection: TextSelection.collapsed(offset: 5),
+      composing: TextRange(start: 0, end: 5),
+    );
+
+    testWidgets(
+      'cuts text still composing where input methods compose Latin text',
+      (tester) async {
+        final controller = await bounded(tester);
+        await send(tester, composingFive);
+        expect(controller.text, 'abcd');
+      },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.android,
+        TargetPlatform.windows,
+      }),
+    );
+
+    testWidgets(
+      'waits for a composition to end before it cuts elsewhere',
+      (tester) async {
+        final controller = await bounded(tester);
+        await send(tester, composingFive);
+        expect(controller.text, 'abcde');
+        await send(tester, composingFive.copyWith(composing: TextRange.empty));
+        expect(controller.text, 'abcd');
+      },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.iOS,
+        TargetPlatform.macOS,
+        TargetPlatform.linux,
+        TargetPlatform.fuchsia,
+      }),
+    );
+
+    testWidgets('refuses a keystroke into a full field', (tester) async {
+      final controller = await bounded(tester);
+      await send(
+        tester,
+        const TextEditingValue(
+          text: 'abcd',
+          selection: TextSelection.collapsed(offset: 2),
+        ),
+      );
+      // A cut would keep the new letter and lose the last one.
+      await send(
+        tester,
+        const TextEditingValue(
+          text: 'abXcd',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      expect(controller.text, 'abcd');
+      expect(controller.selection, const TextSelection.collapsed(offset: 2));
+    });
+
+    testWidgets('keeps the caret where a cut paste left it', (tester) async {
+      final controller = await bounded(tester);
+      await send(
+        tester,
+        const TextEditingValue(
+          text: 'abc',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      await send(
+        tester,
+        const TextEditingValue(
+          text: 'XYZabc',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      expect(controller.text, 'XYZa');
+      expect(controller.selection, const TextSelection.collapsed(offset: 3));
+    });
+
+    testWidgets('counts an emoji as one, and never splits one', (tester) async {
+      final controller = await bounded(tester);
+      final emoji = String.fromCharCode(0x1F600);
+      await tester.enterText(find.byType(TextField), emoji * 4);
+      expect(controller.text, emoji * 4, reason: 'four at a bound of four');
+      controller.clear();
+      await tester.enterText(find.byType(TextField), emoji * 5);
+      expect(controller.text, emoji * 4);
+    });
+
+    testWidgets('a field with no bound keeps a long value whole', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _host(WaxTextField(label: 'Name', controller: controller), height: 80),
+      );
+      await tester.enterText(find.byType(TextField), 'n' * 5000);
+      expect(controller.text.length, 5000);
+    });
+
     testWidgets('clears its own text and hands the empty value back', (
       tester,
     ) async {

@@ -358,6 +358,34 @@ components:
           description: >
             Disc number within a multi-disc release (music). Absent for
             a single-disc release and for anything that is not a track.
+        sortKey:
+          type: string
+          description: >
+            The key the catalog files this item's title under. Comparing
+            keys as plain strings orders titles as a title-sorted
+            listing does, which is what a client keeping its own copy of
+            a listing sorts it by; titles that share a key are not
+            ordered by it. Absent for an empty title.
+          example: prancing pony blues
+        artistSort:
+          type: string
+          description: >
+            The artist's sort spelling as the file or an edit states it
+            (`Beatles, The`); for an audiobook, its author's. Absent when
+            none is stated, which is most items. A spelling to show, not
+            to sort by: `artistSortKey` is.
+        artistSortKey:
+          type: string
+          description: >
+            The key the catalog files this item's artist under: that of
+            its sort spelling when one is stated, else of its name (a
+            track with no artist takes its album artist's), and for an
+            audiobook, of its author. Comparing keys as plain strings
+            orders artists by it, which is what a client sorting its own
+            copy of a listing by artist sorts by; items that share a key
+            are not ordered by it. Absent when the item names none of
+            them, and for a podcast episode.
+          example: beatles, the
         durationMs:
           type: integer
           format: int64

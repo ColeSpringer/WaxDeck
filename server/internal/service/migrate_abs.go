@@ -114,15 +114,15 @@ func (l *Library) runABSImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx
 			Title:      meta.Title,
 			DurationMS: int64(item.Media.Duration * 1000),
 		}
-		it, rung, err := l.resolveMigrationRef(ctx, ref)
+		it, copies, err := l.resolveMigrationRef(ctx, ref)
 		if err != nil {
 			return sum, classify(err)
 		}
-		if it == nil || rung == model.MatchNone {
+		if it == nil {
 			sum.noteUnmatched(author, meta.Title)
 			continue
 		}
-		sum.Matched++
+		sum.noteMatch(author, meta.Title, copies)
 		if !p.Progress {
 			continue
 		}

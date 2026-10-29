@@ -73,7 +73,9 @@ class ServerAddressController extends Notifier<String?> {
   /// elsewhere, which costs one re-login even on a same-server rename.
   /// The mirror and downloads are kept: sync cursors are
   /// generation-bound, so a genuinely different server answers
-  /// sync-reset and the mirror rebuilds itself.
+  /// sync-reset and the mirror rebuilds itself, and a re-mirror asks a
+  /// server only about the downloads that came from it, so no other
+  /// server frees them.
   Future<void> adopt(String address) async {
     final store = ref.read(credentialStoreProvider);
     await store.clearToken();

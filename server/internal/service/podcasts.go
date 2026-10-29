@@ -1848,6 +1848,7 @@ func (l *Library) episodeSummary(ctx context.Context, ep *model.Episode, facts e
 			Title:      clipFeedTitle(ep.Title),
 			Artist:     clipFeedTitle(ep.PodcastTitle),
 			Album:      clipFeedTitle(ep.PodcastTitle),
+			SortKey:    model.SortKey(ep.Title),
 			DurationMS: ep.DurationMS,
 		},
 		ShowPID:     apiPID(PrefixPodcast, ep.PodcastPID),

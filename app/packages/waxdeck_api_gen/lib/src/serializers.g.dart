@@ -55,6 +55,7 @@ Serializers _$serializers =
           ..add(CastDeviceVerdict.serializer)
           ..add(CastPreflight.serializer)
           ..add(CastPreflightBase.serializer)
+          ..add(CatalogConsistency.serializer)
           ..add(CatalogSyncEntry.serializer)
           ..add(CatalogSyncPage.serializer)
           ..add(ChapterMark.serializer)
@@ -119,6 +120,8 @@ Serializers _$serializers =
           ..add(EntityCuratedField.serializer)
           ..add(EntityCuration.serializer)
           ..add(EntityEdit.serializer)
+          ..add(EntityFold.serializer)
+          ..add(EntityFoldPage.serializer)
           ..add(EntityPlayState.serializer)
           ..add(EntityRename.serializer)
           ..add(EntityRenameResult.serializer)
@@ -205,6 +208,10 @@ Serializers _$serializers =
           ..add(LyricsState.serializer)
           ..add(M3uImport.serializer)
           ..add(M3uImportResult.serializer)
+          ..add(M3uPreview.serializer)
+          ..add(M3uPreviewEntry.serializer)
+          ..add(M3uPreviewEntryOutcomeEnum.serializer)
+          ..add(M3uPreviewRequest.serializer)
           ..add(MediaType.serializer)
           ..add(MediaTypeListening.serializer)
           ..add(MergeRequest.serializer)
@@ -325,6 +332,8 @@ Serializers _$serializers =
           ..add(RejectedListen.serializer)
           ..add(ReleaseStatusEdit.serializer)
           ..add(RematchResult.serializer)
+          ..add(RemovedItemList.serializer)
+          ..add(RemovedItemsQuery.serializer)
           ..add(RescanOptions.serializer)
           ..add(ResolveRungCounts.serializer)
           ..add(RestorePlan.serializer)
@@ -418,6 +427,8 @@ Serializers _$serializers =
           ..add(TrashEntry.serializer)
           ..add(TrashList.serializer)
           ..add(TrashPurgeResult.serializer)
+          ..add(UnfoldRequest.serializer)
+          ..add(UnfoldRequestEntityTypeEnum.serializer)
           ..add(UpgradeGroup.serializer)
           ..add(UpgradeGroups.serializer)
           ..add(UpgradeMember.serializer)
@@ -542,6 +553,10 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DeviceSession)]),
             () => ListBuilder<DeviceSession>(),
           )
@@ -644,6 +659,10 @@ Serializers _$serializers =
               const FullType(EntityCuratedField),
             ]),
             () => ListBuilder<EntityCuratedField>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(EntityFold)]),
+            () => ListBuilder<EntityFold>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EpisodeSummary)]),
@@ -750,6 +769,10 @@ Serializers _$serializers =
               const FullType(MediaTypeListening),
             ]),
             () => ListBuilder<MediaTypeListening>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(M3uPreviewEntry)]),
+            () => ListBuilder<M3uPreviewEntry>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(MediaType)]),
@@ -1078,6 +1101,22 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

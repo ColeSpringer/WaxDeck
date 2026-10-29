@@ -110,6 +110,19 @@
       }
     }
   },
+  "libraryDeletePreviewSidecars": "{count, plural, =1{1 sidecar} other{{count} sidecars}}: {list}",
+  "@libraryDeletePreviewSidecars": {
+    "description": "What a screen reader hears for the delete dialog's sidecar list: how many covers, lyrics and other files named for the deleted files go with them, then each by its place in its library.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "list": {
+        "type": "String",
+        "example": "Hum Collective/Shell Songs/01 - Hell Shell.lrc, Hum Collective/Shell Songs/01 - Hell Shell.jpg"
+      }
+    }
+  },
   "libraryDeleteRipAction": "Delete all {count} tracks...",
   "@libraryDeleteRipAction": {
     "description": "Button offering to delete the tracks asked for together with every other track their shared files hold, after a delete naming only some of a file's tracks was refused. The ellipsis says the delete dialog follows.",
@@ -145,6 +158,16 @@
       "max": {
         "type": "int",
         "example": "500"
+      }
+    }
+  },
+  "libraryDeleteSidecarsHeading": "{count, plural, =1{Also removes 1 sidecar:} other{Also removes {count} sidecars:}}",
+  "@libraryDeleteSidecarsHeading": {
+    "description": "Line over the delete dialog's list of sidecars: the covers, lyrics and other small files named for the files being deleted, which go with them. Said once, over the list.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
       }
     }
   },
@@ -195,6 +218,10 @@
   "@libraryFactsContainer": {
     "description": "Facts sheet row label: the file format holding the audio."
   },
+  "libraryFactsDisc": "Disc",
+  "@libraryFactsDisc": {
+    "description": "Facts sheet row label: which disc of the release the track is on."
+  },
   "libraryFactsDuration": "Length",
   "@libraryFactsDuration": {
     "description": "Facts sheet row label: how long the item runs."
@@ -227,6 +254,24 @@
   "@libraryFactsNeverPlayed": {
     "description": "Value of the last-played row for an item the reader has never finished."
   },
+  "libraryFactsNumberOf": "{number} of {total}",
+  "@libraryFactsNumberOf": {
+    "description": "Value of a facts sheet row that says a position and how many there are: track 3 of 12, disc 1 of 2.",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "libraryFactsParts": "Parts",
+  "@libraryFactsParts": {
+    "description": "Facts sheet row label: how many parts the audiobook's file says the book has."
+  },
   "libraryFactsPlayCount": "Plays",
   "@libraryFactsPlayCount": {
     "description": "Facts sheet row label: how many times the reader has played the item."
@@ -238,6 +283,10 @@
   "libraryFactsTitle": "Details",
   "@libraryFactsTitle": {
     "description": "Heading of the sheet listing one item's facts."
+  },
+  "libraryFactsTrack": "Track",
+  "@libraryFactsTrack": {
+    "description": "Facts sheet row label: the track's number on its disc."
   },
   "libraryFactsYear": "Year",
   "@libraryFactsYear": {

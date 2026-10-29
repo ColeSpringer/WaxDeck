@@ -91,7 +91,7 @@ func followerViews(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx,
 			out["the catalog mirror"] = e.Show.FeedURL
 		}
 	}
-	stream, err := svc.SyncServerDelta(ctx, uc, encodeServerCursor(svc.serverGen, 0), 500)
+	stream, err := svc.SyncServerDelta(ctx, uc, encodeServerCursor(svc.serverGen, 0, 0), 500)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -330,6 +330,13 @@ components:
         tagWrite:
           type: boolean
           description: Whether organizing also writes tags.
+        compilationFolder:
+          type: string
+          description: >
+            The folder compilations file under, and the album artist the
+            tag write gives them. An empty string files each under its
+            own tagged album artist (Various Artists for one tagged with
+            none); absent files them under Various Artists.
         builtIn:
           type: boolean
           description: A built-in no saved profile overrides; it cannot be deleted.
@@ -355,9 +362,10 @@ components:
     OrganizeSample:
       type: object
       description: >
-        Where a profile lays out a fixed sample track, book and episode; an
-        empty path is a template that renders none for that sample.
-      required: [music, audiobook, podcast]
+        Where a profile lays out a fixed sample track, book, episode and
+        compilation track; an empty path is a template that renders none
+        for that sample.
+      required: [music, audiobook, podcast, compilation]
       properties:
         music:
           type: string
@@ -366,6 +374,13 @@ components:
           type: string
         podcast:
           type: string
+        compilation:
+          type: string
+          description: >
+            A track of a compilation tagged with an album artist of its
+            own, so each compilation folder setting shows a path of its
+            own.
+          example: Various Artists/Coastal Nights (2023)/1-04 - Night Drive.flac
 
     OrganizeProfileInput:
       type: object
@@ -385,6 +400,17 @@ components:
         tagWrite:
           type: boolean
           default: false
+        compilationFolder:
+          type: string
+          maxLength: 255
+          description: >
+            The folder compilations file under, which the tag write also
+            gives them as album artist. An empty string files each under
+            its own tagged album artist (Various Artists for one tagged
+            with none); absent files them under Various Artists, and a
+            save replaces the whole profile, so a save without it does
+            too. Surrounding space is trimmed; a folder that names none
+            (only dots, say) is `invalid-request`.
 
     OrganizeProfilePreview:
       type: object
@@ -407,6 +433,10 @@ components:
         tagWrite:
           type: boolean
           default: false
+        compilationFolder:
+          type: string
+          maxLength: 255
+          description: Where compilations file, as a saved profile's `compilationFolder`.
 
     OrganizeRequest:
       type: object

@@ -286,9 +286,12 @@ export async function wheelIntoView(
 export async function wheelIntoReach(
   page: Page,
   target: Locator,
-  options: { over?: Locator } = {},
+  options: { over?: Locator; appear?: number } = {},
 ) {
-  const { over } = options;
+  // `appear` bounds the wait for the target to exist: a caller whose own
+  // loop wheels a target back into being gives a short one, or a target
+  // pushed away after it was found spends that loop's whole budget here.
+  const { over, appear = T.nav } = options;
   const view = page.viewportSize();
   const width = view?.width ?? (await page.evaluate(() => window.innerWidth));
   const height = view?.height ?? (await page.evaluate(() => window.innerHeight));
@@ -301,7 +304,7 @@ export async function wheelIntoReach(
     box.x + box.width <= width &&
     box.y >= 0 &&
     box.y + box.height <= height;
-  await target.waitFor({ timeout: T.nav });
+  await target.waitFor({ timeout: appear });
   // The box the last wheel was fired from, kept across attempts: a
   // fresh read matching it means that wheel moved nothing.
   let spent: Box | null = null;

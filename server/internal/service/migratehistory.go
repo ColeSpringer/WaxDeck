@@ -109,7 +109,7 @@ func (h *migrateHistory) resolve(ctx context.Context, p migratePlay) (*model.Ite
 	if it, seen := h.resolved[key]; seen {
 		return it, nil
 	}
-	found, rung, err := h.l.resolveMigrationRef(ctx, model.PortableRef{
+	it, copies, err := h.l.resolveMigrationRef(ctx, model.PortableRef{
 		Kind:   model.KindTrack,
 		MBID:   p.MBID,
 		Artist: p.Artist,
@@ -119,10 +119,8 @@ func (h *migrateHistory) resolve(ctx context.Context, p migratePlay) (*model.Ite
 	if err != nil {
 		return nil, classify(err)
 	}
-	var it *model.ItemView
-	if found != nil && rung != model.MatchNone {
-		it = found
-		h.sum.Matched++
+	if it != nil {
+		h.sum.noteMatch(p.Artist, p.Title, copies)
 	} else {
 		h.sum.noteUnmatched(p.Artist, p.Title)
 	}

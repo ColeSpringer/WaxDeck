@@ -237,7 +237,8 @@ class MirrorItem extends DataClass implements Insertable<MirrorItem> {
   final String? album;
   final int durationMs;
 
-  /// Case-folded title for ordered offline browsing.
+  /// The key the catalog sorts the title by, for ordered offline
+  /// browsing; the lowercase title where the server sent none.
   final String sortKey;
   const MirrorItem({
     required this.pid,
@@ -3194,6 +3195,15 @@ class $DownloadRecordsTable extends DownloadRecords
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _serverMeta = const VerificationMeta('server');
+  @override
+  late final GeneratedColumn<String> server = GeneratedColumn<String>(
+    'server',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     pid,
@@ -3207,6 +3217,7 @@ class $DownloadRecordsTable extends DownloadRecords
     spanStartMs,
     spanEndMs,
     durationMs,
+    server,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3308,6 +3319,12 @@ class $DownloadRecordsTable extends DownloadRecords
         durationMs.isAcceptableOrUnknown(data['duration_ms']!, _durationMsMeta),
       );
     }
+    if (data.containsKey('server')) {
+      context.handle(
+        _serverMeta,
+        server.isAcceptableOrUnknown(data['server']!, _serverMeta),
+      );
+    }
     return context;
   }
 
@@ -3361,6 +3378,10 @@ class $DownloadRecordsTable extends DownloadRecords
         DriftSqlType.int,
         data['${effectivePrefix}duration_ms'],
       ),
+      server: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}server'],
+      ),
     );
   }
 
@@ -3398,6 +3419,15 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
   /// database than on a fresh one. The equivalence test in
   /// `schema_migration_test.dart` catches exactly that, and did.
   final int? durationMs;
+
+  /// The address of the server the file came from: the one whose
+  /// download-info it was fetched under (`WaxDeckRepository.baseUrl`), or
+  /// one whose snapshot has listed its item since, under any prefix, since
+  /// ULIDs never repeat across catalogs. A re-mirror asks only that server
+  /// whether the item is gone for good, so no other catalog's answer can
+  /// free it. Null on a row from before the field until a snapshot lists
+  /// its item. Last, for [durationMs]'s reason.
+  final String? server;
   const DownloadRecord({
     required this.pid,
     required this.fileIndex,
@@ -3410,6 +3440,7 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
     this.spanStartMs,
     this.spanEndMs,
     this.durationMs,
+    this.server,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3430,6 +3461,9 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
     }
     if (!nullToAbsent || durationMs != null) {
       map['duration_ms'] = Variable<int>(durationMs);
+    }
+    if (!nullToAbsent || server != null) {
+      map['server'] = Variable<String>(server);
     }
     return map;
   }
@@ -3453,6 +3487,9 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
       durationMs: durationMs == null && nullToAbsent
           ? const Value.absent()
           : Value(durationMs),
+      server: server == null && nullToAbsent
+          ? const Value.absent()
+          : Value(server),
     );
   }
 
@@ -3473,6 +3510,7 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
       spanStartMs: serializer.fromJson<int?>(json['spanStartMs']),
       spanEndMs: serializer.fromJson<int?>(json['spanEndMs']),
       durationMs: serializer.fromJson<int?>(json['durationMs']),
+      server: serializer.fromJson<String?>(json['server']),
     );
   }
   @override
@@ -3490,6 +3528,7 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
       'spanStartMs': serializer.toJson<int?>(spanStartMs),
       'spanEndMs': serializer.toJson<int?>(spanEndMs),
       'durationMs': serializer.toJson<int?>(durationMs),
+      'server': serializer.toJson<String?>(server),
     };
   }
 
@@ -3505,6 +3544,7 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
     Value<int?> spanStartMs = const Value.absent(),
     Value<int?> spanEndMs = const Value.absent(),
     Value<int?> durationMs = const Value.absent(),
+    Value<String?> server = const Value.absent(),
   }) => DownloadRecord(
     pid: pid ?? this.pid,
     fileIndex: fileIndex ?? this.fileIndex,
@@ -3517,6 +3557,7 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
     spanStartMs: spanStartMs.present ? spanStartMs.value : this.spanStartMs,
     spanEndMs: spanEndMs.present ? spanEndMs.value : this.spanEndMs,
     durationMs: durationMs.present ? durationMs.value : this.durationMs,
+    server: server.present ? server.value : this.server,
   );
   DownloadRecord copyWithCompanion(DownloadRecordsCompanion data) {
     return DownloadRecord(
@@ -3537,6 +3578,7 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
       durationMs: data.durationMs.present
           ? data.durationMs.value
           : this.durationMs,
+      server: data.server.present ? data.server.value : this.server,
     );
   }
 
@@ -3553,7 +3595,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
           ..write('state: $state, ')
           ..write('spanStartMs: $spanStartMs, ')
           ..write('spanEndMs: $spanEndMs, ')
-          ..write('durationMs: $durationMs')
+          ..write('durationMs: $durationMs, ')
+          ..write('server: $server')
           ..write(')'))
         .toString();
   }
@@ -3571,6 +3614,7 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
     spanStartMs,
     spanEndMs,
     durationMs,
+    server,
   );
   @override
   bool operator ==(Object other) =>
@@ -3586,7 +3630,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
           other.state == this.state &&
           other.spanStartMs == this.spanStartMs &&
           other.spanEndMs == this.spanEndMs &&
-          other.durationMs == this.durationMs);
+          other.durationMs == this.durationMs &&
+          other.server == this.server);
 }
 
 class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
@@ -3601,6 +3646,7 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
   final Value<int?> spanStartMs;
   final Value<int?> spanEndMs;
   final Value<int?> durationMs;
+  final Value<String?> server;
   final Value<int> rowid;
   const DownloadRecordsCompanion({
     this.pid = const Value.absent(),
@@ -3614,6 +3660,7 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     this.spanStartMs = const Value.absent(),
     this.spanEndMs = const Value.absent(),
     this.durationMs = const Value.absent(),
+    this.server = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadRecordsCompanion.insert({
@@ -3628,6 +3675,7 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     this.spanStartMs = const Value.absent(),
     this.spanEndMs = const Value.absent(),
     this.durationMs = const Value.absent(),
+    this.server = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : pid = Value(pid),
        fileIndex = Value(fileIndex),
@@ -3649,6 +3697,7 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     Expression<int>? spanStartMs,
     Expression<int>? spanEndMs,
     Expression<int>? durationMs,
+    Expression<String>? server,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3663,6 +3712,7 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
       if (spanStartMs != null) 'span_start_ms': spanStartMs,
       if (spanEndMs != null) 'span_end_ms': spanEndMs,
       if (durationMs != null) 'duration_ms': durationMs,
+      if (server != null) 'server': server,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3679,6 +3729,7 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     Value<int?>? spanStartMs,
     Value<int?>? spanEndMs,
     Value<int?>? durationMs,
+    Value<String?>? server,
     Value<int>? rowid,
   }) {
     return DownloadRecordsCompanion(
@@ -3693,6 +3744,7 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
       spanStartMs: spanStartMs ?? this.spanStartMs,
       spanEndMs: spanEndMs ?? this.spanEndMs,
       durationMs: durationMs ?? this.durationMs,
+      server: server ?? this.server,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3733,6 +3785,9 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     if (durationMs.present) {
       map['duration_ms'] = Variable<int>(durationMs.value);
     }
+    if (server.present) {
+      map['server'] = Variable<String>(server.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3753,6 +3808,7 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
           ..write('spanStartMs: $spanStartMs, ')
           ..write('spanEndMs: $spanEndMs, ')
           ..write('durationMs: $durationMs, ')
+          ..write('server: $server, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7088,6 +7144,7 @@ typedef $$DownloadRecordsTableCreateCompanionBuilder =
       Value<int?> spanStartMs,
       Value<int?> spanEndMs,
       Value<int?> durationMs,
+      Value<String?> server,
       Value<int> rowid,
     });
 typedef $$DownloadRecordsTableUpdateCompanionBuilder =
@@ -7103,6 +7160,7 @@ typedef $$DownloadRecordsTableUpdateCompanionBuilder =
       Value<int?> spanStartMs,
       Value<int?> spanEndMs,
       Value<int?> durationMs,
+      Value<String?> server,
       Value<int> rowid,
     });
 
@@ -7167,6 +7225,11 @@ class $$DownloadRecordsTableFilterComposer
 
   ColumnFilters<int> get durationMs => $composableBuilder(
     column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get server => $composableBuilder(
+    column: $table.server,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -7234,6 +7297,11 @@ class $$DownloadRecordsTableOrderingComposer
     column: $table.durationMs,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get server => $composableBuilder(
+    column: $table.server,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadRecordsTableAnnotationComposer
@@ -7283,6 +7351,9 @@ class $$DownloadRecordsTableAnnotationComposer
     column: $table.durationMs,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get server =>
+      $composableBuilder(column: $table.server, builder: (column) => column);
 }
 
 class $$DownloadRecordsTableTableManager
@@ -7333,6 +7404,7 @@ class $$DownloadRecordsTableTableManager
                 Value<int?> spanStartMs = const Value.absent(),
                 Value<int?> spanEndMs = const Value.absent(),
                 Value<int?> durationMs = const Value.absent(),
+                Value<String?> server = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadRecordsCompanion(
                 pid: pid,
@@ -7346,6 +7418,7 @@ class $$DownloadRecordsTableTableManager
                 spanStartMs: spanStartMs,
                 spanEndMs: spanEndMs,
                 durationMs: durationMs,
+                server: server,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -7361,6 +7434,7 @@ class $$DownloadRecordsTableTableManager
                 Value<int?> spanStartMs = const Value.absent(),
                 Value<int?> spanEndMs = const Value.absent(),
                 Value<int?> durationMs = const Value.absent(),
+                Value<String?> server = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadRecordsCompanion.insert(
                 pid: pid,
@@ -7374,6 +7448,7 @@ class $$DownloadRecordsTableTableManager
                 spanStartMs: spanStartMs,
                 spanEndMs: spanEndMs,
                 durationMs: durationMs,
+                server: server,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -38,6 +38,7 @@ String _typeLabel(
   'acquire' => l10n.toolsTaskAcquire,
   'playlist-sync' => l10n.toolsTaskPlaylistSync,
   'genre-normalize' => l10n.toolsTaskGenreNormalize,
+  'catalog-repair' => l10n.toolsTaskCatalogRepair,
   'health-fix' => switch (summary?['rule']) {
     final String rule => l10n.toolsTaskHealthFix(
       healthRuleName(l10n, rule) ?? rule,
@@ -236,6 +237,9 @@ class _TaskRow extends ConsumerWidget {
     'book-merge' || 'book-split' => WaxIcons.audiobooks,
     'cue-split' => WaxIcons.music,
     'playlist-sync' => WaxIcons.refresh,
+    // Fixes, which rewrite what the catalog holds. A check mark would read
+    // as an outcome beside a row that failed.
+    'catalog-repair' || 'health-fix' || 'genre-normalize' => WaxIcons.edit,
     _ => WaxIcons.downloads,
   };
 
@@ -327,6 +331,22 @@ class _TaskRow extends ConsumerWidget {
     Map<String, Object?> summary,
   ) {
     final parts = <String>[
+      // A catalog repair's, once its closing check is in: what its steps
+      // rewrote and deleted, then how that check read.
+      if (summary['after'] case final Map<Object?, Object?> after) ...<String>[
+        if (_count(summary['sortKeysRewritten']) case final n? when n > 0)
+          l10n.toolsCountSortKeys(n),
+        if (_count(summary['orphansDeleted']) case final n? when n > 0)
+          l10n.toolsCountEntriesRemoved(n),
+        if (_sum(summary, _reclaimedCounts) case final n when n > 0)
+          l10n.toolsCountReclaimed(n),
+        if (_count(summary['searchRowsRebuilt']) case final n? when n > 0)
+          l10n.toolsCountSearchRows(n),
+        if (after['consistent'] == true)
+          l10n.toolsSummaryConsistent
+        else
+          l10n.toolsSummaryDriftLeft(_sum(after, _driftCounts)),
+      ],
       // A health fix's: what it filled of what it tried, and the rest. A
       // path fix moves its items rather than filling them, and holds some.
       if (_count(summary['attempted']) case final attempted?) ...<String>[
@@ -343,6 +363,9 @@ class _TaskRow extends ConsumerWidget {
       ],
       if (summary['matched'] != null)
         l10n.toolsSummaryMatched('${summary['matched']}'),
+      // Part of the matched count, so beside it; present only when an
+      // import took any.
+      if (summary['ties'] != null) l10n.toolsSummaryTied('${summary['ties']}'),
       if (summary['unmatched'] != null)
         l10n.toolsSummaryUnmatched('${summary['unmatched']}'),
       if (summary['listens'] != null)
@@ -844,6 +867,33 @@ int? _skippedTotal(Object? skipped) {
   final total = skipped.values.fold<int>(0, (sum, n) => sum + (_count(n) ?? 0));
   return total == 0 ? null : total;
 }
+
+/// The named counters summed, an absent one as zero.
+int _sum(Map<Object?, Object?> counts, List<String> keys) =>
+    keys.fold(0, (sum, key) => sum + (_count(counts[key]) ?? 0));
+
+/// What a catalog repair deleted as unused, by its summary's counters.
+const _reclaimedCounts = [
+  'artSourcesReclaimed',
+  'thumbnailsReclaimed',
+  'tagProvenanceReclaimed',
+  'strandedTagRowsReclaimed',
+];
+
+/// The counts of a catalog check that hold it back from consistent: all
+/// but the playlist numbering and the unused rows.
+const _driftCounts = [
+  'itemsMissingFromSearch',
+  'orphanSearchRows',
+  'artistRollupDrift',
+  'genreRollupDrift',
+  'releaseGroupRollupDrift',
+  'sortKeyDrift',
+  'bookDurationDrift',
+  'bookIsbnKeyDrift',
+  'albumYearDrift',
+  'releaseYearDrift',
+];
 
 /// Kinds a job runs per item: an upload's imports, a delete, a restore,
 /// one purge. Finished, they would bury a scan.

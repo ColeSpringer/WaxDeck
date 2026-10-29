@@ -16,6 +16,7 @@ part 'organize_profile_preview.g.dart';
 /// * [audiobookTemplate] 
 /// * [podcastTemplate] 
 /// * [tagWrite] 
+/// * [compilationFolder] - Where compilations file, as a saved profile's `compilationFolder`.
 @BuiltValue()
 abstract class OrganizeProfilePreview implements Built<OrganizeProfilePreview, OrganizeProfilePreviewBuilder> {
   @BuiltValueField(wireName: r'name')
@@ -32,6 +33,10 @@ abstract class OrganizeProfilePreview implements Built<OrganizeProfilePreview, O
 
   @BuiltValueField(wireName: r'tagWrite')
   bool? get tagWrite;
+
+  /// Where compilations file, as a saved profile's `compilationFolder`.
+  @BuiltValueField(wireName: r'compilationFolder')
+  String? get compilationFolder;
 
   OrganizeProfilePreview._();
 
@@ -90,6 +95,13 @@ class _$OrganizeProfilePreviewSerializer implements PrimitiveSerializer<Organize
       yield serializers.serialize(
         object.tagWrite,
         specifiedType: const FullType(bool),
+      );
+    }
+    if (object.compilationFolder != null) {
+      yield r'compilationFolder';
+      yield serializers.serialize(
+        object.compilationFolder,
+        specifiedType: const FullType(String),
       );
     }
   }
@@ -154,6 +166,14 @@ class _$OrganizeProfilePreviewSerializer implements PrimitiveSerializer<Organize
           ) as bool?;
           if (valueDes == null) continue;
           result.tagWrite = valueDes;
+          break;
+        case r'compilationFolder':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.compilationFolder = valueDes;
           break;
         default:
           unhandled.add(key);

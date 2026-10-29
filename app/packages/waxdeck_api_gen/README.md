@@ -83,6 +83,9 @@ Conventions:
   carries the current one. Other prefixes are strict.
 - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
   never offsets.
+- A JSON request body larger than 24 MiB is refused with
+  `invalid-request`; a raw body (an upload's bytes, an archive, an
+  export, an image) is bounded by its own operation instead.
 - Errors are always the `Error` schema. `code` is a stable machine-readable
   string; currently defined codes: `invalid-request`, `unauthenticated`,
   `forbidden`, `not-found`, `conflict`, `internal`, `rate-limited` (too
@@ -186,7 +189,8 @@ Conventions:
   the trash, `files`, the first few of them, and `more`, how many
   `files` leaves out; and `single-file`, `multi-file`,
   `no-chapters`, `no-cuts`, `no-sample-rate`, `no-file` or
-  `no-sheet`); a
+  `no-sheet`); a catalog repair refused while one is queued or
+  running carries `reason: task-running`, with `task`; a
   tool task whose clear could not name or remove its hidden files
   carries `reason: outputs-hidden`, with `folder` and `cause`, and
   stays. Under `unsupported-format`,
@@ -459,6 +463,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**emptyTrash**](doc/AdminApi.md#emptytrash) | **POST** /admin/trash/empty | Empty the trash
 [*AdminApi*](doc/AdminApi.md) | [**getAdminSettings**](doc/AdminApi.md#getadminsettings) | **GET** /admin/settings | Read the server&#39;s runtime settings
 [*AdminApi*](doc/AdminApi.md) | [**getBackup**](doc/AdminApi.md#getbackup) | **GET** /admin/backups/{backupId} | Inspect a backup
+[*AdminApi*](doc/AdminApi.md) | [**getCatalogConsistency**](doc/AdminApi.md#getcatalogconsistency) | **GET** /admin/catalog/consistency | Check the catalog&#39;s derived data
 [*AdminApi*](doc/AdminApi.md) | [**getEnrichmentCache**](doc/AdminApi.md#getenrichmentcache) | **GET** /admin/enrichment-cache | Census the enrichment response cache
 [*AdminApi*](doc/AdminApi.md) | [**getGenreTree**](doc/AdminApi.md#getgenretree) | **GET** /admin/genre-tree | Read the canonical genre vocabulary
 [*AdminApi*](doc/AdminApi.md) | [**getJob**](doc/AdminApi.md#getjob) | **GET** /jobs/{pid} | Get one job&#39;s state
@@ -483,6 +488,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**putScrobblingConfig**](doc/AdminApi.md#putscrobblingconfig) | **PUT** /admin/scrobbling | Set the server&#39;s Last.fm API credentials
 [*AdminApi*](doc/AdminApi.md) | [**putTranscodingLimits**](doc/AdminApi.md#puttranscodinglimits) | **PUT** /admin/transcoding | Replace the transcoding limits
 [*AdminApi*](doc/AdminApi.md) | [**removeLibrary**](doc/AdminApi.md#removelibrary) | **DELETE** /libraries/{pid} | Remove a library
+[*AdminApi*](doc/AdminApi.md) | [**repairCatalog**](doc/AdminApi.md#repaircatalog) | **POST** /admin/catalog/repair | Repair the catalog&#39;s derived data
 [*AdminApi*](doc/AdminApi.md) | [**rescanLibrary**](doc/AdminApi.md#rescanlibrary) | **POST** /library/rescan | Start a library rescan
 [*AdminApi*](doc/AdminApi.md) | [**restoreTrashEntry**](doc/AdminApi.md#restoretrashentry) | **POST** /admin/trash/{trashId}/restore | Restore a trashed file
 [*AdminApi*](doc/AdminApi.md) | [**setLibraryFolderFallback**](doc/AdminApi.md#setlibraryfolderfallback) | **PUT** /libraries/{pid}/folder-fallback | Name untagged files from their folders
@@ -523,12 +529,14 @@ Class | Method | HTTP request | Description
 [*HealthApi*](doc/HealthApi.md) | [**getDiagnosticSummary**](doc/HealthApi.md#getdiagnosticsummary) | **GET** /library/diagnostics/summary | Summarize per-file diagnostics
 [*HealthApi*](doc/HealthApi.md) | [**getLibraryHealth**](doc/HealthApi.md#getlibraryhealth) | **GET** /library/health | Metadata health summary
 [*HealthApi*](doc/HealthApi.md) | [**listDuplicates**](doc/HealthApi.md#listduplicates) | **GET** /library/duplicates | List duplicate entities
+[*HealthApi*](doc/HealthApi.md) | [**listEntityFolds**](doc/HealthApi.md#listentityfolds) | **GET** /library/folds | List folded names
 [*HealthApi*](doc/HealthApi.md) | [**listFileDiagnostics**](doc/HealthApi.md#listfilediagnostics) | **GET** /library/diagnostics | Query per-file diagnostics
 [*HealthApi*](doc/HealthApi.md) | [**listHealthIssues**](doc/HealthApi.md#listhealthissues) | **GET** /library/health/issues | List items failing health rules
 [*HealthApi*](doc/HealthApi.md) | [**listUpgrades**](doc/HealthApi.md#listupgrades) | **GET** /library/upgrades | List quality upgrade groups
 [*HealthApi*](doc/HealthApi.md) | [**mergeDuplicates**](doc/HealthApi.md#mergeduplicates) | **POST** /library/duplicates/merge | Merge duplicate entities
 [*HealthApi*](doc/HealthApi.md) | [**resolveUpgrade**](doc/HealthApi.md#resolveupgrade) | **POST** /library/upgrades/resolve | Keep the best encoding
 [*HealthApi*](doc/HealthApi.md) | [**sweepLibraryHealth**](doc/HealthApi.md#sweeplibraryhealth) | **POST** /library/health/sweep | Re-sweep health now
+[*HealthApi*](doc/HealthApi.md) | [**unfoldEntities**](doc/HealthApi.md#unfoldentities) | **POST** /library/folds/unfold | Unfold names
 [*LibraryApi*](doc/LibraryApi.md) | [**browseList**](doc/LibraryApi.md#browselist) | **GET** /library/browse | Browse a discovery list
 [*LibraryApi*](doc/LibraryApi.md) | [**deleteItemFiles**](doc/LibraryApi.md#deleteitemfiles) | **POST** /items/{pid}/files/delete | Delete some of an item&#39;s files
 [*LibraryApi*](doc/LibraryApi.md) | [**deleteLibraryItems**](doc/LibraryApi.md#deletelibraryitems) | **POST** /library/items/delete | Delete library items
@@ -642,6 +650,7 @@ Class | Method | HTTP request | Description
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**importPlaylistNsp**](doc/PlaylistsApi.md#importplaylistnsp) | **POST** /playlists/nsp | Import a Navidrome smart playlist (NSP)
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**listPlaylistItems**](doc/PlaylistsApi.md#listplaylistitems) | **GET** /playlists/{pid}/items | List a playlist&#39;s items
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**listPlaylists**](doc/PlaylistsApi.md#listplaylists) | **GET** /playlists | List playlists visible to the caller
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**previewPlaylistM3u**](doc/PlaylistsApi.md#previewplaylistm3u) | **POST** /playlists/m3u/preview | Preview an M3U8 import
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**previewPlaylistSync**](doc/PlaylistsApi.md#previewplaylistsync) | **POST** /playlists/{pid}/source/preview | Preview a playlist sync
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**previewSmartRule**](doc/PlaylistsApi.md#previewsmartrule) | **POST** /playlists/preview | Preview a smart rule
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**removePlaylistItemAt**](doc/PlaylistsApi.md#removeplaylistitemat) | **DELETE** /playlists/{pid}/items/{position} | Remove one member by position
@@ -709,6 +718,7 @@ Class | Method | HTTP request | Description
 [*StatsApi*](doc/StatsApi.md) | [**getYearInReview**](doc/StatsApi.md#getyearinreview) | **GET** /stats/year-in-review | Year in review
 [*StatsApi*](doc/StatsApi.md) | [**listListenLog**](doc/StatsApi.md#listlistenlog) | **GET** /stats/sessions | Listen session log
 [*SyncApi*](doc/SyncApi.md) | [**syncCatalog**](doc/SyncApi.md#synccatalog) | **GET** /sync/catalog | Mirror the catalog (snapshot or changed-since delta)
+[*SyncApi*](doc/SyncApi.md) | [**syncCatalogRemoved**](doc/SyncApi.md#synccatalogremoved) | **POST** /sync/catalog/removed | Which of these items are gone for good
 [*SyncApi*](doc/SyncApi.md) | [**syncServer**](doc/SyncApi.md#syncserver) | **GET** /sync/server | Mirror the caller&#39;s server-side state (changed-since delta)
 [*SystemApi*](doc/SystemApi.md) | [**getHealth**](doc/SystemApi.md#gethealth) | **GET** /health | Liveness and version probe
 [*ToolsApi*](doc/ToolsApi.md) | [**clearFinishedToolTasks**](doc/ToolsApi.md#clearfinishedtooltasks) | **POST** /tools/tasks/clear-finished | Clear finished tasks
@@ -792,6 +802,7 @@ Class | Method | HTTP request | Description
  - [CastDeviceVerdict](doc/CastDeviceVerdict.md)
  - [CastPreflight](doc/CastPreflight.md)
  - [CastPreflightBase](doc/CastPreflightBase.md)
+ - [CatalogConsistency](doc/CatalogConsistency.md)
  - [CatalogSyncEntry](doc/CatalogSyncEntry.md)
  - [CatalogSyncPage](doc/CatalogSyncPage.md)
  - [ChapterMark](doc/ChapterMark.md)
@@ -850,6 +861,8 @@ Class | Method | HTTP request | Description
  - [EntityCuratedField](doc/EntityCuratedField.md)
  - [EntityCuration](doc/EntityCuration.md)
  - [EntityEdit](doc/EntityEdit.md)
+ - [EntityFold](doc/EntityFold.md)
+ - [EntityFoldPage](doc/EntityFoldPage.md)
  - [EntityPlayState](doc/EntityPlayState.md)
  - [EntityRename](doc/EntityRename.md)
  - [EntityRenameResult](doc/EntityRenameResult.md)
@@ -928,6 +941,9 @@ Class | Method | HTTP request | Description
  - [LyricsState](doc/LyricsState.md)
  - [M3uImport](doc/M3uImport.md)
  - [M3uImportResult](doc/M3uImportResult.md)
+ - [M3uPreview](doc/M3uPreview.md)
+ - [M3uPreviewEntry](doc/M3uPreviewEntry.md)
+ - [M3uPreviewRequest](doc/M3uPreviewRequest.md)
  - [MediaType](doc/MediaType.md)
  - [MediaTypeListening](doc/MediaTypeListening.md)
  - [MergeRequest](doc/MergeRequest.md)
@@ -1036,6 +1052,8 @@ Class | Method | HTTP request | Description
  - [RejectedListen](doc/RejectedListen.md)
  - [ReleaseStatusEdit](doc/ReleaseStatusEdit.md)
  - [RematchResult](doc/RematchResult.md)
+ - [RemovedItemList](doc/RemovedItemList.md)
+ - [RemovedItemsQuery](doc/RemovedItemsQuery.md)
  - [RescanOptions](doc/RescanOptions.md)
  - [ResolveRungCounts](doc/ResolveRungCounts.md)
  - [RestorePlan](doc/RestorePlan.md)
@@ -1124,6 +1142,7 @@ Class | Method | HTTP request | Description
  - [TrashEntry](doc/TrashEntry.md)
  - [TrashList](doc/TrashList.md)
  - [TrashPurgeResult](doc/TrashPurgeResult.md)
+ - [UnfoldRequest](doc/UnfoldRequest.md)
  - [UpgradeGroup](doc/UpgradeGroup.md)
  - [UpgradeGroups](doc/UpgradeGroups.md)
  - [UpgradeMember](doc/UpgradeMember.md)

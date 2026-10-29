@@ -2,7 +2,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Request } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { J, T, chooseFromMenu, clickThrough, clickUntilRequested, retryCatalogBusy } from './driver';
+import {
+  J,
+  T,
+  chooseFromMenu,
+  clickThrough,
+  clickUntilRequested,
+  retryCatalogBusy,
+  wheelIntoView,
+} from './driver';
 import { removeLibrariesNamed, removeLibraryIfThere } from './driver/libraries';
 import { SemanticsIds } from './semantics-ids';
 
@@ -19,9 +27,9 @@ import { SemanticsIds } from './semantics-ids';
 // though: what forced that was server-wide read-only, which refuses
 // every write on the stack while it is on, and that test now has a
 // project of its own after this one (admin-readonly.spec.ts). What is
-// left needs serializing only where two tests share one surface, which
-// is the backup set and nothing else - hence one `describe.serial` and
-// four tests that run beside each other.
+// left needs serializing only where two tests share one surface: the
+// backup set, and the catalog check and its repair - hence two
+// `describe.serial` pairs and the tests that run beside them.
 
 test('the audit log answers who deleted a playlist', async ({ app }) => {
   const items = await app.api.get('/library/items', { query: { limit: 5 } });
@@ -163,6 +171,89 @@ test.describe.serial('backup lifecycle', () => {
         'the imported archive appears in the list',
       ).toBeTruthy();
     }).toPass({ timeout: T.fetch });
+  });
+});
+
+// The catalog check and its repair, from Health to Tasks. A repair is
+// server-wide - one at a time, holding the catalog's write lock while
+// it writes - so the pair runs in order, the check reading the stack
+// before the repair, and the repair follows one an earlier attempt left.
+// Every repair makes each connected client re-mirror the catalog once
+// when it ends; a consistent catalog comes back as it was, so the tests
+// beside it page through the same lists.
+test.describe.serial('catalog check and repair', () => {
+  test('the stack verifies consistent from Health', async ({ app }) => {
+    await app.nav.enter('health');
+    const verify = app.admin.control(SemanticsIds.catalogCheckVerify);
+    await app.admin.intoView(verify);
+    const isCheck = (r: Request) =>
+      r.url().endsWith('/admin/catalog/consistency') && r.method() === 'GET';
+    const checked = app.page.waitForResponse((r) => isCheck(r.request()), { timeout: T.fetch });
+    await clickUntilRequested(app.page, verify, isCheck);
+    const answer = await checked;
+    expect(answer.status()).toBe(200);
+    const check = (await answer.json()) as { consistent: boolean };
+    expect(check.consistent, `the check should read consistent: ${JSON.stringify(check)}`).toBe(true);
+    await expect(app.admin.control(SemanticsIds.catalogCheckResult)).toContainText('Consistent', {
+      timeout: T.step,
+    });
+  });
+
+  test('a repair started from Health runs to done in Tasks', async ({ app }) => {
+    // A journey: the repair waits on the worker it shares with health
+    // fixes for any queued ahead of it, then reads the whole catalog
+    // more than once.
+    test.setTimeout(J.journey);
+    await app.nav.enter('health');
+    const repair = app.admin.control(SemanticsIds.catalogCheckRepair);
+    const confirm = app.admin.control(SemanticsIds.catalogCheckRepairConfirm);
+    await app.admin.intoView(repair);
+    await clickThrough(repair, confirm);
+    const isRepair = (r: Request) =>
+      r.url().endsWith('/admin/catalog/repair') && r.method() === 'POST';
+    const queued = app.page.waitForResponse((r) => isRepair(r.request()), { timeout: T.fetch });
+    await clickUntilRequested(app.page, confirm, isRepair);
+    const answer = await queued;
+    // A repair an earlier attempt left is refused as running, naming
+    // itself, and that one is followed instead.
+    expect([202, 409], await answer.text()).toContain(answer.status());
+    const body = (await answer.json()) as { id?: string; params?: { task?: string } };
+    const taskId = (answer.status() === 202 ? body.id : body.params?.task) ?? '';
+    expect(taskId, 'the answer names the repair to follow').toMatch(/^tk-/);
+
+    // The toast says where it runs. Its end is read where it is recorded,
+    // on the budget the tests ahead of it in the queue take, and then on
+    // its row.
+    await app.admin.control(SemanticsIds.openTasks).click();
+    await expect(app.admin.control(SemanticsIds.tasksScreen)).toBeVisible({ timeout: T.nav });
+    await expect
+      .poll(async () => (await app.api.get('/tools/tasks/{taskId}', { path: { taskId } })).state, {
+        timeout: J.long,
+        message: 'the repair should run to done',
+      })
+      .toBe('done');
+    // The jobs listed above the tasks push them past the fold on a stack
+    // that has run a while, so a row the list has not drawn in view is
+    // wheeled down to.
+    const row = app.admin.control(SemanticsIds.taskRow(taskId));
+    const drawn = await row.waitFor({ state: 'visible', timeout: T.step }).then(
+      () => true,
+      () => false,
+    );
+    if (!drawn) await wheelIntoView(app.page, row);
+    // The row's words are the name of the group inside it; its Dismiss
+    // button is the only text.
+    const words = row.getByRole('group').first();
+    await expect(words).toHaveAccessibleName(/Catalog repair/);
+    await expect(words).toHaveAccessibleName(/Done/, { timeout: T.fetch });
+    await expect(words, 'the check after the repair reads clean').toHaveAccessibleName(/consistent/);
+    const audit = await app.api.get('/admin/audit', {
+      query: { action: 'catalog.repair', limit: 20 },
+    });
+    expect(
+      (audit.events ?? []).find((e) => e.detail?.task === taskId),
+      'the repair is on the record',
+    ).toBeTruthy();
   });
 });
 
@@ -495,27 +586,40 @@ test('a delete the filesystem refuses is said and audited as refused', async ({ 
 
 // The delete dialog names what goes by its place in the library before
 // anything moves. Long Division is alone on its album, so the album's
-// first row is the track, and a preview deletes nothing.
+// first row is the track, and a preview deletes nothing. A file named for
+// the track goes with it, and the dialog says so: an .nfo, which nothing
+// reads back into the catalog, so the file is no other test's concern.
 test('deleting a track from its row menu previews the file', async ({ app }) => {
   const track = await app.seed.item('Long Division');
   const [file] = (await app.api.get('/items/{pid}/files', { path: { pid: track.pid } })).files;
-  await app.music.openAlbumOf(track.pid);
-  const paths = app.music.control(SemanticsIds.itemDeletePaths);
-  await chooseFromMenu(
-    app.music.control(SemanticsIds.albumTrackMore(0)),
-    app.music.control(SemanticsIds.itemMenuDelete),
-    { settled: paths },
-  );
-  await expect
-    .poll(async () => (await paths.getAttribute('aria-label')) ?? (await paths.textContent()) ?? '', {
-      timeout: T.fetch,
-      message: 'the preview should name the file',
-    })
-    .toContain(file.name);
+  expect(file?.path, 'an administrator reads where the file is').toBeTruthy();
+  const sidecar = path.join(path.dirname(file.path!), `${path.parse(file.path!).name}.nfo`);
+  fs.writeFileSync(sidecar, 'notes');
+  try {
+    await app.music.openAlbumOf(track.pid);
+    const paths = app.music.control(SemanticsIds.itemDeletePaths);
+    const sidecars = app.music.control(SemanticsIds.itemDeleteSidecars);
+    await chooseFromMenu(
+      app.music.control(SemanticsIds.albumTrackMore(0)),
+      app.music.control(SemanticsIds.itemMenuDelete),
+      { settled: paths },
+    );
+    const read = async (node: typeof paths) =>
+      (await node.getAttribute('aria-label')) ?? (await node.textContent()) ?? '';
+    await expect
+      .poll(() => read(paths), { timeout: T.fetch, message: 'the preview should name the file' })
+      .toContain(file.name);
+    await expect
+      .poll(() => read(sidecars), { timeout: T.fetch, message: 'the preview should name the file that goes with it' })
+      .toContain(path.basename(sidecar));
 
-  await app.page.keyboard.press('Escape');
-  await expect(paths).toBeHidden();
-  expect((await app.api.raw.get('/items/{pid}', { path: { pid: track.pid } })).ok()).toBeTruthy();
+    await app.page.keyboard.press('Escape');
+    await expect(paths).toBeHidden();
+    expect((await app.api.raw.get('/items/{pid}', { path: { pid: track.pid } })).ok()).toBeTruthy();
+    expect(fs.existsSync(sidecar), 'a preview moves nothing').toBeTruthy();
+  } finally {
+    fs.rmSync(sidecar, { force: true });
+  }
 });
 
 // A merge writes its file beside the book in the book's own library. Kept

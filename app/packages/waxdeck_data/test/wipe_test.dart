@@ -85,6 +85,22 @@ void main() {
           ..insert(
             db.clientSettings,
             ClientSettingsCompanion.insert(key: 'wifi', value: 'true'),
+          )
+          // What the sync keeps about the server's items in the same
+          // table: the pids it still has to ask about and the frees it owes.
+          ..insert(
+            db.clientSettings,
+            ClientSettingsCompanion.insert(
+              key: 'waxdeck.sync.removedUnanswered',
+              value: '["tr-A"]',
+            ),
+          )
+          ..insert(
+            db.clientSettings,
+            ClientSettingsCompanion.insert(
+              key: 'waxdeck.sync.free.tr-A',
+              value: '{"f":[],"p":[]}',
+            ),
           );
       });
 
@@ -107,7 +123,11 @@ void main() {
           reason: table.actualTableName,
         );
       }
-      expect(await db.select(db.clientSettings).get(), hasLength(1));
+      // The device's own setting stays; what the sync held for the server
+      // goes with the rest of what the server gave.
+      expect((await db.select(db.clientSettings).get()).map((r) => r.key), [
+        'wifi',
+      ]);
     },
   );
 }

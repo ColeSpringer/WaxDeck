@@ -426,36 +426,89 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // and its pinned artwork with it. Of the tombstones only `removed`
     // reaches this stream: trash tombstones the mirror row as well and
     // keeps the bytes, because a restore would otherwise cost the whole
-    // transfer again. The other pid on it is a download a kind change
-    // left behind (see `SyncEngine.itemsRemoved`). `remove` is the one
-    // call that does both halves, and stops a transfer still under way.
+    // transfer again. The other pids on it are a download a kind change
+    // left behind, and those a re-mirror (which carries no tombstones)
+    // asked the server about and was told are gone, which can be many at
+    // once (see `SyncEngine.itemsRemoved`). `DownloadsController.freeOwed`
+    // is the one call that does both halves: the downloads manager's free,
+    // which stops a transfer still under way, then the exact unpin.
+    //
+    // The commit that drops an item also records, with it, that its bytes
+    // are owed a free, and this is where the free is kept: the downloads
+    // manager decides in its own chain whether a pid is still owed (the
+    // mirror may list it again, or the device have taken it up again,
+    // since the commit) and takes the rows the record lists and no others,
+    // and the record is cleared only once the bytes are gone. A kill, or a
+    // failed free, leaves it for the next start (below).
     //
     // Chained rather than fired in parallel, for the reason `removeAll`
-    // is sequential: `remove` decides whether to unlink a file by asking
-    // whether any *other* row still holds the same essence, so two items
-    // sharing one (CUE siblings share an image) reclaimed at once each
-    // see the other's row, each conclude the file is shared, and leave it
-    // on disk with nothing pointing at it. A delta page that retires a
-    // pair delivers both tombstones together, so this is the ordinary
-    // case rather than a race. It also keeps N reclaims from launching N
-    // concurrent rebuilds of the downloads list.
+    // is sequential: the manager's discard decides whether to unlink a
+    // file by asking whether any *other* row still holds the same essence,
+    // so two items sharing one (CUE siblings share an image) reclaimed at
+    // once each see the other's row, each conclude the file is shared, and
+    // leave it on disk with nothing pointing at it. A delta page that
+    // retires a pair delivers both tombstones together, so this is the
+    // ordinary case rather than a race.
+    //
+    // A run of frees shares one rebuild of the downloads list, which reads
+    // every stored item: it is asked for once the chain has run dry and
+    // stayed dry through the turn, so what one commit or one delta page
+    // publishes is one run however quickly each free goes.
     var reclaiming = Future<void>.value();
-    final removedSub = engine.itemsRemoved.listen((pid) {
-      reclaiming = reclaiming.then((_) async {
-        // Checked per link rather than once: the chain outlives the
-        // frame that queued it, and signing out disposes this binder
-        // while reclaims are still draining. Reading `ref` past that
-        // throws, which would take the rest of the queue with it.
-        if (!ref.mounted) return;
+    var queued = 0;
+    var changed = false;
+    Timer? settled;
+    ref.onDispose(() => settled?.cancel());
+    Future<void> free(String pid) {
+      queued++;
+      settled?.cancel();
+      return reclaiming = reclaiming.then((_) async {
         try {
-          await ref.read(downloadsProvider.notifier).remove(pid);
-        } catch (_) {
-          // One pid that cannot be reclaimed must not stall the queue
-          // behind it; the bytes stay and the next sweep sees them.
+          // Checked per link rather than once: the chain outlives the
+          // frame that queued it, and signing out disposes this binder
+          // while reclaims are still draining. Reading `ref` past that
+          // throws, which would take the rest of the queue with it.
+          if (!ref.mounted) return;
+          try {
+            if (await ref.read(downloadsProvider.notifier).freeOwed(pid)) {
+              changed = true;
+            }
+            await engine.settleFree(pid);
+          } catch (_) {
+            // One pid that cannot be reclaimed must not stall the queue
+            // behind it; its bytes stay owed, and the next start frees
+            // them. Part of it may have gone, so the list is read again.
+            changed = true;
+          }
+        } finally {
+          if (--queued == 0) {
+            settled = Timer(Duration.zero, () {
+              settled = null;
+              if (!changed || !ref.mounted) return;
+              changed = false;
+              ref.invalidate(downloadsProvider);
+            });
+          }
         }
       });
-      unawaited(reclaiming);
-    });
+    }
+
+    final removedSub = engine.itemsRemoved.listen(
+      (pid) => unawaited(free(pid)),
+    );
+    // What an earlier run owed and did not finish, before this one syncs:
+    // the engine's first sync waits behind it, and the downloads store
+    // does not resume what it frees (see `BackgroundDownloadManager`).
+    unawaited(
+      engine
+          .beforeSync(() async {
+            // One run, so the downloads list is rebuilt once for the lot.
+            for (final pid in await engine.pendingFrees()) {
+              await free(pid);
+            }
+          })
+          .catchError((Object _) {}),
+    );
     connect.bind(
       sender: engine.sendControl,
       routeControl: (handler) => engine.onControlFrame = handler,

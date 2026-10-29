@@ -13,6 +13,7 @@
     "organizePlan": "organize-plan",
     "organizePreview": "organize-preview",
     "organizeProfileAudiobook": "organize-profile-audiobook",
+    "organizeProfileCompilation": "organize-profile-compilation",
     "organizeProfileDelete": "organize-profile-delete-{name}",
     "organizeProfileDeleteConfirm": "organize-profile-delete-confirm",
     "organizeProfileEdit": "organize-profile-edit-{name}",

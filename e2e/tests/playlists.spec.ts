@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import { subsonic } from './driver/subsonic';
-import { clickThrough, typeInto } from './driver/gestures';
+import { clickThrough, clickUntilRequested, typeInto } from './driver/gestures';
 import { SemanticsIds } from './semantics-ids';
 
 // The playlists slice over the real stack: the rule editor building a
@@ -506,6 +506,65 @@ test('a pasted NSP document is checked, then imports as a rule', async ({ app })
 
   await app.seed.clearPlaylistsNamed('Loved and long');
   await app.seed.clearPlaylistsNamed('Old WaxDeck export');
+});
+
+test('a pasted M3U file is checked line by line, then imports what matched', async ({ app }) => {
+  const name = 'Checked M3U';
+  const sourceName = 'Checked M3U source';
+  await app.seed.clearPlaylistsNamed(name);
+  await app.seed.clearPlaylistsNamed(sourceName);
+  const track = await app.seed.item('Alpha Song');
+  const book = await app.seed.book('The Fixture Book');
+  // Paths as a member knows them: from its own export, since file paths
+  // are an administrator's.
+  const source = await app.seed.createPlaylist(sourceName, [track.pid, book.pid]);
+  const exported = await (
+    await app.api.raw.get('/playlists/{pid}/m3u', { path: { pid: source } })
+  ).text();
+  const [trackPath, bookPath] = exported
+    .split('\n')
+    .filter((line) => line !== '' && !line.startsWith('#'));
+  expect(bookPath, 'the export names both members').toBeTruthy();
+  // A track, the book, the book's file again by a relative spelling (the
+  // item of the line before it), and a path naming nothing.
+  const bookRelative = bookPath!.split('/').slice(-3).join('/');
+  const document = ['#EXTM3U', trackPath, bookPath, bookRelative, '/nowhere/missing.flac'].join(
+    '\n',
+  );
+
+  await app.nav.enter('playlists');
+  await app.playlists.openImport('m3u');
+  await typeInto(app.page, app.playlists.control(SemanticsIds.playlistImportName), name);
+  await typeInto(app.page, app.playlists.importPayload(), document);
+  await clickThrough(
+    app.playlists.control(SemanticsIds.playlistM3uCheck),
+    app.playlists.control(SemanticsIds.playlistM3uImport),
+  );
+  await expect(app.playlists.control(SemanticsIds.playlistM3uPreview)).toHaveText(
+    '2 lines become entries, 1 joins the entry before it, 1 has no match in the library.',
+  );
+  await expect(app.playlists.control(SemanticsIds.playlistM3uPreviewRow(0))).toContainText('Alpha Song');
+  await expect(app.playlists.control(SemanticsIds.playlistM3uPreviewRow(2))).toContainText(
+    'Joins the entry before it',
+  );
+  await expect(app.playlists.control(SemanticsIds.playlistM3uPreviewRow(3))).toContainText(
+    '/nowhere/missing.flac',
+  );
+  // The check made nothing.
+  expect(await app.seed.playlistsNamed(name)).toHaveLength(0);
+
+  await clickUntilRequested(
+    app.page,
+    app.playlists.control(SemanticsIds.playlistM3uImport),
+    (req) => req.method() === 'POST' && req.url().endsWith('/playlists/m3u'),
+  );
+  await expect.poll(async () => (await app.seed.playlistsNamed(name)).length).toBe(1);
+  const [pid] = await app.seed.playlistsNamed(name);
+  const listed = await app.api.get('/playlists/{pid}/items', { path: { pid: pid! } });
+  expect(listed.entries.map((e) => e.item.pid)).toEqual([track.pid, book.pid]);
+
+  await app.seed.clearPlaylistsNamed(name);
+  await app.seed.clearPlaylistsNamed(sourceName);
 });
 
 test('a fresh account is seeded with Most played', async ({ app, otherAccount }) => {

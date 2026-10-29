@@ -273,9 +273,6 @@ class _DeleteItemsDialog extends StatefulWidget {
 class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
   var _mode = 'trash';
 
-  /// How many file names the preview lists before counting the rest.
-  static const _namedFiles = 5;
-
   @override
   Widget build(BuildContext context) {
     final plan = widget.plan;
@@ -289,6 +286,9 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
         else
           for (final file in entry.fileList) file.name,
     ];
+    // The covers, lyrics and other files named for those files, which go
+    // with them.
+    final sidecars = [for (final entry in plan.entries) ...entry.sidecars];
     // Scrolls rather than overflows on a short window, so every choice
     // stays reachable.
     return AlertDialog(
@@ -306,36 +306,21 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
             ),
             key: const Key('item-delete-preview'),
           ),
-          // Which files go: the first few, then how many more. Read out
-          // whole as one sentence, which a list of paths is not, and no
-          // longer than the list drawn.
+          // Which files go: the first few, then how many more.
           if (names.isNotEmpty)
-            Semantics(
+            _PathList(
+              paths: names,
               identifier: SemanticsIds.itemDeletePaths,
-              label: l10n.libraryDeletePreviewFiles(
-                names.length,
-                [
-                  ...names.take(_namedFiles),
-                  if (names.length > _namedFiles)
-                    l10n.libraryDeleteMoreFiles(names.length - _namedFiles),
-                ].join(', '),
-              ),
-              excludeSemantics: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final name in names.take(_namedFiles))
-                    Text(
-                      name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: WaxType.monoData,
-                    ),
-                  if (names.length > _namedFiles)
-                    Text(
-                      l10n.libraryDeleteMoreFiles(names.length - _namedFiles),
-                    ),
-                ],
+              spoken: l10n.libraryDeletePreviewFiles,
+            ),
+          if (sidecars.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: WaxSpace.s8),
+              child: _PathList(
+                paths: sidecars,
+                identifier: SemanticsIds.itemDeleteSidecars,
+                spoken: l10n.libraryDeletePreviewSidecars,
+                heading: l10n.libraryDeleteSidecarsHeading(sidecars.length),
               ),
             ),
           if (plan.entries.isNotEmpty &&
@@ -383,6 +368,66 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Library paths as the delete dialog lists them: the first few as rows,
+/// then how many more, with a line over them where there is one. Read out
+/// whole as one sentence, which a list of paths is not, and no longer than
+/// the list drawn.
+class _PathList extends StatelessWidget {
+  const _PathList({
+    required this.paths,
+    required this.identifier,
+    required this.spoken,
+    this.heading,
+  });
+
+  final List<String> paths;
+  final String identifier;
+
+  /// The sentence a screen reader gets: how many paths, then the rows drawn.
+  final String Function(int count, String list) spoken;
+
+  final String? heading;
+
+  /// How many paths are named before the rest are counted.
+  static const _named = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final more = paths.length > _named
+        ? l10n.libraryDeleteMoreFiles(paths.length - _named)
+        : null;
+    return Semantics(
+      identifier: identifier,
+      label: spoken(paths.length, [...paths.take(_named), ?more].join(', ')),
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (heading case final line?)
+            Text(
+              line,
+              style: WaxType.caption.copyWith(
+                color: WaxColors.of(context).textSecondary,
+              ),
+            ),
+          // Keyed by place as well as by path: one path comes twice when an
+          // item and a copy of it sit in two libraries laid out alike.
+          for (final (i, path) in paths.take(_named).indexed)
+            Text(
+              path,
+              key: ValueKey('$i:$path'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: WaxType.monoData,
+            ),
+          if (more != null) Text(more),
+        ],
+      ),
     );
   }
 }

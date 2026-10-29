@@ -576,7 +576,11 @@ void main() {
       ..organizeProfiles = const [
         OrganizeProfile(
           name: 'flat',
-          sample: OrganizeSample(audiobook: 'a', podcast: 'b'),
+          sample: OrganizeSample(
+            audiobook: 'a',
+            podcast: 'b',
+            compilation: 'c',
+          ),
         ),
       ];
     await _pump(tester, _host(repo));

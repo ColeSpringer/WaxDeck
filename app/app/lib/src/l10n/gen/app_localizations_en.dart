@@ -568,6 +568,134 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminEnrichmentWalkColumn => 'Walk';
 
   @override
+  String get adminFoldsAlreadyUnfolded => 'That name was unfolded already';
+
+  @override
+  String adminFoldsApartOf(String apart, int index, int count) {
+    return '$apart, $index of $count';
+  }
+
+  @override
+  String get adminFoldsColumnFilesUnder => 'Files under';
+
+  @override
+  String get adminFoldsColumnSince => 'Folded';
+
+  @override
+  String get adminFoldsColumnSpelling => 'Spelling';
+
+  @override
+  String get adminFoldsEmptyMessage =>
+      'A merge folds the names it does away with into the entry it keeps, so files still spelled the old way file under it.';
+
+  @override
+  String get adminFoldsEmptyTitle => 'No folded names';
+
+  @override
+  String adminFoldsEntry(String name, String kind) {
+    return '$name ($kind)';
+  }
+
+  @override
+  String get adminFoldsError => 'Could not load folded names';
+
+  @override
+  String adminFoldsFoldedAt(String when) {
+    return 'Folded $when';
+  }
+
+  @override
+  String get adminFoldsGroupAlbum => 'Albums';
+
+  @override
+  String get adminFoldsGroupArtist => 'Artists';
+
+  @override
+  String get adminFoldsGroupGenre => 'Genres';
+
+  @override
+  String get adminFoldsGroupReleaseGroup => 'Release groups';
+
+  @override
+  String get adminFoldsGroupSeries => 'Series';
+
+  @override
+  String adminFoldsInFolder(String folder, String library) {
+    return 'In $folder in $library';
+  }
+
+  @override
+  String adminFoldsInLibrary(String library) {
+    return 'At the top of $library';
+  }
+
+  @override
+  String get adminFoldsKindAlbum => 'Album';
+
+  @override
+  String get adminFoldsKindArtist => 'Artist';
+
+  @override
+  String get adminFoldsKindGenre => 'Genre';
+
+  @override
+  String get adminFoldsKindMood => 'Mood';
+
+  @override
+  String get adminFoldsKindReleaseGroup => 'Release group';
+
+  @override
+  String get adminFoldsKindSeries => 'Series';
+
+  @override
+  String adminFoldsMerged(int count, String survivor) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count spellings now file under $survivor',
+      one: '1 spelling now files under $survivor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminFoldsOverline => 'Old spellings that file under another name';
+
+  @override
+  String adminFoldsQuoted(String spelling) {
+    return '\"$spelling\"';
+  }
+
+  @override
+  String adminFoldsQuotedApart(String spelling, String apart) {
+    return '\"$spelling\" ($apart)';
+  }
+
+  @override
+  String get adminFoldsTitle => 'Folded names';
+
+  @override
+  String adminFoldsUnfold(String fold) {
+    return 'Unfold $fold';
+  }
+
+  @override
+  String get adminFoldsUnfoldAction => 'Unfold';
+
+  @override
+  String adminFoldsUnfoldBody(String fold, String name) {
+    return 'Files spelled $fold that the library reads as new or changed (added, moved, replaced or retagged) are filed under their own name again. The ones \"$name\" holds already stay with it, even through a rescan with Re-read unchanged files, until they change or move.';
+  }
+
+  @override
+  String get adminFoldsUnfoldTitle => 'Unfold this name?';
+
+  @override
+  String adminFoldsUnfolded(String fold) {
+    return '$fold is unfolded';
+  }
+
+  @override
   String get adminForbiddenMessage =>
       'The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.';
 
@@ -3815,6 +3943,107 @@ class AppLocalizationsEn extends AppLocalizations {
       'This track is part of a larger file, which another device can\'t play yet. Play it on this one instead.';
 
   @override
+  String get healthCatalogAlbumYears => 'Album years out of date';
+
+  @override
+  String get healthCatalogArtistTotals => 'Artist totals out of date';
+
+  @override
+  String get healthCatalogBlurb =>
+      'Compares what the catalog keeps beside your files (the search index, totals, sort keys and years) with a fresh count from its own records. Rarely needed: a catalog the server built fresh reads consistent.';
+
+  @override
+  String get healthCatalogBookIsbnKeys => 'Book ISBN keys out of date';
+
+  @override
+  String get healthCatalogBookLengths => 'Book lengths out of date';
+
+  @override
+  String healthCatalogCheckedAt(String stamp) {
+    return 'Checked $stamp';
+  }
+
+  @override
+  String get healthCatalogClean => 'Consistent: nothing out of step.';
+
+  @override
+  String get healthCatalogDrift =>
+      'Out of step. A repair recomputes what is listed below.';
+
+  @override
+  String get healthCatalogGenreTotals => 'Genre totals out of date';
+
+  @override
+  String get healthCatalogMissingFromSearch => 'Items search cannot find';
+
+  @override
+  String get healthCatalogOrphanSearchRows => 'Search entries with no item';
+
+  @override
+  String get healthCatalogOverline => 'Search, totals, sort keys and years';
+
+  @override
+  String get healthCatalogPlaylistNumbering => 'Playlists numbered with gaps';
+
+  @override
+  String get healthCatalogRefusedTagRows =>
+      'Tags under names no longer accepted';
+
+  @override
+  String get healthCatalogReleaseGroupTotals =>
+      'Release group totals out of date';
+
+  @override
+  String get healthCatalogReleaseYears => 'Release years out of date';
+
+  @override
+  String get healthCatalogRepair => 'Repair';
+
+  @override
+  String get healthCatalogRepairBody =>
+      'The repair recounts what the check counts from the catalog\'s own records and deletes what nothing uses. It holds the catalog\'s write lock while it writes, so edits and scans wait for it. Your files are not touched.';
+
+  @override
+  String get healthCatalogRepairRunning =>
+      'A repair is already running. Follow it in Tasks.';
+
+  @override
+  String get healthCatalogRepairSpoken => 'Repair the catalog';
+
+  @override
+  String get healthCatalogRepairStarted =>
+      'Repair started. Follow it in Tasks.';
+
+  @override
+  String get healthCatalogRepairTitle => 'Repair the catalog?';
+
+  @override
+  String get healthCatalogReservedTagRecords =>
+      'Tag records under reserved names';
+
+  @override
+  String get healthCatalogSortKeys => 'Names sorting out of place';
+
+  @override
+  String get healthCatalogTidy =>
+      'Consistent. A repair tidies what is listed below.';
+
+  @override
+  String get healthCatalogTitle => 'Catalog check';
+
+  @override
+  String get healthCatalogUnusedImages => 'Unused images';
+
+  @override
+  String get healthCatalogUnusedThumbnails => 'Unused thumbnails';
+
+  @override
+  String get healthCatalogVerify => 'Verify';
+
+  @override
+  String get healthCatalogVerifySpoken => 'Verify the catalog';
+
+  @override
   String get healthColumnAbsorbs => 'Absorbs';
 
   @override
@@ -4459,6 +4688,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String libraryDeletePreviewSidecars(int count, String list) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sidecars',
+      one: '1 sidecar',
+    );
+    return '$_temp0: $list';
+  }
+
+  @override
   String libraryDeleteRipAction(int count) {
     return 'Delete all $count tracks...';
   }
@@ -4486,6 +4726,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String libraryDeleteRipTooMany(int max) {
     return 'With the tracks that share their files, this is more than $max tracks, too many to delete in one go.';
+  }
+
+  @override
+  String libraryDeleteSidecarsHeading(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Also removes $count sidecars:',
+      one: 'Also removes 1 sidecar:',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -4523,6 +4774,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get libraryFactsContainer => 'Container';
 
   @override
+  String get libraryFactsDisc => 'Disc';
+
+  @override
   String get libraryFactsDuration => 'Length';
 
   @override
@@ -4547,6 +4801,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get libraryFactsNeverPlayed => 'Never';
 
   @override
+  String libraryFactsNumberOf(int number, int total) {
+    return '$number of $total';
+  }
+
+  @override
+  String get libraryFactsParts => 'Parts';
+
+  @override
   String get libraryFactsPlayCount => 'Plays';
 
   @override
@@ -4554,6 +4816,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get libraryFactsTitle => 'Details';
+
+  @override
+  String get libraryFactsTrack => 'Track';
 
   @override
   String get libraryFactsYear => 'Year';
@@ -6346,6 +6611,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeProfileAudiobookLabel => 'Audiobook template';
 
   @override
+  String get organizeProfileCompilationHelp =>
+      'Various Artists unless set; empty files compilations under their tagged album artist';
+
+  @override
+  String get organizeProfileCompilationLabel => 'Compilation folder';
+
+  @override
+  String get organizeProfileCompilationOwn => 'Each one\'s tagged album artist';
+
+  @override
+  String get organizeProfileCompilationUnset => 'Various Artists';
+
+  @override
   String get organizeProfileDelete => 'Delete profile';
 
   @override
@@ -6396,6 +6674,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String organizeProfileSampleBook(String path) {
     return 'Book: $path';
+  }
+
+  @override
+  String organizeProfileSampleCompilation(String path) {
+    return 'Compilation: $path';
   }
 
   @override
@@ -7342,6 +7625,57 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistLoadError => 'Could not load this playlist';
+
+  @override
+  String get playlistM3uPreviewChecking =>
+      'Checking each line of the file. A long one takes a while.';
+
+  @override
+  String playlistM3uPreviewCounts(int matched, int merged, int unmatched) {
+    String _temp0 = intl.Intl.pluralLogic(
+      matched,
+      locale: localeName,
+      other: '$matched lines become entries',
+      one: '1 line becomes an entry',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      merged,
+      locale: localeName,
+      other: ', $merged join the entry before them',
+      one: ', 1 joins the entry before it',
+      zero: '',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      unmatched,
+      locale: localeName,
+      other: ', $unmatched have no match in the library',
+      one: ', 1 has no match in the library',
+      zero: '',
+    );
+    return '$_temp0$_temp1$_temp2.';
+  }
+
+  @override
+  String get playlistM3uPreviewImporting =>
+      'Importing the playlist. A long file takes a while.';
+
+  @override
+  String playlistM3uPreviewItem(String artist, String title) {
+    return '$artist - $title';
+  }
+
+  @override
+  String get playlistM3uPreviewMatched => 'Entry';
+
+  @override
+  String get playlistM3uPreviewMerged => 'Joins the entry before it';
+
+  @override
+  String get playlistM3uPreviewStillImporting =>
+      'This file is still being imported. It can be imported again once that finishes.';
+
+  @override
+  String get playlistM3uPreviewUnmatched => 'No match in the library';
 
   @override
   String get playlistMakePrivate => 'Make private';
@@ -10077,6 +10411,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchTitle => 'Search';
 
   @override
+  String get searchTopResult => 'Top result';
+
+  @override
   String get searchTruncated =>
       'There are more matches than fit here. Refine your search to narrow them down.';
 
@@ -12111,6 +12448,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String toolsCountEntriesRemoved(int count) {
+    return 'empty entries removed $count';
+  }
+
+  @override
   String toolsCountErrored(int count) {
     return 'errored $count';
   }
@@ -12176,8 +12518,23 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String toolsCountReclaimed(int count) {
+    return 'unused rows reclaimed $count';
+  }
+
+  @override
+  String toolsCountSearchRows(int count) {
+    return 'search rows rebuilt $count';
+  }
+
+  @override
   String toolsCountSkipped(int count) {
     return 'skipped $count';
+  }
+
+  @override
+  String toolsCountSortKeys(int count) {
+    return 'sort keys rewritten $count';
   }
 
   @override
@@ -12340,6 +12697,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolsStateWaiting => 'Waiting';
 
   @override
+  String get toolsSummaryConsistent => 'consistent';
+
+  @override
+  String toolsSummaryDriftLeft(int count) {
+    return 'still out of step $count';
+  }
+
+  @override
   String toolsSummaryListens(String count) {
     return 'listens $count';
   }
@@ -12352,6 +12717,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String toolsSummaryRefused(String count) {
     return 'refused $count';
+  }
+
+  @override
+  String toolsSummaryTied(String count) {
+    return 'tied $count';
   }
 
   @override
@@ -12376,6 +12746,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolsTaskBookSplit => 'Book split';
+
+  @override
+  String get toolsTaskCatalogRepair => 'Catalog repair';
 
   @override
   String get toolsTaskCueSplit => 'CUE split';

@@ -1,6 +1,132 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "healthCatalogAlbumYears": "Album years out of date",
+  "@healthCatalogAlbumYears": {
+    "description": "Row of the catalog check counting albums whose year is not the one their tracks give."
+  },
+  "healthCatalogArtistTotals": "Artist totals out of date",
+  "@healthCatalogArtistTotals": {
+    "description": "Row of the catalog check counting artists whose stored track and album totals differ from a recount."
+  },
+  "healthCatalogBlurb": "Compares what the catalog keeps beside your files (the search index, totals, sort keys and years) with a fresh count from its own records. Rarely needed: a catalog the server built fresh reads consistent.",
+  "@healthCatalogBlurb": {
+    "description": "Explanation under the Catalog check heading, saying what the check compares and that it is seldom needed."
+  },
+  "healthCatalogBookIsbnKeys": "Book ISBN keys out of date",
+  "@healthCatalogBookIsbnKeys": {
+    "description": "Row of the catalog check counting books whose stored ISBN match key is not the one their ISBN gives."
+  },
+  "healthCatalogBookLengths": "Book lengths out of date",
+  "@healthCatalogBookLengths": {
+    "description": "Row of the catalog check counting books whose stored length differs from the sum of their parts."
+  },
+  "healthCatalogCheckedAt": "Checked {stamp}",
+  "@healthCatalogCheckedAt": {
+    "description": "Under a catalog check's result, when it was read, so a result kept on screen says how old it is. {stamp} is an already-formatted date and time.",
+    "placeholders": {
+      "stamp": {
+        "type": "String",
+        "example": "Aug 12, 2026 3:04 PM"
+      }
+    }
+  },
+  "healthCatalogClean": "Consistent: nothing out of step.",
+  "@healthCatalogClean": {
+    "description": "Result of a catalog check that found nothing out of step and nothing to tidy."
+  },
+  "healthCatalogDrift": "Out of step. A repair recomputes what is listed below.",
+  "@healthCatalogDrift": {
+    "description": "Result of a catalog check that found derived data out of step with the catalog's records; the counts follow."
+  },
+  "healthCatalogGenreTotals": "Genre totals out of date",
+  "@healthCatalogGenreTotals": {
+    "description": "Row of the catalog check counting genres whose stored totals differ from a recount."
+  },
+  "healthCatalogMissingFromSearch": "Items search cannot find",
+  "@healthCatalogMissingFromSearch": {
+    "description": "Row of the catalog check counting items with no search index entry."
+  },
+  "healthCatalogOrphanSearchRows": "Search entries with no item",
+  "@healthCatalogOrphanSearchRows": {
+    "description": "Row of the catalog check counting search index entries whose item is gone."
+  },
+  "healthCatalogOverline": "Search, totals, sort keys and years",
+  "@healthCatalogOverline": {
+    "description": "Line above the Catalog check heading, naming what the check covers."
+  },
+  "healthCatalogPlaylistNumbering": "Playlists numbered with gaps",
+  "@healthCatalogPlaylistNumbering": {
+    "description": "Row of the catalog check counting playlists whose entry positions have gaps; their order reads the same either way."
+  },
+  "healthCatalogRefusedTagRows": "Tags under names no longer accepted",
+  "@healthCatalogRefusedTagRows": {
+    "description": "Row of the catalog check counting custom-tag rows under a tag name the catalog stopped accepting, which nothing can reach."
+  },
+  "healthCatalogReleaseGroupTotals": "Release group totals out of date",
+  "@healthCatalogReleaseGroupTotals": {
+    "description": "Row of the catalog check counting release groups whose stored totals differ from a recount."
+  },
+  "healthCatalogReleaseYears": "Release years out of date",
+  "@healthCatalogReleaseYears": {
+    "description": "Row of the catalog check counting items whose release year differs from their track's or book's year."
+  },
+  "healthCatalogRepair": "Repair",
+  "@healthCatalogRepair": {
+    "description": "Button that repairs the catalog's derived data, on the Catalog check section and in its confirm dialog."
+  },
+  "healthCatalogRepairBody": "The repair recounts what the check counts from the catalog's own records and deletes what nothing uses. It holds the catalog's write lock while it writes, so edits and scans wait for it. Your files are not touched.",
+  "@healthCatalogRepairBody": {
+    "description": "Body of the dialog confirming a catalog repair: what it does, that it holds up writes while it runs, and that it leaves the media files alone."
+  },
+  "healthCatalogRepairRunning": "A repair is already running. Follow it in Tasks.",
+  "@healthCatalogRepairRunning": {
+    "description": "Message when a catalog repair was refused because one is already queued or running; the message offers the Tasks screen."
+  },
+  "healthCatalogRepairSpoken": "Repair the catalog",
+  "@healthCatalogRepairSpoken": {
+    "description": "What a screen reader hears for the Repair button, which needs its subject when reached on its own."
+  },
+  "healthCatalogRepairStarted": "Repair started. Follow it in Tasks.",
+  "@healthCatalogRepairStarted": {
+    "description": "Message after a catalog repair was queued; it runs in the background and the message offers the Tasks screen."
+  },
+  "healthCatalogRepairTitle": "Repair the catalog?",
+  "@healthCatalogRepairTitle": {
+    "description": "Title of the dialog confirming a catalog repair."
+  },
+  "healthCatalogReservedTagRecords": "Tag records under reserved names",
+  "@healthCatalogReservedTagRecords": {
+    "description": "Row of the catalog check counting custom-tag edit records under a name the catalog has since reserved, which nothing can read."
+  },
+  "healthCatalogSortKeys": "Names sorting out of place",
+  "@healthCatalogSortKeys": {
+    "description": "Row of the catalog check counting names whose stored sort key is not the one the catalog generates now."
+  },
+  "healthCatalogTidy": "Consistent. A repair tidies what is listed below.",
+  "@healthCatalogTidy": {
+    "description": "Result of a catalog check that found nothing out of step but unused rows or playlist gaps a repair clears; the counts follow."
+  },
+  "healthCatalogTitle": "Catalog check",
+  "@healthCatalogTitle": {
+    "description": "Heading over the section that checks and repairs what the catalog derives from its own records."
+  },
+  "healthCatalogUnusedImages": "Unused images",
+  "@healthCatalogUnusedImages": {
+    "description": "Row of the catalog check counting stored images no entity uses."
+  },
+  "healthCatalogUnusedThumbnails": "Unused thumbnails",
+  "@healthCatalogUnusedThumbnails": {
+    "description": "Row of the catalog check counting cached thumbnails of images no entity uses."
+  },
+  "healthCatalogVerify": "Verify",
+  "@healthCatalogVerify": {
+    "description": "Button that runs the catalog check and shows what it found."
+  },
+  "healthCatalogVerifySpoken": "Verify the catalog",
+  "@healthCatalogVerifySpoken": {
+    "description": "What a screen reader hears for the Verify button, which needs its subject when reached on its own."
+  },
   "healthColumnAbsorbs": "Absorbs",
   "@healthColumnAbsorbs": {
     "description": "Column heading for the entities a merge folds into the survivor."

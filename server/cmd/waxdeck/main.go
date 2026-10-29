@@ -1104,9 +1104,10 @@ func run() error {
 	})
 	for name, drain := range map[string]func(context.Context) bool{
 		"tool-worker": svc.DrainToolTasks,
-		// Health fixes run for hours; on the tool worker, every
-		// acquisition and sync queued behind one would wait as long.
-		"health-fix-worker": svc.DrainHealthFixes,
+		// Health fixes and catalog repairs run for hours; on the tool
+		// worker, every acquisition and sync queued behind one would wait
+		// as long.
+		"long-task-worker": svc.DrainLongToolTasks,
 	} {
 		group.Go(ctx, name, func(ctx context.Context) error {
 			tick := time.NewTicker(10 * time.Second)

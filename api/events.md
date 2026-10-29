@@ -98,10 +98,19 @@ change history no longer reaches the client's cursor, or the catalog was
 replaced by a restore, which moves what the user stream hydrates too). The client drops the
 affected mirror halves, re-mirrors through the sync endpoints (snapshot for
 `catalog`, re-mint and re-hydrate for `user`), then closes the socket,
-reconnects, and resubscribes with the fresh cursors. Change-log pruning and
-visibility-grant changes surface the same way through a 410 `sync-reset` on
-the sync endpoints, so a full resync is a first-class client path, exercised
-continuously in tests.
+reconnects, and resubscribes with the fresh cursors. Change-log pruning,
+visibility-grant changes, a catalog repair, and a cursor past the end of
+the server's history or from a history it has rolled back (a full restore
+of the server) surface the same way through a 410 `sync-reset` on the sync
+endpoints, so a full resync is a first-class client path, exercised
+continuously in tests. A repair that got past its first step rewrote
+values mirrors hold with no change for each, so when it ends every catalog
+cursor from before then answers that 410, and connected clients get a
+`catalog` invalidation to pull at once: every client re-mirrors the
+catalog once. A
+snapshot carries no tombstones, so a client that holds downloads asks
+`/sync/catalog/removed` about those it fetched from this server and no
+longer lists, and frees what the server can never put back.
 
 ## Topics and cursors
 

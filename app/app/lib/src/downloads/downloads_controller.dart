@@ -30,6 +30,9 @@ class DownloadEntry {
   String get title => item?.title ?? pid;
   String? get subtitle => item?.artist;
 
+  /// What the stored rows of a medium are ordered by.
+  String get sortKey => item?.titleOrderKey ?? pid.toLowerCase();
+
   MediaType get mediaType => item?.mediaType ?? MediaType.music;
 
   bool get complete => record.complete;
@@ -85,9 +88,10 @@ class DownloadsState {
       (grouped[entry.mediaType] ??= <DownloadEntry>[]).add(entry);
     }
     for (final rows in grouped.values) {
-      rows.sort(
-        (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
-      );
+      rows.sort((a, b) {
+        final byKey = a.sortKey.compareTo(b.sortKey);
+        return byKey != 0 ? byKey : a.pid.compareTo(b.pid);
+      });
     }
     return <({MediaType mediaType, List<DownloadEntry> entries})>[
       for (final domain in byDomain)
@@ -141,6 +145,23 @@ class DownloadsController extends AsyncNotifier<DownloadsState> {
     await ref.read(artworkStoreProvider).unpin(pid);
     ref.invalidateSelf();
     await future;
+  }
+
+  /// Frees what a commit promised to free for [pid], and no more: the
+  /// downloads manager decides, in its own chain, whether the promise still
+  /// holds (a request that got there first takes the pid out of it), deletes
+  /// the files the promise lists and answers the covers it lists, which are
+  /// taken here by size and instant and nothing else. Answers whether
+  /// anything was owed. Two calls for the reason [remove] is two: the cover
+  /// is the artwork store's. The list is left to the caller: frees come in
+  /// runs, and a run rebuilds it once.
+  Future<bool> freeOwed(String pid) async {
+    final port = _port;
+    if (port == null) return false;
+    final pins = await port.freeOwed(pid);
+    if (pins == null) return false;
+    await ref.read(artworkStoreProvider).unpinExact(pid, pins);
+    return true;
   }
 
   /// Everything on disk, in one sweep.

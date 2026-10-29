@@ -155,6 +155,24 @@ class ItemFactsSheet extends ConsumerWidget {
         label: l10n.libraryFactsGenres,
         value: detail.genres.join(', '),
       ),
+    if (mediaType == MediaType.music && detail.trackNumber != null)
+      (
+        key: 'track',
+        label: l10n.libraryFactsTrack,
+        value: _position(l10n, detail.trackNumber!, detail.trackTotal),
+      ),
+    if (mediaType == MediaType.music && detail.discNumber != null)
+      (
+        key: 'disc',
+        label: l10n.libraryFactsDisc,
+        value: _position(l10n, detail.discNumber!, detail.discTotal),
+      ),
+    if (mediaType == MediaType.audiobook && (detail.partTotal ?? 0) > 0)
+      (
+        key: 'parts',
+        label: l10n.libraryFactsParts,
+        value: '${detail.partTotal}',
+      ),
     if ((detail.codec ?? '').isNotEmpty)
       (
         key: 'codec',
@@ -191,6 +209,13 @@ class ItemFactsSheet extends ConsumerWidget {
       (key: 'isrc', label: l10n.libraryFactsIsrc, value: detail.isrc!),
   ];
 
+  /// A number and, where the file states one, how many there are: "3 of
+  /// 12", or "3" alone.
+  String _position(AppLocalizations l10n, int number, int? total) =>
+      total == null || total <= 0
+      ? '$number'
+      : l10n.libraryFactsNumberOf(number, total);
+
   /// When the last play was counted.
   ///
   /// Three readings, not two. A hand mark - the button that clears a
@@ -223,6 +248,7 @@ class _Rows extends StatelessWidget {
     children: <Widget>[
       for (final row in rows)
         MonoDetailRow(
+          key: ValueKey(row.key),
           label: row.label,
           value: row.value,
           semanticsId: SemanticsIds.itemFactsRow(row.key),

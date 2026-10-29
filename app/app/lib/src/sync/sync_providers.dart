@@ -50,10 +50,23 @@ final downloadManagerProvider = Provider<DownloadManagerPort?>((ref) {
     copy: () => downloadCopy(ref.read(offTreeL10nProvider)),
   );
   ref.onDispose(manager.dispose);
+  tellOfServerChanges(ref, manager);
   // What a previous run left, before anything new starts.
   unawaited(manager.recover());
   return manager;
 });
+
+/// Tells [manager] each time the app reaches another server, where an
+/// item the last one did not know is read again. On the container: nothing
+/// need watch the manager, and an unwatched provider's own listeners are
+/// paused.
+void tellOfServerChanges(Ref ref, BackgroundDownloadManager manager) {
+  final address = ref.container.listen(
+    repositoryProvider,
+    (_, _) => manager.serverChanged(),
+  );
+  ref.onDispose(address.close);
+}
 
 /// Engine status for the offline banner; empty stream when no engine.
 final syncStatusProvider = StreamProvider.autoDispose<SyncStatus>((ref) {

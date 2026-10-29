@@ -161,8 +161,9 @@ export default defineConfig({
       dependencies: ['mutators-playlist-sync'],
       ...motion('reduce'),
     },
-    // The admin console's global surfaces; parallel with itself, with one
-    // describe.serial around the pair sharing the backup set.
+    // The admin console's global surfaces; parallel with itself, with a
+    // describe.serial around each pair sharing a server-wide surface (the
+    // backup set; the catalog check and its repair).
     {
       name: 'mutators-admin',
       testMatch: /admin-ops\.spec\.ts/,

@@ -272,6 +272,7 @@ func (s *Server) GetEpisode(ctx context.Context, req GetEpisodeRequestObject) (G
 		PublishedAt:   sum.PublishedAt,
 		Season:        sum.Season,
 		ShowPid:       sum.ShowPid,
+		SortKey:       sum.SortKey,
 		Title:         sum.Title,
 	}
 	if det.DescriptionHTML != "" {
@@ -1062,6 +1063,7 @@ func episodeSummaryJSON(ep service.EpisodeSummary) EpisodeSummary {
 	}
 	setOpt(&out.Artist, ep.Artist)
 	setOpt(&out.Album, ep.Album)
+	setOpt(&out.SortKey, ep.SortKey)
 	art := "/api/v1/items/" + ep.PID + "/art"
 	out.ArtUrl = &art
 	if ep.Season > 0 {

@@ -35,6 +35,10 @@ Future<void> pressRaisedAction(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// The address [FakeRepository] answers at, and the one a widget test's app
+/// is pointed at.
+const testServerAddress = 'http://server.test';
+
 /// In-memory repository for widget tests. Pagination uses the item index as
 /// the cursor, which is enough to exercise keyset-style paging end to end.
 class FakeRepository implements WaxDeckRepository {
@@ -52,6 +56,9 @@ class FakeRepository implements WaxDeckRepository {
 
   SessionState sessionState;
   List<ItemSummary> libraryItems;
+
+  @override
+  String baseUrl = testServerAddress;
 
   /// Item surfaced by the recently-played browse list, if any.
   ItemSummary? recentlyPlayed;
@@ -851,6 +858,11 @@ class FakeRepository implements WaxDeckRepository {
       // menus the app never draws.
       artistPid: item.artistPid,
       albumPid: item.albumPid,
+      trackNumber: item.trackNumber,
+      discNumber: item.discNumber,
+      sortKey: item.sortKey,
+      artistSort: item.artistSort,
+      artistSortKey: item.artistSortKey,
       durationMs: item.durationMs,
       artUrl: item.artUrl,
       // The technical half a real detail carries. Kept on the fake
@@ -860,6 +872,9 @@ class FakeRepository implements WaxDeckRepository {
       year: itemDetailYear,
       genres: itemDetailGenres,
       bpm: itemDetailBpm[pid],
+      trackTotal: itemDetailTrackTotal[pid],
+      discTotal: itemDetailDiscTotal[pid],
+      partTotal: itemDetailPartTotal[pid],
       codec: itemDetailCodec,
       container: itemDetailContainer,
       sampleRate: itemDetailSampleRate,
@@ -882,6 +897,9 @@ class FakeRepository implements WaxDeckRepository {
   int? itemDetailBitrate = 986;
   DateTime? itemDetailAddedAt = DateTime.utc(2026, 1, 2, 3, 4);
   final Map<String, int> itemDetailBpm = {};
+  final Map<String, int> itemDetailTrackTotal = {};
+  final Map<String, int> itemDetailDiscTotal = {};
+  final Map<String, int> itemDetailPartTotal = {};
   final Map<String, String> itemDetailMbid = {};
   final Map<String, String> itemDetailIsrc = {};
 
@@ -1349,6 +1367,15 @@ class FakeRepository implements WaxDeckRepository {
       nextSince: 'fake-catalog-cursor',
     );
   }
+
+  /// The pids [syncCatalogRemoved] names, of those it is asked about.
+  final removedForGood = <String>{};
+
+  @override
+  Future<List<String>> syncCatalogRemoved(List<String> pids) async => [
+    for (final pid in pids)
+      if (removedForGood.contains(pid)) pid,
+  ];
 
   /// Pages the server-state stream answers with, in order; an empty page
   /// once they run out.
@@ -2262,6 +2289,11 @@ class FakeRepository implements WaxDeckRepository {
   int importMatched = 0;
   int importUnmatched = 0;
 
+  /// What [importPlaylistM3u] raises, and a gate it waits on until
+  /// completed, so a test can act mid-import.
+  WaxDeckApiException? importM3uError;
+  Completer<void>? importM3uGate;
+
   @override
   Future<String> exportPlaylistM3u(String pid) async {
     exportedM3uPids.add(pid);
@@ -2275,6 +2307,9 @@ class FakeRepository implements WaxDeckRepository {
     String? visibility,
   }) async {
     importedM3uContents.add(content);
+    await importM3uGate?.future;
+    final error = importM3uError;
+    if (error != null) throw error;
     final pl = await createPlaylist(
       name: name,
       kind: 'static',
@@ -2285,6 +2320,24 @@ class FakeRepository implements WaxDeckRepository {
       matched: importMatched,
       unmatched: importUnmatched,
     );
+  }
+
+  /// What [previewPlaylistM3u] answers or raises, and the documents it
+  /// was asked about.
+  M3uPreview m3uPreview = const M3uPreview(matched: 0, merged: 0, unmatched: 0);
+  WaxDeckApiException? m3uPreviewError;
+  final List<String> previewedM3uContents = [];
+
+  /// Held open until completed, so a test can act mid-check.
+  Completer<void>? m3uPreviewGate;
+
+  @override
+  Future<M3uPreview> previewPlaylistM3u(String content) async {
+    previewedM3uContents.add(content);
+    await m3uPreviewGate?.future;
+    final error = m3uPreviewError;
+    if (error != null) throw error;
+    return m3uPreview;
   }
 
   /// Radio stations by pid.
@@ -4876,6 +4929,18 @@ class FakeRepository implements WaxDeckRepository {
   final List<({String entityType, String survivorPid, List<String> loserPids})>
   mergeDuplicatesCalls = [];
 
+  /// The folded names, which a merge adds to as the server does.
+  List<EntityFold> entityFolds = const [];
+
+  /// Thrown by [listEntityFolds] when set; [listEntityFoldsCalls] counts
+  /// the asks.
+  WaxDeckApiException? foldsError;
+  int listEntityFoldsCalls = 0;
+
+  /// Each unfold asked for, and what it refuses with when set.
+  final List<({String entityType, List<String> keys})> unfoldCalls = [];
+  WaxDeckApiException? unfoldError;
+
   List<UpgradeGroup> upgradeGroups = const [];
   final List<
     ({
@@ -5002,11 +5067,77 @@ class FakeRepository implements WaxDeckRepository {
       survivorPid: survivorPid,
       loserPids: List.of(loserPids),
     ));
+    final group = duplicateGroups
+        .where((g) => g.survivor.pid == survivorPid)
+        .firstOrNull;
+    final folded = [
+      for (final loser in group?.losers ?? const <DuplicateEntity>[])
+        if (loserPids.contains(loser.pid))
+          EntityFold(
+            entityType: entityType,
+            key: loser.name.toLowerCase(),
+            spelling: loser.name.toLowerCase(),
+            entityPid: survivorPid,
+            entityName: group!.survivor.name,
+            createdAt: DateTime.utc(2026, 10, 1),
+          ),
+    ];
+    entityFolds = [...entityFolds, ...folded];
     duplicateGroups = [
       for (final g in duplicateGroups)
         if (g.survivor.pid != survivorPid) g,
     ];
-    return MergeOutcome(merged: loserPids.length, childrenMoved: 0);
+    return MergeOutcome(
+      merged: loserPids.length,
+      childrenMoved: 0,
+      folds: [for (final f in folded) f.key],
+    );
+  }
+
+  /// A page after the cursor's type and key, as the server's keyset
+  /// pages: an unfold before the cursor shifts nothing after it.
+  @override
+  Future<EntityFoldPage> listEntityFolds({String? cursor, int? limit}) async {
+    listEntityFoldsCalls++;
+    final error = foldsError;
+    if (error != null) throw error;
+    String at(EntityFold f) => '${f.entityType}|${f.key}';
+    final after = cursor == null
+        ? 0
+        : entityFolds.indexWhere((f) => at(f).compareTo(cursor) > 0);
+    final start = after < 0 ? entityFolds.length : after;
+    final end = (start + (limit ?? 100)).clamp(0, entityFolds.length);
+    final page = entityFolds.sublist(start, end);
+    return EntityFoldPage(
+      folds: page,
+      nextCursor: end < entityFolds.length ? at(page.last) : null,
+    );
+  }
+
+  /// Forgets the folds named, all or none, as the server does.
+  @override
+  Future<void> unfoldEntities({
+    required String entityType,
+    required List<String> keys,
+  }) async {
+    unfoldCalls.add((entityType: entityType, keys: List.of(keys)));
+    if (unfoldError case final error?) throw error;
+    bool named(EntityFold f) =>
+        f.entityType == entityType && keys.contains(f.key);
+    final missing = keys.where(
+      (k) => !entityFolds.any((f) => f.entityType == entityType && f.key == k),
+    );
+    if (missing.isNotEmpty) {
+      throw WaxDeckApiException(
+        code: 'not-found',
+        message: 'no $entityType fold of ${missing.join(', ')}',
+        statusCode: 404,
+      );
+    }
+    entityFolds = [
+      for (final f in entityFolds)
+        if (!named(f)) f,
+    ];
   }
 
   @override
@@ -5082,6 +5213,16 @@ class FakeRepository implements WaxDeckRepository {
         podcast: 'Show/Episode.mp3',
       );
 
+  /// Where the sample compilation lands under a profile's folder, as the
+  /// server lays it out: Various Artists unless set, its tagged album
+  /// artist when empty.
+  static String compilationSampleUnder(String? folder) =>
+      '${switch (folder) {
+        null => 'Various Artists',
+        '' => 'Harbor Selectors',
+        final named => named,
+      }}/Coastal Nights/04 - Night Drive.flac';
+
   /// Holds profile saves and deletes in flight while a test dismisses
   /// what started them.
   Completer<void>? organizeProfileGate;
@@ -5093,6 +5234,7 @@ class FakeRepository implements WaxDeckRepository {
     String audiobookTemplate = '',
     String podcastTemplate = '',
     bool tagWrite = false,
+    String? compilationFolder,
   }) async {
     await organizeProfileGate?.future;
     if (putOrganizeProfileError case final error?) throw error;
@@ -5102,6 +5244,7 @@ class FakeRepository implements WaxDeckRepository {
       audiobookTemplate: audiobookTemplate,
       podcastTemplate: podcastTemplate,
       tagWrite: tagWrite,
+      compilationFolder: compilationFolder,
       sample: organizeSampleFor(musicTemplate),
       saved: OrganizeTemplates(
         music: musicTemplate,
@@ -5135,14 +5278,25 @@ class FakeRepository implements WaxDeckRepository {
     String musicTemplate = '',
     String audiobookTemplate = '',
     String podcastTemplate = '',
+    String? compilationFolder,
   }) async {
     previewOrganizeProfileCalls.add(musicTemplate);
+    previewOrganizeProfileFolders.add(compilationFolder);
     if (organizeSampleAnswer case final answer?) return answer(musicTemplate);
-    return organizeSampleFor(musicTemplate);
+    final sample = organizeSampleFor(musicTemplate);
+    return OrganizeSample(
+      music: sample.music,
+      audiobook: sample.audiobook,
+      podcast: sample.podcast,
+      compilation: compilationSampleUnder(compilationFolder),
+    );
   }
 
   /// Every previewed music template, in call order.
   final List<String> previewOrganizeProfileCalls = [];
+
+  /// Every previewed compilation folder, in call order.
+  final List<String?> previewOrganizeProfileFolders = [];
 
   /// Answers a preview in the test's own time, when set.
   Future<OrganizeSample> Function(String musicTemplate)? organizeSampleAnswer;
@@ -6341,6 +6495,61 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
+  /// The catalog check served by [getCatalogConsistency]: clean unless a
+  /// test plants drift.
+  CatalogConsistency catalogConsistency = const CatalogConsistency(
+    itemsMissingFromSearch: 0,
+    orphanSearchRows: 0,
+    artistRollupDrift: 0,
+    genreRollupDrift: 0,
+    releaseGroupRollupDrift: 0,
+    sortKeyDrift: 0,
+    bookDurationDrift: 0,
+    bookIsbnKeyDrift: 0,
+    albumYearDrift: 0,
+    releaseYearDrift: 0,
+    playlistPositionDrift: 0,
+    orphanArtSources: 0,
+    orphanThumbnails: 0,
+    orphanTagProvenance: 0,
+    strandedTagRows: 0,
+    consistent: true,
+    reclaimable: false,
+  );
+
+  /// How many checks were read, and the repairs started, each queued as
+  /// a task. A repair refused as the server refuses one throws
+  /// [catalogRepairError] when set; a check waits on [catalogCheckGate]
+  /// when set, and answers what [catalogConsistency] holds by then.
+  int catalogChecks = 0;
+  final List<ToolTask> catalogRepairs = [];
+  WaxDeckApiException? catalogRepairError;
+  Completer<void>? catalogCheckGate;
+
+  @override
+  Future<CatalogConsistency> getCatalogConsistency() async {
+    final error = adminError;
+    if (error != null) throw error;
+    catalogChecks++;
+    await catalogCheckGate?.future;
+    return catalogConsistency;
+  }
+
+  @override
+  Future<ToolTask> repairCatalog() async {
+    final error = adminError ?? catalogRepairError;
+    if (error != null) throw error;
+    final task = ToolTask(
+      id: 'tt-repair-${catalogRepairs.length}',
+      type: 'catalog-repair',
+      state: 'queued',
+      createdAt: DateTime.utc(2026, 10, 1),
+    );
+    catalogRepairs.add(task);
+    toolTasksById[task.id] = task;
+    return task;
+  }
+
   /// Every set of exit requests built, so a test can assert what a
   /// closing tab would have sent without a browser to close.
   final List<List<ExitRequest>> exitBuilds = [];
@@ -7347,12 +7556,22 @@ ItemSummary testItem(
   String title = 'Prancing Pony Blues',
   String? artist = 'The Bree Trio',
   int durationMs = 214000,
+  int? trackNumber,
+  int? discNumber,
+  String? sortKey,
+  String? artistSort,
+  String? artistSortKey,
 }) => ItemSummary(
   pid: pid,
   mediaType: mediaType,
   title: title,
   artist: artist,
   durationMs: durationMs,
+  trackNumber: trackNumber,
+  discNumber: discNumber,
+  sortKey: sortKey,
+  artistSort: artistSort,
+  artistSortKey: artistSortKey,
 );
 
 /// Handy show factory for tests.
@@ -7601,6 +7820,14 @@ class FakeDownloads implements DownloadManagerPort {
     inFlightRemovals--;
   }
 
+  /// Frees as [remove] does and answers no covers: what a real manager
+  /// decides is the data package's own to test, against its own chain.
+  @override
+  Future<List<OwedPin>?> freeOwed(String pid) async {
+    await remove(pid);
+    return const <OwedPin>[];
+  }
+
   @override
   Future<List<DownloadedItem>> stored() async {
     await storedGate?.future;
@@ -7721,6 +7948,16 @@ class FakeArtworkStore extends ArtworkStore {
 
   @override
   Future<void> unpin(String pid) async => unpinned.add(pid);
+
+  /// The covers each exact unpin was told of, by pid; the pid also lands in
+  /// [unpinned], since its covers were taken.
+  final unpinnedExactly = <String, List<OwedPin>>{};
+
+  @override
+  Future<void> unpinExact(String pid, List<OwedPin> owed) async {
+    unpinned.add(pid);
+    unpinnedExactly[pid] = owed;
+  }
 
   @override
   Future<void> evict(String artUrl) async => evicted.add(artUrl);

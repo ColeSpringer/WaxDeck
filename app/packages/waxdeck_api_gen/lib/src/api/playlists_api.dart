@@ -14,6 +14,8 @@ import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/m3u_import.dart';
 import 'package:waxdeck_api_gen/src/model/m3u_import_result.dart';
+import 'package:waxdeck_api_gen/src/model/m3u_preview.dart';
+import 'package:waxdeck_api_gen/src/model/m3u_preview_request.dart';
 import 'package:waxdeck_api_gen/src/model/nsp_report.dart';
 import 'package:waxdeck_api_gen/src/model/playlist.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_create.dart';
@@ -912,7 +914,7 @@ class PlaylistsApi {
   }
 
   /// Import an M3U8 playlist
-  /// Creates a static playlist from an M3U8 document, matching each entry to a cataloged item by exact path or unique relative-path suffix. Unmatched paths are skipped and reported, never invented; an empty document yields an empty playlist. A path naming an item the caller cannot see is reported as unmatched, exactly like a path that names nothing. 
+  /// Creates a static playlist from an M3U8 document, matching each entry to a cataloged item by exact path or unique relative-path suffix. Unmatched paths are skipped and reported, never invented; an empty document yields an empty playlist. A path naming an item the caller cannot see is reported as unmatched, exactly like a path that names nothing. A line naming the item of the line before it through a different path to it (another of its files, such as a book&#39;s next part or a copy, or another spelling of the same file) adds no second entry and is counted in neither; the same path given twice in a row is two entries. A document naming more than 2000 paths is refused. Ask &#x60;POST /playlists/m3u/preview&#x60; first to see how each line matches. 
   ///
   /// Parameters:
   /// * [m3uImport] 
@@ -1018,7 +1020,7 @@ class PlaylistsApi {
   }
 
   /// Import a Navidrome smart playlist (NSP)
-  /// Creates a **smart** playlist from an NSP document, which is the request body itself. The document&#39;s &#x60;name&#x60; names the playlist (the &#x60;name&#x60; parameter overrides it, and is what lets a nameless document be imported) and &#x60;public&#x60; sets its visibility; &#x60;comment&#x60; is read and discarded, since a WaxDeck playlist has no comment. Keys match exactly, so &#x60;Public&#x60; is an unrecognised key rather than the visibility.  Fields map onto the rule vocabulary (&#x60;GET /playlists/rule-fields&#x60;) whatever their case: &#x60;title&#x60;, &#x60;album&#x60;, &#x60;artist&#x60;, &#x60;albumartist&#x60;, &#x60;composer&#x60;, &#x60;genre&#x60;, &#x60;year&#x60;, &#x60;bpm&#x60;, &#x60;tracknumber&#x60;, &#x60;discnumber&#x60;, &#x60;rating&#x60; and &#x60;playcount&#x60; to the fields of the same name; &#x60;loved&#x60; to &#x60;starred&#x60;, &#x60;duration&#x60; to &#x60;durationMs&#x60;, &#x60;filepath&#x60; to &#x60;relPath&#x60;, &#x60;catalognumber&#x60; to &#x60;albumCatalogNumber&#x60;, and &#x60;mbz_recording_id&#x60;, &#x60;mbz_album_id&#x60; and &#x60;mbz_release_group_id&#x60; to &#x60;recordingMbid&#x60;, &#x60;albumMbid&#x60; and &#x60;releaseGroupMbid&#x60;; the dates &#x60;dateadded&#x60;, &#x60;lastplayed&#x60; and &#x60;dateloved&#x60; to &#x60;addedAt&#x60;, &#x60;lastPlayedAt&#x60; and &#x60;starredAt&#x60;.  &#x60;rating&#x60; is **rescaled** from NSP&#39;s 0 to 5 stars onto WaxDeck&#39;s 0 to 100, and &#x60;duration&#x60; from seconds onto milliseconds. &#x60;loved&#x60; is a boolean, compared with &#x60;is&#x60; and &#x60;isNot&#x60; only.  &#x60;notContains&#x60; imports as a &#x60;not&#x60; node wrapping &#x60;contains&#x60;. &#x60;isMissing&#x60; and &#x60;isPresent&#x60; take a boolean (&#x60;isMissing: false&#x60; is &#x60;isPresent&#x60;) and cross only on &#x60;album&#x60;, &#x60;artist&#x60;, &#x60;albumartist&#x60;, &#x60;composer&#x60;, &#x60;genre&#x60;, &#x60;bpm&#x60;, &#x60;catalognumber&#x60; and the three &#x60;mbz_*&#x60; ids. Every other operator has a WaxDeck spelling of the same name.  Mapping is **all-or-nothing** by default. A field, an operator, or a top-level key with no faithful counterpart rejects the whole document, naming **every** offender, rather than importing a rule that means something else. That covers fields the catalog has no answer for (&#x60;bitrate&#x60;, &#x60;size&#x60;, the artist &#x60;mbz_*&#x60; ids, and the rest), &#x60;limitPercent&#x60; and any other unrecognised top-level key, &#x60;inPlaylist&#x60;/&#x60;notInPlaylist&#x60;, and every operator but &#x60;inTheLast&#x60; and &#x60;notInTheLast&#x60; on the dates, whose naive local dates have no faithful reading against the catalog&#39;s stored instants. It also covers what a rule would not save as written: an &#x60;offset&#x60;, an operator the field does not take (&#x60;contains&#x60; on &#x60;year&#x60;, &#x60;gt&#x60; on &#x60;title&#x60;), a value of the wrong type, and a window past 100000 days. &#x60;sort: random&#x60; maps to the random limit mode and needs a positive &#x60;limit&#x60;.  &#x60;partial&#x3D;true&#x60; accepts the loss instead: the unmappable parts are dropped and what is left becomes the rule. Still refused when nothing survives, since a rule with every condition dropped matches the whole library, and when the document is malformed rather than merely unmappable. Ask &#x60;POST /playlists/nsp/report&#x60; first to see what would go, and what would be kept. 
+  /// Creates a **smart** playlist from an NSP document, which is the request body itself. The document&#39;s &#x60;name&#x60; names the playlist (the &#x60;name&#x60; parameter overrides it, and is what lets a nameless document be imported; either may be at most 200 characters) and &#x60;public&#x60; sets its visibility; &#x60;comment&#x60; is read and discarded, since a WaxDeck playlist has no comment. Keys match exactly, so &#x60;Public&#x60; is an unrecognised key rather than the visibility.  Fields map onto the rule vocabulary (&#x60;GET /playlists/rule-fields&#x60;) whatever their case: &#x60;title&#x60;, &#x60;album&#x60;, &#x60;artist&#x60;, &#x60;albumartist&#x60;, &#x60;composer&#x60;, &#x60;genre&#x60;, &#x60;year&#x60;, &#x60;bpm&#x60;, &#x60;tracknumber&#x60;, &#x60;discnumber&#x60;, &#x60;rating&#x60; and &#x60;playcount&#x60; to the fields of the same name; &#x60;loved&#x60; to &#x60;starred&#x60;, &#x60;duration&#x60; to &#x60;durationMs&#x60;, &#x60;filepath&#x60; to &#x60;relPath&#x60;, &#x60;catalognumber&#x60; to &#x60;albumCatalogNumber&#x60;, and &#x60;mbz_recording_id&#x60;, &#x60;mbz_album_id&#x60; and &#x60;mbz_release_group_id&#x60; to &#x60;recordingMbid&#x60;, &#x60;albumMbid&#x60; and &#x60;releaseGroupMbid&#x60;; the dates &#x60;dateadded&#x60;, &#x60;lastplayed&#x60; and &#x60;dateloved&#x60; to &#x60;addedAt&#x60;, &#x60;lastPlayedAt&#x60; and &#x60;starredAt&#x60;.  &#x60;rating&#x60; is **rescaled** from NSP&#39;s 0 to 5 stars onto WaxDeck&#39;s 0 to 100, and &#x60;duration&#x60; from seconds onto milliseconds. &#x60;loved&#x60; is a boolean, compared with &#x60;is&#x60; and &#x60;isNot&#x60; only.  &#x60;notContains&#x60; imports as a &#x60;not&#x60; node wrapping &#x60;contains&#x60;. &#x60;isMissing&#x60; and &#x60;isPresent&#x60; take a boolean (&#x60;isMissing: false&#x60; is &#x60;isPresent&#x60;) and cross only on &#x60;album&#x60;, &#x60;artist&#x60;, &#x60;albumartist&#x60;, &#x60;composer&#x60;, &#x60;genre&#x60;, &#x60;bpm&#x60;, &#x60;catalognumber&#x60; and the three &#x60;mbz_*&#x60; ids. Every other operator has a WaxDeck spelling of the same name.  Mapping is **all-or-nothing** by default. A field, an operator, or a top-level key with no faithful counterpart rejects the whole document, naming **every** offender, rather than importing a rule that means something else. That covers fields the catalog has no answer for (&#x60;bitrate&#x60;, &#x60;size&#x60;, the artist &#x60;mbz_*&#x60; ids, and the rest), &#x60;limitPercent&#x60; and any other unrecognised top-level key, &#x60;inPlaylist&#x60;/&#x60;notInPlaylist&#x60;, and every operator but &#x60;inTheLast&#x60; and &#x60;notInTheLast&#x60; on the dates, whose naive local dates have no faithful reading against the catalog&#39;s stored instants. It also covers what a rule would not save as written: an &#x60;offset&#x60;, an operator the field does not take (&#x60;contains&#x60; on &#x60;year&#x60;, &#x60;gt&#x60; on &#x60;title&#x60;), a value of the wrong type, and a window past 100000 days. &#x60;sort: random&#x60; maps to the random limit mode and needs a positive &#x60;limit&#x60;.  &#x60;partial&#x3D;true&#x60; accepts the loss instead: the unmappable parts are dropped and what is left becomes the rule. Still refused when nothing survives, since a rule with every condition dropped matches the whole library, and when the document is malformed rather than merely unmappable. Ask &#x60;POST /playlists/nsp/report&#x60; first to see what would go, and what would be kept. 
   ///
   /// Parameters:
   /// * [requestBody] - The NSP document, at most 1 MiB. A free-form object carries no `maxLength`, so the bound is enforced on the way in and answers `invalid-request`. 
@@ -1316,6 +1318,112 @@ class PlaylistsApi {
     }
 
     return Response<PlaylistPage>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Preview an M3U8 import
+  /// How each path line of an M3U8 document matches, in document order, read exactly as &#x60;POST /playlists/m3u&#x60; reads it. Nothing is created or written and no name is needed, so it answers on a read-only server too. A document naming more than 2000 paths is refused, as the import refuses it.  A line is &#x60;matched&#x60; when it becomes an entry, &#x60;merged&#x60; when it names the item of the line before it through a different path to it (another of its files, such as a book&#39;s next part or a copy, or another spelling of the same file), which the import adds once, and &#x60;unmatched&#x60; when it names nothing. The same path given twice in a row is two &#x60;matched&#x60; lines. A line naming an item the caller cannot see is &#x60;unmatched&#x60; and carries no item, exactly like one that names nothing. 
+  ///
+  /// Parameters:
+  /// * [m3uPreviewRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [M3uPreview] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<M3uPreview>> previewPlaylistM3u({ 
+    required M3uPreviewRequest m3uPreviewRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/playlists/m3u/preview';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(M3uPreviewRequest);
+      _bodyData = _serializers.serialize(m3uPreviewRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    M3uPreview? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(M3uPreview),
+      ) as M3uPreview;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<M3uPreview>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

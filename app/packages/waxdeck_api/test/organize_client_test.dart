@@ -258,6 +258,7 @@ void main() {
           ..sample.music = 'a'
           ..sample.audiobook = 'b'
           ..sample.podcast = 'c'
+          ..sample.compilation = 'd'
           ..saved.musicTemplate = '{title}.{ext}'
           ..saved.audiobookTemplate = ''
           ..saved.podcastTemplate = '',
@@ -265,5 +266,78 @@ void main() {
     );
     expect(profile.saved?.music, '{title}.{ext}');
     expect(profile.saved?.audiobook, '');
+  });
+
+  test('a compilation folder keeps its three states apart', () {
+    gen.OrganizeProfile wire(String? folder) => gen.OrganizeProfile(
+      (b) => b
+        ..name = 'flat'
+        ..musicTemplate = 'm'
+        ..audiobookTemplate = 'a'
+        ..podcastTemplate = 'p'
+        ..tagWrite = false
+        ..builtIn = false
+        ..compilationFolder = folder
+        ..sample.music = 'a'
+        ..sample.audiobook = 'b'
+        ..sample.podcast = 'c'
+        ..sample.compilation = 'Mixes/Coastal Nights/04 - Night Drive.flac',
+    );
+    expect(organizeProfileFromGen(wire(null)).compilationFolder, isNull);
+    expect(organizeProfileFromGen(wire('')).compilationFolder, '');
+    final named = organizeProfileFromGen(wire('Mixes'));
+    expect(named.compilationFolder, 'Mixes');
+    expect(
+      named.sample.compilation,
+      'Mixes/Coastal Nights/04 - Night Drive.flac',
+    );
+  });
+
+  test('a save and a preview send the folder only when there is one', () async {
+    final profile = {
+      'name': 'flat',
+      'musicTemplate': 'm',
+      'audiobookTemplate': 'a',
+      'podcastTemplate': 'p',
+      'tagWrite': false,
+      'builtIn': false,
+      'sample': {
+        'music': '',
+        'audiobook': '',
+        'podcast': '',
+        'compilation': '',
+      },
+    };
+    final saves = _AnsweringAdapter(profile);
+    final client = WaxDeckClient(
+      baseUrl: 'http://host:4420',
+      dio: Dio()..httpClientAdapter = saves,
+    );
+    await client.putOrganizeProfile('unset');
+    await client.putOrganizeProfile('own', compilationFolder: '');
+    await client.putOrganizeProfile('named', compilationFolder: 'Mixes');
+    final sent = [
+      for (final r in saves.requests)
+        jsonDecode(jsonEncode(r.data)) as Map<String, Object?>,
+    ];
+    expect(sent[0].containsKey('compilationFolder'), isFalse);
+    expect(sent[1]['compilationFolder'], '');
+    expect(sent[2]['compilationFolder'], 'Mixes');
+
+    final previews = _AnsweringAdapter(profile['sample']!);
+    final previewing = WaxDeckClient(
+      baseUrl: 'http://host:4420',
+      dio: Dio()..httpClientAdapter = previews,
+    );
+    await previewing.previewOrganizeProfile();
+    await previewing.previewOrganizeProfile(compilationFolder: '');
+    expect(
+      jsonEncode(previews.requests.first.data),
+      isNot(contains('compilationFolder')),
+    );
+    expect(
+      jsonEncode(previews.requests.last.data),
+      contains('"compilationFolder":""'),
+    );
   });
 }

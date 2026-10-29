@@ -40,6 +40,7 @@
   "searchSubscribe": "Suscribirse",
   "searchSubscribed": "Te has suscrito a {name}.",
   "searchTitle": "Buscar",
+  "searchTopResult": "Mejor resultado",
   "searchTruncated": "Hay más coincidencias de las que caben aquí. Afina la búsqueda para reducirlas.",
   "searchYourStations": "Tus emisoras"
 }

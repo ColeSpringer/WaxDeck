@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -13,6 +14,7 @@ part 'merge_result.g.dart';
 /// Properties:
 /// * [merged] - Losers merged.
 /// * [childrenMoved] - Children re-parented onto the survivor.
+/// * [folds] - The keys the merge now folds into the survivor, one per loser, as `GET /library/folds` lists them. 
 @BuiltValue()
 abstract class MergeResult implements Built<MergeResult, MergeResultBuilder> {
   /// Losers merged.
@@ -22,6 +24,10 @@ abstract class MergeResult implements Built<MergeResult, MergeResultBuilder> {
   /// Children re-parented onto the survivor.
   @BuiltValueField(wireName: r'childrenMoved')
   int get childrenMoved;
+
+  /// The keys the merge now folds into the survivor, one per loser, as `GET /library/folds` lists them. 
+  @BuiltValueField(wireName: r'folds')
+  BuiltList<String> get folds;
 
   MergeResult._();
 
@@ -55,6 +61,11 @@ class _$MergeResultSerializer implements PrimitiveSerializer<MergeResult> {
     yield serializers.serialize(
       object.childrenMoved,
       specifiedType: const FullType(int),
+    );
+    yield r'folds';
+    yield serializers.serialize(
+      object.folds,
+      specifiedType: const FullType(BuiltList, [FullType(String)]),
     );
   }
 
@@ -92,6 +103,13 @@ class _$MergeResultSerializer implements PrimitiveSerializer<MergeResult> {
             specifiedType: const FullType(int),
           ) as int;
           result.childrenMoved = valueDes;
+          break;
+        case r'folds':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>;
+          result.folds.replace(valueDes);
           break;
         default:
           unhandled.add(key);

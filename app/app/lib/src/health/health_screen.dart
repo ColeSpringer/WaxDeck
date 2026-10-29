@@ -12,6 +12,8 @@ import '../settings/settings_registry.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import 'catalog_check_section.dart';
+import 'folds_section.dart';
 import 'health_controller.dart';
 import 'health_labels.dart';
 
@@ -61,8 +63,8 @@ Future<void> _startFix(
 }
 
 /// The library health dashboard: the score headline, the per-rule
-/// failure counts with fixes, and the duplicate and quality-upgrade
-/// resolution sections.
+/// failure counts with fixes, the duplicate, folded name and
+/// quality-upgrade sections, and the catalog check.
 class HealthScreen extends ConsumerWidget {
   const HealthScreen({super.key});
 
@@ -104,7 +106,13 @@ class HealthScreen extends ConsumerWidget {
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final outcome = await ref.read(duplicatesProvider.notifier).merge(group);
-      messenger.show(l10n.healthMerged(outcome.merged));
+      messenger.show(
+        <String>[
+          l10n.healthMerged(outcome.merged),
+          if (outcome.folds.isNotEmpty)
+            l10n.adminFoldsMerged(outcome.folds.length, group.survivor.name),
+        ].join('\n'),
+      );
     } on WaxDeckApiException catch (e) {
       messenger.show(_refused(l10n, e));
     }
@@ -206,8 +214,10 @@ class HealthScreen extends ConsumerWidget {
         ),
         const SizedBox(height: WaxSpace.s32),
         _DuplicatesSection(onMerge: (group) => _merge(context, ref, group)),
+        const FoldsSection(),
         const SizedBox(height: WaxSpace.s32),
         _UpgradesSection(onResolve: (group) => _resolve(context, ref, group)),
+        const CatalogCheckSection(),
       ],
     );
   }

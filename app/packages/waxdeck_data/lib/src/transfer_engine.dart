@@ -185,6 +185,15 @@ abstract interface class TransferEnginePort {
   /// [recover] replays them.
   Future<List<TrackedTransfer>> trackedTransfers();
 
+  /// The directory a transfer's file lands in, where the engine moves it
+  /// from its own temporary place once the transfer is whole; null where
+  /// the engine has no such place. The manager names files and never
+  /// writes here, so a file here that no record names is what a completion
+  /// left behind. What else may be here is the engine's own temporary
+  /// files, which a plugin falls back to keeping beside the destination
+  /// when it cannot keep them elsewhere: they are named for the plugin.
+  Future<String?> mediaDirectory();
+
   /// Replays what the platform did while the app was away, and reschedules
   /// what it killed.
   Future<void> recover();

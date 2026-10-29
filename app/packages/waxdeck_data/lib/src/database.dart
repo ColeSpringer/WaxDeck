@@ -19,7 +19,8 @@ class MirrorItems extends Table {
   TextColumn get album => text().nullable()();
   IntColumn get durationMs => integer()();
 
-  /// Case-folded title for ordered offline browsing.
+  /// The key the catalog sorts the title by, for ordered offline
+  /// browsing; the lowercase title where the server sent none.
   TextColumn get sortKey => text()();
 
   @override
@@ -168,6 +169,15 @@ class DownloadRecords extends Table {
   /// `schema_migration_test.dart` catches exactly that, and did.
   IntColumn get durationMs => integer().nullable()();
 
+  /// The address of the server the file came from: the one whose
+  /// download-info it was fetched under (`WaxDeckRepository.baseUrl`), or
+  /// one whose snapshot has listed its item since, under any prefix, since
+  /// ULIDs never repeat across catalogs. A re-mirror asks only that server
+  /// whether the item is gone for good, so no other catalog's answer can
+  /// free it. Null on a row from before the field until a snapshot lists
+  /// its item. Last, for [durationMs]'s reason.
+  TextColumn get server => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {pid, fileIndex};
 }
@@ -310,8 +320,11 @@ class MirrorDatabase extends _$MirrorDatabase {
   }
 
   /// Forgets everything this device holds for its server, in one
-  /// transaction. [ClientSettings] stay: they describe the device, which
-  /// sign-out keeps too. Downloaded files are the caller's to unlink first.
+  /// transaction. [ClientSettings] describe the device, which sign-out
+  /// keeps, and stay - bar the `waxdeck.sync.` rows the sync keeps there
+  /// about the server's items (what it still has to ask, and the frees it
+  /// owes), which go with the rest of what the server gave. Downloaded
+  /// files are the caller's to unlink first.
   Future<void> wipe() => transaction(() async {
     for (final table in <TableInfo<Table, Object?>>[
       mirrorItems,
@@ -327,10 +340,16 @@ class MirrorDatabase extends _$MirrorDatabase {
     ]) {
       await delete(table).go();
     }
+    await (delete(clientSettings)..where(
+          (t) =>
+              t.key.isBiggerOrEqualValue('waxdeck.sync.') &
+              t.key.isSmallerThanValue('waxdeck.sync/'),
+        ))
+        .go();
   });
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -377,6 +396,20 @@ class MirrorDatabase extends _$MirrorDatabase {
         await m.addColumn(syncCursors, syncCursors.serverAccount);
         await m.addColumn(outboxMutations, outboxMutations.owner);
         await m.addColumn(outboxListens, outboxListens.owner);
+      }
+      if (from < 8) {
+        // No table changed; what a mirror row's sort_key holds did, from a
+        // bare lowercase title to the catalog's key, and one ordered
+        // column must not hold both. The catalog cursor is the mirror's
+        // only marker, so clearing it has the next sync snapshot every
+        // row afresh in one transaction. Nothing else is touched: the
+        // downloads, play states, outbox and queue are the user's.
+        await customStatement('UPDATE sync_cursors SET catalog_since = NULL');
+      }
+      if (from < 9) {
+        // download_records is a v1 table. A row from before names no
+        // server, so no re-mirror asks after it until a snapshot lists it.
+        await m.addColumn(downloadRecords, downloadRecords.server);
       }
     },
   );

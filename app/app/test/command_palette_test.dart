@@ -399,6 +399,113 @@ void main() {
     );
   });
 
+  testWidgets('the palette leads with the album named as the query', (
+    tester,
+  ) async {
+    // The groups come in turn, artists first, so an artist merely
+    // starting with the query would sit above the album that is the query.
+    // What the server marks as the name asked for goes first, and goes
+    // once.
+    final shell = await _pumpShell(tester);
+    const artistPid = 'ar-01JZX5N8QW3F4V9T2B7KDARTST1';
+    shell.repo.searchResults['heroes'] = SearchResults(
+      query: 'heroes',
+      artists: <SearchHit>[
+        SearchHit(pid: artistPid, kind: 'artist', title: 'Heroes del Silencio'),
+      ],
+      albums: <SearchHit>[
+        SearchHit(pid: _albumPid, kind: 'album', title: 'Heroes', exact: true),
+      ],
+      tracks: <SearchHit>[
+        SearchHit(pid: _trackPid, kind: 'track', title: 'Heroes Medley'),
+      ],
+    );
+
+    await _openPalette(tester);
+    await _type(tester, 'heroes');
+
+    double at(String id) => tester.getTopLeft(_row(id)).dy;
+    expect(_row('hit-$_albumPid'), findsOne);
+    expect(at('hit-$_albumPid'), lessThan(at('hit-$artistPid')));
+    expect(at('hit-$artistPid'), lessThan(at('hit-$_trackPid')));
+  });
+
+  testWidgets('an exact album past the cut still leads the palette', (
+    tester,
+  ) async {
+    // Three hits of every kind, and the round-robin takes eight, two deep,
+    // so it never reached the third album. The one the server names exact
+    // leads, and the rest is what the round-robin took, short by the last
+    // row, which the lead made room for.
+    final shell = await _pumpShell(tester);
+    List<SearchHit> hits(String prefix, String kind, {int exact = -1}) => [
+      for (var i = 0; i < 3; i++)
+        SearchHit(
+          pid: '$prefix-0$i',
+          kind: kind,
+          title: '$kind $i',
+          exact: i == exact,
+        ),
+    ];
+    shell.repo.searchResults['moon'] = SearchResults(
+      query: 'moon',
+      artists: hits('ar', 'artist'),
+      albums: hits('al', 'album', exact: 2),
+      tracks: hits('tr', 'track'),
+      books: hits('bk', 'book'),
+      episodes: hits('ep', 'episode'),
+    );
+
+    await _openPalette(tester);
+    await _type(tester, 'moon');
+
+    // Read off the palette's own groups: a row past the dialog's height is
+    // not built, and what is being pinned is what it was handed.
+    final palette = tester.widget<WaxCommandPalette>(
+      find.byType(WaxCommandPalette),
+    );
+    expect(
+      [
+        for (final group in palette.groups)
+          for (final entry in group.entries)
+            if (entry.id.startsWith('hit-')) entry.id,
+      ],
+      [
+        'hit-al-02',
+        'hit-ar-00',
+        'hit-al-00',
+        'hit-tr-00',
+        'hit-bk-00',
+        'hit-ep-00',
+        'hit-ar-01',
+        'hit-al-01',
+      ],
+    );
+  });
+
+  testWidgets('an exact artist leads an exact album', (tester) async {
+    final shell = await _pumpShell(tester);
+    shell.repo.searchResults['heroes'] = SearchResults(
+      query: 'heroes',
+      artists: <SearchHit>[
+        SearchHit(pid: 'ar-01', kind: 'artist', title: 'Heroes del Silencio'),
+        SearchHit(pid: 'ar-02', kind: 'artist', title: 'Heroes', exact: true),
+      ],
+      albums: <SearchHit>[
+        SearchHit(pid: 'al-01', kind: 'album', title: 'Heroes', exact: true),
+      ],
+    );
+
+    await _openPalette(tester);
+    await _type(tester, 'heroes');
+
+    double at(String pid) => tester.getTopLeft(_row('hit-$pid')).dy;
+    expect(at('ar-02'), lessThan(at('ar-01')));
+    expect(at('ar-02'), lessThan(at('al-01')));
+    // Taken once: the exact artist is not listed again among the artists.
+    expect(_row('hit-ar-02'), findsOne);
+  });
+
   testWidgets('a hit opens over what the palette was opened from', (
     tester,
   ) async {

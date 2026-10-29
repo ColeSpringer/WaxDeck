@@ -165,7 +165,7 @@ func TestHealthSweepAndIssues(t *testing.T) {
 		if fix.Queued != 1 || fix.TaskId == nil || fix.JobPid != nil {
 			t.Fatalf("fix = %+v, want one item on a task", fix)
 		}
-		for h.svc.DrainHealthFixes(ctx) {
+		for h.svc.DrainLongToolTasks(ctx) {
 		}
 		task := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+*fix.TaskId, h.token))
 		if task.State != "done" || task.Summary == nil || (*task.Summary)["attempted"] != float64(1) ||

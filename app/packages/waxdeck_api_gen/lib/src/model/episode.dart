@@ -26,6 +26,9 @@ part 'episode.g.dart';
 /// * [albumPid] - The album entity behind `album`, for the same reason. Tracks only: a podcast episode and an audiobook are not album members, and their `album` is a series or show title with no album entity behind it. Absent when the track belongs to no album. 
 /// * [trackNumber] - Track position within its disc (music). On the summary row rather than only on the detail because a listing is where it is needed: an album's items page arrives in the library's own stable order, and this plus `discNumber` is what a client sorts a release back into. Absent when the item carries none. 
 /// * [discNumber] - Disc number within a multi-disc release (music). Absent for a single-disc release and for anything that is not a track. 
+/// * [sortKey] - The key the catalog files this item's title under. Comparing keys as plain strings orders titles as a title-sorted listing does, which is what a client keeping its own copy of a listing sorts it by; titles that share a key are not ordered by it. Absent for an empty title. 
+/// * [artistSort] - The artist's sort spelling as the file or an edit states it (`Beatles, The`); for an audiobook, its author's. Absent when none is stated, which is most items. A spelling to show, not to sort by: `artistSortKey` is. 
+/// * [artistSortKey] - The key the catalog files this item's artist under: that of its sort spelling when one is stated, else of its name (a track with no artist takes its album artist's), and for an audiobook, of its author. Comparing keys as plain strings orders artists by it, which is what a client sorting its own copy of a listing by artist sorts by; items that share a key are not ordered by it. Absent when the item names none of them, and for a podcast episode. 
 /// * [durationMs] - Duration in milliseconds. For a multi-file audiobook this is the total across all parts; for a not-yet-fetched podcast episode it is the feed-declared duration, or 0 when the feed declares none. 
 /// * [artUrl] - Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
 /// * [showPid] - The show this episode belongs to.
@@ -110,6 +113,13 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         specifiedType: const FullType(String),
       );
     }
+    if (object.artistSortKey != null) {
+      yield r'artistSortKey';
+      yield serializers.serialize(
+        object.artistSortKey,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'pid';
     yield serializers.serialize(
       object.pid,
@@ -132,6 +142,13 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
       yield serializers.serialize(
         object.episodeNumber,
         specifiedType: const FullType(int),
+      );
+    }
+    if (object.artistSort != null) {
+      yield r'artistSort';
+      yield serializers.serialize(
+        object.artistSort,
+        specifiedType: const FullType(String),
       );
     }
     if (object.artUrl != null) {
@@ -240,6 +257,13 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         specifiedType: const FullType(BuiltList, [FullType(FeedPerson)]),
       );
     }
+    if (object.sortKey != null) {
+      yield r'sortKey';
+      yield serializers.serialize(
+        object.sortKey,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'showPid';
     yield serializers.serialize(
       object.showPid,
@@ -311,6 +335,14 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
           if (valueDes == null) continue;
           result.link = valueDes;
           break;
+        case r'artistSortKey':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.artistSortKey = valueDes;
+          break;
         case r'pid':
           final valueDes = serializers.deserialize(
             value,
@@ -340,6 +372,14 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
           ) as int?;
           if (valueDes == null) continue;
           result.episodeNumber = valueDes;
+          break;
+        case r'artistSort':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.artistSort = valueDes;
           break;
         case r'artUrl':
           final valueDes = serializers.deserialize(
@@ -465,6 +505,14 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
           ) as BuiltList<FeedPerson>?;
           if (valueDes == null) continue;
           result.persons.replace(valueDes);
+          break;
+        case r'sortKey':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.sortKey = valueDes;
           break;
         case r'showPid':
           final valueDes = serializers.deserialize(

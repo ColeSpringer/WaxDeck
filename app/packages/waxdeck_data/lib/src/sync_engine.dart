@@ -8,6 +8,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'database.dart';
 import 'events_channel.dart';
 import 'mirror_pages.dart';
+import 'pending_frees.dart';
 
 /// How the engine currently reaches the server.
 enum SyncConnection { connected, connecting, offline }
@@ -21,6 +22,14 @@ typedef PrefsFlush = ({
 
 /// Where a mirrored bookmark stands with the server.
 enum BookmarkSync { synced, pending, refused }
+
+/// What a removed-check came to: the pids the server named, and the ones
+/// it was not asked or could not answer.
+typedef _Asked = ({List<String> gone, List<String> unanswered});
+
+/// What a kind change's look at a book came to: whether the server could
+/// answer, and the essence of a one-file download it listed alone.
+typedef _Sole = ({bool answered, String? essence});
 
 /// One bookmark as this device holds it.
 class LocalBookmark {
@@ -138,10 +147,16 @@ class SyncEngine {
   /// vanished item cannot name its kind and carries the track prefix
   /// whatever it was.
   ///
+  /// A snapshot carries no tombstones, so a re-mirror gets the same by
+  /// asking the server which of the pids it holds downloads from that
+  /// server for, and the snapshot no longer lists, are gone for good, and
+  /// publishes those. What the server cannot answer is asked again at a
+  /// later sync.
+  ///
   /// One more pid is published: one a kind change retired whose download
   /// cannot stand in for the item under its new pid - several files, one
-  /// file of a book that may have more, or a transfer still under way -
-  /// so it is reclaimed whole.
+  /// file the server does not list as the whole of a book, or a transfer
+  /// still under way - so it is reclaimed whole.
   ///
   /// Published rather than acted on: the mirror is this package's job,
   /// and the downloads store and the artwork pins are the app's. An
@@ -150,6 +165,14 @@ class SyncEngine {
   /// one pid at a time**: removing two downloads concurrently lets each
   /// see the other's row and conclude a shared file is still referenced,
   /// which leaves it on disk with nothing pointing at it.
+  ///
+  /// A pid is published after the commit that dropped it, and a run can
+  /// end between the two, so the commit also records the free as owed
+  /// when the device holds anything for the pid (see [pendingFrees]). A
+  /// consumer frees through [DownloadManagerPort.freeOwed], which decides
+  /// there whether it is still owed and takes what the record lists and
+  /// no more, and says so with [settleFree] once the bytes are gone; what
+  /// a run left owed is the next start's to finish.
   Stream<String> get itemsRemoved => _itemsRemoved.stream;
 
   final _itemsRemoved = StreamController<String>.broadcast();
@@ -324,13 +347,20 @@ class SyncEngine {
 
   /// Reconcile after (re)connecting: flush the offline queues first so
   /// the pulls that follow already see the winners, then catch both
-  /// mirror halves up.
+  /// mirror halves up, then put again any removed-check or look at a book
+  /// the server could not answer (see [_askAgainRemoved] and
+  /// [_checkKindsAgain]).
   Future<void> reconcile() async {
     try {
+      _askedRemoved = false;
+      _kindsAsked.clear();
       await flushOutbox();
       await _ensureCatalogMirror();
       await pullServer();
       _setStatus(SyncConnection.connected);
+      // Last, so a question the server sits on holds up nothing else.
+      if (!_askedRemoved) await _askAgainRemoved();
+      await _checkKindsAgain();
     } on WaxDeckApiException catch (e) {
       _handleApiFailure(e);
     }
@@ -396,28 +426,279 @@ class SyncEngine {
       if (page.nextCursor == null) break;
       cursor = page.nextCursor;
     }
+    final asked = await _removedForGood(rows.keys.toSet());
+    final sole = await _soleFiles(rows);
     final reclaim = <String>[];
     await db.transaction(() async {
-      // An item whose kind changed while this device was away is in the
-      // snapshot under its new prefix and nowhere else: the old mirror
-      // and the new one, matched on the ULID, are all that tell. What
-      // the device keeps moves as a delta's upsert moves it.
-      final before = await _mirroredPids();
-      for (final row in rows.values) {
-        final was = before[row.ulid.value];
-        if (was != null && was != row.pid.value) {
-          final track = row.mediaType.value == MediaType.music.wireName;
-          if (await _rekey(was, row.pid.value, track: track)) reclaim.add(was);
-        }
+      final mirrored = await _mirroredPids();
+      final held = await _heldUnder();
+      final waiting = <String, Set<String>>{};
+      for (final pid in await _pidsAt(_kindsKey)) {
+        (waiting[_ulidOf(pid)] ??= <String>{}).add(pid);
       }
       await db.delete(db.mirrorItems).go();
       await db.batch(
         (b) => b.insertAllOnConflictUpdate(db.mirrorItems, [...rows.values]),
       );
+      // A download whose item this server lists, under any prefix, is this
+      // server's to answer for, whichever address fetched it or none did:
+      // ULIDs never repeat across catalogs, so the item's ULID is where the
+      // rows came from (a restored copy of this catalog is this catalog).
+      await db.customUpdate(
+        'UPDATE download_records SET server = ? WHERE server IS NOT ? '
+        "AND substr(pid, instr(pid, '-') + 1) IN (SELECT ulid FROM mirror_items)",
+        variables: [
+          Variable.withString(repository.baseUrl),
+          Variable.withString(repository.baseUrl),
+        ],
+        updates: {db.downloadRecords},
+      );
+      // An item whose kind changed while this device was away is in the
+      // snapshot under its new prefix and nowhere else: the old mirror,
+      // what the device holds and the changes still undecided, matched on
+      // the new one by ULID, are all that tell. What the device keeps moves
+      // as a delta's upsert moves it.
+      final unsure = <String>[];
+      for (final row in rows.values) {
+        final ulid = row.ulid.value;
+        final track = row.mediaType.value == MediaType.music.wireName;
+        final was = {?mirrored[ulid], ...?held[ulid], ...?waiting[ulid]}
+          ..remove(row.pid.value);
+        for (final old in was) {
+          final check = sole[old];
+          if (check != null && !check.answered) {
+            unsure.add(old);
+          } else if (await _rekey(
+            old,
+            row.pid.value,
+            track: track,
+            sole: check?.essence,
+          )) {
+            reclaim.add(old);
+          }
+        }
+      }
+      // With the mirror, so a pid is never left waiting for a snapshot
+      // that did not commit, nor lost to one that did.
+      await _savePidsAt(_unansweredKey, asked.unanswered);
+      await _savePidsAt(_kindsKey, unsure..sort());
+      // The same for what the commit gives up on: the downloads a kind
+      // change left behind and the pids the server named are owed a free
+      // from here, whether or not this run lives to do it.
+      for (final pid in [...reclaim, ...asked.gone]) {
+        await _pending.condemn(pid);
+      }
     });
     await _saveCatalogCursor(since);
     _catalogChanged.add(null);
     reclaim.forEach(_itemsRemoved.add);
+    asked.gone.forEach(_itemsRemoved.add);
+  }
+
+  /// Of the pids the device holds a download from this server for that the
+  /// snapshot [listed] no longer lists, those the server can never put
+  /// back: a delta's `removed` tombstone, for a snapshot that carries none.
+  /// Without it an item deleted while the device was away looks like one
+  /// the server merely hid, whose bytes are worth keeping.
+  ///
+  /// Only held pids the snapshot lacks are asked about, so the ordinary
+  /// re-mirror asks nothing; an item listed under another prefix (its
+  /// kind changed) is the kind change's to move or reclaim. A download
+  /// from another server is never asked about: this one cannot know it,
+  /// and the bytes play again back there. A cover goes with its pid's
+  /// download, and one pinned with no download beside it names no server.
+  /// The snapshot does not wait on the answer: see [_askRemoved] for what a
+  /// question that fails leaves behind.
+  Future<_Asked> _removedForGood(Set<String> listed) async {
+    final unlisted = [
+      for (final pid in await _downloadedHere())
+        if (!listed.contains(_ulidOf(pid))) pid,
+    ]..sort();
+    return _askRemoved(unlisted);
+  }
+
+  /// Puts [pids] to the server in pages of 500 and sorts them into the
+  /// ones it named (never one that was not asked) and the ones that stay
+  /// unanswered: the page a request failed on and every page after it,
+  /// which are not tried once the server has shown it cannot say.
+  ///
+  /// Anything but a clear answer keeps the bytes, as an unrecognised
+  /// reason does: a server that does not know the question, a request that
+  /// failed. Only a lapsed session raises, as it would anywhere else, and
+  /// it discards what earlier pages named, so a retry starts clean.
+  Future<_Asked> _askRemoved(List<String> pids) async {
+    _askedRemoved = true;
+    final gone = <String>[];
+    for (var i = 0; i < pids.length; i += 500) {
+      final page = pids.sublist(i, math.min(i + 500, pids.length));
+      final pageSet = page.toSet();
+      try {
+        final named = await repository.syncCatalogRemoved(page);
+        gone.addAll(named.where(pageSet.contains));
+      } on WaxDeckApiException catch (e) {
+        if (e.statusCode == 401) rethrow;
+        return (gone: gone, unanswered: pids.sublist(i));
+      }
+    }
+    return (gone: gone, unanswered: const <String>[]);
+  }
+
+  /// Asks again about what an earlier removed-check left unanswered, at
+  /// the sync after connecting, until the server answers.
+  ///
+  /// The question is the one that failed and nothing wider: a pid is asked
+  /// about only while a download from this server still holds it and the
+  /// mirror still does not list it, and one the device has come to hold
+  /// since was no part of it. What the server names is published; what it
+  /// cannot answer waits for the next sync.
+  Future<void> _askAgainRemoved() async {
+    final waiting = await _pidsAt(_unansweredKey);
+    if (waiting.isEmpty) return;
+    final held = (await _downloadedHere()).toSet();
+    final listed = <String>{};
+    for (var i = 0; i < waiting.length; i += 500) {
+      listed.addAll(
+        (await _mirroredPids([
+          for (final pid in waiting.skip(i).take(500)) _ulidOf(pid),
+        ])).keys,
+      );
+    }
+    final asked = await _askRemoved([
+      for (final pid in waiting)
+        if (held.contains(pid) && !listed.contains(_ulidOf(pid))) pid,
+    ]);
+    // What is named moves from waiting to owed in one commit.
+    await db.transaction(() async {
+      await _savePidsAt(_unansweredKey, asked.unanswered);
+      for (final pid in asked.gone) {
+        await _pending.condemn(pid);
+      }
+    });
+    asked.gone.forEach(_itemsRemoved.add);
+  }
+
+  /// Whether this sync has already put the removed-check, so a reconcile
+  /// that took a snapshot does not put it a second time at its end.
+  bool _askedRemoved = false;
+
+  late final _pending = PendingFrees(db);
+
+  /// The pids whose bytes a commit promised to free and nothing has yet
+  /// freed ([only] one pid's): the downloads and pinned covers of an item
+  /// dropped for good, in pid order. What is owed is what the device held
+  /// when the commit ran, and a free takes those rows and no others. A pid
+  /// the mirror lists again, or one the device holds a download for beyond
+  /// them (a file taken up after the commit), is no longer owed and is
+  /// forgotten here, every byte kept; a cover pinned since is no take-up,
+  /// and is not listed, so the free leaves it.
+  Future<List<String>> pendingFrees({String? only}) => _pending.due(only: only);
+
+  /// Says [pid]'s bytes are gone, and clears the promise once nothing the
+  /// commit recorded is still held, which is when the free is done. Bytes
+  /// taken up since do not hold it open. Answers whether it cleared.
+  ///
+  /// What a kind change left with a download it reclaimed, the play state
+  /// and the queue's entries, follows the item to its pid now, unless the
+  /// device holds a download under [pid] again.
+  Future<bool> settleFree(String pid) async {
+    if (!await _pending.settle(pid)) return false;
+    await db.transaction(() async {
+      final now = await mirrorRenamedPid(db, pid);
+      if (now == null) return;
+      final held =
+          await (db.select(db.downloadRecords)
+                ..where((t) => t.pid.equals(pid))
+                ..limit(1))
+              .getSingleOrNull();
+      if (held == null) await _move(pid, now);
+    });
+    return true;
+  }
+
+  /// Runs [work] ahead of every sync not yet started, and after any under
+  /// way: what an earlier run left to finish goes first.
+  Future<void> beforeSync(Future<void> Function() work) => _serialized(work);
+
+  /// Where the questions the server could not answer wait, each a JSON list
+  /// of pids under its key of the settings table, in the database so a
+  /// later launch asks again: the removed-checks, and the kind changes
+  /// whose book could not be looked at, by the old pid.
+  static const _unansweredKey = 'waxdeck.sync.removedUnanswered';
+  static const _kindsKey = 'waxdeck.sync.kindUnanswered';
+
+  Future<List<String>> _pidsAt(String key) async {
+    final row = await (db.select(
+      db.clientSettings,
+    )..where((t) => t.key.equals(key))).getSingleOrNull();
+    if (row == null) return const [];
+    try {
+      return [...(jsonDecode(row.value) as List<Object?>).cast<String>()];
+    } on Object {
+      // Not a list this build wrote; nothing to ask, and the next write
+      // replaces it.
+      return const [];
+    }
+  }
+
+  Future<void> _savePidsAt(String key, List<String> pids) async {
+    if (pids.isEmpty) {
+      await (db.delete(
+        db.clientSettings,
+      )..where((t) => t.key.equals(key))).go();
+      return;
+    }
+    await db
+        .into(db.clientSettings)
+        .insertOnConflictUpdate(
+          ClientSettingsCompanion.insert(key: key, value: jsonEncode(pids)),
+        );
+  }
+
+  /// Takes [decided] off the kind changes still waiting on a look at their
+  /// book, and puts [unsure] on.
+  Future<void> _settleKinds({
+    Iterable<String> decided = const [],
+    Iterable<String> unsure = const [],
+  }) async {
+    final before = (await _pidsAt(_kindsKey)).toSet();
+    final after = {...before}
+      ..removeAll(decided)
+      ..addAll(unsure);
+    if (after.length == before.length && after.containsAll(before)) return;
+    await _savePidsAt(_kindsKey, after.toList()..sort());
+  }
+
+  /// The old pids whose book this sync has put to the server already, so
+  /// [_checkKindsAgain] does not put the same question twice.
+  final _kindsAsked = <String>{};
+
+  /// Puts again to the server, at the sync after connecting, the looks at a
+  /// book it could not answer, and decides each kind change it now answers
+  /// for as the sync would have ([_rekey]), each in a commit of its own
+  /// that also takes it off the list. One with no change left to decide
+  /// (the mirror lists the old pid itself again, or not the item at all)
+  /// is forgotten.
+  Future<void> _checkKindsAgain() async {
+    for (final old in await _pidsAt(_kindsKey)) {
+      if (_kindsAsked.contains(old)) continue;
+      final now = await mirrorRenamedPid(db, old);
+      final item = now == null ? null : await mirrorItemByPid(db, now);
+      final track = item?.mediaType == MediaType.music;
+      _Sole? check;
+      if (item != null && !track) {
+        check = await _soleFileOf(old, item.pid);
+        if (!check.answered) continue;
+      }
+      final reclaim = await db.transaction(() async {
+        final left =
+            item != null &&
+            await _rekey(old, item.pid, track: track, sole: check?.essence);
+        if (left) await _pending.condemn(old);
+        await _settleKinds(decided: [old]);
+        return left;
+      });
+      if (reclaim) _itemsRemoved.add(old);
+    }
   }
 
   /// Pulls catalog deltas to the tail. A sync-reset drops the mirror
@@ -435,12 +716,19 @@ class SyncEngine {
         final page = await repository.syncCatalog(since: since);
         // An item whose kind changed comes back under its new prefix
         // with no tombstone for the old one: the same ULID under another
-        // pid is that item. Rare, so it is looked for once a page and
+        // pid is that item, whether the mirror still holds the old pid or
+        // only a download does. Rare, so it is looked for once a page and
         // the ordinary upsert stays one write; kept current as the page
         // applies, since one page can carry the same item twice.
-        final mirrored = await _mirroredPids([
+        final upserted = [
           for (final e in page.entries)
             if (e.op == 'upsert' && e.item != null) _ulidOf(e.item!.pid),
+        ];
+        final mirrored = await _mirroredPids(upserted);
+        final held = await _heldUnder([
+          ...upserted,
+          for (final e in page.entries)
+            if (e.op == 'delete' && e.reason == 'removed') _ulidOf(e.pid),
         ]);
         for (final e in page.entries) {
           switch (e.op) {
@@ -448,31 +736,53 @@ class SyncEngine {
               final item = e.item;
               if (item == null) continue;
               final ulid = _ulidOf(item.pid);
-              final was = mirrored[ulid];
+              final was = {?mirrored[ulid], ...?held.remove(ulid)}
+                ..remove(item.pid);
               mirrored[ulid] = item.pid;
-              if (was == null || was == item.pid) {
+              if (was.isEmpty) {
                 await db
                     .into(db.mirrorItems)
                     .insertOnConflictUpdate(_itemRow(item));
               } else {
-                // What the device keeps under the old pid moves to the
-                // new one, and the old row goes first, or the mirror's
-                // unique ULID refuses the insert.
+                // What the device keeps under an old pid moves to the new
+                // one, and the old row goes first, or the mirror's unique
+                // ULID refuses the insert. An old pid whose book the server
+                // could not say anything of stays as it is, to be asked
+                // about again at the next connect.
+                final track = item.mediaType == MediaType.music;
+                final checks = {
+                  for (final old in was)
+                    old: track ? null : await _soleFileOf(old, item.pid),
+                };
                 final reclaim = await db.transaction(() async {
-                  final left = await _rekey(
-                    was,
-                    item.pid,
-                    track: item.mediaType == MediaType.music,
-                  );
+                  final left = <String>[];
+                  final unsure = <String>[];
+                  for (final old in was) {
+                    final check = checks[old];
+                    if (check != null && !check.answered) {
+                      unsure.add(old);
+                    } else if (await _rekey(
+                      old,
+                      item.pid,
+                      track: track,
+                      sole: check?.essence,
+                    )) {
+                      left.add(old);
+                    }
+                  }
                   await (db.delete(
                     db.mirrorItems,
-                  )..where((t) => t.pid.equals(was))).go();
+                  )..where((t) => t.ulid.equals(ulid))).go();
                   await db
                       .into(db.mirrorItems)
                       .insertOnConflictUpdate(_itemRow(item));
+                  for (final pid in left) {
+                    await _pending.condemn(pid);
+                  }
+                  await _settleKinds(decided: was, unsure: unsure);
                   return left;
                 });
-                if (reclaim) _itemsRemoved.add(was);
+                reclaim.forEach(_itemsRemoved.add);
               }
               changed = true;
             case 'delete':
@@ -480,42 +790,50 @@ class SyncEngine {
               // meaning once the item is gone.
               final ulid = _ulidOf(e.pid);
               mirrored.remove(ulid);
-              // Read before the delete, because the mirror row is what
-              // knows the pid everything else stored. A tombstone for an
-              // item that is genuinely gone cannot name its kind, so it
-              // carries the track prefix whatever the item was - and a
-              // download or an artwork pin for an audiobook was written
-              // under `bk-`. Reclaiming on the wire pid would miss every
-              // one of them.
-              // Read only for the branch that uses it, and still before
-              // the delete. `hidden` is the common tombstone - it is what
-              // trashing sends -
-              // and reading a row to discard it costs one round trip per
-              // item: two hundred of them for a discography.
-              final rows = e.reason == 'removed'
-                  ? await (db.select(
-                      db.mirrorItems,
-                    )..where((t) => t.ulid.equals(ulid))).get()
-                  : const <MirrorItem>[];
-              await (db.delete(
-                db.mirrorItems,
-              )..where((t) => t.ulid.equals(ulid))).go();
-              // The row goes either way; the bytes only when the catalog
-              // has genuinely dropped it.
-              if (e.reason == 'removed') {
-                // The wire pid when nothing was mirrored under that ULID,
-                // which is not the same as nothing to reclaim: a mirror
-                // reset re-snapshots without the archived items, so a
-                // later tombstone for one finds no row to name it. A
-                // reclaim for a pid this client never downloaded is a
-                // no-op, so the fallback costs nothing and rescues the
-                // case where the stored pid did carry the track prefix.
-                if (rows.isEmpty) {
-                  _itemsRemoved.add(e.pid);
-                }
-                for (final row in rows) {
-                  _itemsRemoved.add(row.pid);
-                }
+              if (e.reason != 'removed') {
+                // The row goes either way; the bytes only when the catalog
+                // has genuinely dropped it. `hidden` is the common
+                // tombstone - it is what trashing sends - so it reads
+                // nothing: reading a row to discard it costs one round
+                // trip per item, two hundred of them for a discography.
+                await (db.delete(
+                  db.mirrorItems,
+                )..where((t) => t.ulid.equals(ulid))).go();
+              } else {
+                // The mirror row is what knows the pid everything else
+                // stored, so it is read before it goes, and so are the
+                // downloads under the same ULID, which outlive the row
+                // while the item is out of sight. A tombstone for an
+                // item that is genuinely gone cannot name its kind, so it
+                // carries the track prefix whatever the item was - and a
+                // download or an artwork pin for an audiobook was written
+                // under `bk-`. Reclaiming on the wire pid would miss every
+                // one of them. The wire pid stands when nothing was
+                // mirrored or held under that ULID, which is not the same
+                // as nothing to reclaim: a cover can be pinned with no
+                // download beside it. A reclaim for a pid this client never
+                // downloaded is a no-op, so the fallback costs nothing and
+                // rescues the case where the stored pid did carry the
+                // track prefix.
+                //
+                // One transaction with the free it owes, so a kill between
+                // the two cannot drop the row and lose the bytes.
+                final kept = held.remove(ulid) ?? const <String>{};
+                final gone = await db.transaction(() async {
+                  final rows = await (db.select(
+                    db.mirrorItems,
+                  )..where((t) => t.ulid.equals(ulid))).get();
+                  await (db.delete(
+                    db.mirrorItems,
+                  )..where((t) => t.ulid.equals(ulid))).go();
+                  final pids = {for (final row in rows) row.pid, ...kept};
+                  if (pids.isEmpty) pids.add(e.pid);
+                  for (final pid in pids) {
+                    await _pending.condemn(pid);
+                  }
+                  return pids;
+                });
+                gone.forEach(_itemsRemoved.add);
               }
               changed = true;
             // Unrecognized ops are dropped by contract.
@@ -605,11 +923,7 @@ class SyncEngine {
     // news: without this the walk *after* a fresh install or a reset
     // would be swallowed as though it were the backlog.
     _caughtUp = true;
-    final held =
-        await (db.selectOnly(db.downloadRecords, distinct: true)
-              ..addColumns([db.downloadRecords.pid]))
-            .map((r) => r.read(db.downloadRecords.pid)!)
-            .get();
+    final held = await _downloadedPids();
     for (var i = 0; i < held.length; i += 500) {
       final batch = held.sublist(i, math.min(i + 500, held.length));
       final states = await repository.listPlayStates(batch);
@@ -1408,8 +1722,40 @@ class SyncEngine {
       artist: Value(item.artist),
       album: Value(item.album),
       durationMs: item.durationMs,
-      sortKey: item.title.toLowerCase(),
+      sortKey: item.titleOrderKey,
     );
+  }
+
+  /// Every pid the device holds a download for.
+  Future<List<String>> _downloadedPids() =>
+      (db.selectOnly(db.downloadRecords, distinct: true)
+            ..addColumns([db.downloadRecords.pid]))
+          .map((r) => r.read(db.downloadRecords.pid)!)
+          .get();
+
+  /// Every pid the device holds a download from this engine's server for.
+  Future<List<String>> _downloadedHere() =>
+      (db.selectOnly(db.downloadRecords, distinct: true)
+            ..addColumns([db.downloadRecords.pid])
+            ..where(db.downloadRecords.server.equals(repository.baseUrl)))
+          .map((r) => r.read(db.downloadRecords.pid)!)
+          .get();
+
+  /// The pids the device holds downloads under, by ULID, for [ulids] or
+  /// for every ULID when null. A download outlives its mirror row (an item
+  /// out of this account's sight keeps its bytes for its return), so these
+  /// name an item's pid where the mirror no longer can.
+  Future<Map<String, Set<String>>> _heldUnder([List<String>? ulids]) async {
+    if (ulids != null && ulids.isEmpty) return {};
+    final wanted = ulids?.toSet();
+    final held = <String, Set<String>>{};
+    for (final pid in await _downloadedPids()) {
+      final ulid = _ulidOf(pid);
+      if (wanted == null || wanted.contains(ulid)) {
+        (held[ulid] ??= <String>{}).add(pid);
+      }
+    }
+    return held;
   }
 
   /// The pid the mirror holds under each of [ulids], or under every
@@ -1431,32 +1777,52 @@ class SyncEngine {
   /// the old one with it.
   ///
   /// A download moves only when it is certainly all of the item: one
-  /// file on disk, for a [track] (one file by kind), onto a pid holding
-  /// none. A book's summary does not say how many parts it has, so one
-  /// file may be the first of several, and a transfer still under way
-  /// is the download manager's under [from]. Any other download stays,
-  /// its pin with it, and this answers true for the caller to publish
-  /// [from] on [itemsRemoved] once the write lands, so the downloads
-  /// store stops what still moves and reclaims the files and the cover
-  /// together.
-  Future<bool> _rekey(String from, String to, {required bool track}) async {
+  /// file on disk onto a pid holding none, for a [track] (one file by
+  /// kind) or where the server listed that file and no other as the item
+  /// under [to] ([sole] is its essence, from [_soleFileOf]): a book's
+  /// summary does not say how many parts it has, so one file may be the
+  /// first of several. A transfer still under way is the download
+  /// manager's under [from]. Any other download stays, its pin with it,
+  /// and this answers true for the caller to publish [from] on
+  /// [itemsRemoved] once the write lands, so the downloads store stops
+  /// what still moves and reclaims the files and the cover together.
+  ///
+  /// The play state and the queue's entries go where the download goes:
+  /// with it, or alone where the device holds none. Left with a download
+  /// that is to be reclaimed, they play its bytes offline (and stream
+  /// meanwhile, the server answering either prefix of a track or a book)
+  /// and follow the item once its free settles ([settleFree]).
+  Future<bool> _rekey(
+    String from,
+    String to, {
+    required bool track,
+    String? sole,
+  }) async {
     SimpleSelectStatement<$DownloadRecordsTable, DownloadRecord> filesOf(
       String pid,
     ) => db.select(db.downloadRecords)..where((t) => t.pid.equals(pid));
     final files = await filesOf(from).get();
     final moves =
         files.isEmpty ||
-        (track &&
-            files.length == 1 &&
+        (files.length == 1 &&
             files.single.state == 'complete' &&
+            (track || files.single.essenceHash == sole) &&
             await (filesOf(to)..limit(1)).getSingleOrNull() == null);
+    if (moves) await _move(from, to, download: true);
+    return !moves;
+  }
+
+  /// Moves [from]'s play state and queue entries to [to], and with
+  /// [download] its download and pinned covers too. A row [to] already
+  /// holds is kept, and [from]'s with it.
+  Future<void> _move(String from, String to, {bool download = false}) async {
     final pids = [Variable.withString(to), Variable.withString(from)];
     // Named for the watchers: a raw statement tells drift's streams
     // nothing of what it touched otherwise.
     for (final (table, name) in <(TableInfo<Table, Object?>, String)>[
-      if (moves) (db.downloadRecords, 'download_records'),
+      if (download) (db.downloadRecords, 'download_records'),
       (db.mirrorPlayStates, 'mirror_play_states'),
-      if (moves) (db.artworkPins, 'artwork_pins'),
+      if (download) (db.artworkPins, 'artwork_pins'),
     ]) {
       await db.customUpdate(
         'UPDATE OR IGNORE $name SET pid = ? WHERE pid = ?',
@@ -1469,7 +1835,62 @@ class SyncEngine {
       variables: pids,
       updates: {db.queueEntries},
     );
-    return !moves;
+  }
+
+  /// [_soleFileOf] for each download the device holds whose item [rows]
+  /// list under a new pid, as anything but a track, keyed by the old pid.
+  Future<Map<String, _Sole>> _soleFiles(
+    Map<String, MirrorItemsCompanion> rows,
+  ) async {
+    final checks = <String, _Sole>{};
+    for (final pid in await _downloadedPids()) {
+      final row = rows[_ulidOf(pid)];
+      if (row == null ||
+          row.pid.value == pid ||
+          row.mediaType.value == MediaType.music.wireName) {
+        continue;
+      }
+      checks[pid] = await _soleFileOf(pid, row.pid.value);
+    }
+    return checks;
+  }
+
+  /// What the server's download-info for [to], its item's pid after a kind
+  /// change, says of the one finished file [from] holds: its essence when
+  /// that file is listed and no other, which makes it all of the item. No
+  /// essence when [from] holds anything else, when [to] holds a download
+  /// already, or when the server lists more or other audio or refuses to
+  /// say. A server that cannot answer leaves it unanswered, for the kind
+  /// change to wait on rather than the sync; a lapsed session throws, as a
+  /// page read does.
+  Future<_Sole> _soleFileOf(String from, String to) async {
+    const none = (answered: true, essence: null);
+    final files = await (db.select(
+      db.downloadRecords,
+    )..where((t) => t.pid.equals(from))).get();
+    if (files.length != 1 || files.single.state != 'complete') return none;
+    final held = files.single;
+    final taken =
+        await (db.select(db.downloadRecords)
+              ..where((t) => t.pid.equals(to))
+              ..limit(1))
+            .getSingleOrNull();
+    if (taken != null) return none;
+    _kindsAsked.add(from);
+    final DownloadInfo info;
+    try {
+      info = await repository.getDownloadInfo(to);
+    } on WaxDeckApiException catch (e) {
+      if (e.statusCode == 401) rethrow;
+      return e.isRefusal ? none : (answered: false, essence: null);
+    }
+    final file = info.files.singleOrNull;
+    return file != null &&
+            file.essenceHash == held.essenceHash &&
+            info.spanStartMs == held.spanStartMs &&
+            info.spanEndMs == held.spanEndMs
+        ? (answered: true, essence: held.essenceHash)
+        : none;
   }
 
   static String _ulidOf(String pid) {

@@ -13,6 +13,8 @@ class _$OrganizeSample extends OrganizeSample {
   final String audiobook;
   @override
   final String podcast;
+  @override
+  final String compilation;
 
   factory _$OrganizeSample([void Function(OrganizeSampleBuilder)? updates]) =>
       (OrganizeSampleBuilder()..update(updates))._build();
@@ -21,6 +23,7 @@ class _$OrganizeSample extends OrganizeSample {
     required this.music,
     required this.audiobook,
     required this.podcast,
+    required this.compilation,
   }) : super._();
   @override
   OrganizeSample rebuild(void Function(OrganizeSampleBuilder) updates) =>
@@ -35,7 +38,8 @@ class _$OrganizeSample extends OrganizeSample {
     return other is OrganizeSample &&
         music == other.music &&
         audiobook == other.audiobook &&
-        podcast == other.podcast;
+        podcast == other.podcast &&
+        compilation == other.compilation;
   }
 
   @override
@@ -44,6 +48,7 @@ class _$OrganizeSample extends OrganizeSample {
     _$hash = $jc(_$hash, music.hashCode);
     _$hash = $jc(_$hash, audiobook.hashCode);
     _$hash = $jc(_$hash, podcast.hashCode);
+    _$hash = $jc(_$hash, compilation.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -53,7 +58,8 @@ class _$OrganizeSample extends OrganizeSample {
     return (newBuiltValueToStringHelper(r'OrganizeSample')
           ..add('music', music)
           ..add('audiobook', audiobook)
-          ..add('podcast', podcast))
+          ..add('podcast', podcast)
+          ..add('compilation', compilation))
         .toString();
   }
 }
@@ -74,6 +80,10 @@ class OrganizeSampleBuilder
   String? get podcast => _$this._podcast;
   set podcast(String? podcast) => _$this._podcast = podcast;
 
+  String? _compilation;
+  String? get compilation => _$this._compilation;
+  set compilation(String? compilation) => _$this._compilation = compilation;
+
   OrganizeSampleBuilder() {
     OrganizeSample._defaults(this);
   }
@@ -84,6 +94,7 @@ class OrganizeSampleBuilder
       _music = $v.music;
       _audiobook = $v.audiobook;
       _podcast = $v.podcast;
+      _compilation = $v.compilation;
       _$v = null;
     }
     return this;
@@ -120,6 +131,11 @@ class OrganizeSampleBuilder
             podcast,
             r'OrganizeSample',
             'podcast',
+          ),
+          compilation: BuiltValueNullFieldError.checkNotNull(
+            compilation,
+            r'OrganizeSample',
+            'compilation',
           ),
         );
     replace(_$result);

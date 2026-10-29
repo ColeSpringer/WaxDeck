@@ -129,6 +129,22 @@ enum SearchHitKind {
 /// How many hits a group shows before "Show all" expands it in place.
 const searchGroupPreview = 5;
 
+/// The hit a search leads with: the artist whose own name is the query,
+/// else the album, as the server marks them, among the kinds [scope]
+/// shows. Null when the answer names none.
+SearchHit? topSearchHit(
+  SearchResults results, [
+  SearchScope scope = SearchScope.all,
+]) {
+  for (final kind in const [SearchHitKind.artists, SearchHitKind.albums]) {
+    if (!scope.covers(kind)) continue;
+    for (final hit in kind.from(results)) {
+      if (hit.exact) return hit;
+    }
+  }
+  return null;
+}
+
 /// The typed query, debounced.
 ///
 /// The field reports every keystroke and this holds the last one back

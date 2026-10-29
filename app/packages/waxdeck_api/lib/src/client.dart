@@ -13,6 +13,11 @@ import 'models.dart';
 /// What feature code programs against. [WaxDeckClient] is the real
 /// implementation; tests substitute fakes without touching the network.
 abstract interface class WaxDeckRepository {
+  /// The server origin this repository reaches, empty on web, where every
+  /// URL is origin-relative. Another address is another server to what
+  /// the device holds: a download records the one it came from.
+  String get baseUrl;
+
   /// Bearer token applied to every request. [login], [bootstrap],
   /// [oidcExchange], and [refreshToken] set it; native clients persist it
   /// and restore it here before the startup session probe. Web builds
@@ -353,6 +358,12 @@ abstract interface class WaxDeckRepository {
     int? limit,
   });
 
+  /// `POST /sync/catalog/removed`: of [pids] (at most 500), those the
+  /// server can never put back, which is what a `removed` tombstone says
+  /// of an item and a snapshot, carrying none, cannot. The pids come back
+  /// as asked; one not named may still return.
+  Future<List<String>> syncCatalogRemoved(List<String> pids);
+
   /// `GET /sync/server`: the caller's own server-side state changes.
   /// Without [since] it mints a fresh cursor and returns no events.
   Future<ServerSyncPage> syncServer({String? since, int? limit});
@@ -609,6 +620,10 @@ abstract interface class WaxDeckRepository {
     required String content,
     String? visibility,
   });
+
+  /// `POST /playlists/m3u/preview`: how each line of an M3U8 document
+  /// would import for the caller, without importing it.
+  Future<M3uPreview> previewPlaylistM3u(String content);
 
   /// `POST /playlists/import`: imports a playlist export as a static
   /// playlist. [source] is `spotify`, `applemusic`, `ytmusic`, `csv`,
@@ -1511,6 +1526,18 @@ abstract interface class WaxDeckRepository {
     required List<String> loserPids,
   });
 
+  /// `GET /library/folds`: one page of the names merges folded into an
+  /// entity, by type and then key.
+  Future<EntityFoldPage> listEntityFolds({String? cursor, int? limit});
+
+  /// `POST /library/folds/unfold`: forgets the folds of [keys], all of
+  /// them or none, so the files still spelled that way file under their
+  /// own name at the next scan.
+  Future<void> unfoldEntities({
+    required String entityType,
+    required List<String> keys,
+  });
+
   /// `GET /library/upgrades`: recordings present in more than one
   /// quality.
   Future<List<UpgradeGroup>> listUpgrades();
@@ -1531,13 +1558,16 @@ abstract interface class WaxDeckRepository {
   Future<OrganizeProfiles> listOrganizeProfiles();
 
   /// `PUT /organize/profiles/{name}`: saves a profile; an empty
-  /// template inherits.
+  /// template inherits. A null [compilationFolder] files compilations
+  /// under Various Artists, an empty one under their own tagged album
+  /// artist.
   Future<OrganizeProfile> putOrganizeProfile(
     String name, {
     String musicTemplate = '',
     String audiobookTemplate = '',
     String podcastTemplate = '',
     bool tagWrite = false,
+    String? compilationFolder,
   });
 
   /// `DELETE /organize/profiles/{name}`: deletes a saved profile.
@@ -1549,6 +1579,7 @@ abstract interface class WaxDeckRepository {
     String musicTemplate = '',
     String audiobookTemplate = '',
     String podcastTemplate = '',
+    String? compilationFolder,
   });
 
   /// `PUT /libraries/{pid}/profile`: the profile a managed library is
@@ -1903,6 +1934,16 @@ abstract interface class WaxDeckRepository {
     int? maxBytes,
   });
 
+  /// `GET /admin/catalog/consistency`: checks what the catalog keeps
+  /// derived from its own rows against a fresh recompute
+  /// (administrators).
+  Future<CatalogConsistency> getCatalogConsistency();
+
+  /// `POST /admin/catalog/repair`: queues the catalog's repair as a
+  /// `catalog-repair` tool task, refused with `conflict` while one is
+  /// queued or running (administrators).
+  Future<ToolTask> repairCatalog();
+
   /// The two requests a client that is about to stop existing has to
   /// get out, already addressed, encoded, and carrying whatever
   /// authenticates a mutation here.
@@ -2067,6 +2108,9 @@ class WaxDeckClient implements WaxDeckRepository {
       _ => true,
     };
   }
+
+  @override
+  String get baseUrl => _baseUrl;
 
   final String _baseUrl;
   final gen.WaxdeckApiGen _gen;
@@ -2651,6 +2695,15 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<List<String>> syncCatalogRemoved(List<String> pids) =>
+      _guard(() async {
+        final response = await _gen.getSyncApi().syncCatalogRemoved(
+          removedItemsQuery: gen.RemovedItemsQuery((b) => b..pids.addAll(pids)),
+        );
+        return _require(response.data).pids.toList();
+      });
+
+  @override
   Future<ServerSyncPage> syncServer({String? since, int? limit}) =>
       _guard(() async {
         final response = await _gen.getSyncApi().syncServer(
@@ -3182,6 +3235,9 @@ class WaxDeckClient implements WaxDeckRepository {
     String? visibility,
   }) => _guard(() async {
     final response = await _gen.getPlaylistsApi().importPlaylistM3u(
+      // Every line is resolved before the answer, each relative one a scan
+      // of the catalog's files.
+      extra: const {_longOperation: true},
       m3uImport: gen.M3uImport(
         (b) => b
           ..name = name
@@ -3190,6 +3246,16 @@ class WaxDeckClient implements WaxDeckRepository {
       ),
     );
     return m3uImportResultFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<M3uPreview> previewPlaylistM3u(String content) => _guard(() async {
+    final response = await _gen.getPlaylistsApi().previewPlaylistM3u(
+      // Resolved line by line before the answer, as the import is.
+      extra: const {_longOperation: true},
+      m3uPreviewRequest: gen.M3uPreviewRequest((b) => b..content = content),
+    );
+    return m3uPreviewFromGen(_require(response.data), baseUrl: _baseUrl);
   });
 
   @override
@@ -4845,7 +4911,39 @@ class WaxDeckClient implements WaxDeckRepository {
       ),
     );
     final body = _require(response.data);
-    return MergeOutcome(merged: body.merged, childrenMoved: body.childrenMoved);
+    return MergeOutcome(
+      merged: body.merged,
+      childrenMoved: body.childrenMoved,
+      folds: body.folds.toList(growable: false),
+    );
+  });
+
+  @override
+  Future<EntityFoldPage> listEntityFolds({String? cursor, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getHealthApi().listEntityFolds(
+          cursor: cursor,
+          limit: limit,
+        );
+        final page = _require(response.data);
+        return EntityFoldPage(
+          folds: page.folds.map(entityFoldFromGen).toList(growable: false),
+          nextCursor: page.nextCursor,
+        );
+      });
+
+  @override
+  Future<void> unfoldEntities({
+    required String entityType,
+    required List<String> keys,
+  }) => _guard(() async {
+    await _gen.getHealthApi().unfoldEntities(
+      unfoldRequest: gen.UnfoldRequest(
+        (b) => b
+          ..entityType = unfoldEntityTypeToGen(entityType)
+          ..keys = ListBuilder<String>(keys),
+      ),
+    );
   });
 
   @override
@@ -4891,6 +4989,7 @@ class WaxDeckClient implements WaxDeckRepository {
     String audiobookTemplate = '',
     String podcastTemplate = '',
     bool tagWrite = false,
+    String? compilationFolder,
   }) => _guard(() async {
     // The generated client puts a path parameter in as typed.
     final response = await _gen.getOrganizeApi().putOrganizeProfile(
@@ -4900,7 +4999,8 @@ class WaxDeckClient implements WaxDeckRepository {
           ..musicTemplate = musicTemplate
           ..audiobookTemplate = audiobookTemplate
           ..podcastTemplate = podcastTemplate
-          ..tagWrite = tagWrite,
+          ..tagWrite = tagWrite
+          ..compilationFolder = compilationFolder,
       ),
     );
     return organizeProfileFromGen(_require(response.data));
@@ -4919,6 +5019,7 @@ class WaxDeckClient implements WaxDeckRepository {
     String musicTemplate = '',
     String audiobookTemplate = '',
     String podcastTemplate = '',
+    String? compilationFolder,
   }) => _guard(() async {
     final response = await _gen.getOrganizeApi().previewOrganizeProfile(
       organizeProfilePreview: gen.OrganizeProfilePreview(
@@ -4926,7 +5027,8 @@ class WaxDeckClient implements WaxDeckRepository {
           ..name = name
           ..musicTemplate = musicTemplate
           ..audiobookTemplate = audiobookTemplate
-          ..podcastTemplate = podcastTemplate,
+          ..podcastTemplate = podcastTemplate
+          ..compilationFolder = compilationFolder,
       ),
     );
     return organizeSampleFromGen(_require(response.data));
@@ -5653,6 +5755,41 @@ class WaxDeckClient implements WaxDeckRepository {
       removed: body.removed,
       freedBytes: body.freedBytes,
     );
+  });
+
+  @override
+  Future<CatalogConsistency> getCatalogConsistency() => _guard(() async {
+    // The check counts the whole catalog before it answers.
+    final body = _require(
+      (await _gen.getAdminApi().getCatalogConsistency(
+        extra: const {_longOperation: true},
+      )).data,
+    );
+    return CatalogConsistency(
+      itemsMissingFromSearch: body.itemsMissingFromSearch,
+      orphanSearchRows: body.orphanSearchRows,
+      artistRollupDrift: body.artistRollupDrift,
+      genreRollupDrift: body.genreRollupDrift,
+      releaseGroupRollupDrift: body.releaseGroupRollupDrift,
+      sortKeyDrift: body.sortKeyDrift,
+      bookDurationDrift: body.bookDurationDrift,
+      bookIsbnKeyDrift: body.bookIsbnKeyDrift,
+      albumYearDrift: body.albumYearDrift,
+      releaseYearDrift: body.releaseYearDrift,
+      playlistPositionDrift: body.playlistPositionDrift,
+      orphanArtSources: body.orphanArtSources,
+      orphanThumbnails: body.orphanThumbnails,
+      orphanTagProvenance: body.orphanTagProvenance,
+      strandedTagRows: body.strandedTagRows,
+      consistent: body.consistent,
+      reclaimable: body.reclaimable,
+    );
+  });
+
+  @override
+  Future<ToolTask> repairCatalog() => _guard(() async {
+    final response = await _gen.getAdminApi().repairCatalog();
+    return toolTaskFromGen(_require(response.data));
   });
 
   @override

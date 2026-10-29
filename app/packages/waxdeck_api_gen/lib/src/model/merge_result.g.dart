@@ -11,12 +11,17 @@ class _$MergeResult extends MergeResult {
   final int merged;
   @override
   final int childrenMoved;
+  @override
+  final BuiltList<String> folds;
 
   factory _$MergeResult([void Function(MergeResultBuilder)? updates]) =>
       (MergeResultBuilder()..update(updates))._build();
 
-  _$MergeResult._({required this.merged, required this.childrenMoved})
-    : super._();
+  _$MergeResult._({
+    required this.merged,
+    required this.childrenMoved,
+    required this.folds,
+  }) : super._();
   @override
   MergeResult rebuild(void Function(MergeResultBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -29,7 +34,8 @@ class _$MergeResult extends MergeResult {
     if (identical(other, this)) return true;
     return other is MergeResult &&
         merged == other.merged &&
-        childrenMoved == other.childrenMoved;
+        childrenMoved == other.childrenMoved &&
+        folds == other.folds;
   }
 
   @override
@@ -37,6 +43,7 @@ class _$MergeResult extends MergeResult {
     var _$hash = 0;
     _$hash = $jc(_$hash, merged.hashCode);
     _$hash = $jc(_$hash, childrenMoved.hashCode);
+    _$hash = $jc(_$hash, folds.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -45,7 +52,8 @@ class _$MergeResult extends MergeResult {
   String toString() {
     return (newBuiltValueToStringHelper(r'MergeResult')
           ..add('merged', merged)
-          ..add('childrenMoved', childrenMoved))
+          ..add('childrenMoved', childrenMoved)
+          ..add('folds', folds))
         .toString();
   }
 }
@@ -62,6 +70,10 @@ class MergeResultBuilder implements Builder<MergeResult, MergeResultBuilder> {
   set childrenMoved(int? childrenMoved) =>
       _$this._childrenMoved = childrenMoved;
 
+  ListBuilder<String>? _folds;
+  ListBuilder<String> get folds => _$this._folds ??= ListBuilder<String>();
+  set folds(ListBuilder<String>? folds) => _$this._folds = folds;
+
   MergeResultBuilder() {
     MergeResult._defaults(this);
   }
@@ -71,6 +83,7 @@ class MergeResultBuilder implements Builder<MergeResult, MergeResultBuilder> {
     if ($v != null) {
       _merged = $v.merged;
       _childrenMoved = $v.childrenMoved;
+      _folds = $v.folds.toBuilder();
       _$v = null;
     }
     return this;
@@ -90,20 +103,37 @@ class MergeResultBuilder implements Builder<MergeResult, MergeResultBuilder> {
   MergeResult build() => _build();
 
   _$MergeResult _build() {
-    final _$result =
-        _$v ??
-        _$MergeResult._(
-          merged: BuiltValueNullFieldError.checkNotNull(
-            merged,
-            r'MergeResult',
-            'merged',
-          ),
-          childrenMoved: BuiltValueNullFieldError.checkNotNull(
-            childrenMoved,
-            r'MergeResult',
-            'childrenMoved',
-          ),
+    _$MergeResult _$result;
+    try {
+      _$result =
+          _$v ??
+          _$MergeResult._(
+            merged: BuiltValueNullFieldError.checkNotNull(
+              merged,
+              r'MergeResult',
+              'merged',
+            ),
+            childrenMoved: BuiltValueNullFieldError.checkNotNull(
+              childrenMoved,
+              r'MergeResult',
+              'childrenMoved',
+            ),
+            folds: folds.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'folds';
+        folds.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'MergeResult',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

@@ -524,7 +524,7 @@ func TestACursorPastTheHeadIsAReplacedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SyncCatalogDelta(ctx, uc, encodeCatalogCursor(gen, epoch, past), 10); KindOf(err) != KindGone {
+	if _, err := svc.SyncCatalogDelta(ctx, uc, encodeCatalogCursor(gen, epoch, past, 0), 10); KindOf(err) != KindGone {
 		t.Errorf("a delta past the head answered %q (%v), want sync-reset", KindOf(err), err)
 	}
 	for _, k := range []string{genreSweepCursorKey, discoveryCursorKey} {
@@ -583,7 +583,7 @@ func TestTheQueuesWaitOutAHandOff(t *testing.T) {
 	if err := svc.lib.BeginMaintenance(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if svc.DrainHealthFixes(ctx) || svc.DrainToolTasks(ctx) || svc.DrainMatchQueue(ctx) || svc.DrainFetchQueue(ctx) {
+	if svc.DrainLongToolTasks(ctx) || svc.DrainToolTasks(ctx) || svc.DrainMatchQueue(ctx) || svc.DrainFetchQueue(ctx) {
 		t.Error("a queue drained during the hand-off")
 	}
 	svc.SweepRetention(ctx)

@@ -15,6 +15,7 @@ part 'organize_profile_input.g.dart';
 /// * [audiobookTemplate] 
 /// * [podcastTemplate] 
 /// * [tagWrite] 
+/// * [compilationFolder] - The folder compilations file under, which the tag write also gives them as album artist. An empty string files each under its own tagged album artist (Various Artists for one tagged with none); absent files them under Various Artists, and a save replaces the whole profile, so a save without it does too. Surrounding space is trimmed; a folder that names none (only dots, say) is `invalid-request`. 
 @BuiltValue()
 abstract class OrganizeProfileInput implements Built<OrganizeProfileInput, OrganizeProfileInputBuilder> {
   @BuiltValueField(wireName: r'musicTemplate')
@@ -28,6 +29,10 @@ abstract class OrganizeProfileInput implements Built<OrganizeProfileInput, Organ
 
   @BuiltValueField(wireName: r'tagWrite')
   bool? get tagWrite;
+
+  /// The folder compilations file under, which the tag write also gives them as album artist. An empty string files each under its own tagged album artist (Various Artists for one tagged with none); absent files them under Various Artists, and a save replaces the whole profile, so a save without it does too. Surrounding space is trimmed; a folder that names none (only dots, say) is `invalid-request`. 
+  @BuiltValueField(wireName: r'compilationFolder')
+  String? get compilationFolder;
 
   OrganizeProfileInput._();
 
@@ -79,6 +84,13 @@ class _$OrganizeProfileInputSerializer implements PrimitiveSerializer<OrganizePr
       yield serializers.serialize(
         object.tagWrite,
         specifiedType: const FullType(bool),
+      );
+    }
+    if (object.compilationFolder != null) {
+      yield r'compilationFolder';
+      yield serializers.serialize(
+        object.compilationFolder,
+        specifiedType: const FullType(String),
       );
     }
   }
@@ -135,6 +147,14 @@ class _$OrganizeProfileInputSerializer implements PrimitiveSerializer<OrganizePr
           ) as bool?;
           if (valueDes == null) continue;
           result.tagWrite = valueDes;
+          break;
+        case r'compilationFolder':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.compilationFolder = valueDes;
           break;
         default:
           unhandled.add(key);

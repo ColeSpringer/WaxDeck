@@ -44,7 +44,7 @@ export class Books extends Surface {
         await page.mouse.wheel(0, 400);
         await expect(card).toBeVisible({ timeout: 1_000 });
       }
-      await wheelIntoReach(page, card);
+      await wheelIntoReach(page, card, { appear: 1_000 });
       await clickToward(card, { shows: this.resume() });
     }).toPass({ timeout: T.nav });
   }

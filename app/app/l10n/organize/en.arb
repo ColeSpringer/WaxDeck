@@ -237,6 +237,22 @@
   "@organizeProfileAudiobookLabel": {
     "description": "Field for the path template of audiobooks."
   },
+  "organizeProfileCompilationHelp": "Various Artists unless set; empty files compilations under their tagged album artist",
+  "@organizeProfileCompilationHelp": {
+    "description": "Help under the profile editor's compilation folder field: what an unset field and an emptied one do."
+  },
+  "organizeProfileCompilationLabel": "Compilation folder",
+  "@organizeProfileCompilationLabel": {
+    "description": "Label of the profile editor field naming the folder compilations file under, which the tag write also gives them as album artist."
+  },
+  "organizeProfileCompilationOwn": "Each one's tagged album artist",
+  "@organizeProfileCompilationOwn": {
+    "description": "Hint in the compilation folder field once it is emptied: each compilation then files under its own tagged album artist."
+  },
+  "organizeProfileCompilationUnset": "Various Artists",
+  "@organizeProfileCompilationUnset": {
+    "description": "Hint in the compilation folder field while it is unset: the folder compilations then file under, spelled as the catalog writes it on disk, so it is not translated."
+  },
   "organizeProfileDelete": "Delete profile",
   "@organizeProfileDelete": {
     "description": "Button in the profile editor that deletes the profile."
@@ -320,6 +336,16 @@
       "path": {
         "type": "String",
         "example": "Author/Title/Title.m4b"
+      }
+    }
+  },
+  "organizeProfileSampleCompilation": "Compilation: {path}",
+  "@organizeProfileSampleCompilation": {
+    "description": "Sample path of a track of a compilation.",
+    "placeholders": {
+      "path": {
+        "type": "String",
+        "example": "Various Artists/Album (2023)/1-04 - Title.flac"
       }
     }
   },

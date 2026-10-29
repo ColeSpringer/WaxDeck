@@ -530,7 +530,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     List<Widget> stations,
     List<Widget> directory,
   ) {
-    final slivers = <Widget>[...stations];
+    // The artist or album named as the query leads, above everything. It
+    // stays in its group too, so the rows below keep their places and ids.
+    final top = topSearchHit(results, scope);
+    final slivers = <Widget>[...?_topResult(top), ...stations];
     var found = 0;
     for (final kind in SearchHitKind.values) {
       if (!scope.covers(kind)) continue;
@@ -557,64 +560,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       slivers.add(
         SliverList.builder(
           itemCount: shown.length,
-          itemBuilder: (context, index) {
-            final hit = shown[index];
-            // What the row's overflow holds follows the kind. An album
-            // gets the release menu (pin, mix, share); an artist or a
-            // book pins, which is all their pid supports from here; a
-            // track and an episode get the item menu, which always has
-            // something for a bare pid - a hit carries no handle to
-            // its container, so there is nowhere else for its row to
-            // go.
-            final VoidCallback? onMore = switch (hit.kind) {
-              'album' => () => showAlbumMenuSheet(
-                context,
-                ref,
-                pid: hit.pid,
-                title: hit.title,
-              ),
-              'artist' || 'book' => () => showPinSheet(
-                context,
-                ref,
-                targets: <PinTarget>[
-                  (pid: hit.pid, what: hit.kind, name: hit.title),
-                ],
-              ),
-              'track' => () => showItemMenuSheet(
-                context,
-                ref,
-                pid: hit.pid,
-                title: hit.title,
-                mediaType: MediaType.music,
-              ),
-              'episode' => () => showItemMenuSheet(
-                context,
-                ref,
-                pid: hit.pid,
-                title: hit.title,
-                mediaType: MediaType.podcast,
-              ),
-              _ => null,
-            };
-            return MediaListRow(
-              data: MediaTileData(
-                title: hit.title,
-                subtitle: hit.subtitle,
-                shape: kind == SearchHitKind.artists
-                    ? ArtworkShape.circle
-                    : ArtworkShape.square,
-                domain: switch (kind) {
-                  SearchHitKind.episodes => WaxDomain.podcasts,
-                  SearchHitKind.books => WaxDomain.audiobooks,
-                  _ => WaxDomain.music,
-                },
-                semanticsId: SemanticsIds.searchHit(kind.name, index),
-              ),
-              onTap: () => _open(hit),
-              onMore: onMore,
-              moreSemanticsId: SemanticsIds.searchHitMore(kind.name, index),
-            );
-          },
+          itemBuilder: (context, index) => _hitRow(
+            shown[index],
+            kind,
+            semanticsId: SemanticsIds.searchHit(kind.name, index),
+            moreSemanticsId: SemanticsIds.searchHitMore(kind.name, index),
+          ),
         ),
       );
     }
@@ -658,6 +609,92 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
     slivers.addAll(directory);
     return slivers;
+  }
+
+  /// The top result: its heading and its row, or nothing without one.
+  List<Widget>? _topResult(SearchHit? hit) {
+    if (hit == null) return null;
+    final kind = hit.kind == 'artist'
+        ? SearchHitKind.artists
+        : SearchHitKind.albums;
+    return <Widget>[
+      SliverPadding(
+        padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),
+        sliver: SliverToBoxAdapter(
+          child: SectionHeader(title: context.l10n.searchTopResult),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: _hitRow(
+          hit,
+          kind,
+          semanticsId: SemanticsIds.searchTopResult,
+          moreSemanticsId: SemanticsIds.searchTopResultMore,
+        ),
+      ),
+    ];
+  }
+
+  /// One hit's row, which opens what the palette's own row for it opens.
+  Widget _hitRow(
+    SearchHit hit,
+    SearchHitKind kind, {
+    required String semanticsId,
+    required String moreSemanticsId,
+  }) {
+    // What the row's overflow holds follows the kind. An album gets the
+    // release menu (pin, mix, share); an artist or a book pins, which is
+    // all their pid supports from here; a track and an episode get the
+    // item menu, which always has something for a bare pid - a hit
+    // carries no handle to its container, so there is nowhere else for
+    // its row to go.
+    final VoidCallback? onMore = switch (hit.kind) {
+      'album' => () => showAlbumMenuSheet(
+        context,
+        ref,
+        pid: hit.pid,
+        title: hit.title,
+      ),
+      'artist' || 'book' => () => showPinSheet(
+        context,
+        ref,
+        targets: <PinTarget>[(pid: hit.pid, what: hit.kind, name: hit.title)],
+      ),
+      'track' => () => showItemMenuSheet(
+        context,
+        ref,
+        pid: hit.pid,
+        title: hit.title,
+        mediaType: MediaType.music,
+      ),
+      'episode' => () => showItemMenuSheet(
+        context,
+        ref,
+        pid: hit.pid,
+        title: hit.title,
+        mediaType: MediaType.podcast,
+      ),
+      _ => null,
+    };
+    return MediaListRow(
+      key: ValueKey(hit.pid),
+      data: MediaTileData(
+        title: hit.title,
+        subtitle: hit.subtitle,
+        shape: kind == SearchHitKind.artists
+            ? ArtworkShape.circle
+            : ArtworkShape.square,
+        domain: switch (kind) {
+          SearchHitKind.episodes => WaxDomain.podcasts,
+          SearchHitKind.books => WaxDomain.audiobooks,
+          _ => WaxDomain.music,
+        },
+        semanticsId: semanticsId,
+      ),
+      onTap: () => _open(hit),
+      onMore: onMore,
+      moreSemanticsId: moreSemanticsId,
+    );
   }
 
   /// The podcast directory, under the library's own episodes.

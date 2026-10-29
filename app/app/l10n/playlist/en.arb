@@ -217,7 +217,7 @@
   },
   "playlistImportCheck": "Check",
   "@playlistImportCheck": {
-    "description": "Button in the NSP import sheet that asks the server what the pasted document would lose, before anything is imported."
+    "description": "Button in the NSP and M3U import sheets that asks the server, before anything is imported, what the pasted document would lose (NSP) or what each of its lines matches (M3U)."
   },
   "playlistImportComplete": "Import complete",
   "@playlistImportComplete": {
@@ -474,6 +474,59 @@
   "playlistLoadError": "Could not load this playlist",
   "@playlistLoadError": {
     "description": "Title of the error state when one playlist could not be read."
+  },
+  "playlistM3uPreviewChecking": "Checking each line of the file. A long one takes a while.",
+  "@playlistM3uPreviewChecking": {
+    "description": "Shown beside a spinner while the server checks each line of a pasted M3U file, which for a long file can take tens of seconds."
+  },
+  "playlistM3uPreviewCounts": "{matched, plural, =1{1 line becomes an entry} other{{matched} lines become entries}}{merged, plural, =0{} =1{, 1 joins the entry before it} other{, {merged} join the entry before them}}{unmatched, plural, =0{} =1{, 1 has no match in the library} other{, {unmatched} have no match in the library}}.",
+  "@playlistM3uPreviewCounts": {
+    "description": "Line above the lines of a pasted M3U file once it is checked, before anything is imported: how many lines become playlist entries, how many name the same item as the line before them through a different path to it (another of its files, such as a book's next part or a copy, or another spelling of the same file) and so add no entry, and how many match nothing the person can see.",
+    "placeholders": {
+      "matched": {
+        "type": "int"
+      },
+      "merged": {
+        "type": "int"
+      },
+      "unmatched": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistM3uPreviewImporting": "Importing the playlist. A long file takes a while.",
+  "@playlistM3uPreviewImporting": {
+    "description": "Shown beside a spinner while a checked M3U file is imported as a playlist, which for a long file can take tens of seconds."
+  },
+  "playlistM3uPreviewItem": "{artist} - {title}",
+  "@playlistM3uPreviewItem": {
+    "description": "A checked M3U line's match, by its artist and title.",
+    "placeholders": {
+      "artist": {
+        "type": "String",
+        "example": "The Bree Trio"
+      },
+      "title": {
+        "type": "String",
+        "example": "Prancing Pony Blues"
+      }
+    }
+  },
+  "playlistM3uPreviewMatched": "Entry",
+  "@playlistM3uPreviewMatched": {
+    "description": "Label on a checked M3U line that becomes a playlist entry; its match is named under it."
+  },
+  "playlistM3uPreviewMerged": "Joins the entry before it",
+  "@playlistM3uPreviewMerged": {
+    "description": "Label on a checked M3U line that names the same item as the line before it through a different path to it (another of its files, such as a book's next part or a copy, or another spelling of the same file), so it adds no entry; the item is named under it."
+  },
+  "playlistM3uPreviewStillImporting": "This file is still being imported. It can be imported again once that finishes.",
+  "@playlistM3uPreviewStillImporting": {
+    "description": "Shown under a checked M3U file, with Import held off, when an import of the same file started earlier (perhaps from a dialog since closed) has not finished."
+  },
+  "playlistM3uPreviewUnmatched": "No match in the library",
+  "@playlistM3uPreviewUnmatched": {
+    "description": "Label on a checked M3U line that matches nothing the person can see; the line's path is shown under it."
   },
   "playlistMakePrivate": "Make private",
   "@playlistMakePrivate": {

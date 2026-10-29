@@ -161,6 +161,10 @@ class CachedArtworkStore extends ArtworkStore {
   Future<void> pinForOffline(String pid, String? artUrl) async {
     if (artUrl == null || artUrl.isEmpty) return;
     if (!isWaxDeckUrl(artUrl, baseUrl)) return;
+    // Only for an item the device holds and is not freeing: the caller
+    // checked that the audio is on disk, and this is where that is still
+    // true. See [ArtworkPinStore.mayPin].
+    if (!await pins.mayPin(pid)) return;
     final dir = await _pinDirectory();
     final held = <int, ArtworkPinRecord>{
       for (final pin in await pins.pinsFor(pid)) pin.sizePx: pin,
@@ -194,17 +198,28 @@ class CachedArtworkStore extends ArtworkStore {
       final file = File(p.join(dir.path, '${_fileSafe(pid)}-$rung.img'));
       try {
         await writeFileDurably(file, fetched.bytes);
-        await pins.put(
-          ArtworkPinRecord(
-            pid: pid,
-            sizePx: rung,
-            artUrl: artUrl,
-            etag: fetched.etag,
-            localPath: file.path,
-            sizeBytes: fetched.bytes.length,
-            pinnedAt: DateTime.now().toUtc(),
-          ),
+        final record = ArtworkPinRecord(
+          pid: pid,
+          sizePx: rung,
+          artUrl: artUrl,
+          etag: fetched.etag,
+          localPath: file.path,
+          sizeBytes: fetched.bytes.length,
+          pinnedAt: DateTime.now().toUtc(),
         );
+        await pins.put(record);
+        // The cover took its time coming, and the item may have been freed,
+        // or promised to the free, meanwhile. Asked after the row is
+        // written: a commit that lands later finds the pin and lists it,
+        // and one that landed first is seen here, so the cover takes
+        // itself back rather than be stranded for an item that is gone.
+        if (!await pins.mayPin(pid)) {
+          await _delete([record]);
+          await pins.removeExactly(pid, [
+            (sizePx: rung, pinnedAt: record.pinnedAt),
+          ]);
+          return;
+        }
       } catch (_) {
         // A full disk, a revoked directory. This runs beside a download
         // that has already succeeded, and a cover that could not be kept
@@ -215,8 +230,32 @@ class CachedArtworkStore extends ArtworkStore {
   }
 
   @override
+  Future<void> unpinExact(String pid, List<OwedPin> owed) async {
+    // The files before the rows, as in [unpin], and only the covers that
+    // match what was listed, by size and by the instant they were pinned.
+    final listed = {
+      for (final o in owed) (o.sizePx, o.pinnedAt.millisecondsSinceEpoch),
+    };
+    await _delete([
+      for (final pin in await pins.pinsFor(pid))
+        if (listed.contains((pin.sizePx, pin.pinnedAt.millisecondsSinceEpoch)))
+          pin,
+    ]);
+    await pins.removeExactly(pid, owed);
+  }
+
+  @override
   Future<void> unpin(String pid) async {
-    await _delete(await pins.remove(pid));
+    // The files before the rows: an unpin is retried (the free a commit
+    // promised is finished at the next start), and a retry can only find
+    // what the rows still say, so one cut short must leave a row and not a
+    // file nothing names. Only the rows it read: a cover pinned meanwhile
+    // keeps its row and its file.
+    final held = await pins.pinsFor(pid);
+    await _delete(held);
+    await pins.removeExactly(pid, [
+      for (final pin in held) (sizePx: pin.sizePx, pinnedAt: pin.pinnedAt),
+    ]);
   }
 
   @override

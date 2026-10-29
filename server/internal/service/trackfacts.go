@@ -278,8 +278,8 @@ func (l *Library) CatalogPlaysSeq(ctx context.Context) (int64, bool) {
 	return st.gen<<40 | st.plays, true
 }
 
-// catalogGeneration counts catalog replacements: a reset or a restore
-// moves it, and nothing short of one does.
+// catalogGeneration counts the catalog's generations: a reset, a restore
+// or a repair moves it, and nothing short of one does.
 func (l *Library) catalogGeneration() int64 {
 	l.feed.mu.Lock()
 	defer l.feed.mu.Unlock()

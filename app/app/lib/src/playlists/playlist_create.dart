@@ -18,6 +18,9 @@ Future<void> showCreatePlaylistDialog(BuildContext context) => showDialog<void>(
   builder: (_) => const _CreatePlaylistDialog(),
 );
 
+/// The longest name the server takes for a playlist.
+const playlistNameMaxLength = 200;
+
 /// Asks for a playlist name and nothing else. Pops with the trimmed
 /// name, or null on cancel. Its own controller: one built inline in an
 /// async handler cannot be safely disposed.
@@ -71,6 +74,7 @@ class _NamePromptDialogState extends State<_NamePromptDialog> {
       child: WaxTextField(
         label: context.l10n.playlistNameLabel,
         controller: _controller,
+        maxCharacters: playlistNameMaxLength,
         autofocus: true,
         textInputAction: TextInputAction.done,
         onSubmitted: (_) => _confirm(),
@@ -172,6 +176,7 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
             WaxTextField(
               label: l10n.playlistNameLabel,
               controller: _name,
+              maxCharacters: playlistNameMaxLength,
               autofocus: true,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => unawaited(_create()),

@@ -36,7 +36,7 @@ func TestAScopedPathFixMovesOneItem(t *testing.T) {
 	if fix.TaskId == nil || fix.JobPid != nil || fix.Queued != 1 {
 		t.Fatalf("fix = %+v, want one item on a task", fix)
 	}
-	for h.svc.DrainHealthFixes(context.Background()) {
+	for h.svc.DrainLongToolTasks(context.Background()) {
 	}
 	task := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+*fix.TaskId, h.token))
 	if task.State != "done" || task.Summary == nil {

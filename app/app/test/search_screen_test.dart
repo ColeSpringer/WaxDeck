@@ -15,19 +15,26 @@ import 'routed_host.dart';
 
 SearchResults _results({
   List<SearchHit> artists = const <SearchHit>[],
+  List<SearchHit> albums = const <SearchHit>[],
   List<SearchHit> tracks = const <SearchHit>[],
   List<SearchHit> episodes = const <SearchHit>[],
   bool truncated = false,
 }) => SearchResults(
   query: 'night',
   artists: artists,
+  albums: albums,
   tracks: tracks,
   episodes: episodes,
   truncated: truncated,
 );
 
-SearchHit _hit(String kind, String title, {String? pid}) =>
-    SearchHit(pid: pid ?? '$kind-$title', kind: kind, title: title);
+SearchHit _hit(String kind, String title, {String? pid, bool exact = false}) =>
+    SearchHit(
+      pid: pid ?? '$kind-$title',
+      kind: kind,
+      title: title,
+      exact: exact,
+    );
 
 Future<ProviderContainer> _pump(
   WidgetTester tester,
@@ -645,5 +652,154 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  group('the top result', () {
+    Finder topResult() =>
+        find.bySemanticsIdentifier(SemanticsIds.searchTopResult);
+
+    /// Where a text sits down the screen.
+    double at(WidgetTester tester, Finder finder) =>
+        tester.getTopLeft(finder.first).dy;
+
+    testWidgets('an artist named as the query leads the screen', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..searchResults['night'] = _results(
+          artists: <SearchHit>[
+            _hit('artist', 'Night', exact: true),
+            _hit('artist', 'Nightjar'),
+          ],
+          tracks: <SearchHit>[_hit('track', 'Night Drive')],
+        );
+      await _pump(tester, repository, initialQuery: 'night');
+
+      expect(find.text('Top result'), findsOneWidget);
+      expect(topResult(), findsOneWidget);
+      // Over the groups, and the group still lists it where it was: the
+      // rows below keep their places.
+      expect(find.text('Night'), findsNWidgets(2));
+      expect(
+        at(tester, find.text('Top result')),
+        lessThan(at(tester, find.text('Night'))),
+      );
+      expect(
+        at(tester, find.text('Night')),
+        lessThan(at(tester, find.text('Artists'))),
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.searchHit('artists', 0)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an album leads when no artist is named as the query', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..searchResults['night'] = _results(
+          artists: <SearchHit>[_hit('artist', 'Nightjar')],
+          albums: <SearchHit>[
+            _hit('album', 'Night', exact: true),
+            _hit('album', 'Night Songs'),
+          ],
+        );
+      await _pump(tester, repository, initialQuery: 'night');
+
+      expect(topResult(), findsOneWidget);
+      expect(find.text('Night'), findsNWidgets(2));
+      expect(
+        at(tester, find.text('Night')),
+        lessThan(at(tester, find.text('Nightjar'))),
+      );
+    });
+
+    testWidgets('the artist leads when the album is named too', (tester) async {
+      final repository = FakeRepository()
+        ..searchResults['night'] = _results(
+          artists: <SearchHit>[_hit('artist', 'Night', exact: true)],
+          albums: <SearchHit>[_hit('album', 'Night Album', exact: true)],
+        );
+      await _pump(tester, repository, initialQuery: 'night');
+
+      // One top result, and it is the artist's: the album's title is only
+      // in its own group.
+      expect(topResult(), findsOneWidget);
+      expect(find.text('Night'), findsNWidgets(2));
+      expect(find.text('Night Album'), findsOneWidget);
+    });
+
+    testWidgets('no hit named as the query, no top result', (tester) async {
+      final repository = FakeRepository()
+        ..searchResults['night'] = _results(
+          artists: <SearchHit>[_hit('artist', 'Nightjar')],
+          tracks: <SearchHit>[_hit('track', 'Night Drive')],
+        );
+      await _pump(tester, repository, initialQuery: 'night');
+
+      expect(topResult(), findsNothing);
+      expect(find.text('Top result'), findsNothing);
+      expect(find.text('Nightjar'), findsOneWidget);
+    });
+
+    testWidgets('a filter that hides its kind hides it', (tester) async {
+      final repository = FakeRepository()
+        ..searchResults['night'] = _results(
+          artists: <SearchHit>[_hit('artist', 'Night', exact: true)],
+          episodes: <SearchHit>[_hit('episode', 'Night Shift Ep. 4')],
+        );
+      await _pump(tester, repository, initialQuery: 'night');
+      expect(topResult(), findsOneWidget);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.searchFilter('podcasts')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(topResult(), findsNothing);
+      expect(find.text('Night Shift Ep. 4'), findsOneWidget);
+    });
+
+    testWidgets('it opens what its group row opens', (tester) async {
+      final repository = FakeRepository()
+        ..searchResults['night'] = _results(
+          artists: <SearchHit>[
+            _hit('artist', 'Night', pid: 'ar-01JZXNIGHT', exact: true),
+          ],
+        )
+        ..facetItems['artist 01JZXNIGHT'] = <ItemSummary>[
+          const ItemSummary(
+            pid: 'tr-1',
+            mediaType: MediaType.music,
+            title: 'Gullwing',
+            artist: 'Night',
+            durationMs: 200000,
+          ),
+        ];
+      await _pump(tester, repository, initialQuery: 'night');
+
+      await tester.tap(topResult());
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ArtistScreen), findsOneWidget);
+    });
+
+    testWidgets('its overflow is its kind\'s', (tester) async {
+      final repository = FakeRepository()
+        ..searchResults['night'] = _results(
+          artists: <SearchHit>[
+            _hit('artist', 'Night', pid: 'ar-01JZXNIGHT', exact: true),
+          ],
+        );
+      await _pump(tester, repository, initialQuery: 'night');
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.searchTopResultMore),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pin artist to Home'), findsOneWidget);
+    });
   });
 }

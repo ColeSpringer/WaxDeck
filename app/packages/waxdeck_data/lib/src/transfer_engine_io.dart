@@ -2,8 +2,26 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:background_downloader/background_downloader.dart';
+import 'package:path/path.dart' as p;
 
 import 'transfer_engine.dart';
+
+/// Where downloaded originals go, under the application-support
+/// directory. An engine decision, not the manager's: the manager names
+/// files, this owns the directory.
+const _directory = 'waxdeck/media';
+
+/// The directory a finished download lands in, resolved as the plugin
+/// resolves a completion's path, so that it is the one it writes to.
+Future<String> mediaDirectoryPath() async {
+  final probe = DownloadTask(
+    url: 'https://unused.invalid/',
+    filename: 'probe',
+    directory: _directory,
+    baseDirectory: BaseDirectory.applicationSupport,
+  );
+  return p.dirname(await probe.filePath());
+}
 
 /// The transfer engine over `background_downloader`: everything
 /// plugin-shaped lives here, from its tasks and statuses to its
@@ -12,10 +30,6 @@ class BackgroundTransferEngine implements TransferEnginePort {
   BackgroundTransferEngine() {
     _updates = FileDownloader().updates.listen(_onUpdate);
   }
-
-  /// Where downloaded originals go. An engine decision, not the
-  /// manager's: the manager names files, this owns the directory.
-  static const _directory = 'waxdeck/media';
 
   final _events = StreamController<TransferEvent>.broadcast();
 
@@ -28,6 +42,16 @@ class BackgroundTransferEngine implements TransferEnginePort {
 
   @override
   Stream<TransferEvent> get events => _events.stream;
+
+  /// Where the plugin moves a finished file ([mediaDirectoryPath]).
+  /// In-flight bytes are not here: it writes them to a temporary file of
+  /// its own (`com.bbflight.background_downloader` and a number, in the
+  /// cache, the support or the temporary directory) and moves it into place
+  /// when the transfer is whole. The one exception is a desktop whose
+  /// temporary directory cannot be written, where it falls back to a
+  /// hidden file of that name beside the destination.
+  @override
+  Future<String?> mediaDirectory() => mediaDirectoryPath();
 
   /// The plugin's own records, which it keeps from [recover] on. A failed
   /// one is forgotten here: nothing will come of it.

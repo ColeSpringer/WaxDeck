@@ -209,6 +209,9 @@ ItemSummary itemSummaryFromGen(gen.ItemSummary item, {String baseUrl = ''}) {
     albumPid: item.albumPid,
     trackNumber: item.trackNumber,
     discNumber: item.discNumber,
+    sortKey: item.sortKey,
+    artistSort: item.artistSort,
+    artistSortKey: item.artistSortKey,
     durationMs: item.durationMs,
     artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
   );
@@ -255,8 +258,14 @@ ItemDetail itemDetailFromGen(gen.Item item, {String baseUrl = ''}) {
     albumPid: item.albumPid,
     trackNumber: item.trackNumber,
     discNumber: item.discNumber,
+    sortKey: item.sortKey,
+    artistSort: item.artistSort,
+    artistSortKey: item.artistSortKey,
     durationMs: item.durationMs,
     artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
+    trackTotal: item.trackTotal,
+    discTotal: item.discTotal,
+    partTotal: item.partTotal,
     genres: item.genres?.toList() ?? const [],
     year: item.year,
     bpm: item.bpm,
@@ -457,6 +466,7 @@ SearchHit searchHitFromGen(gen.SearchHit hit) {
     kind: hit.kind,
     title: hit.title,
     subtitle: hit.subtitle,
+    exact: hit.exact ?? false,
   );
 }
 
@@ -704,6 +714,7 @@ EpisodeSummary episodeSummaryFromGen(
     title: episode.title,
     artist: episode.artist,
     album: episode.album,
+    sortKey: episode.sortKey,
     durationMs: episode.durationMs,
     artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
     showPid: episode.showPid,
@@ -746,6 +757,7 @@ EpisodeDetail episodeDetailFromGen(gen.Episode episode, {String baseUrl = ''}) {
     title: episode.title,
     artist: episode.artist,
     album: episode.album,
+    sortKey: episode.sortKey,
     durationMs: episode.durationMs,
     artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
     showPid: episode.showPid,
@@ -1089,6 +1101,35 @@ M3uImportResult m3uImportResultFromGen(
     unmatchedPaths: res.unmatchedPaths?.toList() ?? const [],
   );
 }
+
+/// An outcome a newer server added reads as unmatched, without its item:
+/// this build cannot say what such a line will do.
+M3uPreview m3uPreviewFromGen(gen.M3uPreview preview, {String baseUrl = ''}) {
+  return M3uPreview(
+    matched: preview.matched,
+    merged: preview.merged,
+    unmatched: preview.unmatched,
+    lines: [
+      for (final e in preview.entries)
+        switch (e.outcome) {
+          gen.M3uPreviewEntryOutcomeEnum.matched => M3uPreviewLine(
+            path: e.path,
+            outcome: M3uLineOutcome.matched,
+            item: _m3uItem(e, baseUrl),
+          ),
+          gen.M3uPreviewEntryOutcomeEnum.merged => M3uPreviewLine(
+            path: e.path,
+            outcome: M3uLineOutcome.merged,
+            item: _m3uItem(e, baseUrl),
+          ),
+          _ => M3uPreviewLine(path: e.path, outcome: M3uLineOutcome.unmatched),
+        },
+    ],
+  );
+}
+
+ItemSummary? _m3uItem(gen.M3uPreviewEntry e, String baseUrl) =>
+    e.item == null ? null : itemSummaryFromGen(e.item!, baseUrl: baseUrl);
 
 RadioStation radioStationFromGen(gen.RadioStation st) {
   return RadioStation(
@@ -2087,6 +2128,24 @@ gen.MergeRequestEntityTypeEnum mergeEntityTypeToGen(String entityType) =>
       entityType == 'release-group' ? 'releaseGroup' : entityType,
     );
 
+/// The same bridge for an unfold's entity type.
+gen.UnfoldRequestEntityTypeEnum unfoldEntityTypeToGen(String entityType) =>
+    gen.UnfoldRequestEntityTypeEnum.valueOf(
+      entityType == 'release-group' ? 'releaseGroup' : entityType,
+    );
+
+EntityFold entityFoldFromGen(gen.EntityFold f) => EntityFold(
+  entityType: f.entityType,
+  key: f.key,
+  spelling: f.spelling,
+  facet: f.facet,
+  folder: f.folder,
+  library: f.library_,
+  entityPid: f.entityPid,
+  entityName: f.entityName,
+  createdAt: f.createdAt.toUtc(),
+);
+
 UpgradeMember upgradeMemberFromGen(gen.UpgradeMember m) {
   return UpgradeMember(
     itemPid: m.itemPid,
@@ -2113,6 +2172,7 @@ OrganizeProfile organizeProfileFromGen(gen.OrganizeProfile profile) {
     audiobookTemplate: profile.audiobookTemplate,
     podcastTemplate: profile.podcastTemplate,
     tagWrite: profile.tagWrite,
+    compilationFolder: profile.compilationFolder,
     builtIn: profile.builtIn,
     sample: organizeSampleFromGen(profile.sample),
     saved: switch (profile.saved) {
@@ -2131,6 +2191,7 @@ OrganizeSample organizeSampleFromGen(gen.OrganizeSample sample) =>
       music: sample.music,
       audiobook: sample.audiobook,
       podcast: sample.podcast,
+      compilation: sample.compilation,
     );
 
 OrganizeProfiles organizeProfilesFromGen(gen.OrganizeProfiles listing) {
@@ -2745,6 +2806,7 @@ DeleteItemsResult deleteItemsResultFromGen(gen.DeleteItemsResult result) {
                 ),
             ],
             paths: e.paths?.toList() ?? const [],
+            sidecars: e.sidecars?.toList() ?? const [],
             itemSurvives: e.itemSurvives ?? false,
             failed: e.failed ?? 0,
             error: e.error,

@@ -1065,6 +1065,204 @@ abstract class AppLocalizations {
   /// **'Walk'**
   String get adminEnrichmentWalkColumn;
 
+  /// Message when an unfold finds the name no longer folded, another session having unfolded it first; the list is read again.
+  ///
+  /// In en, this message translates to:
+  /// **'That name was unfolded already'**
+  String get adminFoldsAlreadyUnfolded;
+
+  /// What tells a folded name apart, numbered in the listing's order where folds of one spelling still read alike: copies of one release folded by the same merge whose files have since left their folders.
+  ///
+  /// In en, this message translates to:
+  /// **'{apart}, {index} of {count}'**
+  String adminFoldsApartOf(String apart, int index, int count);
+
+  /// Column heading in the folded names list: the entry a folded name files under.
+  ///
+  /// In en, this message translates to:
+  /// **'Files under'**
+  String get adminFoldsColumnFilesUnder;
+
+  /// Column heading in the folded names list: when the name was folded.
+  ///
+  /// In en, this message translates to:
+  /// **'Folded'**
+  String get adminFoldsColumnSince;
+
+  /// Column heading in the folded names list: the folded name as the catalog matches it.
+  ///
+  /// In en, this message translates to:
+  /// **'Spelling'**
+  String get adminFoldsColumnSpelling;
+
+  /// Empty state of the folded names section, saying where folded names come from.
+  ///
+  /// In en, this message translates to:
+  /// **'A merge folds the names it does away with into the entry it keeps, so files still spelled the old way file under it.'**
+  String get adminFoldsEmptyMessage;
+
+  /// Empty state of the folded names section.
+  ///
+  /// In en, this message translates to:
+  /// **'No folded names'**
+  String get adminFoldsEmptyTitle;
+
+  /// The entry a folded name files under, as a row of the folded names list reads it out: its name and what kind of entry it is.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} ({kind})'**
+  String adminFoldsEntry(String name, String kind);
+
+  /// Title of the error state when the folded names could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load folded names'**
+  String get adminFoldsError;
+
+  /// When an album's name was folded, telling apart copies of one release that no file places in a folder any longer (their files have moved, or two folders read alike to the catalog).
+  ///
+  /// In en, this message translates to:
+  /// **'Folded {when}'**
+  String adminFoldsFoldedAt(String when);
+
+  /// Heading over the folded names that file under an album.
+  ///
+  /// In en, this message translates to:
+  /// **'Albums'**
+  String get adminFoldsGroupAlbum;
+
+  /// Heading over the folded names that file under an artist.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get adminFoldsGroupArtist;
+
+  /// Heading over the folded names that file under a genre.
+  ///
+  /// In en, this message translates to:
+  /// **'Genres'**
+  String get adminFoldsGroupGenre;
+
+  /// Heading over the folded names that file under a release group.
+  ///
+  /// In en, this message translates to:
+  /// **'Release groups'**
+  String get adminFoldsGroupReleaseGroup;
+
+  /// Heading over the folded names that file under a book series.
+  ///
+  /// In en, this message translates to:
+  /// **'Series'**
+  String get adminFoldsGroupSeries;
+
+  /// An album fold's folder, as a path within its library, and that library's name, telling apart copies of one release in different folders.
+  ///
+  /// In en, this message translates to:
+  /// **'In {folder} in {library}'**
+  String adminFoldsInFolder(String folder, String library);
+
+  /// Where an album fold's files sit when they are in the top folder of their library, named.
+  ///
+  /// In en, this message translates to:
+  /// **'At the top of {library}'**
+  String adminFoldsInLibrary(String library);
+
+  /// Kind of entry a folded name files under: an album.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get adminFoldsKindAlbum;
+
+  /// Kind of entry a folded name files under: an artist.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get adminFoldsKindArtist;
+
+  /// Kind of entry a folded name files under: a genre. Also marks a genre fold apart from a mood fold of the same spelling.
+  ///
+  /// In en, this message translates to:
+  /// **'Genre'**
+  String get adminFoldsKindGenre;
+
+  /// Kind of entry a folded name files under: a mood, the genre vocabulary's other facet. Also marks a mood fold apart from a genre fold of the same spelling.
+  ///
+  /// In en, this message translates to:
+  /// **'Mood'**
+  String get adminFoldsKindMood;
+
+  /// Kind of entry a folded name files under: a release group.
+  ///
+  /// In en, this message translates to:
+  /// **'Release group'**
+  String get adminFoldsKindReleaseGroup;
+
+  /// Kind of entry a folded name files under: a book series.
+  ///
+  /// In en, this message translates to:
+  /// **'Series'**
+  String get adminFoldsKindSeries;
+
+  /// Second line of the message after a merge: how many names the merge folded into the entry it kept.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 spelling now files under {survivor}} other{{count} spellings now file under {survivor}}}'**
+  String adminFoldsMerged(int count, String survivor);
+
+  /// Line above the Folded names heading, saying what a folded name is.
+  ///
+  /// In en, this message translates to:
+  /// **'Old spellings that file under another name'**
+  String get adminFoldsOverline;
+
+  /// A folded name quoted, as the unfold button, its dialog and its message name it.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{spelling}\"'**
+  String adminFoldsQuoted(String spelling);
+
+  /// A folded name quoted, with what tells it apart from another fold of the same spelling (its folder and library, its facet, or when it was folded), as the unfold button, its dialog and its message name it.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{spelling}\" ({apart})'**
+  String adminFoldsQuotedApart(String spelling, String apart);
+
+  /// Heading of the Health section listing the names merges folded into an entry.
+  ///
+  /// In en, this message translates to:
+  /// **'Folded names'**
+  String get adminFoldsTitle;
+
+  /// Label of a folded name's unfold button. {fold} is the name quoted (adminFoldsQuoted or adminFoldsQuotedApart).
+  ///
+  /// In en, this message translates to:
+  /// **'Unfold {fold}'**
+  String adminFoldsUnfold(String fold);
+
+  /// Confirm button of the unfold dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Unfold'**
+  String get adminFoldsUnfoldAction;
+
+  /// Body of the unfold dialog: which files an unfold moves (those the library reads as new or changed), and that the ones already filed stay, a rescan with the re-read option (adminLibraryRescanForce) included. {fold} is the name quoted (adminFoldsQuoted).
+  ///
+  /// In en, this message translates to:
+  /// **'Files spelled {fold} that the library reads as new or changed (added, moved, replaced or retagged) are filed under their own name again. The ones \"{name}\" holds already stay with it, even through a rescan with Re-read unchanged files, until they change or move.'**
+  String adminFoldsUnfoldBody(String fold, String name);
+
+  /// Title of the dialog confirming that a folded name is unfolded.
+  ///
+  /// In en, this message translates to:
+  /// **'Unfold this name?'**
+  String get adminFoldsUnfoldTitle;
+
+  /// Message after a name was unfolded: the fold is gone, and no file moved. {fold} is the name quoted (adminFoldsQuoted or adminFoldsQuotedApart).
+  ///
+  /// In en, this message translates to:
+  /// **'{fold} is unfolded'**
+  String adminFoldsUnfolded(String fold);
+
   /// Body of the refusal an account without the role gets at a console location it followed a link to.
   ///
   /// In en, this message translates to:
@@ -6255,6 +6453,186 @@ abstract class AppLocalizations {
   /// **'This track is part of a larger file, which another device can\'t play yet. Play it on this one instead.'**
   String get errorWindowedTrack;
 
+  /// Row of the catalog check counting albums whose year is not the one their tracks give.
+  ///
+  /// In en, this message translates to:
+  /// **'Album years out of date'**
+  String get healthCatalogAlbumYears;
+
+  /// Row of the catalog check counting artists whose stored track and album totals differ from a recount.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist totals out of date'**
+  String get healthCatalogArtistTotals;
+
+  /// Explanation under the Catalog check heading, saying what the check compares and that it is seldom needed.
+  ///
+  /// In en, this message translates to:
+  /// **'Compares what the catalog keeps beside your files (the search index, totals, sort keys and years) with a fresh count from its own records. Rarely needed: a catalog the server built fresh reads consistent.'**
+  String get healthCatalogBlurb;
+
+  /// Row of the catalog check counting books whose stored ISBN match key is not the one their ISBN gives.
+  ///
+  /// In en, this message translates to:
+  /// **'Book ISBN keys out of date'**
+  String get healthCatalogBookIsbnKeys;
+
+  /// Row of the catalog check counting books whose stored length differs from the sum of their parts.
+  ///
+  /// In en, this message translates to:
+  /// **'Book lengths out of date'**
+  String get healthCatalogBookLengths;
+
+  /// Under a catalog check's result, when it was read, so a result kept on screen says how old it is. {stamp} is an already-formatted date and time.
+  ///
+  /// In en, this message translates to:
+  /// **'Checked {stamp}'**
+  String healthCatalogCheckedAt(String stamp);
+
+  /// Result of a catalog check that found nothing out of step and nothing to tidy.
+  ///
+  /// In en, this message translates to:
+  /// **'Consistent: nothing out of step.'**
+  String get healthCatalogClean;
+
+  /// Result of a catalog check that found derived data out of step with the catalog's records; the counts follow.
+  ///
+  /// In en, this message translates to:
+  /// **'Out of step. A repair recomputes what is listed below.'**
+  String get healthCatalogDrift;
+
+  /// Row of the catalog check counting genres whose stored totals differ from a recount.
+  ///
+  /// In en, this message translates to:
+  /// **'Genre totals out of date'**
+  String get healthCatalogGenreTotals;
+
+  /// Row of the catalog check counting items with no search index entry.
+  ///
+  /// In en, this message translates to:
+  /// **'Items search cannot find'**
+  String get healthCatalogMissingFromSearch;
+
+  /// Row of the catalog check counting search index entries whose item is gone.
+  ///
+  /// In en, this message translates to:
+  /// **'Search entries with no item'**
+  String get healthCatalogOrphanSearchRows;
+
+  /// Line above the Catalog check heading, naming what the check covers.
+  ///
+  /// In en, this message translates to:
+  /// **'Search, totals, sort keys and years'**
+  String get healthCatalogOverline;
+
+  /// Row of the catalog check counting playlists whose entry positions have gaps; their order reads the same either way.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlists numbered with gaps'**
+  String get healthCatalogPlaylistNumbering;
+
+  /// Row of the catalog check counting custom-tag rows under a tag name the catalog stopped accepting, which nothing can reach.
+  ///
+  /// In en, this message translates to:
+  /// **'Tags under names no longer accepted'**
+  String get healthCatalogRefusedTagRows;
+
+  /// Row of the catalog check counting release groups whose stored totals differ from a recount.
+  ///
+  /// In en, this message translates to:
+  /// **'Release group totals out of date'**
+  String get healthCatalogReleaseGroupTotals;
+
+  /// Row of the catalog check counting items whose release year differs from their track's or book's year.
+  ///
+  /// In en, this message translates to:
+  /// **'Release years out of date'**
+  String get healthCatalogReleaseYears;
+
+  /// Button that repairs the catalog's derived data, on the Catalog check section and in its confirm dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Repair'**
+  String get healthCatalogRepair;
+
+  /// Body of the dialog confirming a catalog repair: what it does, that it holds up writes while it runs, and that it leaves the media files alone.
+  ///
+  /// In en, this message translates to:
+  /// **'The repair recounts what the check counts from the catalog\'s own records and deletes what nothing uses. It holds the catalog\'s write lock while it writes, so edits and scans wait for it. Your files are not touched.'**
+  String get healthCatalogRepairBody;
+
+  /// Message when a catalog repair was refused because one is already queued or running; the message offers the Tasks screen.
+  ///
+  /// In en, this message translates to:
+  /// **'A repair is already running. Follow it in Tasks.'**
+  String get healthCatalogRepairRunning;
+
+  /// What a screen reader hears for the Repair button, which needs its subject when reached on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Repair the catalog'**
+  String get healthCatalogRepairSpoken;
+
+  /// Message after a catalog repair was queued; it runs in the background and the message offers the Tasks screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Repair started. Follow it in Tasks.'**
+  String get healthCatalogRepairStarted;
+
+  /// Title of the dialog confirming a catalog repair.
+  ///
+  /// In en, this message translates to:
+  /// **'Repair the catalog?'**
+  String get healthCatalogRepairTitle;
+
+  /// Row of the catalog check counting custom-tag edit records under a name the catalog has since reserved, which nothing can read.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag records under reserved names'**
+  String get healthCatalogReservedTagRecords;
+
+  /// Row of the catalog check counting names whose stored sort key is not the one the catalog generates now.
+  ///
+  /// In en, this message translates to:
+  /// **'Names sorting out of place'**
+  String get healthCatalogSortKeys;
+
+  /// Result of a catalog check that found nothing out of step but unused rows or playlist gaps a repair clears; the counts follow.
+  ///
+  /// In en, this message translates to:
+  /// **'Consistent. A repair tidies what is listed below.'**
+  String get healthCatalogTidy;
+
+  /// Heading over the section that checks and repairs what the catalog derives from its own records.
+  ///
+  /// In en, this message translates to:
+  /// **'Catalog check'**
+  String get healthCatalogTitle;
+
+  /// Row of the catalog check counting stored images no entity uses.
+  ///
+  /// In en, this message translates to:
+  /// **'Unused images'**
+  String get healthCatalogUnusedImages;
+
+  /// Row of the catalog check counting cached thumbnails of images no entity uses.
+  ///
+  /// In en, this message translates to:
+  /// **'Unused thumbnails'**
+  String get healthCatalogUnusedThumbnails;
+
+  /// Button that runs the catalog check and shows what it found.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify'**
+  String get healthCatalogVerify;
+
+  /// What a screen reader hears for the Verify button, which needs its subject when reached on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify the catalog'**
+  String get healthCatalogVerifySpoken;
+
   /// Column heading for the entities a merge folds into the survivor.
   ///
   /// In en, this message translates to:
@@ -7233,6 +7611,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 file} other{{count} files}}: {list}'**
   String libraryDeletePreviewFiles(int count, String list);
 
+  /// What a screen reader hears for the delete dialog's sidecar list: how many covers, lyrics and other files named for the deleted files go with them, then each by its place in its library.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 sidecar} other{{count} sidecars}}: {list}'**
+  String libraryDeletePreviewSidecars(int count, String list);
+
   /// Button offering to delete the tracks asked for together with every other track their shared files hold, after a delete naming only some of a file's tracks was refused. The ellipsis says the delete dialog follows.
   ///
   /// In en, this message translates to:
@@ -7256,6 +7640,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'With the tracks that share their files, this is more than {max} tracks, too many to delete in one go.'**
   String libraryDeleteRipTooMany(int max);
+
+  /// Line over the delete dialog's list of sidecars: the covers, lyrics and other small files named for the files being deleted, which go with them. Said once, over the list.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Also removes 1 sidecar:} other{Also removes {count} sidecars:}}'**
+  String libraryDeleteSidecarsHeading(int count);
 
   /// Title of the dialog confirming that an item's files are deleted.
   ///
@@ -7305,6 +7695,12 @@ abstract class AppLocalizations {
   /// **'Container'**
   String get libraryFactsContainer;
 
+  /// Facts sheet row label: which disc of the release the track is on.
+  ///
+  /// In en, this message translates to:
+  /// **'Disc'**
+  String get libraryFactsDisc;
+
   /// Facts sheet row label: how long the item runs.
   ///
   /// In en, this message translates to:
@@ -7353,6 +7749,18 @@ abstract class AppLocalizations {
   /// **'Never'**
   String get libraryFactsNeverPlayed;
 
+  /// Value of a facts sheet row that says a position and how many there are: track 3 of 12, disc 1 of 2.
+  ///
+  /// In en, this message translates to:
+  /// **'{number} of {total}'**
+  String libraryFactsNumberOf(int number, int total);
+
+  /// Facts sheet row label: how many parts the audiobook's file says the book has.
+  ///
+  /// In en, this message translates to:
+  /// **'Parts'**
+  String get libraryFactsParts;
+
   /// Facts sheet row label: how many times the reader has played the item.
   ///
   /// In en, this message translates to:
@@ -7370,6 +7778,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Details'**
   String get libraryFactsTitle;
+
+  /// Facts sheet row label: the track's number on its disc.
+  ///
+  /// In en, this message translates to:
+  /// **'Track'**
+  String get libraryFactsTrack;
 
   /// Facts sheet row label: the release or publication year.
   ///
@@ -9891,6 +10305,30 @@ abstract class AppLocalizations {
   /// **'Audiobook template'**
   String get organizeProfileAudiobookLabel;
 
+  /// Help under the profile editor's compilation folder field: what an unset field and an emptied one do.
+  ///
+  /// In en, this message translates to:
+  /// **'Various Artists unless set; empty files compilations under their tagged album artist'**
+  String get organizeProfileCompilationHelp;
+
+  /// Label of the profile editor field naming the folder compilations file under, which the tag write also gives them as album artist.
+  ///
+  /// In en, this message translates to:
+  /// **'Compilation folder'**
+  String get organizeProfileCompilationLabel;
+
+  /// Hint in the compilation folder field once it is emptied: each compilation then files under its own tagged album artist.
+  ///
+  /// In en, this message translates to:
+  /// **'Each one\'s tagged album artist'**
+  String get organizeProfileCompilationOwn;
+
+  /// Hint in the compilation folder field while it is unset: the folder compilations then file under, spelled as the catalog writes it on disk, so it is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Various Artists'**
+  String get organizeProfileCompilationUnset;
+
   /// Button in the profile editor that deletes the profile.
   ///
   /// In en, this message translates to:
@@ -9974,6 +10412,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Book: {path}'**
   String organizeProfileSampleBook(String path);
+
+  /// Sample path of a track of a compilation.
+  ///
+  /// In en, this message translates to:
+  /// **'Compilation: {path}'**
+  String organizeProfileSampleCompilation(String path);
 
   /// Sample path of a track.
   ///
@@ -11121,7 +11565,7 @@ abstract class AppLocalizations {
   /// **'Kept matched to this export. Re-match it whenever you like from the playlist\'s sync settings.'**
   String get playlistImportBound;
 
-  /// Button in the NSP import sheet that asks the server what the pasted document would lose, before anything is imported.
+  /// Button in the NSP and M3U import sheets that asks the server, before anything is imported, what the pasted document would lose (NSP) or what each of its lines matches (M3U).
   ///
   /// In en, this message translates to:
   /// **'Check'**
@@ -11402,6 +11846,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not load this playlist'**
   String get playlistLoadError;
+
+  /// Shown beside a spinner while the server checks each line of a pasted M3U file, which for a long file can take tens of seconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking each line of the file. A long one takes a while.'**
+  String get playlistM3uPreviewChecking;
+
+  /// Line above the lines of a pasted M3U file once it is checked, before anything is imported: how many lines become playlist entries, how many name the same item as the line before them through a different path to it (another of its files, such as a book's next part or a copy, or another spelling of the same file) and so add no entry, and how many match nothing the person can see.
+  ///
+  /// In en, this message translates to:
+  /// **'{matched, plural, =1{1 line becomes an entry} other{{matched} lines become entries}}{merged, plural, =0{} =1{, 1 joins the entry before it} other{, {merged} join the entry before them}}{unmatched, plural, =0{} =1{, 1 has no match in the library} other{, {unmatched} have no match in the library}}.'**
+  String playlistM3uPreviewCounts(int matched, int merged, int unmatched);
+
+  /// Shown beside a spinner while a checked M3U file is imported as a playlist, which for a long file can take tens of seconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing the playlist. A long file takes a while.'**
+  String get playlistM3uPreviewImporting;
+
+  /// A checked M3U line's match, by its artist and title.
+  ///
+  /// In en, this message translates to:
+  /// **'{artist} - {title}'**
+  String playlistM3uPreviewItem(String artist, String title);
+
+  /// Label on a checked M3U line that becomes a playlist entry; its match is named under it.
+  ///
+  /// In en, this message translates to:
+  /// **'Entry'**
+  String get playlistM3uPreviewMatched;
+
+  /// Label on a checked M3U line that names the same item as the line before it through a different path to it (another of its files, such as a book's next part or a copy, or another spelling of the same file), so it adds no entry; the item is named under it.
+  ///
+  /// In en, this message translates to:
+  /// **'Joins the entry before it'**
+  String get playlistM3uPreviewMerged;
+
+  /// Shown under a checked M3U file, with Import held off, when an import of the same file started earlier (perhaps from a dialog since closed) has not finished.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is still being imported. It can be imported again once that finishes.'**
+  String get playlistM3uPreviewStillImporting;
+
+  /// Label on a checked M3U line that matches nothing the person can see; the line's path is shown under it.
+  ///
+  /// In en, this message translates to:
+  /// **'No match in the library'**
+  String get playlistM3uPreviewUnmatched;
 
   /// Row in a shared playlist's overflow menu, taking it back from the server.
   ///
@@ -15363,6 +15855,12 @@ abstract class AppLocalizations {
   /// **'Search'**
   String get searchTitle;
 
+  /// Heading over the one artist or album whose name is the search, shown above the result groups.
+  ///
+  /// In en, this message translates to:
+  /// **'Top result'**
+  String get searchTopResult;
+
   /// Note under the results when the server capped how many it answered with.
   ///
   /// In en, this message translates to:
@@ -18712,6 +19210,12 @@ abstract class AppLocalizations {
   /// **'detached {count}'**
   String toolsCountDetached(int count);
 
+  /// Counter in a finished catalog repair's result: artists, albums, genres and the like left with no items, which it deleted. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'empty entries removed {count}'**
+  String toolsCountEntriesRemoved(int count);
+
   /// Counter in a finished job's result: files it could not read or write. Lower case: it sits in a comma-separated run of counters.
   ///
   /// In en, this message translates to:
@@ -18790,11 +19294,29 @@ abstract class AppLocalizations {
   /// **'pictures {count}'**
   String toolsCountPictures(int count);
 
+  /// Counter in a finished catalog repair's result: images, thumbnails and tag records nothing used, which it deleted. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'unused rows reclaimed {count}'**
+  String toolsCountReclaimed(int count);
+
+  /// Counter in a finished catalog repair's result: search index entries it wrote or dropped. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'search rows rebuilt {count}'**
+  String toolsCountSearchRows(int count);
+
   /// Counter in a finished job's or fix's result: items left alone. Lower case: it sits in a comma-separated run of counters.
   ///
   /// In en, this message translates to:
   /// **'skipped {count}'**
   String toolsCountSkipped(int count);
+
+  /// Counter in a finished catalog repair's result: names whose sort key it rewrote, which moves where they list. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'sort keys rewritten {count}'**
+  String toolsCountSortKeys(int count);
 
   /// Counter in a finished library removal's result: the library's trash entries that went with it, their files staying in its trash folder. Shown only when there were any. Lower case: it sits in a comma-separated run of counters.
   ///
@@ -19036,6 +19558,18 @@ abstract class AppLocalizations {
   /// **'Waiting'**
   String get toolsStateWaiting;
 
+  /// Last part of a finished catalog repair's result: the check it ran after found nothing out of step. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'consistent'**
+  String get toolsSummaryConsistent;
+
+  /// Last part of a finished catalog repair's result: rows the check it ran after still found out of step. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'still out of step {count}'**
+  String toolsSummaryDriftLeft(int count);
+
   /// Headline counter from a task's report, counting listening records it carried across. Lower case: it sits in a comma-separated run of counters.
   ///
   /// In en, this message translates to:
@@ -19053,6 +19587,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'refused {count}'**
   String toolsSummaryRefused(String count);
+
+  /// Headline counter from an import's report, counting matched entries whose recording the library holds more than once with nothing to tell the copies apart, so the import took one of the copies. Part of the matched count, not beside it. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'tied {count}'**
+  String toolsSummaryTied(String count);
 
   /// Headline note on an import whose history ran past what one run reads: the most recent part landed. Lower case: it sits in a comma-separated run of counters.
   ///
@@ -19095,6 +19635,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Book split'**
   String get toolsTaskBookSplit;
+
+  /// Name of the task that recomputes what the catalog derives from its own records and deletes what nothing uses.
+  ///
+  /// In en, this message translates to:
+  /// **'Catalog repair'**
+  String get toolsTaskCatalogRepair;
 
   /// Name of the task that cuts one long audio file into tracks using its CUE sheet. CUE is a file format and stays as it is.
   ///

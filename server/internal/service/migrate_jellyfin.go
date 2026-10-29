@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -287,15 +288,15 @@ func (l *Library) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 			}
 			prefix = PrefixBook
 		}
-		found, rung, err := l.resolveMigrationRef(ctx, ref)
+		found, copies, err := l.resolveMigrationRef(ctx, ref)
 		if err != nil {
 			return sum, classify(err)
 		}
-		if found == nil || rung == model.MatchNone {
+		if found == nil {
 			sum.noteUnmatched(it.artist(), it.Name)
 			continue
 		}
-		sum.Matched++
+		sum.noteMatch(it.artist(), it.Name, copies)
 		pid := apiPID(prefix, found.PID)
 		write := func(fn func() error) (bool, error) {
 			if p.DryRun {
@@ -374,7 +375,8 @@ func (l *Library) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 // the entity handles that name what to star. The members come from the
 // walk already done rather than from more requests - a favourite album
 // is named by the songs that say they belong to it - so this pass costs
-// one listing per entity type and no per-group fetches.
+// one listing per entity type, and one more only for a group none of
+// whose walked songs matches for sure.
 func (l *Library) importJellyfinEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *jellyfinClient, prog *toolProgress, walked []jellyfinItem, sum *migrationSummary) error {
 	var albums, artists []jellyfinItem
 	if err := client.items(ctx, "MusicAlbum,MusicArtist", url.Values{"Filters": {"IsFavorite"}},
@@ -431,43 +433,53 @@ func (l *Library) importJellyfinEntityStars(ctx context.Context, t *wdb.ToolTask
 		return out, err
 	}
 
-	resolveMember := func(members []jellyfinItem) (*model.ItemView, error) {
+	// resolveMember answers the first member the ladder matches for sure
+	// (see resolveGroupMember), else the first tie among them.
+	resolveMember := func(members []jellyfinItem, entity func(*model.ItemView) model.PID) (sure, fallback *model.ItemView, err error) {
 		for _, s := range members {
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			}
-			it, rung, err := l.resolveMigrationRef(ctx, model.PortableRef{
+			it, tie, err := l.resolveGroupMember(ctx, model.PortableRef{
 				Kind:       model.KindTrack,
 				MBID:       s.ProviderIds.MusicBrainzTrack,
 				Artist:     s.artist(),
 				Title:      s.Name,
 				Album:      s.Album,
 				DurationMS: s.durationMS(),
-			})
+			}, entity)
 			if err != nil {
-				return nil, classify(err)
+				return nil, nil, classify(err)
 			}
-			if it != nil && rung != model.MatchNone {
-				return it, nil
+			if it != nil {
+				return it, nil, nil
+			}
+			if fallback == nil {
+				fallback = tie
 			}
 		}
-		return nil, nil
+		return nil, fallback, nil
 	}
 
 	star := func(members []jellyfinItem, fetch func() ([]jellyfinItem, error), label string, entityPID func(*model.ItemView) model.PID, prefix string, count *int) error {
-		it, err := resolveMember(members)
+		it, tie, err := resolveMember(members, entityPID)
 		if err != nil {
 			return err
 		}
 		if it == nil {
-			// Nothing this listener had played matched, which says
-			// nothing about the group: ask the server what is in it.
+			// Nothing this listener had played matched for sure, which
+			// says nothing about the group: ask the server what is in it,
+			// and take a tie only when no member there is sure either.
 			fetched, fetchErr := fetch()
 			if fetchErr != nil {
 				return migrateClientErr(fetchErr)
 			}
-			if it, err = resolveMember(fetched); err != nil {
+			var later *model.ItemView
+			if it, later, err = resolveMember(fetched, entityPID); err != nil {
 				return err
+			}
+			if it == nil {
+				it = cmp.Or(tie, later)
 			}
 		}
 		var pid model.PID

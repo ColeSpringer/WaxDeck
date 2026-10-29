@@ -44,6 +44,7 @@ Future<ItemPage> mirrorItemsPage(
           title: r.title,
           artist: r.artist,
           album: r.album,
+          sortKey: r.sortKey,
           durationMs: r.durationMs,
           // No artUrl offline: the grid's placeholder renders instead of
           // a dead request.
@@ -120,6 +121,7 @@ Future<ItemSummary?> mirrorItemByPid(MirrorDatabase db, String pid) async {
     title: row.title,
     artist: row.artist,
     album: row.album,
+    sortKey: row.sortKey,
     durationMs: row.durationMs,
   );
 }

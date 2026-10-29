@@ -19,6 +19,7 @@ part 'delete_plan_entry.g.dart';
 /// * [bytes] - Bytes reclaimed (or to reclaim).
 /// * [fileList] - The files `files` counts, by name. Absent for an entry whose file counts under another track of its rip. 
 /// * [paths] - Where the files `fileList` names are, in the same order, each relative to its library's root, so two files of one name in different folders read apart. Absent with `fileList`. 
+/// * [sidecars] - The sidecars that go with this entry's files, each relative to its library's root as `paths` are: the covers, lyrics, cue sheets and other files named for a file being deleted. A sidecar another file of its name still uses stays, and is listed with the last of those files to go. In an applied result, only those that left with their files. Absent when none goes. 
 /// * [failed] - Files of this item the deletion tried to remove and could not; they stayed, and `files` does not count them. Absent from a plan and when every file went. 
 /// * [error] - Why the first of the `failed` files stayed, in words without the server's folders. 
 /// * [itemSurvives] - The item keeps a file after the deletion (a copy it holds, or one left in place), so it stays in the library rather than being archived. 
@@ -47,6 +48,10 @@ abstract class DeletePlanEntry implements Built<DeletePlanEntry, DeletePlanEntry
   /// Where the files `fileList` names are, in the same order, each relative to its library's root, so two files of one name in different folders read apart. Absent with `fileList`. 
   @BuiltValueField(wireName: r'paths')
   BuiltList<String>? get paths;
+
+  /// The sidecars that go with this entry's files, each relative to its library's root as `paths` are: the covers, lyrics, cue sheets and other files named for a file being deleted. A sidecar another file of its name still uses stays, and is listed with the last of those files to go. In an applied result, only those that left with their files. Absent when none goes. 
+  @BuiltValueField(wireName: r'sidecars')
+  BuiltList<String>? get sidecars;
 
   /// Files of this item the deletion tried to remove and could not; they stayed, and `files` does not count them. Absent from a plan and when every file went. 
   @BuiltValueField(wireName: r'failed')
@@ -116,6 +121,13 @@ class _$DeletePlanEntrySerializer implements PrimitiveSerializer<DeletePlanEntry
       yield r'paths';
       yield serializers.serialize(
         object.paths,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
+    if (object.sidecars != null) {
+      yield r'sidecars';
+      yield serializers.serialize(
+        object.sidecars,
         specifiedType: const FullType(BuiltList, [FullType(String)]),
       );
     }
@@ -207,6 +219,14 @@ class _$DeletePlanEntrySerializer implements PrimitiveSerializer<DeletePlanEntry
           ) as BuiltList<String>?;
           if (valueDes == null) continue;
           result.paths.replace(valueDes);
+          break;
+        case r'sidecars':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
+          result.sidecars.replace(valueDes);
           break;
         case r'failed':
           final valueDes = serializers.deserialize(

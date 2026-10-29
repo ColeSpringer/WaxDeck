@@ -543,6 +543,9 @@ func deleteResultJSON(res service.DeleteItemsResultDTO) DeleteItemsResult {
 		if len(e.Paths) > 0 {
 			row.Paths = ptr(append([]string{}, e.Paths...))
 		}
+		if len(e.Sidecars) > 0 {
+			row.Sidecars = ptr(append([]string{}, e.Sidecars...))
+		}
 		if e.Failed > 0 {
 			row.Failed, row.Error = ptr(e.Failed), ptr(e.Error)
 		}

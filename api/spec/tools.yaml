@@ -410,7 +410,7 @@ components:
           description: >
             The operation: `book-merge`, `book-split`, `cue-split`,
             `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`,
-            or an `import-` migration (`import-jellyfin`,
+            `catalog-repair`, or an `import-` migration (`import-jellyfin`,
             `import-subsonic`, ...). A string, not a closed enum.
         state:
           type: string
@@ -444,9 +444,9 @@ components:
             moved is (new files waiting beside the book, originals in the
             trash) and what clearing the task does with new files still
             hidden.
-            While a book merge or split, or a CUE split, is
-            `running` it can say what the task waits out instead, in the
-            server's words beside `waitReason`.
+            While a book merge or split, a CUE split, or a catalog repair
+            is `running` it can say what the task waits out instead, in
+            the server's words beside `waitReason`.
         waitReason:
           type: string
           description: >
@@ -458,7 +458,10 @@ components:
             `engine-unavailable`, `part-missing` (a file the catalog has
             is not where it says), `put-back-blocked` (a file going back
             from the trash cannot), `stopped` (the server stopped or the
-            run ran out of time), or `other`. A task waits at most six
+            run ran out of time), or `other`. A `catalog-repair` that a
+            catalog hand-off cut short waits too, with
+            `catalog-maintenance`, and starts over once the catalog is
+            back. A book merge or split, or CUE split, waits at most six
             hours in a row, then ends safely for how far it went. A
             string, not a closed enum.
         retryAt:
@@ -500,7 +503,19 @@ components:
             left alone by reason (`gone`, `locked`, `no match`, ...); a
             `path-mismatch` fix also carries `moved` (the items it
             moved), `held` (by hold code) and `jobPids` (the organize
-            jobs that moved them).
+            jobs that moved them). A `catalog-repair` task carries each
+            step's count once that step has run, added up over its
+            attempts and absent for a step none has reached:
+            `sortKeysRewritten`, `orphansDeleted` (entities with no items
+            deleted), `orphansPending` (those its last orphans step noted
+            for the next repair), `artSourcesReclaimed`,
+            `thumbnailsReclaimed`, `tagProvenanceReclaimed`,
+            `strandedTagRowsReclaimed` and `searchRowsRebuilt` (entries
+            written or dropped); `runs`, what each run of the task did:
+            the steps it finished, in order, with `error` saying why a run
+            stopped short and `handedOff` marking one a catalog hand-off
+            cut short; and once it has run, `after`, the
+            `CatalogConsistency` its closing check read.
 
     ClearFinishedTasksRequest:
       type: object

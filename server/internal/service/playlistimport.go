@@ -171,17 +171,92 @@ func (l *Library) resolvePlaylistImportRefs(ctx context.Context, f memberFilter,
 // filtering inside each pass lets the retries look past it. An import
 // takes a tie between copies of one recording: any of them serves.
 func (l *Library) resolveReachable(ctx context.Context, f memberFilter, refs []model.PortableRef) ([]model.RefResolution, map[model.PID]*model.ItemView, error) {
-	return l.resolveVisible(ctx, f, refs, waxbin.ResolveOptions{AcceptSameRecording: true})
+	return l.resolveVisible(ctx, f, refs, true)
+}
+
+// resolveTakingTies is resolveTakingTie over refs: one walk of them all
+// taking ties, then a plain walk of those whose tie stood above the last
+// rung, where a unique match is the answer. It answers the tie-taking walk
+// beside it, since a match the caller may not hold falls back on its tie.
+func (l *Library) resolveTakingTies(ctx context.Context, refs []model.PortableRef) (res, tied []model.RefResolution, err error) {
+	tied, err = l.resolveRefs(ctx, refs, waxbin.ResolveOptions{AcceptSameRecording: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	res = slices.Clone(tied)
+	var at []int
+	var again []model.PortableRef
+	for i, r := range tied {
+		if tieAboveLastRung(r.Rung, r.Candidates) {
+			at = append(at, i)
+			again = append(again, refs[i])
+		}
+	}
+	if len(again) == 0 {
+		return res, tied, nil
+	}
+	plain, err := l.resolveRefs(ctx, again, waxbin.ResolveOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+	for j, i := range at {
+		if plain[j].Rung != model.MatchNone {
+			res[i] = plain[j]
+		}
+	}
+	return res, tied, nil
+}
+
+// resolveRefs walks the catalog's resolve ladder for each of refs, in
+// order.
+func (l *Library) resolveRefs(ctx context.Context, refs []model.PortableRef, opts waxbin.ResolveOptions) ([]model.RefResolution, error) {
+	if l.refResolveHook != nil {
+		l.refResolveHook(opts, len(refs))
+	}
+	return l.lib.ResolvePlaylistRefsWith(ctx, refs, opts)
 }
 
 // resolveVisible is the resolve both directions share: the catalog's
 // ladder, then every match the filter's caller may not hold made a miss,
 // answering the matched views beside the resolutions.
-func (l *Library) resolveVisible(ctx context.Context, f memberFilter, refs []model.PortableRef, opts waxbin.ResolveOptions) ([]model.RefResolution, map[model.PID]*model.ItemView, error) {
-	res, err := l.lib.ResolvePlaylistRefsWith(ctx, refs, opts)
+func (l *Library) resolveVisible(ctx context.Context, f memberFilter, refs []model.PortableRef, takeTies bool) ([]model.RefResolution, map[model.PID]*model.ItemView, error) {
+	var res, tied []model.RefResolution
+	var err error
+	if takeTies {
+		res, tied, err = l.resolveTakingTies(ctx, refs)
+	} else {
+		res, err = l.resolveRefs(ctx, refs, waxbin.ResolveOptions{})
+	}
 	if err != nil {
 		return nil, nil, classify(err)
 	}
+	views, hidden, err := l.dropHidden(ctx, f, res)
+	if err != nil || !takeTies || len(hidden) == 0 {
+		return res, views, err
+	}
+	// A match the caller may not hold can stand in front of a copy of the
+	// same recording they may: those take the tie instead, kept only where
+	// its pick is one the caller may hold.
+	picks := make([]model.RefResolution, len(hidden))
+	for j, i := range hidden {
+		picks[j] = tied[i]
+	}
+	pickViews, _, err := l.dropHidden(ctx, f, picks)
+	if err != nil {
+		return nil, nil, err
+	}
+	for j, i := range hidden {
+		if picks[j].Rung != model.MatchNone {
+			res[i] = picks[j]
+		}
+	}
+	maps.Copy(views, pickViews)
+	return res, views, nil
+}
+
+// dropHidden turns every match the filter's caller may not hold into a
+// miss, answering the matched views and where the hidden matches were.
+func (l *Library) dropHidden(ctx context.Context, f memberFilter, res []model.RefResolution) (map[model.PID]*model.ItemView, []int, error) {
 	var pids []model.PID
 	for _, r := range res {
 		if r.Rung != model.MatchNone {
@@ -195,15 +270,17 @@ func (l *Library) resolveVisible(ctx context.Context, f memberFilter, refs []mod
 	if f, err = l.withTagVerdicts(ctx, f, slices.Collect(maps.Values(views))); err != nil {
 		return nil, nil, err
 	}
+	var hidden []int
 	for i, r := range res {
 		if r.Rung == model.MatchNone {
 			continue
 		}
 		if v := views[r.PID]; v == nil || !l.memberVisible(ctx, f, v) {
 			res[i] = model.RefResolution{Ref: r.Ref, Rung: model.MatchNone}
+			hidden = append(hidden, i)
 		}
 	}
-	return res, views, nil
+	return views, hidden, nil
 }
 
 // ImportStreamingPlaylist parses an export, resolves it against the
@@ -219,6 +296,9 @@ func (l *Library) ImportStreamingPlaylist(ctx context.Context, uc *UserCtx, in P
 	}
 	if name == "" {
 		name = "Imported playlist"
+	}
+	if err := checkPlaylistName(name); err != nil {
+		return PlaylistImportOutcome{}, err
 	}
 	// The new list is static, so a trashed match is a miss too.
 	res, _, err := l.resolvePlaylistImportRefs(ctx, memberFilter{uc: uc, subs: l.newSubscriptionFilter(uc)}, refs)
@@ -455,7 +535,7 @@ func (l *Library) drawnRefs(ctx context.Context, f memberFilter, pl *model.Playl
 	if err != nil {
 		return nil, classify(err)
 	}
-	res, views, err := l.resolveVisible(ctx, f, refs, waxbin.ResolveOptions{})
+	res, views, err := l.resolveVisible(ctx, f, refs, false)
 	if err != nil {
 		return nil, err
 	}

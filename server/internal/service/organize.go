@@ -41,10 +41,12 @@ const maxItemPids = 1000
 const catalogSetCap = 500
 
 // A profile name is an API path segment, and a template is bounded like
-// any field a request carries; the catalog bounds its group nesting.
+// any field a request carries; the catalog bounds its group nesting. A
+// compilation folder is one path segment.
 const (
-	maxProfileNameLen = 64
-	maxTemplateLen    = 1024
+	maxProfileNameLen       = 64
+	maxTemplateLen          = 1024
+	maxCompilationFolderLen = 255
 )
 
 // OrganizeProfileDTO is one organize profile, its templates after
@@ -54,8 +56,11 @@ type OrganizeProfileDTO struct {
 	Name                      string
 	Music, Audiobook, Podcast string
 	TagWrite                  bool
-	BuiltIn                   bool
-	Sample                    OrganizeSampleDTO
+	// CompilationFolder is where compilations file: nil for Various
+	// Artists, empty for their own tagged album artist.
+	CompilationFolder *string
+	BuiltIn           bool
+	Sample            OrganizeSampleDTO
 	// Saved is what a saved profile sets itself, an empty template
 	// inheriting; nil for a built-in nothing overrides.
 	Saved *OrganizeTemplatesDTO
@@ -66,10 +71,11 @@ type OrganizeTemplatesDTO struct {
 	Music, Audiobook, Podcast string
 }
 
-// OrganizeSampleDTO is where a profile lays out a sample track, book and
-// episode.
+// OrganizeSampleDTO is where a profile lays out a sample track, book,
+// episode and compilation track.
 type OrganizeSampleDTO struct {
 	Music, Audiobook, Podcast string
+	Compilation               string
 }
 
 // OrganizeProfileInput is an administrator's profile; an empty template
@@ -77,6 +83,7 @@ type OrganizeSampleDTO struct {
 type OrganizeProfileInput struct {
 	Music, Audiobook, Podcast string
 	TagWrite                  bool
+	CompilationFolder         *string
 }
 
 // OrganizeActionDTO is one planned move.
@@ -191,7 +198,8 @@ func builtinProfile(name string) bool { return slices.Contains(organize.Profiles
 func profileDTO(p organize.Profile, row *wdb.OrganizeProfile) OrganizeProfileDTO {
 	out := OrganizeProfileDTO{
 		Name: p.Name, Music: p.Music, Audiobook: p.Audiobook, Podcast: p.Podcast,
-		TagWrite: p.TagWrite, BuiltIn: row == nil && builtinProfile(p.Name), Sample: organizeSample(p),
+		TagWrite: p.TagWrite, CompilationFolder: p.CompilationFolder,
+		BuiltIn: row == nil && builtinProfile(p.Name), Sample: organizeSample(p),
 	}
 	if row != nil {
 		out.Saved = &OrganizeTemplatesDTO{Music: row.Music, Audiobook: row.Audiobook, Podcast: row.Podcast}
@@ -222,6 +230,19 @@ func checkTemplates(in OrganizeProfileInput) error {
 	return nil
 }
 
+// compilationFolder trims a profile's compilation folder, as the catalog
+// reads it, and bounds it; nil stays nil.
+func compilationFolder(raw *string) (*string, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	folder := strings.TrimSpace(*raw)
+	if utf8.RuneCountInString(folder) > maxCompilationFolderLen {
+		return nil, errInvalid("a compilation folder is at most 255 characters")
+	}
+	return &folder, nil
+}
+
 // The items every sample renders: fixed, so a sample shows what the
 // templates do rather than what the catalog holds.
 var (
@@ -234,6 +255,11 @@ var (
 	sampleEpisode = &model.ItemView{Kind: model.KindEpisode, Title: "The Lighthouse Keeper",
 		Album: "Night Shift Radio", Season: 3, DisplayPath: "sample.mp3",
 		PubDateNS: time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC).UnixNano()}
+	// Tagged with an album artist of its own, so an empty compilation
+	// folder shows a path of its own too.
+	sampleCompilation = &model.ItemView{Kind: model.KindTrack, Title: "Night Drive", Artist: "Neon Coast",
+		AlbumArtist: "Harbor Selectors", Album: "Coastal Nights", TrackNo: 4, DiscNo: 1, Year: 2023,
+		Genre: "Electronic", Compilation: true, DisplayPath: "sample.flac"}
 )
 
 func organizeSample(p organize.Profile) OrganizeSampleDTO {
@@ -244,7 +270,8 @@ func organizeSample(p organize.Profile) OrganizeSampleDTO {
 		}
 		return rel
 	}
-	return OrganizeSampleDTO{Music: render(sampleTrack), Audiobook: render(sampleBook), Podcast: render(sampleEpisode)}
+	return OrganizeSampleDTO{Music: render(sampleTrack), Audiobook: render(sampleBook), Podcast: render(sampleEpisode),
+		Compilation: render(sampleCompilation)}
 }
 
 // profileDefs is the saved profiles as the catalog takes them.
@@ -252,7 +279,7 @@ func profileDefs(rows []wdb.OrganizeProfile) []config.ProfileDef {
 	out := make([]config.ProfileDef, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, config.ProfileDef{Name: r.Name, Music: r.Music, Audiobook: r.Audiobook,
-			Podcast: r.Podcast, TagWrite: r.TagWrite})
+			Podcast: r.Podcast, TagWrite: r.TagWrite, CompilationFolder: r.CompilationFolder})
 	}
 	return out
 }
@@ -293,6 +320,10 @@ func (l *Library) PutOrganizeProfile(ctx context.Context, uc *UserCtx, name stri
 	if err := checkTemplates(in); err != nil {
 		return OrganizeProfileDTO{}, err
 	}
+	folder, err := compilationFolder(in.CompilationFolder)
+	if err != nil {
+		return OrganizeProfileDTO{}, err
+	}
 	l.profilesMu.Lock()
 	defer l.profilesMu.Unlock()
 	rows, err := l.db.OrganizeProfilesList(ctx)
@@ -300,7 +331,7 @@ func (l *Library) PutOrganizeProfile(ctx context.Context, uc *UserCtx, name stri
 		return OrganizeProfileDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
 	row := wdb.OrganizeProfile{Name: name, Music: in.Music, Audiobook: in.Audiobook, Podcast: in.Podcast,
-		TagWrite: in.TagWrite, UpdatedAtNS: time.Now().UnixNano()}
+		TagWrite: in.TagWrite, CompilationFolder: folder, UpdatedAtNS: time.Now().UnixNano()}
 	next := slices.DeleteFunc(usableProfiles(rows, l.log), func(r wdb.OrganizeProfile) bool { return r.Name == name })
 	next = append(next, row)
 	if err := l.lib.SetProfiles(ctx, profileDefs(next)); err != nil {
@@ -311,7 +342,8 @@ func (l *Library) PutOrganizeProfile(ctx context.Context, uc *UserCtx, name stri
 		return OrganizeProfileDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
 	l.Audit(ctx, uc, "organize.profile", AuditTarget{Kind: "organize-profile", Name: name},
-		map[string]any{"music": in.Music, "audiobook": in.Audiobook, "podcast": in.Podcast, "tagWrite": in.TagWrite})
+		map[string]any{"music": in.Music, "audiobook": in.Audiobook, "podcast": in.Podcast, "tagWrite": in.TagWrite,
+			"compilationFolder": folder})
 	for _, p := range l.lib.Profiles() {
 		if p.Name == name {
 			return profileDTO(p, &row), nil
@@ -391,8 +423,12 @@ func (l *Library) PreviewOrganizeProfile(ctx context.Context, uc *UserCtx, name 
 	if err := checkTemplates(in); err != nil {
 		return OrganizeSampleDTO{}, err
 	}
+	folder, err := compilationFolder(in.CompilationFolder)
+	if err != nil {
+		return OrganizeSampleDTO{}, err
+	}
 	profiles, err := waxbin.ProfilesFor([]config.ProfileDef{{Name: name, Music: in.Music,
-		Audiobook: in.Audiobook, Podcast: in.Podcast, TagWrite: in.TagWrite}})
+		Audiobook: in.Audiobook, Podcast: in.Podcast, TagWrite: in.TagWrite, CompilationFolder: folder}})
 	if err != nil {
 		return OrganizeSampleDTO{}, classify(err)
 	}

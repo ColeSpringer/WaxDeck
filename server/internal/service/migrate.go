@@ -17,7 +17,9 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
+	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/query"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/scrobble"
@@ -50,7 +52,7 @@ const (
 	// five-digit play counter is a counter, not five thousand sessions
 	// worth storing. Capped items are counted in the summary.
 	migrateListenCap = 500
-	// migrateUnmatchedSamples caps the unmatched examples the summary
+	// migrateUnmatchedSamples caps each list of examples the summary
 	// carries; the counts stay exact.
 	migrateUnmatchedSamples = 20
 	// migrateClientName identifies this importer to the source server
@@ -135,6 +137,10 @@ type migrationSummary struct {
 	// the real import afterwards is the point of one - and a run with a
 	// switch turned off leaves part of it unread and keeps it too.
 	ExportConsumed bool `json:"exportConsumed,omitempty"`
+	// Ties counts the matched entries that took one of several copies of
+	// one recording: the library holds it more than once and nothing in
+	// the entry tells the copies apart.
+	Ties int `json:"ties,omitempty"`
 	// Refused counts plays the ingest would not record: the target
 	// account is not allowed the item - a library it is not on, or a
 	// content rule that hides it - or the session the source described
@@ -153,11 +159,21 @@ type migrationSummary struct {
 // migrationSamples carries a bounded set of examples for the report.
 type migrationSamples struct {
 	Unmatched []string `json:"unmatched"`
+	// Ties names entries that took a tie, each with how many copies tied.
+	Ties []string `json:"ties,omitempty"`
 	// UnmatchedEntities samples starred albums and artists that missed,
 	// which are a different failure from a song that missed: the group
 	// may be absent, or present under a spelling the ladder did not
 	// reach through any of its members.
 	UnmatchedEntities []string `json:"unmatchedEntities,omitempty"`
+}
+
+// migrationEntryLabel names one source entry in the report's samples.
+func migrationEntryLabel(artist, title string) string {
+	if artist == "" {
+		return title
+	}
+	return artist + " - " + title
 }
 
 // noteUnmatched counts a miss and keeps a bounded sample of it.
@@ -166,11 +182,21 @@ func (s *migrationSummary) noteUnmatched(artist, title string) {
 	if len(s.Samples.Unmatched) >= migrateUnmatchedSamples {
 		return
 	}
-	label := title
-	if artist != "" {
-		label = artist + " - " + title
+	s.Samples.Unmatched = append(s.Samples.Unmatched, migrationEntryLabel(artist, title))
+}
+
+// noteMatch counts a match, and a tie when copies, two or more items of
+// one recording, tied for it, keeping a bounded sample of the ties.
+func (s *migrationSummary) noteMatch(artist, title string, copies int) {
+	s.Matched++
+	if copies < 2 {
+		return
 	}
-	s.Samples.Unmatched = append(s.Samples.Unmatched, label)
+	s.Ties++
+	if len(s.Samples.Ties) >= migrateUnmatchedSamples {
+		return
+	}
+	s.Samples.Ties = append(s.Samples.Ties, fmt.Sprintf("%s (%d copies)", migrationEntryLabel(artist, title), copies))
 }
 
 // noteRefusedListens counts the sessions an ingest permanently refused.
@@ -560,9 +586,98 @@ func (l *Library) openMigrationSecret(sealedB64 string) (string, error) {
 }
 
 // resolveMigrationRef walks the catalog's resolve ladder for one source
-// item. Any rung is accepted; only a clean miss counts unmatched.
-func (l *Library) resolveMigrationRef(ctx context.Context, ref model.PortableRef) (*model.ItemView, model.MatchRung, error) {
-	return l.lib.ResolveRef(ctx, ref)
+// item, answering the match (nil for a miss) and how many copies of one
+// recording tied for it.
+func (l *Library) resolveMigrationRef(ctx context.Context, ref model.PortableRef) (*model.ItemView, int, error) {
+	m, err := l.resolveTakingTie(ctx, ref)
+	return m.Item, m.Candidates, err
+}
+
+// resolveTakingTie resolves one ref, taking a tie between copies of one
+// recording. A tie taken above the last rung stops the walk before a later
+// rung could pick the copy on the album the source names, so that ref is
+// walked again without ties, and a unique match there is the answer. A tie
+// the ladder cannot prove misses either way, and one taken on the last
+// rung has no rung after it.
+func (l *Library) resolveTakingTie(ctx context.Context, ref model.PortableRef) (waxbin.RefMatch, error) {
+	m, err := l.resolveRef(ctx, ref, waxbin.ResolveOptions{AcceptSameRecording: true})
+	if err != nil || !tieAboveLastRung(m.Rung, m.Candidates) {
+		return m, err
+	}
+	plain, err := l.resolveRef(ctx, ref, waxbin.ResolveOptions{})
+	if err != nil {
+		return waxbin.RefMatch{}, err
+	}
+	if plain.Item != nil {
+		return plain, nil
+	}
+	return m, nil
+}
+
+// tieAboveLastRung reports a tie taken on a rung that a later one, the
+// descriptive rung at least, could still overrule.
+func tieAboveLastRung(rung model.MatchRung, candidates int) bool {
+	return candidates > 1 && rung != model.MatchNone && rung != model.MatchDescriptive
+}
+
+// resolveRef walks the catalog's resolve ladder for one ref.
+func (l *Library) resolveRef(ctx context.Context, ref model.PortableRef, opts waxbin.ResolveOptions) (waxbin.RefMatch, error) {
+	if l.refResolveHook != nil {
+		l.refResolveHook(opts, 1)
+	}
+	return l.lib.ResolveRefWith(ctx, ref, opts)
+}
+
+// resolveGroupMember resolves one member song of a starred album or
+// artist, for the entity its match names. A unique match is sure, and so
+// is a tie whose copies all name the pick's entity, since then the copy
+// decides nothing. Any other tie is only a fallback: the copy decides the
+// group (a song on its album and on a compilation stars one or the
+// other), so the caller takes it only when no member of the group is sure.
+func (l *Library) resolveGroupMember(ctx context.Context, ref model.PortableRef, entity func(*model.ItemView) model.PID) (sure, fallback *model.ItemView, err error) {
+	m, err := l.resolveTakingTie(ctx, ref)
+	if err != nil || m.Item == nil || m.Candidates < 2 {
+		return m.Item, nil, err
+	}
+	agrees, err := l.copiesAgree(ctx, m, entity)
+	if err != nil || !agrees {
+		return nil, m.Item, err
+	}
+	return m.Item, nil, nil
+}
+
+// copiesAgree reports whether every copy that tied for m names the entity
+// its pick does. Only copies that can be listed are judged: the tracks
+// carrying the pick's recording id, which a tie on that id rests on,
+// counted against the tie. The catalog keeps a recording id as tagged and
+// matches it in any case, so the copies are read the same way. A tie
+// whose copies cannot all be listed so does not agree.
+func (l *Library) copiesAgree(ctx context.Context, m waxbin.RefMatch, entity func(*model.ItemView) model.PID) (bool, error) {
+	want := entity(m.Item)
+	if want == "" || m.Item.MBID == "" {
+		return false, nil
+	}
+	// A prefix LIKE folds ASCII case as the catalog's match does; the
+	// comparison below drops ids that only begin with this one.
+	read, err := l.lib.Query(ctx, visibleTracks().Where("mbid", query.OpStartsWith, m.Item.MBID).Build(), "")
+	if err != nil {
+		return false, err
+	}
+	var copies []*model.ItemView
+	for _, c := range read {
+		if strings.EqualFold(c.MBID, m.Item.MBID) {
+			copies = append(copies, c)
+		}
+	}
+	if len(copies) != m.Candidates {
+		return false, nil
+	}
+	for _, c := range copies {
+		if entity(c) != want {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // migrateSessionID is the deterministic idempotency key for one

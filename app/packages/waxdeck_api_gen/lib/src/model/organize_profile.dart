@@ -18,6 +18,7 @@ part 'organize_profile.g.dart';
 /// * [audiobookTemplate] - Path template for audiobooks.
 /// * [podcastTemplate] - Path template for podcast files.
 /// * [tagWrite] - Whether organizing also writes tags.
+/// * [compilationFolder] - The folder compilations file under, and the album artist the tag write gives them. An empty string files each under its own tagged album artist (Various Artists for one tagged with none); absent files them under Various Artists. 
 /// * [builtIn] - A built-in no saved profile overrides; it cannot be deleted.
 /// * [sample] 
 /// * [saved] 
@@ -42,6 +43,10 @@ abstract class OrganizeProfile implements Built<OrganizeProfile, OrganizeProfile
   /// Whether organizing also writes tags.
   @BuiltValueField(wireName: r'tagWrite')
   bool get tagWrite;
+
+  /// The folder compilations file under, and the album artist the tag write gives them. An empty string files each under its own tagged album artist (Various Artists for one tagged with none); absent files them under Various Artists. 
+  @BuiltValueField(wireName: r'compilationFolder')
+  String? get compilationFolder;
 
   /// A built-in no saved profile overrides; it cannot be deleted.
   @BuiltValueField(wireName: r'builtIn')
@@ -101,6 +106,13 @@ class _$OrganizeProfileSerializer implements PrimitiveSerializer<OrganizeProfile
       object.tagWrite,
       specifiedType: const FullType(bool),
     );
+    if (object.compilationFolder != null) {
+      yield r'compilationFolder';
+      yield serializers.serialize(
+        object.compilationFolder,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'builtIn';
     yield serializers.serialize(
       object.builtIn,
@@ -175,6 +187,14 @@ class _$OrganizeProfileSerializer implements PrimitiveSerializer<OrganizeProfile
             specifiedType: const FullType(bool),
           ) as bool;
           result.tagWrite = valueDes;
+          break;
+        case r'compilationFolder':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.compilationFolder = valueDes;
           break;
         case r'builtIn':
           final valueDes = serializers.deserialize(

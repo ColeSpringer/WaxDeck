@@ -1161,6 +1161,9 @@ func searchHitsJSON(hits []service.SearchHit) []SearchHit {
 		if h.Subtitle != "" {
 			hit.Subtitle = ptr(h.Subtitle)
 		}
+		if h.Exact {
+			hit.Exact = ptr(true)
+		}
 		out = append(out, hit)
 	}
 	return out
@@ -1289,6 +1292,15 @@ func summaryJSON(it service.ItemSummary) ItemSummary {
 	if it.DiscNo > 0 {
 		s.DiscNumber = ptr(it.DiscNo)
 	}
+	if it.SortKey != "" {
+		s.SortKey = ptr(it.SortKey)
+	}
+	if it.ArtistSort != "" {
+		s.ArtistSort = ptr(it.ArtistSort)
+	}
+	if it.ArtistSortKey != "" {
+		s.ArtistSortKey = ptr(it.ArtistSortKey)
+	}
 	return s
 }
 
@@ -1323,6 +1335,24 @@ func itemJSON(d service.ItemDetail) Item {
 	}
 	if d.DiscNo != 0 {
 		it.DiscNumber = ptr(d.DiscNo)
+	}
+	if d.SortKey != "" {
+		it.SortKey = ptr(d.SortKey)
+	}
+	if d.ArtistSort != "" {
+		it.ArtistSort = ptr(d.ArtistSort)
+	}
+	if d.ArtistSortKey != "" {
+		it.ArtistSortKey = ptr(d.ArtistSortKey)
+	}
+	if d.TrackTotal != 0 {
+		it.TrackTotal = ptr(d.TrackTotal)
+	}
+	if d.DiscTotal != 0 {
+		it.DiscTotal = ptr(d.DiscTotal)
+	}
+	if d.PartTotal != 0 {
+		it.PartTotal = ptr(d.PartTotal)
 	}
 	if d.BPM != 0 {
 		it.Bpm = ptr(d.BPM)
@@ -1596,6 +1626,9 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 				writeError(w, http.StatusUnauthorized, "unauthenticated", "a worker token is required")
 				return
 			}
+			if !capRequestBody(w, r) {
+				return
+			}
 			ctx = context.WithValue(ctx, ctxWorkerKey{}, true)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
@@ -1632,7 +1665,9 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 				return
 			}
 		}
-		capRequestBody(w, r)
+		if !capRequestBody(w, r) {
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -1778,7 +1813,7 @@ func requestFailure(err error) string {
 	case errors.As(err, &typ):
 		return "the request body has the wrong shape"
 	case errors.As(err, &tooBig):
-		return "the request body is too large"
+		return bodyTooLarge(tooBig.Limit)
 	case errors.As(err, &syntax), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, io.EOF):
 		return "the request body is not valid JSON"
 	}

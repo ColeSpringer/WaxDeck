@@ -84,6 +84,7 @@ class WaxTable<T> extends StatelessWidget {
     required this.rowId,
     this.rowSemanticsId,
     this.rowDetailSemanticsId,
+    this.rowLabel,
     this.onRowTap,
     this.trailing,
     this.empty,
@@ -105,6 +106,10 @@ class WaxTable<T> extends StatelessWidget {
   /// The handle for a row's detail control, given its id. Only the card
   /// layout draws one, and only where a detail column exists to show.
   final String Function(String id)? rowDetailSemanticsId;
+
+  /// What a row is read out as, for a row whose primary fields do not say
+  /// enough on their own; null reads out its primary fields.
+  final String Function(T row)? rowLabel;
 
   /// Opening a row. A table whose rows do nothing passes null, and the
   /// rows announce as content rather than as buttons.
@@ -231,10 +236,11 @@ class WaxTable<T> extends StatelessWidget {
     }
   }
 
-  /// What a row is read out as: its primary fields, or its id where no
-  /// primary column has text. A tappable row is one node over its cells,
-  /// so this is all a screen reader says of it.
+  /// What a row is read out as: its [rowLabel], else its primary fields,
+  /// or its id where no primary column has text. A tappable row is one
+  /// node over its cells, so this is all a screen reader says of it.
   String _nameOf(T row, String id) {
+    if (rowLabel case final label?) return label(row);
     final fields = <String>[
       for (final column in columns)
         if (column.priority == WaxColumnPriority.primary)

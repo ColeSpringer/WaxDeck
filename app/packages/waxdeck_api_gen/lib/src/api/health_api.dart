@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/diagnostic_summary.dart';
 import 'package:waxdeck_api_gen/src/model/duplicate_groups.dart';
+import 'package:waxdeck_api_gen/src/model/entity_fold_page.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/file_diagnostic_page.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_request.dart';
@@ -19,6 +20,7 @@ import 'package:waxdeck_api_gen/src/model/health_issue_page.dart';
 import 'package:waxdeck_api_gen/src/model/health_summary.dart';
 import 'package:waxdeck_api_gen/src/model/merge_request.dart';
 import 'package:waxdeck_api_gen/src/model/merge_result.dart';
+import 'package:waxdeck_api_gen/src/model/unfold_request.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_groups.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_resolve_request.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_resolve_result.dart';
@@ -405,6 +407,100 @@ class HealthApi {
     );
   }
 
+  /// List folded names
+  /// The names a merge folded into an entity, and those an entity rename that locks left behind: a file still spelled a folded way files under the entity the fold names instead of bringing back the one the merge or the rename did away with. Every type&#39;s folds, ordered by &#x60;entityType&#x60;, then by &#x60;key&#x60;, a page at a time. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 
+  /// * [limit] - Maximum folds per page.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [EntityFoldPage] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<EntityFoldPage>> listEntityFolds({ 
+    String? cursor,
+    int? limit = 100,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/library/folds';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    EntityFoldPage? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(EntityFoldPage),
+      ) as EntityFoldPage;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<EntityFoldPage>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Query per-file diagnostics
   /// Persisted per-file diagnostics (what scan, organize, replaygain, enrichment, tag write-back, and the analyze pass recorded about individual files) across the library in a stable path order, optionally narrowed by origin, code, severity, or library. This is the query surface a diagnostics dashboard reads instead of auditing item by item. Administrators only. 
   ///
@@ -693,7 +789,7 @@ class HealthApi {
   }
 
   /// Merge duplicate entities
-  /// Merges the losers into the survivor atomically. The losers&#39; children, credits, and play history re-parent onto the survivor; identifiers union. Administrators only. 
+  /// Merges the losers into the survivor atomically. The losers&#39; children, credits, and play history re-parent onto the survivor; identifiers union. Each loser&#39;s name folds into the survivor (see &#x60;GET /library/folds&#x60;), and so do the names already folded into a loser. Administrators only. 
   ///
   /// Parameters:
   /// * [mergeRequest] 
@@ -951,6 +1047,84 @@ class HealthApi {
 
     final _response = await _dio.request<Object>(
       _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
+  }
+
+  /// Unfold names
+  /// Forgets folds of one entity type by their keys, all of them or none: a key no fold holds is &#x60;not-found&#x60;, the message naming it, and nothing is forgotten. Nothing moves: a file spelled an unfolded way is filed under an entity of its own name once it is added, moved, replaced or retagged, and the files the fold already filed under the entity stay with it until they change or move; a rescan, &#x60;force&#x60; included, leaves an unchanged file where it is. Audited as &#x60;entity.unfold&#x60;. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [unfoldRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> unfoldEntities({ 
+    required UnfoldRequest unfoldRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/library/folds/unfold';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(UnfoldRequest);
+      _bodyData = _serializers.serialize(unfoldRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
       options: _options,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,

@@ -23,6 +23,12 @@ import "time"
 // listing is where they are needed: an items page arrives in the
 // catalog's own stable order, and these are what sort a release back
 // into itself without a fetch per row.
+//
+// SortKey and ArtistSortKey are the collation keys the catalog files the
+// title and the artist (a book's author) under, each empty when there
+// is none: what a client sorting its own copy of a listing orders by.
+// ArtistSort is the artist's sort spelling as a file or an edit states
+// it, empty when none, and is no key.
 type ItemSummary struct {
 	PID        string
 	MediaType  string
@@ -33,12 +39,15 @@ type ItemSummary struct {
 	AlbumPID   string
 	TrackNo    int
 	DiscNo     int
+	SortKey    string
+	ArtistSort string
 	DurationMS int64
 	Virtual    bool
 	// AdvisoryFlagged folds the episode advisory pair (the episode's
 	// own feed flag or its show's). Always false for other kinds, whose
 	// advisory lives in the ITUNESADVISORY custom tag instead.
 	AdvisoryFlagged bool
+	ArtistSortKey   string
 }
 
 // ItemDetail is the full single-item shape.
@@ -62,6 +71,12 @@ type ItemDetail struct {
 	MBID      string
 	ISRC      string
 	ArtSource ArtSourceDTO
+	// TrackTotal and DiscTotal are the counts a file states beside its
+	// track and disc numbers, and PartTotal the parts a book's file says
+	// it has; each is 0 when none is stated.
+	TrackTotal int
+	DiscTotal  int
+	PartTotal  int
 }
 
 // AlbumDetail is one album entity's identity and counts. Everything
@@ -91,12 +106,14 @@ type Page struct {
 	Next  string
 }
 
-// SearchHit is one ranked search result.
+// SearchHit is one ranked search result. Exact marks an artist or album
+// whose own name is the query.
 type SearchHit struct {
 	PID      string
 	Kind     string
 	Title    string
 	Subtitle string
+	Exact    bool
 }
 
 // SearchResults groups hits by kind.

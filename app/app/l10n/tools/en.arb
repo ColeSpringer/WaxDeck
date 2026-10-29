@@ -98,6 +98,16 @@
       }
     }
   },
+  "toolsCountEntriesRemoved": "empty entries removed {count}",
+  "@toolsCountEntriesRemoved": {
+    "description": "Counter in a finished catalog repair's result: artists, albums, genres and the like left with no items, which it deleted. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "toolsCountErrored": "errored {count}",
   "@toolsCountErrored": {
     "description": "Counter in a finished job's result: files it could not read or write. Lower case: it sits in a comma-separated run of counters.",
@@ -234,6 +244,26 @@
       }
     }
   },
+  "toolsCountReclaimed": "unused rows reclaimed {count}",
+  "@toolsCountReclaimed": {
+    "description": "Counter in a finished catalog repair's result: images, thumbnails and tag records nothing used, which it deleted. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "40"
+      }
+    }
+  },
+  "toolsCountSearchRows": "search rows rebuilt {count}",
+  "@toolsCountSearchRows": {
+    "description": "Counter in a finished catalog repair's result: search index entries it wrote or dropped. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "toolsCountSkipped": "skipped {count}",
   "@toolsCountSkipped": {
     "description": "Counter in a finished job's or fix's result: items left alone. Lower case: it sits in a comma-separated run of counters.",
@@ -241,6 +271,16 @@
       "count": {
         "type": "int",
         "example": "2"
+      }
+    }
+  },
+  "toolsCountSortKeys": "sort keys rewritten {count}",
+  "@toolsCountSortKeys": {
+    "description": "Counter in a finished catalog repair's result: names whose sort key it rewrote, which moves where they list. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "6"
       }
     }
   },
@@ -476,6 +516,20 @@
   "@toolsStateWaiting": {
     "description": "State of a task in flight that is waiting out a passing failure and tries again on its own; a line under it says why."
   },
+  "toolsSummaryConsistent": "consistent",
+  "@toolsSummaryConsistent": {
+    "description": "Last part of a finished catalog repair's result: the check it ran after found nothing out of step. Lower case: it sits in a comma-separated run of counters."
+  },
+  "toolsSummaryDriftLeft": "still out of step {count}",
+  "@toolsSummaryDriftLeft": {
+    "description": "Last part of a finished catalog repair's result: rows the check it ran after still found out of step. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "toolsSummaryListens": "listens {count}",
   "@toolsSummaryListens": {
     "description": "Headline counter from a task's report, counting listening records it carried across. Lower case: it sits in a comma-separated run of counters.",
@@ -503,6 +557,16 @@
       "count": {
         "type": "String",
         "example": "84"
+      }
+    }
+  },
+  "toolsSummaryTied": "tied {count}",
+  "@toolsSummaryTied": {
+    "description": "Headline counter from an import's report, counting matched entries whose recording the library holds more than once with nothing to tell the copies apart, so the import took one of the copies. Part of the matched count, not beside it. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "4"
       }
     }
   },
@@ -539,6 +603,10 @@
   "toolsTaskBookSplit": "Book split",
   "@toolsTaskBookSplit": {
     "description": "Name of the task that breaks one audiobook into its parts."
+  },
+  "toolsTaskCatalogRepair": "Catalog repair",
+  "@toolsTaskCatalogRepair": {
+    "description": "Name of the task that recomputes what the catalog derives from its own records and deletes what nothing uses."
   },
   "toolsTaskCueSplit": "CUE split",
   "@toolsTaskCueSplit": {

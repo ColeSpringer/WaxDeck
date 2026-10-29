@@ -693,6 +693,232 @@
   "@adminEnrichmentWalkColumn": {
     "description": "Column header naming what a pass walked over."
   },
+  "adminFoldsAlreadyUnfolded": "That name was unfolded already",
+  "@adminFoldsAlreadyUnfolded": {
+    "description": "Message when an unfold finds the name no longer folded, another session having unfolded it first; the list is read again."
+  },
+  "adminFoldsApartOf": "{apart}, {index} of {count}",
+  "@adminFoldsApartOf": {
+    "description": "What tells a folded name apart, numbered in the listing's order where folds of one spelling still read alike: copies of one release folded by the same merge whose files have since left their folders.",
+    "placeholders": {
+      "apart": {
+        "type": "String",
+        "example": "Folded Oct 1, 2026 9:30 AM"
+      },
+      "index": {
+        "type": "int",
+        "example": "2"
+      },
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "adminFoldsColumnFilesUnder": "Files under",
+  "@adminFoldsColumnFilesUnder": {
+    "description": "Column heading in the folded names list: the entry a folded name files under."
+  },
+  "adminFoldsColumnSince": "Folded",
+  "@adminFoldsColumnSince": {
+    "description": "Column heading in the folded names list: when the name was folded."
+  },
+  "adminFoldsColumnSpelling": "Spelling",
+  "@adminFoldsColumnSpelling": {
+    "description": "Column heading in the folded names list: the folded name as the catalog matches it."
+  },
+  "adminFoldsEmptyMessage": "A merge folds the names it does away with into the entry it keeps, so files still spelled the old way file under it.",
+  "@adminFoldsEmptyMessage": {
+    "description": "Empty state of the folded names section, saying where folded names come from."
+  },
+  "adminFoldsEmptyTitle": "No folded names",
+  "@adminFoldsEmptyTitle": {
+    "description": "Empty state of the folded names section."
+  },
+  "adminFoldsEntry": "{name} ({kind})",
+  "@adminFoldsEntry": {
+    "description": "The entry a folded name files under, as a row of the folded names list reads it out: its name and what kind of entry it is.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "The Beatles"
+      },
+      "kind": {
+        "type": "String",
+        "example": "Artist"
+      }
+    }
+  },
+  "adminFoldsError": "Could not load folded names",
+  "@adminFoldsError": {
+    "description": "Title of the error state when the folded names could not be read."
+  },
+  "adminFoldsFoldedAt": "Folded {when}",
+  "@adminFoldsFoldedAt": {
+    "description": "When an album's name was folded, telling apart copies of one release that no file places in a folder any longer (their files have moved, or two folders read alike to the catalog).",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "Oct 1, 2026 9:30 AM"
+      }
+    }
+  },
+  "adminFoldsGroupAlbum": "Albums",
+  "@adminFoldsGroupAlbum": {
+    "description": "Heading over the folded names that file under an album."
+  },
+  "adminFoldsGroupArtist": "Artists",
+  "@adminFoldsGroupArtist": {
+    "description": "Heading over the folded names that file under an artist."
+  },
+  "adminFoldsGroupGenre": "Genres",
+  "@adminFoldsGroupGenre": {
+    "description": "Heading over the folded names that file under a genre."
+  },
+  "adminFoldsGroupReleaseGroup": "Release groups",
+  "@adminFoldsGroupReleaseGroup": {
+    "description": "Heading over the folded names that file under a release group."
+  },
+  "adminFoldsGroupSeries": "Series",
+  "@adminFoldsGroupSeries": {
+    "description": "Heading over the folded names that file under a book series."
+  },
+  "adminFoldsInFolder": "In {folder} in {library}",
+  "@adminFoldsInFolder": {
+    "description": "An album fold's folder, as a path within its library, and that library's name, telling apart copies of one release in different folders.",
+    "placeholders": {
+      "folder": {
+        "type": "String",
+        "example": "Joni/Blue Again"
+      },
+      "library": {
+        "type": "String",
+        "example": "Music"
+      }
+    }
+  },
+  "adminFoldsInLibrary": "At the top of {library}",
+  "@adminFoldsInLibrary": {
+    "description": "Where an album fold's files sit when they are in the top folder of their library, named.",
+    "placeholders": {
+      "library": {
+        "type": "String",
+        "example": "Music"
+      }
+    }
+  },
+  "adminFoldsKindAlbum": "Album",
+  "@adminFoldsKindAlbum": {
+    "description": "Kind of entry a folded name files under: an album."
+  },
+  "adminFoldsKindArtist": "Artist",
+  "@adminFoldsKindArtist": {
+    "description": "Kind of entry a folded name files under: an artist."
+  },
+  "adminFoldsKindGenre": "Genre",
+  "@adminFoldsKindGenre": {
+    "description": "Kind of entry a folded name files under: a genre. Also marks a genre fold apart from a mood fold of the same spelling."
+  },
+  "adminFoldsKindMood": "Mood",
+  "@adminFoldsKindMood": {
+    "description": "Kind of entry a folded name files under: a mood, the genre vocabulary's other facet. Also marks a mood fold apart from a genre fold of the same spelling."
+  },
+  "adminFoldsKindReleaseGroup": "Release group",
+  "@adminFoldsKindReleaseGroup": {
+    "description": "Kind of entry a folded name files under: a release group."
+  },
+  "adminFoldsKindSeries": "Series",
+  "@adminFoldsKindSeries": {
+    "description": "Kind of entry a folded name files under: a book series."
+  },
+  "adminFoldsMerged": "{count, plural, =1{1 spelling now files under {survivor}} other{{count} spellings now file under {survivor}}}",
+  "@adminFoldsMerged": {
+    "description": "Second line of the message after a merge: how many names the merge folded into the entry it kept.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      },
+      "survivor": {
+        "type": "String",
+        "example": "The Beatles"
+      }
+    }
+  },
+  "adminFoldsOverline": "Old spellings that file under another name",
+  "@adminFoldsOverline": {
+    "description": "Line above the Folded names heading, saying what a folded name is."
+  },
+  "adminFoldsQuoted": "\"{spelling}\"",
+  "@adminFoldsQuoted": {
+    "description": "A folded name quoted, as the unfold button, its dialog and its message name it.",
+    "placeholders": {
+      "spelling": {
+        "type": "String",
+        "example": "beatles"
+      }
+    }
+  },
+  "adminFoldsQuotedApart": "\"{spelling}\" ({apart})",
+  "@adminFoldsQuotedApart": {
+    "description": "A folded name quoted, with what tells it apart from another fold of the same spelling (its folder and library, its facet, or when it was folded), as the unfold button, its dialog and its message name it.",
+    "placeholders": {
+      "spelling": {
+        "type": "String",
+        "example": "joni - blue"
+      },
+      "apart": {
+        "type": "String",
+        "example": "In Joni/Blue Again in Music"
+      }
+    }
+  },
+  "adminFoldsTitle": "Folded names",
+  "@adminFoldsTitle": {
+    "description": "Heading of the Health section listing the names merges folded into an entry."
+  },
+  "adminFoldsUnfold": "Unfold {fold}",
+  "@adminFoldsUnfold": {
+    "description": "Label of a folded name's unfold button. {fold} is the name quoted (adminFoldsQuoted or adminFoldsQuotedApart).",
+    "placeholders": {
+      "fold": {
+        "type": "String",
+        "example": "\"beatles\""
+      }
+    }
+  },
+  "adminFoldsUnfoldAction": "Unfold",
+  "@adminFoldsUnfoldAction": {
+    "description": "Confirm button of the unfold dialog."
+  },
+  "adminFoldsUnfoldBody": "Files spelled {fold} that the library reads as new or changed (added, moved, replaced or retagged) are filed under their own name again. The ones \"{name}\" holds already stay with it, even through a rescan with Re-read unchanged files, until they change or move.",
+  "@adminFoldsUnfoldBody": {
+    "description": "Body of the unfold dialog: which files an unfold moves (those the library reads as new or changed), and that the ones already filed stay, a rescan with the re-read option (adminLibraryRescanForce) included. {fold} is the name quoted (adminFoldsQuoted).",
+    "placeholders": {
+      "fold": {
+        "type": "String",
+        "example": "\"beatles\""
+      },
+      "name": {
+        "type": "String",
+        "example": "The Beatles"
+      }
+    }
+  },
+  "adminFoldsUnfoldTitle": "Unfold this name?",
+  "@adminFoldsUnfoldTitle": {
+    "description": "Title of the dialog confirming that a folded name is unfolded."
+  },
+  "adminFoldsUnfolded": "{fold} is unfolded",
+  "@adminFoldsUnfolded": {
+    "description": "Message after a name was unfolded: the fold is gone, and no file moved. {fold} is the name quoted (adminFoldsQuoted or adminFoldsQuotedApart).",
+    "placeholders": {
+      "fold": {
+        "type": "String",
+        "example": "\"beatles\""
+      }
+    }
+  },
   "adminForbiddenMessage": "The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.",
   "@adminForbiddenMessage": {
     "description": "Body of the refusal an account without the role gets at a console location it followed a link to."

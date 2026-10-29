@@ -10,6 +10,8 @@
     "searchRecent": "search-recent-{index}",
     "searchRecentRemove": "search-recent-remove-{index}",
     "searchShowAll": "search-show-all-{kind}",
+    "searchTopResult": "search-top-result",
+    "searchTopResultMore": "search-top-result-more",
     "searchTruncated": "search-truncated"
   }
 }

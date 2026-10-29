@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'database.dart';
 import 'downloads_port.dart';
+import 'pending_frees.dart';
 import 'transfer_engine.dart';
 
 /// Web stub: the browser build keeps no offline downloads yet, so the
@@ -29,6 +30,9 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   @override
   Future<void> remove(String pid) => throw UnsupportedError('web');
+
+  @override
+  Future<List<OwedPin>?> freeOwed(String pid) => throw UnsupportedError('web');
 
   @override
   Future<LocalPlayback?> localFor(String pid) => throw UnsupportedError('web');
@@ -58,4 +62,6 @@ class BackgroundDownloadManager implements DownloadManagerPort {
   Future<void> requestNotificationPermission() => throw UnsupportedError('web');
 
   Future<void> recover() => throw UnsupportedError('web');
+
+  void serverChanged() => throw UnsupportedError('web');
 }

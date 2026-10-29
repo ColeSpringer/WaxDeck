@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'database.dart';
 import 'mirror_pages.dart';
+import 'pending_frees.dart';
 
 /// One pinned cover: the bytes kept on disk for an item that was
 /// downloaded, so its grid cell and its player draw artwork with the
@@ -55,9 +56,19 @@ abstract class ArtworkPinStore {
 
   Future<void> put(ArtworkPinRecord pin);
 
-  /// Drops every pin for [pid] and answers what was dropped, so the
-  /// caller can unlink the files it just stopped promising.
-  Future<List<ArtworkPinRecord>> remove(String pid);
+  /// Drops exactly the pins listed, each by its size and the instant it was
+  /// pinned, and no others: a cover the device pinned since (another size,
+  /// or the same size pinned again) is not what was listed and stays. For
+  /// the free a commit promised, which takes what it recorded, and for an
+  /// unpin, which takes what it read.
+  Future<void> removeExactly(String pid, List<OwedPin> pins);
+
+  /// Whether a cover may be kept for [pid] now: only while the device holds
+  /// a download for it and no free is owed for it. A pin is a promise made
+  /// when the listener downloaded the item, so one made for an item that
+  /// is gone, or about to be freed, would be a promise about nothing that
+  /// nothing would ever take back.
+  Future<bool> mayPin(String pid);
 
   /// Drops every pin there is, for a sign-out: the next account has no
   /// business reading the last one's covers.
@@ -106,10 +117,30 @@ class DriftArtworkPinStore implements ArtworkPinStore {
   }
 
   @override
-  Future<List<ArtworkPinRecord>> remove(String pid) async {
-    final going = await pinsFor(pid);
-    await (db.delete(db.artworkPins)..where((t) => t.pid.equals(pid))).go();
-    return going;
+  Future<void> removeExactly(String pid, List<OwedPin> pins) async {
+    for (final pin in pins) {
+      await (db.delete(db.artworkPins)..where(
+            (t) =>
+                t.pid.equals(pid) &
+                t.sizePx.equals(pin.sizePx) &
+                t.pinnedAt.equals(pin.pinnedAt),
+          ))
+          .go();
+    }
+  }
+
+  @override
+  Future<bool> mayPin(String pid) async {
+    final held =
+        await (db.select(db.downloadRecords)
+              ..where((t) => t.pid.equals(pid))
+              ..limit(1))
+            .getSingleOrNull();
+    if (held == null) return false;
+    // Asked of the promise rather than read off its row, so one that has
+    // stopped being owed (the item is listed again) does not keep a cover
+    // from a download that is the device's own.
+    return (await PendingFrees(db).due(only: pid)).isEmpty;
   }
 
   @override
@@ -145,7 +176,10 @@ class NoArtworkPinStore implements ArtworkPinStore {
   Future<void> put(ArtworkPinRecord pin) async {}
 
   @override
-  Future<List<ArtworkPinRecord>> remove(String pid) async => const [];
+  Future<void> removeExactly(String pid, List<OwedPin> pins) async {}
+
+  @override
+  Future<bool> mayPin(String pid) async => false;
 
   @override
   Future<List<ArtworkPinRecord>> clear() async => const [];

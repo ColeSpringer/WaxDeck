@@ -12,6 +12,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'nsp_gap_copy.dart';
+import 'playlist_create.dart';
 import 'playlists_controller.dart';
 import 'rule_chip_row.dart';
 import 'rule_vocabulary.dart';
@@ -62,6 +63,12 @@ enum PlaylistImportSource {
   /// Only M3U asks for a name up front; a nameless NSP document is asked
   /// for one when it is imported.
   bool get needsName => this == PlaylistImportSource.m3u;
+
+  /// Whether the paste is checked before anything is imported: an NSP
+  /// document for what it would lose, an M3U file for what each of its
+  /// lines matches.
+  bool get checksFirst =>
+      this == PlaylistImportSource.m3u || this == PlaylistImportSource.nsp;
 
   /// Whether the created playlist can be bound to what was pasted. Not
   /// M3U, a file of paths, nor NSP, whose playlist is a rule.
@@ -200,6 +207,14 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
   /// `public` until somebody says otherwise.
   var _nspShared = false;
 
+  /// What checking an M3U file found for the paste as it stands; an edit
+  /// to the paste drops it.
+  M3uPreview? _m3uPreview;
+
+  /// What this dialog is waiting on the server for, if anything: a long
+  /// file's check or import takes tens of seconds, and says so meanwhile.
+  _M3uStep? _step;
+
   /// The paste as last seen, so a moved caret is not an edit.
   var _lastPaste = '';
 
@@ -221,10 +236,11 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
   void _pasteEdited() {
     if (_payload.text == _lastPaste) return;
     _lastPaste = _payload.text;
-    if (_nspReport == null && _error == null) return;
+    if (_nspReport == null && _m3uPreview == null && _error == null) return;
     setState(() {
       _nspReport = null;
       _nspDocument = null;
+      _m3uPreview = null;
       _error = null;
     });
   }
@@ -239,45 +255,19 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
       return;
     }
     if (_source == PlaylistImportSource.nsp) return _checkNsp(payload);
-    if (_source.needsName && name.isEmpty) {
-      setState(() => _error = l10n.playlistImportNeedsName);
-      return;
-    }
+    if (_source == PlaylistImportSource.m3u) return _checkM3u(payload);
     setState(() {
       _busy = true;
       _error = null;
     });
     final navigator = Navigator.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    // Read here, beside the navigator and messenger and for the same
-    // reason: the bind happens after an await, and `ref` is only good
-    // while this dialog is mounted - which a dismissal ends. The
-    // import already ran, so the binding somebody asked for should not
-    // depend on the dialog still being up.
+    // Read here, beside the navigator and for the same reason: the bind
+    // happens after an await, and `ref` is only good while this dialog
+    // is mounted - which a dismissal ends. The import already ran, so the
+    // binding somebody asked for should not depend on the dialog still
+    // being up.
     final repository = ref.read(repositoryProvider);
     try {
-      if (_source == PlaylistImportSource.m3u) {
-        final result = await ref
-            .read(playlistsProvider.notifier)
-            .importM3u(name: name, content: payload);
-        // Only while this dialog is still up: an import outlives a
-        // dialog somebody dismissed, and popping then takes the screen
-        // underneath with it.
-        if (mounted) navigator.pop();
-        // The M3U endpoint answers with counts rather than a resolve
-        // report, and it pops on success, so a toast is readable.
-        messenger.show(
-          result.unmatched == 0
-              ? l10n.playlistImportedAll(result.playlist.name, result.matched)
-              : l10n.playlistImportedPartial(
-                  result.playlist.name,
-                  result.matched,
-                  result.unmatched,
-                ),
-          channel: ShellChannel.playlists,
-        );
-        return;
-      }
       // The portable source carries refs, not export text.
       String? exportedName;
       List<PortableRef>? refs;
@@ -404,6 +394,89 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
     }
   }
 
+  /// Asks how each line of the pasted M3U file would import, and shows it
+  /// before anything is created. The check needs no name; the import does.
+  Future<void> _checkM3u(String payload) async {
+    final l10n = context.l10n;
+    setState(() {
+      _busy = true;
+      _step = _M3uStep.checking;
+      _error = null;
+    });
+    try {
+      final preview = await ref
+          .read(repositoryProvider)
+          .previewPlaylistM3u(payload);
+      // An edit made while asking makes this answer another text's.
+      if (!mounted || _payload.text != payload) return;
+      setState(() => _m3uPreview = preview);
+    } on WaxDeckApiException catch (e) {
+      if (mounted && _payload.text == payload) {
+        setState(() => _error = explainRefusal(l10n, e));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _step = null;
+        });
+      }
+    }
+  }
+
+  /// Imports the checked M3U file as a static playlist and closes on a
+  /// toast: the endpoint answers counts, which the check already listed.
+  Future<void> _importM3u() async {
+    if (_busy || _m3uPreview == null) return;
+    final l10n = context.l10n;
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = l10n.playlistImportNeedsName);
+      return;
+    }
+    // Claimed for the whole import, past this dialog's dismissal, so the
+    // next dialog holds off the same file until it is done.
+    final content = _payload.text;
+    final running = ref.read(m3uImportsRunningProvider.notifier);
+    if (!running.claim(content)) return;
+    setState(() {
+      _busy = true;
+      _step = _M3uStep.importing;
+      _error = null;
+    });
+    final navigator = Navigator.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    try {
+      final result = await ref
+          .read(playlistsProvider.notifier)
+          .importM3u(name: name, content: content);
+      // Only while this dialog is still up: an import outlives a dialog
+      // somebody dismissed, and popping then takes the screen underneath
+      // with it.
+      if (mounted) navigator.pop();
+      messenger.show(
+        result.unmatched == 0
+            ? l10n.playlistImportedAll(result.playlist.name, result.matched)
+            : l10n.playlistImportedPartial(
+                result.playlist.name,
+                result.matched,
+                result.unmatched,
+              ),
+        channel: ShellChannel.playlists,
+      );
+    } on WaxDeckApiException catch (e) {
+      if (mounted) setState(() => _error = explainRefusal(l10n, e));
+    } finally {
+      running.release(content);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _step = null;
+        });
+      }
+    }
+  }
+
   /// Binds the created playlist to what was just pasted, and answers
   /// what the report should say about it - null when nobody asked, or
   /// when nothing was created to bind.
@@ -445,6 +518,13 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
     final l10n = context.l10n;
     final source = _source.labelOf(l10n);
     final report = _nspReport;
+    final preview = _m3uPreview;
+    final runningImports = ref.watch(m3uImportsRunningProvider);
+    // Another dialog's import of this file, still going.
+    final importedElsewhere =
+        preview != null &&
+        _step != _M3uStep.importing &&
+        runningImports.contains(_payload.text);
     return AlertDialog(
       title: Text(l10n.playlistImportTitle(source)),
       content: SizedBox(
@@ -459,6 +539,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
                     ? l10n.playlistNameLabel
                     : l10n.playlistNameOptional,
                 controller: _name,
+                maxCharacters: playlistNameMaxLength,
                 autofocus: _source.needsName,
                 semanticsId: SemanticsIds.playlistImportName,
               ),
@@ -493,6 +574,24 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
                   ),
                 ),
               if (report != null) _NspCheck(report: report),
+              if (preview != null) _M3uCheck(preview: preview),
+              if (_step case final step?)
+                _M3uWorking(
+                  label: switch (step) {
+                    _M3uStep.checking => l10n.playlistM3uPreviewChecking,
+                    _M3uStep.importing => l10n.playlistM3uPreviewImporting,
+                  },
+                )
+              else if (importedElsewhere)
+                Padding(
+                  padding: const EdgeInsets.only(top: WaxSpace.s12),
+                  child: Text(
+                    l10n.playlistM3uPreviewStillImporting,
+                    style: WaxType.bodySmall.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ),
               if (report != null &&
                   (report.gaps.isEmpty || report.rule != null))
                 WaxSettingRow(
@@ -525,12 +624,22 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
           kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
         ),
-        if (report == null)
+        if (preview != null)
           WaxButton(
-            label: _source == PlaylistImportSource.nsp
+            label: l10n.playlistImportRun,
+            semanticsId: SemanticsIds.playlistM3uImport,
+            onPressed: _busy || importedElsewhere
+                ? null
+                : () => unawaited(_importM3u()),
+          )
+        else if (report == null)
+          WaxButton(
+            label: _source.checksFirst
                 ? l10n.playlistImportCheck
                 : l10n.playlistImportRun,
-            semanticsId: SemanticsIds.playlistImportRun,
+            semanticsId: _source == PlaylistImportSource.m3u
+                ? SemanticsIds.playlistM3uCheck
+                : SemanticsIds.playlistImportRun,
             onPressed: _busy ? null : () => unawaited(_import()),
           )
         else if (report.gaps.isEmpty)
@@ -633,6 +742,143 @@ class _NspCheck extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What a dialog can be waiting on the server for with an M3U file.
+enum _M3uStep { checking, importing }
+
+/// Work under way, said in words beside a spinner.
+class _M3uWorking extends StatelessWidget {
+  const _M3uWorking({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: WaxSpace.s12),
+    child: Row(
+      children: <Widget>[
+        const WaxSpinner(),
+        const SizedBox(width: WaxSpace.s12),
+        Expanded(
+          child: Text(
+            label,
+            style: WaxType.bodySmall.copyWith(
+              color: WaxColors.of(context).textSecondary,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// What checking an M3U file found: the counts, then every line in the
+/// file's order with what it matched, or its path where it matched
+/// nothing. Rows go by line index, since a path can be given twice.
+class _M3uCheck extends StatelessWidget {
+  const _M3uCheck({required this.preview});
+
+  final M3uPreview preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.only(top: WaxSpace.s12),
+      child: WaxProse.block(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Semantics(
+              identifier: SemanticsIds.playlistM3uPreview,
+              container: true,
+              child: Text(
+                l10n.playlistM3uPreviewCounts(
+                  preview.matched,
+                  preview.merged,
+                  preview.unmatched,
+                ),
+                style: WaxType.body.copyWith(color: colors.textPrimary),
+              ),
+            ),
+            const SizedBox(height: WaxSpace.s4),
+            // Built as they scroll in: a file can run to thousands of
+            // lines, and the window shows a handful.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: preview.lines.length,
+                itemBuilder: (context, index) => _M3uLineRow(
+                  key: ValueKey<int>(index),
+                  index: index,
+                  line: preview.lines[index],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One line of a checked M3U file: what it reads as, then its match or,
+/// where it matched nothing, its path.
+class _M3uLineRow extends StatelessWidget {
+  const _M3uLineRow({super.key, required this.index, required this.line});
+
+  final int index;
+  final M3uPreviewLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    return Semantics(
+      identifier: SemanticsIds.playlistM3uPreviewRow(index),
+      container: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: WaxSpace.s4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              switch (line.outcome) {
+                M3uLineOutcome.matched => l10n.playlistM3uPreviewMatched,
+                M3uLineOutcome.merged => l10n.playlistM3uPreviewMerged,
+                M3uLineOutcome.unmatched => l10n.playlistM3uPreviewUnmatched,
+              },
+              style: WaxType.caption.copyWith(
+                color: line.outcome == M3uLineOutcome.unmatched
+                    ? colors.error
+                    : colors.textTertiary,
+              ),
+            ),
+            switch (line.item) {
+              final item? => Text(
+                switch (item.artist) {
+                  final artist? => l10n.playlistM3uPreviewItem(
+                    artist,
+                    item.title,
+                  ),
+                  null => item.title,
+                },
+                style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+              ),
+              null => Text(
+                line.path,
+                style: WaxType.monoData.copyWith(color: colors.textSecondary),
+              ),
+            },
+          ],
         ),
       ),
     );

@@ -177,6 +177,10 @@
   "@searchTitle": {
     "description": "Title of the search screen."
   },
+  "searchTopResult": "Top result",
+  "@searchTopResult": {
+    "description": "Heading over the one artist or album whose name is the search, shown above the result groups."
+  },
   "searchTruncated": "There are more matches than fit here. Refine your search to narrow them down.",
   "@searchTruncated": {
     "description": "Note under the results when the server capped how many it answered with."

@@ -333,6 +333,11 @@ export const SemanticsIds = {
   adminDiagnostics: 'admin-diagnostics',
   adminHealth: 'admin-health',
   adminHealthRule: 'admin-health-rule',
+  catalogCheck: 'catalog-check',
+  catalogCheckRepair: 'catalog-check-repair',
+  catalogCheckRepairConfirm: 'catalog-check-repair-confirm',
+  catalogCheckResult: 'catalog-check-result',
+  catalogCheckVerify: 'catalog-check-verify',
   diagnosticCode: (code: string | number) => `diagnostic-code-${code}`,
   diagnosticDetail: (path: string | number) => `diagnostic-detail-${path}`,
   diagnosticRow: (path: string | number) => `diagnostic-row-${path}`,
@@ -341,6 +346,14 @@ export const SemanticsIds = {
   duplicateGroup: (pid: string | number) => `duplicate-group-${pid}`,
   duplicateMerge: (pid: string | number) => `duplicate-merge-${pid}`,
   duplicatesRetry: 'duplicates-retry',
+  foldDetail: (type: string | number, key: string | number) => `fold-detail-${type}-${key}`,
+  foldGroup: (type: string | number) => `fold-group-${type}`,
+  foldRow: (type: string | number, key: string | number) => `fold-row-${type}-${key}`,
+  foldUnfold: (type: string | number, key: string | number) => `fold-unfold-${type}-${key}`,
+  foldUnfoldConfirm: 'fold-unfold-confirm',
+  foldsMore: 'folds-more',
+  foldsRetry: 'folds-retry',
+  foldsSection: 'folds-section',
   health: (rule: string | number) => `health-rule-${rule}`,
   healthFix: (rule: string | number) => `health-fix-${rule}`,
   healthFixBlocked: (rule: string | number) => `health-fix-blocked-${rule}`,
@@ -389,6 +402,7 @@ export const SemanticsIds = {
   itemDeleteMode: (mode: string | number) => `item-delete-mode-${mode}`,
   itemDeletePaths: 'item-delete-paths',
   itemDeleteRip: 'item-delete-rip',
+  itemDeleteSidecars: 'item-delete-sidecars',
   itemFactsError: 'item-facts-error',
   itemFactsRow: (key: string | number) => `item-facts-${key}`,
   itemFactsSheet: (pid: string | number) => `item-facts-sheet-${pid}`,
@@ -540,6 +554,7 @@ export const SemanticsIds = {
   organizePlan: 'organize-plan',
   organizePreview: 'organize-preview',
   organizeProfileAudiobook: 'organize-profile-audiobook',
+  organizeProfileCompilation: 'organize-profile-compilation',
   organizeProfileDelete: (name: string | number) => `organize-profile-delete-${name}`,
   organizeProfileDeleteConfirm: 'organize-profile-delete-confirm',
   organizeProfileEdit: (name: string | number) => `organize-profile-edit-${name}`,
@@ -679,6 +694,10 @@ export const SemanticsIds = {
   playlistImportReport: 'playlist-import-report',
   playlistImportRun: 'playlist-import-run',
   playlistImportSource: (source: string | number) => `playlist-import-source-${source}`,
+  playlistM3uCheck: 'playlist-m3u-check',
+  playlistM3uImport: 'playlist-m3u-import',
+  playlistM3uPreview: 'playlist-m3u-preview',
+  playlistM3uPreviewRow: (index: string | number) => `playlist-m3u-preview-${index}`,
   playlistMore: (pid: string | number) => `playlist-more-${pid}`,
   playlistNameField: 'playlist-name-field',
   playlistOverflow: 'playlist-overflow',
@@ -860,6 +879,8 @@ export const SemanticsIds = {
   searchRecent: (index: string | number) => `search-recent-${index}`,
   searchRecentRemove: (index: string | number) => `search-recent-remove-${index}`,
   searchShowAll: (kind: string | number) => `search-show-all-${kind}`,
+  searchTopResult: 'search-top-result',
+  searchTopResultMore: 'search-top-result-more',
   searchTruncated: 'search-truncated',
 
   // settings: Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.
@@ -1091,6 +1112,10 @@ export const SemanticsIdPrefixes = {
   duplicateDetail: 'duplicate-detail-',
   duplicateGroup: 'duplicate-group-',
   duplicateMerge: 'duplicate-merge-',
+  foldDetail: 'fold-detail-',
+  foldGroup: 'fold-group-',
+  foldRow: 'fold-row-',
+  foldUnfold: 'fold-unfold-',
   health: 'health-rule-',
   healthFix: 'health-fix-',
   healthFixBlocked: 'health-fix-blocked-',
@@ -1187,6 +1212,7 @@ export const SemanticsIdPrefixes = {
   playlistEntryRemove: 'playlist-entry-remove-',
   playlistExportNspLossRow: 'playlist-export-nsp-loss-',
   playlistImportSource: 'playlist-import-source-',
+  playlistM3uPreviewRow: 'playlist-m3u-preview-',
   playlistMore: 'playlist-more-',
   playlistSyncArmOption: 'playlist-sync-arm-',
   playlistSyncIntervalOption: 'playlist-sync-interval-',
@@ -1314,11 +1340,20 @@ export const SemanticsIdPrefixes = {
 /// need that should not have to earn an exemption.
 export const SEMANTICS_ATTRIBUTE = 'flt-semantics-identifier';
 
+/// What a CSS double-quoted string cannot hold as itself, and what stands
+/// in for each: an id built from a server's data (a fold key holds a
+/// tag's text) can carry one.
+const CSS_STRING_ESCAPES: Readonly<Record<string, string>> = {"\"":"\\\"","\\":"\\\\","\n":"\\a ","\r":"\\d ","\f":"\\c "};
+
+/// [value] as the inside of a CSS double-quoted string.
+const cssString = (value: string) =>
+  Array.from(value, (c) => CSS_STRING_ESCAPES[c] ?? c).join('');
+
 /// The attribute selector Flutter renders an identifier as.
 export const sem = (id: string) =>
-  `[${SEMANTICS_ATTRIBUTE}="${id}"]`;
+  `[${SEMANTICS_ATTRIBUTE}="${cssString(id)}"]`;
 
 /// The same selector, matching every identifier that starts
 /// with [prefix] - a `SemanticsIdPrefixes` member.
 export const semPrefix = (prefix: string) =>
-  `[${SEMANTICS_ATTRIBUTE}^="${prefix}"]`;
+  `[${SEMANTICS_ATTRIBUTE}^="${cssString(prefix)}"]`;

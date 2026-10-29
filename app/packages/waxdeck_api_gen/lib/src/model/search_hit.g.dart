@@ -15,6 +15,8 @@ class _$SearchHit extends SearchHit {
   final String title;
   @override
   final String? subtitle;
+  @override
+  final bool? exact;
 
   factory _$SearchHit([void Function(SearchHitBuilder)? updates]) =>
       (SearchHitBuilder()..update(updates))._build();
@@ -24,6 +26,7 @@ class _$SearchHit extends SearchHit {
     required this.kind,
     required this.title,
     this.subtitle,
+    this.exact,
   }) : super._();
   @override
   SearchHit rebuild(void Function(SearchHitBuilder) updates) =>
@@ -39,7 +42,8 @@ class _$SearchHit extends SearchHit {
         pid == other.pid &&
         kind == other.kind &&
         title == other.title &&
-        subtitle == other.subtitle;
+        subtitle == other.subtitle &&
+        exact == other.exact;
   }
 
   @override
@@ -49,6 +53,7 @@ class _$SearchHit extends SearchHit {
     _$hash = $jc(_$hash, kind.hashCode);
     _$hash = $jc(_$hash, title.hashCode);
     _$hash = $jc(_$hash, subtitle.hashCode);
+    _$hash = $jc(_$hash, exact.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -59,7 +64,8 @@ class _$SearchHit extends SearchHit {
           ..add('pid', pid)
           ..add('kind', kind)
           ..add('title', title)
-          ..add('subtitle', subtitle))
+          ..add('subtitle', subtitle)
+          ..add('exact', exact))
         .toString();
   }
 }
@@ -83,6 +89,10 @@ class SearchHitBuilder implements Builder<SearchHit, SearchHitBuilder> {
   String? get subtitle => _$this._subtitle;
   set subtitle(String? subtitle) => _$this._subtitle = subtitle;
 
+  bool? _exact;
+  bool? get exact => _$this._exact;
+  set exact(bool? exact) => _$this._exact = exact;
+
   SearchHitBuilder() {
     SearchHit._defaults(this);
   }
@@ -94,6 +104,7 @@ class SearchHitBuilder implements Builder<SearchHit, SearchHitBuilder> {
       _kind = $v.kind;
       _title = $v.title;
       _subtitle = $v.subtitle;
+      _exact = $v.exact;
       _$v = null;
     }
     return this;
@@ -128,6 +139,7 @@ class SearchHitBuilder implements Builder<SearchHit, SearchHitBuilder> {
             'title',
           ),
           subtitle: subtitle,
+          exact: exact,
         );
     replace(_$result);
     return _$result;

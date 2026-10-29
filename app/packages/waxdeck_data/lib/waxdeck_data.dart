@@ -15,6 +15,7 @@ export 'src/events_channel.dart';
 export 'src/media_url_life.dart';
 export 'src/mirror_pages.dart';
 export 'src/open_io.dart' if (dart.library.js_interop) 'src/open_stub.dart';
+export 'src/pending_frees.dart';
 export 'src/queue_store.dart';
 export 'src/sync_engine.dart';
 export 'src/transfer_engine.dart';

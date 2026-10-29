@@ -43,6 +43,21 @@ void main() {
           (MethodCall call) async => temp.path,
         );
     db = inMemoryMirrorDatabase();
+    // A cover is only pinned for an item the device has downloaded.
+    await db
+        .into(db.downloadRecords)
+        .insert(
+          DownloadRecordsCompanion.insert(
+            pid: _pid,
+            fileIndex: 0,
+            essenceHash: 'essence',
+            etag: '1-1',
+            fileName: 'track.flac',
+            localPath: '/downloads/track.flac',
+            sizeBytes: 1024,
+            state: 'complete',
+          ),
+        );
     pins = DriftArtworkPinStore(db);
     server = _FakeServer();
     store = CachedArtworkStore(
@@ -165,6 +180,307 @@ void main() {
     for (final path in paths) {
       expect(File(path).existsSync(), isFalse, reason: path);
     }
+  });
+
+  test('an unpin cut short leaves its rows for the next to finish', () async {
+    final killed = _KilledPinStore(pins);
+    final cut = CachedArtworkStore(
+      baseUrl: _base,
+      pins: killed,
+      token: () => 'secret-token',
+      client: Dio()..httpClientAdapter = server,
+      pinDirectory: temp,
+      cache: _UnreachableCache(),
+    );
+    addTearDown(cut.dispose);
+    server.serve('$_art?size=1024', 'hero bytes', etag: '"cover-1024"');
+    server.serve('$_art?size=256', 'cell bytes', etag: '"cover-256"');
+    await cut.pinForOffline(_pid, _art);
+    final held = await pins.pinsFor(_pid);
+
+    killed.killNext = true;
+    await expectLater(cut.unpin(_pid), throwsStateError);
+
+    // The files went first, so what is left is a row the next unpin can
+    // finish, not a file nothing names: an unpin is retried (the free a
+    // commit promised is finished at the next start), and a retry can only
+    // find what the rows still say.
+    for (final pin in held) {
+      expect(File(pin.localPath).existsSync(), isFalse, reason: pin.localPath);
+    }
+    expect(await pins.pinsFor(_pid), hasLength(held.length));
+
+    await cut.unpin(_pid);
+    expect(await pins.pinsFor(_pid), isEmpty);
+  });
+
+  test('an unpin leaves a cover pinned while it ran, row and file', () async {
+    final racing = _PinsBeforeRemoval(pins);
+    final cut = CachedArtworkStore(
+      baseUrl: _base,
+      pins: racing,
+      token: () => 'secret-token',
+      client: Dio()..httpClientAdapter = server,
+      pinDirectory: temp,
+      cache: _UnreachableCache(),
+    );
+    addTearDown(cut.dispose);
+    server.serve('$_art?size=1024', 'hero bytes', etag: '"cover-1024"');
+    server.serve('$_art?size=256', 'cell bytes', etag: '"cover-256"');
+    await cut.pinForOffline(_pid, _art);
+    final [hero, cell] = await pins.pinsFor(_pid);
+    final larger = File('${temp.path}/larger.img');
+    // After the unpin read the pins: the hero is pinned again (fresh bytes
+    // under its file name, a later instant) and a size it never held lands.
+    racing.before = () async {
+      File(hero.localPath).writeAsStringSync('fresh hero');
+      larger.writeAsStringSync('larger');
+      for (final (size, path) in [(1024, hero.localPath), (512, larger.path)]) {
+        await pins.put(
+          ArtworkPinRecord(
+            pid: _pid,
+            sizePx: size,
+            artUrl: _art,
+            etag: 'since',
+            localPath: path,
+            sizeBytes: 6,
+            pinnedAt: DateTime.utc(2030),
+          ),
+        );
+      }
+    };
+
+    await cut.unpin(_pid);
+
+    final held = await pins.pinsFor(_pid);
+    expect(held.map((p) => (p.sizePx, p.etag)), [
+      (1024, 'since'),
+      (512, 'since'),
+    ]);
+    expect(File(hero.localPath).readAsStringSync(), 'fresh hero');
+    expect(larger.readAsStringSync(), 'larger');
+    expect(File(cell.localPath).existsSync(), isFalse, reason: 'it was read');
+  });
+
+  group('a cover is for an item the device holds and is not freeing', () {
+    void serveBoth() {
+      server.serve('$_art?size=1024', 'hero bytes', etag: '"cover-1024"');
+      server.serve('$_art?size=256', 'cell bytes', etag: '"cover-256"');
+    }
+
+    List<File> files() => temp.listSync().whereType<File>().toList();
+
+    test(
+      'none is pinned for an item the device holds no download of',
+      () async {
+        serveBoth();
+        await db.delete(db.downloadRecords).go();
+
+        await store.pinForOffline(_pid, _art);
+
+        expect(server.requested, isEmpty, reason: 'nothing is even asked for');
+        expect(await pins.pinsFor(_pid), isEmpty);
+        expect(files(), isEmpty);
+      },
+    );
+
+    test('none for an item a commit has promised to free, which is where '
+        'a download that landed after the commit pins', () async {
+      serveBoth();
+      await db.transaction(() => PendingFrees(db).condemn(_pid));
+
+      await store.pinForOffline(_pid, _art);
+
+      expect(server.requested, isEmpty);
+      expect(await pins.pinsFor(_pid), isEmpty);
+      expect(files(), isEmpty);
+      // So the free it was owed still comes, and takes the audio too.
+      expect(await PendingFrees(db).due(), [_pid]);
+    });
+
+    test('a cover on its way when the item is freed does not land', () async {
+      serveBoth();
+      server.hold = Completer<void>();
+      final pinning = store.pinForOffline(_pid, _art);
+      await pumpEventQueue();
+      expect(server.requested, isNotEmpty, reason: 'the fetch is out');
+
+      // The free runs and settles while the cover is still coming.
+      await db.delete(db.downloadRecords).go();
+      server.hold!.complete();
+      await pinning;
+
+      expect(await pins.pinsFor(_pid), isEmpty);
+      expect(files(), isEmpty);
+    });
+
+    test('a cover on its way when a commit promises the free takes itself '
+        'back', () async {
+      serveBoth();
+      server.hold = Completer<void>();
+      final pinning = store.pinForOffline(_pid, _art);
+      await pumpEventQueue();
+
+      await db.transaction(() => PendingFrees(db).condemn(_pid));
+      server.hold!.complete();
+      await pinning;
+
+      expect(await pins.pinsFor(_pid), isEmpty);
+      expect(files(), isEmpty);
+      expect(await PendingFrees(db).due(), [_pid], reason: 'still owed');
+    });
+
+    test('a download that finishes after the commit pins nothing, and the '
+        'free then leaves nothing behind', () async {
+      // Still going when the commit promised the free.
+      await (db.update(
+        db.downloadRecords,
+      )..where((t) => t.pid.equals(_pid))).write(
+        const DownloadRecordsCompanion(
+          state: Value('pending'),
+          localPath: Value(''),
+        ),
+      );
+      await db.transaction(() => PendingFrees(db).condemn(_pid));
+      // It lands, and the action that waited on it asks for the cover.
+      await (db.update(
+        db.downloadRecords,
+      )..where((t) => t.pid.equals(_pid))).write(
+        const DownloadRecordsCompanion(
+          state: Value('complete'),
+          localPath: Value('/downloads/track.flac'),
+        ),
+      );
+      serveBoth();
+
+      await store.pinForOffline(_pid, _art);
+
+      expect(server.requested, isEmpty);
+      expect(await pins.pinsFor(_pid), isEmpty);
+      // The cover being no take-up, the free still comes, and takes the
+      // audio; there is no cover of this download for it to leave.
+      final owed = (await PendingFrees(db).owed(_pid))!;
+      expect(owed.files.map((f) => f.index), [0]);
+      await db.delete(db.downloadRecords).go();
+      await store.unpinExact(_pid, owed.pins);
+      expect(await PendingFrees(db).settle(_pid), isTrue);
+      expect(await PendingFrees(db).due(), isEmpty);
+      expect(files(), isEmpty);
+    });
+
+    test('a cover on its way for an item the device keeps lands', () async {
+      serveBoth();
+      server.hold = Completer<void>();
+      final pinning = store.pinForOffline(_pid, _art);
+      await pumpEventQueue();
+
+      server.hold!.complete();
+      await pinning;
+
+      expect(await pins.pinsFor(_pid), hasLength(2));
+    });
+  });
+
+  group('unpinning exactly', () {
+    test('takes the covers listed and leaves one pinned since', () async {
+      server.serve('$_art?size=1024', 'hero bytes', etag: '"cover-1024"');
+      server.serve('$_art?size=256', 'cell bytes', etag: '"cover-256"');
+      await store.pinForOffline(_pid, _art);
+      final listed = [
+        for (final pin in await pins.pinsFor(_pid))
+          (sizePx: pin.sizePx, pinnedAt: pin.pinnedAt),
+      ];
+      // After the list was made, a cover lands for the same item.
+      final late = File('${temp.path}/late.img')..writeAsStringSync('late');
+      await pins.put(
+        ArtworkPinRecord(
+          pid: _pid,
+          sizePx: 512,
+          artUrl: _art,
+          etag: 'late',
+          localPath: late.path,
+          sizeBytes: 4,
+          pinnedAt: DateTime.utc(2030),
+        ),
+      );
+      final paths = (await pins.pinsFor(
+        _pid,
+      )).where((p) => p.sizePx != 512).map((p) => p.localPath).toList();
+
+      await store.unpinExact(_pid, listed);
+
+      expect((await pins.pinsFor(_pid)).map((p) => p.sizePx), [512]);
+      expect(late.existsSync(), isTrue);
+      for (final path in paths) {
+        expect(File(path).existsSync(), isFalse, reason: path);
+      }
+    });
+
+    test('leaves a size pinned again since, row and file', () async {
+      server.serve('$_art?size=1024', 'hero bytes', etag: '"cover-1024"');
+      server.serve('$_art?size=256', 'cell bytes', etag: '"cover-256"');
+      await store.pinForOffline(_pid, _art);
+      final listed = [
+        for (final pin in await pins.pinsFor(_pid))
+          (sizePx: pin.sizePx, pinnedAt: pin.pinnedAt),
+      ];
+      // The 1024 cover is pinned again at a later instant: same file name,
+      // fresh bytes, and not the cover that was listed.
+      final again = (await pins.pinsFor(_pid)).first;
+      File(again.localPath).writeAsStringSync('fresh hero');
+      await pins.put(
+        ArtworkPinRecord(
+          pid: _pid,
+          sizePx: again.sizePx,
+          artUrl: again.artUrl,
+          etag: 'fresh',
+          localPath: again.localPath,
+          sizeBytes: 10,
+          pinnedAt: DateTime.utc(2030),
+        ),
+      );
+
+      await store.unpinExact(_pid, listed);
+
+      final held = await pins.pinsFor(_pid);
+      expect(held.map((p) => p.sizePx), [1024]);
+      expect(File(held.single.localPath).readAsStringSync(), 'fresh hero');
+    });
+
+    test('cut short, leaves its rows for the next to finish', () async {
+      final killed = _KilledPinStore(pins);
+      final cut = CachedArtworkStore(
+        baseUrl: _base,
+        pins: killed,
+        token: () => 'secret-token',
+        client: Dio()..httpClientAdapter = server,
+        pinDirectory: temp,
+        cache: _UnreachableCache(),
+      );
+      addTearDown(cut.dispose);
+      server.serve('$_art?size=1024', 'hero bytes', etag: '"cover-1024"');
+      server.serve('$_art?size=256', 'cell bytes', etag: '"cover-256"');
+      await cut.pinForOffline(_pid, _art);
+      final held = await pins.pinsFor(_pid);
+      final listed = [
+        for (final pin in held) (sizePx: pin.sizePx, pinnedAt: pin.pinnedAt),
+      ];
+
+      killed.killNext = true;
+      await expectLater(cut.unpinExact(_pid, listed), throwsStateError);
+
+      for (final pin in held) {
+        expect(
+          File(pin.localPath).existsSync(),
+          isFalse,
+          reason: pin.localPath,
+        );
+      }
+      expect(await pins.pinsFor(_pid), hasLength(held.length));
+
+      await cut.unpinExact(_pid, listed);
+      expect(await pins.pinsFor(_pid), isEmpty);
+    });
   });
 
   test('signing out leaves the next account nothing', () async {
@@ -367,6 +683,77 @@ class _NotFoundCache implements CacheManager {
   }
 }
 
+/// A pin store whose next removal of rows dies, as a process does between one
+/// step and the next.
+class _KilledPinStore implements ArtworkPinStore {
+  _KilledPinStore(this.inner);
+
+  final ArtworkPinStore inner;
+  bool killNext = false;
+
+  @override
+  Future<List<ArtworkPinRecord>> pinsFor(String pid) => inner.pinsFor(pid);
+
+  @override
+  Future<List<ArtworkPinRecord>> pinsToDraw(String pid) =>
+      inner.pinsToDraw(pid);
+
+  @override
+  Future<void> put(ArtworkPinRecord pin) => inner.put(pin);
+
+  @override
+  Future<void> removeExactly(String pid, List<OwedPin> pins) async {
+    if (killNext) {
+      killNext = false;
+      throw StateError('killed');
+    }
+    return inner.removeExactly(pid, pins);
+  }
+
+  @override
+  Future<bool> mayPin(String pid) => inner.mayPin(pid);
+
+  @override
+  Future<List<ArtworkPinRecord>> clear() => inner.clear();
+}
+
+/// A pin store that runs [before] once, just ahead of its next removal of
+/// rows: a cover pinned while an unpin is part-way.
+class _PinsBeforeRemoval implements ArtworkPinStore {
+  _PinsBeforeRemoval(this.inner);
+
+  final ArtworkPinStore inner;
+  Future<void> Function()? before;
+
+  Future<void> _landBefore() async {
+    final land = before;
+    before = null;
+    await land?.call();
+  }
+
+  @override
+  Future<List<ArtworkPinRecord>> pinsFor(String pid) => inner.pinsFor(pid);
+
+  @override
+  Future<List<ArtworkPinRecord>> pinsToDraw(String pid) =>
+      inner.pinsToDraw(pid);
+
+  @override
+  Future<void> put(ArtworkPinRecord pin) => inner.put(pin);
+
+  @override
+  Future<void> removeExactly(String pid, List<OwedPin> pins) async {
+    await _landBefore();
+    return inner.removeExactly(pid, pins);
+  }
+
+  @override
+  Future<bool> mayPin(String pid) => inner.mayPin(pid);
+
+  @override
+  Future<List<ArtworkPinRecord>> clear() => inner.clear();
+}
+
 /// Counts pin lookups, to prove the ones that should not happen do not.
 class _CountingPinStore implements ArtworkPinStore {
   _CountingPinStore(this.inner);
@@ -390,7 +777,11 @@ class _CountingPinStore implements ArtworkPinStore {
   Future<void> put(ArtworkPinRecord pin) => inner.put(pin);
 
   @override
-  Future<List<ArtworkPinRecord>> remove(String pid) => inner.remove(pid);
+  Future<void> removeExactly(String pid, List<OwedPin> pins) =>
+      inner.removeExactly(pid, pins);
+
+  @override
+  Future<bool> mayPin(String pid) => inner.mayPin(pid);
 
   @override
   Future<List<ArtworkPinRecord>> clear() => inner.clear();
@@ -436,6 +827,9 @@ class _FakeServer implements HttpClientAdapter {
       <String, Map<String, List<String>>>{};
   final List<String> requested = <String>[];
 
+  /// Held open, a fetch waits on it before it answers: a cover on its way.
+  Completer<void>? hold;
+
   void serve(String url, String body, {String? etag}) =>
       serveBytes(url, Uint8List.fromList(utf8.encode(body)), etag: etag);
 
@@ -458,6 +852,7 @@ class _FakeServer implements HttpClientAdapter {
   ) async {
     final url = options.uri.toString();
     requested.add(url);
+    if (hold case final gate?) await gate.future;
     _headers[url] = <String, List<String>>{
       for (final entry in options.headers.entries)
         entry.key: <String>['${entry.value}'],

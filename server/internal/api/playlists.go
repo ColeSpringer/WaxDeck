@@ -276,6 +276,32 @@ func (s *Server) ImportPlaylistM3u(ctx context.Context, req ImportPlaylistM3uReq
 	return ImportPlaylistM3u201JSONResponse(out), nil
 }
 
+func (s *Server) PreviewPlaylistM3u(ctx context.Context, req PreviewPlaylistM3uRequestObject) (PreviewPlaylistM3uResponseObject, error) {
+	if req.Body == nil {
+		return PreviewPlaylistM3u400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	prev, err := s.svc.PreviewPlaylistM3U(ctx, uc, req.Body.Content)
+	if err != nil {
+		return nil, err
+	}
+	out := M3uPreview{
+		Matched: prev.Matched, Merged: prev.Merged, Unmatched: prev.Unmatched,
+		Entries: make([]M3uPreviewEntry, 0, len(prev.Lines)),
+	}
+	for _, ln := range prev.Lines {
+		e := M3uPreviewEntry{Path: ln.Path, Outcome: M3uPreviewEntryOutcome(ln.Outcome)}
+		if ln.Item != nil {
+			e.Item = ptr(summaryJSON(*ln.Item))
+		}
+		out.Entries = append(out.Entries, e)
+	}
+	return PreviewPlaylistM3u200JSONResponse(out), nil
+}
+
 func (s *Server) ImportPlaylistNsp(ctx context.Context, req ImportPlaylistNspRequestObject) (ImportPlaylistNspResponseObject, error) {
 	if req.Body == nil {
 		return ImportPlaylistNsp400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil

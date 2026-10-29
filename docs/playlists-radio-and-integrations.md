@@ -68,7 +68,14 @@ Playlists round-trip M3U8 for interop with path-based players. Import
 lives on the playlists screen (paste a file's contents; the server
 matches entries against the library and reports what it could not
 place), and every playlist detail menu offers Export M3U with a copy
-button. Every import matches only what the importing account can see:
+button. A pasted file is checked before anything is created: the check
+lists every line with what it matched, and Import then creates the
+playlist. A line naming the item of the line before it through a
+different path to it (another of its files, such as a book's next part
+or a copy, or another spelling of the same file) joins that entry
+rather than adding one; the same path given twice in a row is two
+entries. A file naming more than 2,000 paths is refused, so a longer
+one is imported in parts. Every import matches only what the importing account can see:
 an entry naming a track outside its libraries or denied by its content
 settings is reported as unmatched, the same as one nothing matched. M3U8 carries no cover: the format has no directive for one, so
 an exported playlist is text and its cover stays on the server.

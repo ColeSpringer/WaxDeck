@@ -89,6 +89,9 @@ info:
       carries the current one. Other prefixes are strict.
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
+    - A JSON request body larger than 24 MiB is refused with
+      `invalid-request`; a raw body (an upload's bytes, an archive, an
+      export, an image) is bounded by its own operation instead.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
       string; currently defined codes: `invalid-request`, `unauthenticated`,
       `forbidden`, `not-found`, `conflict`, `internal`, `rate-limited` (too
@@ -192,7 +195,8 @@ info:
       the trash, `files`, the first few of them, and `more`, how many
       `files` leaves out; and `single-file`, `multi-file`,
       `no-chapters`, `no-cuts`, `no-sample-rate`, `no-file` or
-      `no-sheet`); a
+      `no-sheet`); a catalog repair refused while one is queued or
+      running carries `reason: task-running`, with `task`; a
       tool task whose clear could not name or remove its hidden files
       carries `reason: outputs-hidden`, with `folder` and `cause`, and
       stays. Under `unsupported-format`,
@@ -1846,6 +1850,100 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /admin/catalog/consistency:
+    get:
+      operationId: getCatalogConsistency
+      summary: Check the catalog's derived data
+      description: >
+        Recomputes what the catalog keeps derived from its own rows (the
+        artist, genre and release-group totals, sort keys, book lengths
+        and ISBN keys, album and release years, playlist positions) and
+        counts the rows that disagree; checks the search index for
+        coverage, counting the present items it has no entry for and
+        the entries with no item (an entry's content is not read); and
+        counts the stored images, thumbnails and custom-tag rows nothing
+        uses, which a repair deletes. Artists, albums, release groups,
+        genres and series with no items are not counted; a repair has a
+        step of its own for them. Read-only, so it runs beside scans and
+        edits. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: The counts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogConsistency"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /admin/catalog/repair:
+    post:
+      operationId: repairCatalog
+      summary: Repair the catalog's derived data
+      description: >
+        Queues a `catalog-repair` task that recomputes everything the
+        check counts, in this order: the totals, book lengths and ISBN
+        keys, album and release years and playlist positions; the sort
+        keys; the artists, albums, release groups, genres and series
+        with no items (deleted when an earlier repair found them so at
+        least a day before, otherwise noted for the next one); the
+        images and thumbnails nothing uses; the custom-tag rows under
+        keys the catalog no longer takes; the search index, whose
+        entries are rewritten where their content went stale as well as
+        added where missing and dropped where orphaned. It then
+        checks again, and the finished task's `summary` says what each
+        step did and what the check counted after (see `ToolTask`), and
+        in `runs` what each run of the task did: the steps it finished,
+        in order, with `error` saying why a run stopped short and
+        `handedOff` marking one a catalog hand-off cut short.
+        It holds the catalog's write lock while it writes, so edits and
+        scans wait for it. It runs beside the other tool tasks, but one at
+        a time with health fixes, which can run as long. Each run has six
+        hours. A run cut short for a reason that may pass (an error, its
+        time running out, the server stopping) is followed by one that
+        starts after the last step a run finished, since every step
+        recomputes from the catalog's own rows, three attempts in all. A
+        run a catalog hand-off cuts short waits the hand-off out without
+        spending an attempt, and the next starts over. A step the catalog
+        refuses ends the repair as failed, and so does a third attempt
+        that fails. It writes no file in any
+        library, so it runs on a read-only server too. The release years
+        a repair puts back, and the sort keys it rewrites other than an
+        item's own, reach no sync delta, so a repair that got past its
+        first step makes every client re-mirror the catalog once, when
+        it ends: every catalog sync cursor handed out before then
+        answers 410 `sync-reset` at its next use, and connected clients
+        are told to pull at once. One at a time:
+        `conflict` while one is queued or running. Administrators only.
+      tags: [admin]
+      responses:
+        "202":
+          description: The repair task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >
+            A repair is already queued or running (`conflict`, with
+            `params.reason` `task-running` and `params.task` naming its
+            task).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /admin/enrichment-cache:
     get:
       operationId: getEnrichmentCache
@@ -1988,7 +2086,10 @@ paths:
         ladder (identifiers, then fingerprints, then descriptive
         metadata); play history lands as import-source listen
         sessions with deterministic idempotency ids, so re-running an
-        import never doubles anything. Last.fm, ListenBrainz and
+        import never doubles anything. An entry naming a recording the
+        library holds more than once, with nothing in it to tell the
+        copies apart, matches the present copy with the lowest id, and
+        the summary counts it under `ties`. Last.fm, ListenBrainz and
         Spotify carry a time per play, so their history lands at the
         times it happened; the sources that report only a play count
         are spread backwards a week apart. Imported listens are never
@@ -3285,7 +3386,9 @@ paths:
       description: >
         Merges the losers into the survivor atomically. The losers'
         children, credits, and play history re-parent onto the
-        survivor; identifiers union. Administrators only.
+        survivor; identifiers union. Each loser's name folds into the
+        survivor (see `GET /library/folds`), and so do the names already
+        folded into a loser. Administrators only.
       tags: [health]
       requestBody:
         required: true
@@ -3310,6 +3413,84 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/folds:
+    get:
+      operationId: listEntityFolds
+      summary: List folded names
+      description: >
+        The names a merge folded into an entity, and those an entity
+        rename that locks left behind: a file still spelled a folded way
+        files under the entity the fold names instead of bringing back
+        the one the merge or the rename did away with. Every type's folds,
+        ordered by `entityType`, then by `key`, a page at a time.
+        Administrators only.
+      tags: [health]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum folds per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of folds.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityFoldPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/folds/unfold:
+    post:
+      operationId: unfoldEntities
+      summary: Unfold names
+      description: >
+        Forgets folds of one entity type by their keys, all of them or
+        none: a key no fold holds is `not-found`, the message naming it,
+        and nothing is forgotten. Nothing moves: a file spelled an
+        unfolded way is filed under an entity of its own name once it is
+        added, moved, replaced or retagged, and the files the fold already
+        filed under the entity stay with it until they change or move; a
+        rescan, `force` included, leaves an unchanged file where it is.
+        Audited as `entity.unfold`. Administrators only.
+      tags: [health]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnfoldRequest"
+      responses:
+        "204":
+          description: Unfolded.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -4294,8 +4475,9 @@ paths:
         Deletes items' files, to the catalog trash by default
         (reversible from the trash surface) or permanently (`mode`
         `permanent`, administrators only). `dryRun` answers the plan
-        (which files, how many bytes) without deleting, and the
-        response reports the same entries when it applies. Deleting
+        (which files and the sidecars that go with them, how many
+        bytes) without deleting, and the response reports the same
+        entries when it applies. Deleting
         needs the `delete` permission or the admin role, and every
         pid must be visible to the caller (`not-found` otherwise).
         Items keep their catalog identity: an item that loses its
@@ -8158,7 +8340,13 @@ paths:
         reported, never invented; an empty document yields an empty
         playlist. A path naming an item the caller cannot see is
         reported as unmatched, exactly like a path that names
-        nothing.
+        nothing. A line naming the item of the line before it through
+        a different path to it (another of its files, such as a book's
+        next part or a copy, or another spelling of the same file) adds
+        no second entry and is counted in neither; the same path given
+        twice in a row is two entries. A document naming more than
+        2000 paths is refused. Ask `POST /playlists/m3u/preview` first
+        to see how each line matches.
       tags: [playlists]
       requestBody:
         required: true
@@ -8180,6 +8368,47 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /playlists/m3u/preview:
+    post:
+      operationId: previewPlaylistM3u
+      summary: Preview an M3U8 import
+      description: >
+        How each path line of an M3U8 document matches, in document
+        order, read exactly as `POST /playlists/m3u` reads it. Nothing
+        is created or written and no name is needed, so it answers on a
+        read-only server too. A document naming more than 2000 paths is
+        refused, as the import refuses it.
+
+
+        A line is `matched` when it becomes an entry, `merged` when it
+        names the item of the line before it through a different path
+        to it (another of its files, such as a book's next part or a
+        copy, or another spelling of the same file), which the import
+        adds once, and `unmatched` when it names nothing. The same path
+        given twice in a row is two `matched` lines. A line naming an
+        item the caller cannot see is `unmatched` and carries no item,
+        exactly like one that names nothing.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/M3uPreviewRequest"
+      responses:
+        "200":
+          description: Each line's outcome, in document order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/M3uPreview"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /playlists/nsp:
     post:
       operationId: importPlaylistNsp
@@ -8188,7 +8417,8 @@ paths:
         Creates a **smart** playlist from an NSP document, which is the
         request body itself. The document's `name` names the playlist
         (the `name` parameter overrides it, and is what lets a nameless
-        document be imported) and `public` sets its visibility;
+        document be imported; either may be at most 200 characters) and
+        `public` sets its visibility;
         `comment` is read and discarded, since a WaxDeck playlist has
         no comment. Keys match exactly, so `Public` is an unrecognised
         key rather than the visibility.
@@ -11532,11 +11762,20 @@ paths:
         visibility grants invalidates their catalog cursors, so the next
         delta answers 410 `sync-reset` and the re-snapshot reflects the
         new grants. 410 likewise answers any cursor the server can no
-        longer serve contiguously (pruned change history, a rebuilt
-        catalog): drop the mirror and snapshot again. Snapshot-minted
+        longer serve contiguously: one behind its pruned change history,
+        one past the end of its history, one from a history it has since
+        rolled back (a full restore of the server), even once that history
+        has grown past the cursor again, one from a rebuilt catalog, and
+        one handed out before a catalog repair (`POST
+        /admin/catalog/repair`) that got past its first step, since what
+        the repair rewrites reaches no delta: drop the mirror and
+        snapshot again. Short of those, snapshot-minted
         cursors stay serviceable for at least the server's change
-        retention horizon. The WebSocket channel (`api/events.md`)
-        signals when to pull deltas; polling works without it.
+        retention horizon. A snapshot carries no tombstones, so a client
+        that re-mirrors learns which of the items it holds downloads for
+        are gone for good from `POST /sync/catalog/removed`. The
+        WebSocket channel (`api/events.md`) signals when to pull deltas;
+        polling works without it.
       tags: [sync]
       parameters:
         - name: since
@@ -11578,6 +11817,48 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /sync/catalog/removed:
+    post:
+      operationId: syncCatalogRemoved
+      summary: Which of these items are gone for good
+      description: >
+        Names, of the items asked about, those the server can never put
+        back: the question a snapshot cannot answer, since it lists only
+        what is present. It names an item the catalog still holds whose
+        audio was deleted outright, or that is in the trash with nothing
+        left to restore it from, which is when a `delete` tombstone for
+        it carries the `removed` reason (see the entry schema). An item
+        that is out of the caller's sight but could return (not granted,
+        a show not subscribed to) or is in the trash with its undo
+        journal is not named, so a device keeps what it downloaded of
+        it. Nor is a PID the catalog holds no row for, whether its item
+        was dropped or was never in this catalog (a download another
+        server gave the device): the device keeps those bytes. A PID
+        without an item prefix (an album's, an artist's), or no PID at
+        all, is never named. A POST because the PID list rides the body;
+        nothing changes server-side. The response repeats each named PID
+        as it was asked, in request order.
+      tags: [sync]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemovedItemsQuery"
+      responses:
+        "200":
+          description: The requested items that are gone for good.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemovedItemList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /sync/server:
     get:
       operationId: syncServer
@@ -11600,7 +11881,9 @@ paths:
         for other users' shared playlists (shared playlists are
         visible to everyone, so their changes reach every user's
         stream). A `since` the server can no longer serve contiguously
-        answers 410 `sync-reset`: re-mint and re-hydrate.
+        answers 410 `sync-reset`, as for the catalog: one behind the pruned
+        history, past its end, or from a history the server has since
+        rolled back. Re-mint and re-hydrate.
       tags: [sync]
       parameters:
         - name: since
@@ -13486,8 +13769,9 @@ components:
 
     SyncReset:
       description: >
-        The sync cursor predates the retained change history or belongs to
-        a previous catalog generation (code `sync-reset`). Drop the local
+        The sync cursor predates the retained change history, lies past
+        its end or in a history the server has rolled back, or belongs to a
+        previous catalog generation (code `sync-reset`). Drop the local
         mirror and re-mirror from a fresh snapshot.
       content:
         application/json:
@@ -13690,6 +13974,34 @@ components:
           description: >
             Disc number within a multi-disc release (music). Absent for
             a single-disc release and for anything that is not a track.
+        sortKey:
+          type: string
+          description: >
+            The key the catalog files this item's title under. Comparing
+            keys as plain strings orders titles as a title-sorted
+            listing does, which is what a client keeping its own copy of
+            a listing sorts it by; titles that share a key are not
+            ordered by it. Absent for an empty title.
+          example: prancing pony blues
+        artistSort:
+          type: string
+          description: >
+            The artist's sort spelling as the file or an edit states it
+            (`Beatles, The`); for an audiobook, its author's. Absent when
+            none is stated, which is most items. A spelling to show, not
+            to sort by: `artistSortKey` is.
+        artistSortKey:
+          type: string
+          description: >
+            The key the catalog files this item's artist under: that of
+            its sort spelling when one is stated, else of its name (a
+            track with no artist takes its album artist's), and for an
+            audiobook, of its author. Comparing keys as plain strings
+            orders artists by it, which is what a client sorting its own
+            copy of a listing by artist sorts by; items that share a key
+            are not ordered by it. Absent when the item names none of
+            them, and for a podcast episode.
+          example: beatles, the
         durationMs:
           type: integer
           format: int64
@@ -14649,6 +14961,102 @@ components:
           description: >
             What they held. Freed inside the catalog file rather than
             returned to the filesystem.
+
+    CatalogConsistency:
+      type: object
+      description: >
+        The catalog's derived data against a fresh recompute from its own
+        rows. Each count is rows that disagree, or unused rows a repair
+        deletes.
+      required:
+        [itemsMissingFromSearch, orphanSearchRows, artistRollupDrift,
+        genreRollupDrift, releaseGroupRollupDrift, sortKeyDrift,
+        bookDurationDrift, bookIsbnKeyDrift, albumYearDrift,
+        releaseYearDrift, playlistPositionDrift, orphanArtSources,
+        orphanThumbnails, orphanTagProvenance, strandedTagRows,
+        consistent, reclaimable]
+      properties:
+        itemsMissingFromSearch:
+          type: integer
+          description: >
+            Present items with no search index row, which search cannot
+            find.
+        orphanSearchRows:
+          type: integer
+          description: Search index rows whose item is gone.
+        artistRollupDrift:
+          type: integer
+          description: >
+            Artists whose stored totals differ from a recount of their
+            items.
+        genreRollupDrift:
+          type: integer
+          description: >
+            Genres whose stored totals differ from a recount of their
+            items.
+        releaseGroupRollupDrift:
+          type: integer
+          description: >
+            Release groups whose stored totals differ from a recount of
+            their albums.
+        sortKeyDrift:
+          type: integer
+          description: >
+            Names whose stored sort key is not the one the catalog
+            generates for them now, so they list out of place.
+        bookDurationDrift:
+          type: integer
+          description: >
+            Books whose stored length differs from the sum of their
+            parts.
+        bookIsbnKeyDrift:
+          type: integer
+          description: >
+            Books whose stored ISBN match key is not the one their ISBN
+            gives.
+        albumYearDrift:
+          type: integer
+          description: Albums whose year is not the one their tracks give.
+        releaseYearDrift:
+          type: integer
+          description: >
+            Items whose release year differs from their track's or
+            book's year.
+        playlistPositionDrift:
+          type: integer
+          description: >
+            Static playlists whose entry positions are not numbered from
+            0 without gaps. Their order reads the same either way, so
+            they do not count against `consistent`.
+        orphanArtSources:
+          type: integer
+          description: Stored images no entity uses.
+        orphanThumbnails:
+          type: integer
+          description: Cached thumbnails of images no entity uses.
+        orphanTagProvenance:
+          type: integer
+          description: >
+            Custom-tag edit records under a key the catalog has since
+            reserved, which nothing can read, edit or unlock.
+        strandedTagRows:
+          type: integer
+          description: >
+            Custom-tag values and locks under a key the catalog no longer
+            accepts, and tag writes owed under a key no file can carry.
+        consistent:
+          type: boolean
+          description: >
+            True when every count is zero but `playlistPositionDrift`
+            and the four unused-row counts (`orphanArtSources`,
+            `orphanThumbnails`, `orphanTagProvenance`,
+            `strandedTagRows`).
+        reclaimable:
+          type: boolean
+          description: >
+            True when any of the four unused-row counts is above zero:
+            rows a repair deletes, which do not count against
+            `consistent`.
 
     EnrichmentCacheReport:
       type: object
@@ -16882,7 +17290,7 @@ components:
     MergeResult:
       type: object
       description: The merge outcome.
-      required: [merged, childrenMoved]
+      required: [merged, childrenMoved, folds]
       properties:
         merged:
           type: integer
@@ -16890,6 +17298,108 @@ components:
         childrenMoved:
           type: integer
           description: Children re-parented onto the survivor.
+        folds:
+          type: array
+          description: >
+            The keys the merge now folds into the survivor, one per
+            loser, as `GET /library/folds` lists them.
+          items:
+            type: string
+
+    EntityFoldPage:
+      type: object
+      description: One page of folded names.
+      required: [folds]
+      properties:
+        folds:
+          type: array
+          description: Folds, ordered by `entityType`, then by `key`.
+          items:
+            $ref: "#/components/schemas/EntityFold"
+        nextCursor:
+          type: string
+          description: >
+            Cursor for the next page, which can come back empty; omitted
+            when no fold can follow.
+
+    EntityFold:
+      type: object
+      description: >
+        One name folded into an entity: a file whose tags still spell it
+        files under that entity.
+      required: [entityType, key, spelling, entityPid, entityName, createdAt]
+      properties:
+        entityType:
+          type: string
+          description: "`album`, `artist`, `genre`, `release-group`, or `series`."
+        key:
+          type: string
+          description: >
+            The folded name as the catalog matches it, the handle
+            `POST /library/folds/unfold` takes. Opaque: it can hold
+            separator characters.
+        spelling:
+          type: string
+          description: >
+            The key as a person reads it: the name lower-cased, with
+            accents and punctuation folded away; an album's or a release
+            group's as its artist and title joined by ` - `; one keyed by
+            a MusicBrainz id as `MusicBrainz` and the id. Two folds can
+            spell alike, and `facet`, or `folder` and `library`, then tell
+            them apart, or `createdAt` for album folds no file places.
+          example: the beatles - abbey road
+        facet:
+          type: string
+          description: >
+            A genre fold's facet, `genre` or `mood`: one name folds apart
+            in each.
+        folder:
+          type: string
+          description: >
+            An album fold's folder as a path within its library, read off
+            a file of the album that sits in it: copies of one release in
+            different folders fold apart. Absent for an album at the top
+            of its library, for one known by its own MusicBrainz id, and
+            for a fold no present file of its album places (its files have
+            left the folder, or two folders fold to its key alike);
+            `createdAt` still tells such folds apart when they were folded
+            at different times.
+          example: Joni/Blue Again
+        library:
+          type: string
+          description: >
+            The name of the library holding an album fold's folder, given
+            whenever the fold is placed: with `folder`, or alone for an
+            album at the top of its library.
+        entityPid:
+          type: string
+          description: >
+            The entity the name files under: prefixed (`ar-`, `al-`,
+            `rg-`, `sr-`) where the type has a prefix, and a genre's bare,
+            as the genre listing takes it.
+        entityName:
+          type: string
+          description: The entity's display name.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the name was folded.
+
+    UnfoldRequest:
+      type: object
+      description: Folds of one entity type to forget.
+      required: [entityType, keys]
+      properties:
+        entityType:
+          type: string
+          enum: [album, artist, release-group, genre, series]
+        keys:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Fold keys exactly as `GET /library/folds` lists them.
+          items:
+            type: string
 
     UpgradeGroups:
       type: object
@@ -17256,6 +17766,13 @@ components:
         subtitle:
           type: string
           description: Context line (artist for a track, author for a book).
+        exact:
+          type: boolean
+          description: >
+            True on an artist or album whose own name is the query,
+            ignoring case, accents, punctuation and spacing (`jayz`
+            finds `Jay-Z`), so a client can lead with it. Absent on every
+            other hit.
 
     SearchResults:
       type: object
@@ -17476,6 +17993,24 @@ components:
                 none, which is most of them; nothing measures it, so
                 this is the tag's number and not an analysis result.
               example: 128
+            trackTotal:
+              type: integer
+              description: >
+                How many tracks the release holds, as the file states it
+                beside `trackNumber`. Absent when the file states none.
+              example: 12
+            discTotal:
+              type: integer
+              description: >
+                How many discs the release holds, as the file states it
+                beside `discNumber`. Absent when the file states none.
+              example: 2
+            partTotal:
+              type: integer
+              description: >
+                How many parts an audiobook's file says the book has.
+                Absent for anything else and when the file states none.
+              example: 5
             codec:
               type: string
               description: Source audio codec.
@@ -17658,6 +18193,19 @@ components:
           items:
             type: string
             example: Hum Collective/Shell Songs/01 - Hell Shell.m4a
+        sidecars:
+          type: array
+          description: >
+            The sidecars that go with this entry's files, each relative
+            to its library's root as `paths` are: the covers, lyrics,
+            cue sheets and other files named for a file being deleted.
+            A sidecar another file of its name still uses stays, and is
+            listed with the last of those files to go. In an applied
+            result, only those that left with their files. Absent when
+            none goes.
+          items:
+            type: string
+            example: Hum Collective/Shell Songs/01 - Hell Shell.lrc
         failed:
           type: integer
           description: >
@@ -19799,6 +20347,13 @@ components:
         tagWrite:
           type: boolean
           description: Whether organizing also writes tags.
+        compilationFolder:
+          type: string
+          description: >
+            The folder compilations file under, and the album artist the
+            tag write gives them. An empty string files each under its
+            own tagged album artist (Various Artists for one tagged with
+            none); absent files them under Various Artists.
         builtIn:
           type: boolean
           description: A built-in no saved profile overrides; it cannot be deleted.
@@ -19824,9 +20379,10 @@ components:
     OrganizeSample:
       type: object
       description: >
-        Where a profile lays out a fixed sample track, book and episode; an
-        empty path is a template that renders none for that sample.
-      required: [music, audiobook, podcast]
+        Where a profile lays out a fixed sample track, book, episode and
+        compilation track; an empty path is a template that renders none
+        for that sample.
+      required: [music, audiobook, podcast, compilation]
       properties:
         music:
           type: string
@@ -19835,6 +20391,13 @@ components:
           type: string
         podcast:
           type: string
+        compilation:
+          type: string
+          description: >
+            A track of a compilation tagged with an album artist of its
+            own, so each compilation folder setting shows a path of its
+            own.
+          example: Various Artists/Coastal Nights (2023)/1-04 - Night Drive.flac
 
     OrganizeProfileInput:
       type: object
@@ -19854,6 +20417,17 @@ components:
         tagWrite:
           type: boolean
           default: false
+        compilationFolder:
+          type: string
+          maxLength: 255
+          description: >
+            The folder compilations file under, which the tag write also
+            gives them as album artist. An empty string files each under
+            its own tagged album artist (Various Artists for one tagged
+            with none); absent files them under Various Artists, and a
+            save replaces the whole profile, so a save without it does
+            too. Surrounding space is trimmed; a folder that names none
+            (only dots, say) is `invalid-request`.
 
     OrganizeProfilePreview:
       type: object
@@ -19876,6 +20450,10 @@ components:
         tagWrite:
           type: boolean
           default: false
+        compilationFolder:
+          type: string
+          maxLength: 255
+          description: Where compilations file, as a saved profile's `compilationFolder`.
 
     OrganizeRequest:
       type: object
@@ -21472,7 +22050,8 @@ components:
           maxLength: 200
           description: >
             Name for the created playlist. Defaults to a name found in
-            the export, or `Imported playlist`.
+            the export, or `Imported playlist`; a name found in the
+            export past 200 characters is refused as one given here is.
         payload:
           type: string
           maxLength: 4000000
@@ -22397,6 +22976,62 @@ components:
           pattern: "^[0-9a-f]{16}$"
         rule:
           $ref: "#/components/schemas/SmartRule"
+
+    M3uPreviewRequest:
+      type: object
+      description: An M3U8 document to match without importing it.
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: The M3U8 document text.
+          maxLength: 1048576
+
+    M3uPreview:
+      type: object
+      description: >
+        How every path line of an M3U8 document matches. The three
+        counts add up to the lines in `entries`.
+      required: [matched, merged, unmatched, entries]
+      properties:
+        matched:
+          type: integer
+          description: Lines that become entries of the playlist.
+        merged:
+          type: integer
+          description: >
+            Lines naming the item of the line before them through a
+            different path to it (another of its files, or another
+            spelling of the same file), which add no entry.
+        unmatched:
+          type: integer
+          description: Lines naming nothing the caller can see.
+        entries:
+          type: array
+          description: Every path line, in document order.
+          items:
+            $ref: "#/components/schemas/M3uPreviewEntry"
+
+    M3uPreviewEntry:
+      type: object
+      description: >
+        One path line and what it matched; `item` is present on a
+        `matched` or `merged` line.
+      required: [path, outcome]
+      properties:
+        path:
+          type: string
+          description: The line's path, as the document gives it.
+        outcome:
+          type: string
+          description: >
+            `matched`, `merged` (the item of the line before it, through
+            a different path to it: another of its files, or another
+            spelling of the same file) or `unmatched`. The same path given
+            twice in a row is `matched` both times.
+          enum: [matched, merged, unmatched]
+        item:
+          $ref: "#/components/schemas/ItemSummary"
 
     M3uImport:
       type: object
@@ -24816,6 +25451,36 @@ components:
             immediately with `since` set to this page's `nextSince`.
             Absent in snapshot mode (`nextCursor` plays that role).
 
+    RemovedItemsQuery:
+      type: object
+      description: The items to ask about.
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: >
+            Items a device holds downloads of from this server that its
+            latest snapshot did not list.
+          items:
+            type: string
+            example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    RemovedItemList:
+      type: object
+      description: The asked-about items that are gone for good.
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          description: >
+            The requested PIDs the server can never put back, as asked.
+            An item not named here may still return.
+          items:
+            type: string
+            example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+
     ServerSyncEvent:
       type: object
       description: >
@@ -25047,7 +25712,7 @@ components:
           description: >
             The operation: `book-merge`, `book-split`, `cue-split`,
             `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`,
-            or an `import-` migration (`import-jellyfin`,
+            `catalog-repair`, or an `import-` migration (`import-jellyfin`,
             `import-subsonic`, ...). A string, not a closed enum.
         state:
           type: string
@@ -25081,9 +25746,9 @@ components:
             moved is (new files waiting beside the book, originals in the
             trash) and what clearing the task does with new files still
             hidden.
-            While a book merge or split, or a CUE split, is
-            `running` it can say what the task waits out instead, in the
-            server's words beside `waitReason`.
+            While a book merge or split, a CUE split, or a catalog repair
+            is `running` it can say what the task waits out instead, in
+            the server's words beside `waitReason`.
         waitReason:
           type: string
           description: >
@@ -25095,7 +25760,10 @@ components:
             `engine-unavailable`, `part-missing` (a file the catalog has
             is not where it says), `put-back-blocked` (a file going back
             from the trash cannot), `stopped` (the server stopped or the
-            run ran out of time), or `other`. A task waits at most six
+            run ran out of time), or `other`. A `catalog-repair` that a
+            catalog hand-off cut short waits too, with
+            `catalog-maintenance`, and starts over once the catalog is
+            back. A book merge or split, or CUE split, waits at most six
             hours in a row, then ends safely for how far it went. A
             string, not a closed enum.
         retryAt:
@@ -25137,7 +25805,19 @@ components:
             left alone by reason (`gone`, `locked`, `no match`, ...); a
             `path-mismatch` fix also carries `moved` (the items it
             moved), `held` (by hold code) and `jobPids` (the organize
-            jobs that moved them).
+            jobs that moved them). A `catalog-repair` task carries each
+            step's count once that step has run, added up over its
+            attempts and absent for a step none has reached:
+            `sortKeysRewritten`, `orphansDeleted` (entities with no items
+            deleted), `orphansPending` (those its last orphans step noted
+            for the next repair), `artSourcesReclaimed`,
+            `thumbnailsReclaimed`, `tagProvenanceReclaimed`,
+            `strandedTagRowsReclaimed` and `searchRowsRebuilt` (entries
+            written or dropped); `runs`, what each run of the task did:
+            the steps it finished, in order, with `error` saying why a run
+            stopped short and `handedOff` marking one a catalog hand-off
+            cut short; and once it has run, `after`, the
+            `CatalogConsistency` its closing check read.
 
     ClearFinishedTasksRequest:
       type: object

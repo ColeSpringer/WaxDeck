@@ -436,6 +436,15 @@ func TestPodcastLifecycle(t *testing.T) {
 	// Episode detail sanitizes feed HTML: markup survives, scripts die.
 	resp = get(t, h.ts, "/api/v1/episodes/"+ep.Pid, h.token)
 	det := decode[Episode](t, resp)
+	// And files its title under the key the listing row carries.
+	if key := func(p *string) string {
+		if p == nil {
+			return "<absent>"
+		}
+		return *p
+	}; det.SortKey == nil || *det.SortKey == "" || key(det.SortKey) != key(ep.SortKey) {
+		t.Fatalf("episode detail sortKey = %q, want the listing row's %q", key(det.SortKey), key(ep.SortKey))
+	}
 	if det.DescriptionHtml == nil ||
 		!strings.Contains(*det.DescriptionHtml, "<b>episode 1</b>") ||
 		strings.Contains(strings.ToLower(*det.DescriptionHtml), "script") {

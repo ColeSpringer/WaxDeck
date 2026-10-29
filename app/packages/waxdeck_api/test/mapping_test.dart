@@ -906,6 +906,20 @@ void main() {
   });
 
   group('job mapping', () {
+    test('a running job says how far it is, and nothing when it cannot', () {
+      Job running(double? progress) => jobFromGen(
+        gen.Job(
+          (b) => b
+            ..pid = 'jb-01JZX5N8QW3F4V9T2B7KDEXAMPL'
+            ..kind = 'scan'
+            ..state = 'running'
+            ..progress = progress,
+        ),
+      );
+      expect(running(0.42).progress, 0.42);
+      expect(running(null).progress, isNull);
+    });
+
     test('a finished job carries when it ran and what it did', () {
       final job = jobFromGen(
         gen.Job(
@@ -974,7 +988,9 @@ void main() {
             ..builtIn = false
             ..sample.music = 'Amber Waves.flac'
             ..sample.audiobook = 'The Long Harbor/The Long Harbor.m4b'
-            ..sample.podcast = 'Night Shift Radio/The Lighthouse Keeper.mp3',
+            ..sample.podcast = 'Night Shift Radio/The Lighthouse Keeper.mp3'
+            ..sample.compilation =
+                'Various Artists/Coastal Nights (2023)/1-04 - Night Drive.flac',
         ),
       );
       expect(profile.musicTemplate, '{title}.{ext}');

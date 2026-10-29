@@ -20,6 +20,8 @@ class _$DeletePlanEntry extends DeletePlanEntry {
   @override
   final BuiltList<String>? paths;
   @override
+  final BuiltList<String>? sidecars;
+  @override
   final int? failed;
   @override
   final String? error;
@@ -36,6 +38,7 @@ class _$DeletePlanEntry extends DeletePlanEntry {
     required this.bytes,
     this.fileList,
     this.paths,
+    this.sidecars,
     this.failed,
     this.error,
     this.itemSurvives,
@@ -57,6 +60,7 @@ class _$DeletePlanEntry extends DeletePlanEntry {
         bytes == other.bytes &&
         fileList == other.fileList &&
         paths == other.paths &&
+        sidecars == other.sidecars &&
         failed == other.failed &&
         error == other.error &&
         itemSurvives == other.itemSurvives;
@@ -71,6 +75,7 @@ class _$DeletePlanEntry extends DeletePlanEntry {
     _$hash = $jc(_$hash, bytes.hashCode);
     _$hash = $jc(_$hash, fileList.hashCode);
     _$hash = $jc(_$hash, paths.hashCode);
+    _$hash = $jc(_$hash, sidecars.hashCode);
     _$hash = $jc(_$hash, failed.hashCode);
     _$hash = $jc(_$hash, error.hashCode);
     _$hash = $jc(_$hash, itemSurvives.hashCode);
@@ -87,6 +92,7 @@ class _$DeletePlanEntry extends DeletePlanEntry {
           ..add('bytes', bytes)
           ..add('fileList', fileList)
           ..add('paths', paths)
+          ..add('sidecars', sidecars)
           ..add('failed', failed)
           ..add('error', error)
           ..add('itemSurvives', itemSurvives))
@@ -124,6 +130,11 @@ class DeletePlanEntryBuilder
   ListBuilder<String> get paths => _$this._paths ??= ListBuilder<String>();
   set paths(ListBuilder<String>? paths) => _$this._paths = paths;
 
+  ListBuilder<String>? _sidecars;
+  ListBuilder<String> get sidecars =>
+      _$this._sidecars ??= ListBuilder<String>();
+  set sidecars(ListBuilder<String>? sidecars) => _$this._sidecars = sidecars;
+
   int? _failed;
   int? get failed => _$this._failed;
   set failed(int? failed) => _$this._failed = failed;
@@ -149,6 +160,7 @@ class DeletePlanEntryBuilder
       _bytes = $v.bytes;
       _fileList = $v.fileList?.toBuilder();
       _paths = $v.paths?.toBuilder();
+      _sidecars = $v.sidecars?.toBuilder();
       _failed = $v.failed;
       _error = $v.error;
       _itemSurvives = $v.itemSurvives;
@@ -194,6 +206,7 @@ class DeletePlanEntryBuilder
             ),
             fileList: _fileList?.build(),
             paths: _paths?.build(),
+            sidecars: _sidecars?.build(),
             failed: failed,
             error: error,
             itemSurvives: itemSurvives,
@@ -205,6 +218,8 @@ class DeletePlanEntryBuilder
         _fileList?.build();
         _$failedField = 'paths';
         _paths?.build();
+        _$failedField = 'sidecars';
+        _sidecars?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'DeletePlanEntry',

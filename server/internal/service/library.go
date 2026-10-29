@@ -300,6 +300,20 @@ type Library struct {
 	// error it answers ends the run there, as a crash or a shutdown would,
 	// in a test; nothing in the server sets it.
 	toolStepHook func(step string) error
+	// catalogRepairHook runs before each step of a catalog repair, and an
+	// error it answers is that step's, in a test; nothing in the server
+	// sets it.
+	catalogRepairHook func(step string) error
+	// catalogRepairEndHook runs once a catalog repair's end is recorded,
+	// before anything follows it, and answering true stops there, as the
+	// process stopping would, in a test; nothing in the server sets it.
+	catalogRepairEndHook func() bool
+	// refResolveHook runs as a walk of the catalog's resolve ladder over
+	// refs portable refs starts, and m3uResolveHook as the catalog's
+	// resolve of an M3U8 document does, in a test; nothing in the server
+	// sets them.
+	refResolveHook func(opts waxbin.ResolveOptions, refs int)
+	m3uResolveHook func()
 	// mutateHook stands in for the answer of a tool's catalog mutation
 	// (its trash, its scan, its import) in a test, a busy catalog say;
 	// nil lets the call through. Nothing in the server sets it.
@@ -343,7 +357,8 @@ type Library struct {
 	jobOriginInsertHook func(context.Context, wdb.JobOrigin) error
 	awaitJobHook        func(ctx context.Context, pid model.PID, silence time.Duration, tick func(context.Context)) (*model.Job, error)
 	// resetMu serializes a replaced catalog's reset between the reopen
-	// hook and the feed; profilesMu a saved profile's round trip.
+	// hook and the feed, and a repair's new generation with both;
+	// profilesMu a saved profile's round trip.
 	resetMu    sync.Mutex
 	profilesMu sync.Mutex
 	// runProfiles is the profile each organize run the history last listed
@@ -390,6 +405,8 @@ type Library struct {
 	// compiling a caller's tag rules into a query. Same generation as
 	// facets, since both are functions of the catalog's contents.
 	tagValues tagValueCache
+	// m3us holds the catalog's latest resolutions of M3U8 documents.
+	m3us m3uResolutions
 	// podcastDir and podcastRootName locate the episode download
 	// library; defaultRetentionKeep is the unset-subscriber policy;
 	// retentionInUseWindow gates the sweep's in-use deferral.
@@ -954,6 +971,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		lib.Close()
 		return nil, fmt.Errorf("service: sync state: %w", err)
 	}
+	l.settleOwedResync(ctx)
 
 	// Cipher adoption: re-seal any plaintext catalog secrets once. Old
 	// rows seal lazily on write anyway; the one-shot closes the gap for
@@ -1327,10 +1345,37 @@ func summary(it *model.ItemView) ItemSummary {
 		AlbumPID:        entityAPIPID(PrefixAlbum, it.AlbumPID),
 		TrackNo:         it.TrackNo,
 		DiscNo:          it.DiscNo,
+		SortKey:         model.SortKey(it.Title),
+		ArtistSort:      artistSort(it),
 		DurationMS:      it.DurationMS,
 		Virtual:         it.Virtual,
 		AdvisoryFlagged: it.AdvisoryFlagged(),
+		ArtistSortKey:   artistSortKey(it),
 	}
+}
+
+// artistSort is the sort spelling a file or an edit states for an
+// item's artist: a book's author's, since a book names its author as its
+// artist. An episode states none.
+func artistSort(it *model.ItemView) string {
+	if it.Kind == model.KindBook {
+		return it.AuthorSort
+	}
+	return it.ArtistSort
+}
+
+// artistSortKey is the key the catalog files an item's artist under,
+// made as it makes the stored one: of the stated sort spelling, else of
+// the artist, else of a track's album artist, and of a book's author in
+// the same way. An episode is filed by no artist.
+func artistSortKey(it *model.ItemView) string {
+	switch it.Kind {
+	case model.KindTrack:
+		return model.SortKey(cmp.Or(it.ArtistSort, it.Artist, it.AlbumArtist))
+	case model.KindBook:
+		return model.SortKey(cmp.Or(it.AuthorSort, it.Artist))
+	}
+	return ""
 }
 
 // itemNames are an item view's title, artist and album as WaxDeck names

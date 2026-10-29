@@ -15,6 +15,8 @@ class _$OrganizeProfileInput extends OrganizeProfileInput {
   final String? podcastTemplate;
   @override
   final bool? tagWrite;
+  @override
+  final String? compilationFolder;
 
   factory _$OrganizeProfileInput([
     void Function(OrganizeProfileInputBuilder)? updates,
@@ -25,6 +27,7 @@ class _$OrganizeProfileInput extends OrganizeProfileInput {
     this.audiobookTemplate,
     this.podcastTemplate,
     this.tagWrite,
+    this.compilationFolder,
   }) : super._();
   @override
   OrganizeProfileInput rebuild(
@@ -42,7 +45,8 @@ class _$OrganizeProfileInput extends OrganizeProfileInput {
         musicTemplate == other.musicTemplate &&
         audiobookTemplate == other.audiobookTemplate &&
         podcastTemplate == other.podcastTemplate &&
-        tagWrite == other.tagWrite;
+        tagWrite == other.tagWrite &&
+        compilationFolder == other.compilationFolder;
   }
 
   @override
@@ -52,6 +56,7 @@ class _$OrganizeProfileInput extends OrganizeProfileInput {
     _$hash = $jc(_$hash, audiobookTemplate.hashCode);
     _$hash = $jc(_$hash, podcastTemplate.hashCode);
     _$hash = $jc(_$hash, tagWrite.hashCode);
+    _$hash = $jc(_$hash, compilationFolder.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -62,7 +67,8 @@ class _$OrganizeProfileInput extends OrganizeProfileInput {
           ..add('musicTemplate', musicTemplate)
           ..add('audiobookTemplate', audiobookTemplate)
           ..add('podcastTemplate', podcastTemplate)
-          ..add('tagWrite', tagWrite))
+          ..add('tagWrite', tagWrite)
+          ..add('compilationFolder', compilationFolder))
         .toString();
   }
 }
@@ -90,6 +96,11 @@ class OrganizeProfileInputBuilder
   bool? get tagWrite => _$this._tagWrite;
   set tagWrite(bool? tagWrite) => _$this._tagWrite = tagWrite;
 
+  String? _compilationFolder;
+  String? get compilationFolder => _$this._compilationFolder;
+  set compilationFolder(String? compilationFolder) =>
+      _$this._compilationFolder = compilationFolder;
+
   OrganizeProfileInputBuilder() {
     OrganizeProfileInput._defaults(this);
   }
@@ -101,6 +112,7 @@ class OrganizeProfileInputBuilder
       _audiobookTemplate = $v.audiobookTemplate;
       _podcastTemplate = $v.podcastTemplate;
       _tagWrite = $v.tagWrite;
+      _compilationFolder = $v.compilationFolder;
       _$v = null;
     }
     return this;
@@ -127,6 +139,7 @@ class OrganizeProfileInputBuilder
           audiobookTemplate: audiobookTemplate,
           podcastTemplate: podcastTemplate,
           tagWrite: tagWrite,
+          compilationFolder: compilationFolder,
         );
     replace(_$result);
     return _$result;

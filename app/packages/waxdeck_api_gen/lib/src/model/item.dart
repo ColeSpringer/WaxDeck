@@ -24,11 +24,17 @@ part 'item.g.dart';
 /// * [albumPid] - The album entity behind `album`, for the same reason. Tracks only: a podcast episode and an audiobook are not album members, and their `album` is a series or show title with no album entity behind it. Absent when the track belongs to no album. 
 /// * [trackNumber] - Track position within its disc (music). On the summary row rather than only on the detail because a listing is where it is needed: an album's items page arrives in the library's own stable order, and this plus `discNumber` is what a client sorts a release back into. Absent when the item carries none. 
 /// * [discNumber] - Disc number within a multi-disc release (music). Absent for a single-disc release and for anything that is not a track. 
+/// * [sortKey] - The key the catalog files this item's title under. Comparing keys as plain strings orders titles as a title-sorted listing does, which is what a client keeping its own copy of a listing sorts it by; titles that share a key are not ordered by it. Absent for an empty title. 
+/// * [artistSort] - The artist's sort spelling as the file or an edit states it (`Beatles, The`); for an audiobook, its author's. Absent when none is stated, which is most items. A spelling to show, not to sort by: `artistSortKey` is. 
+/// * [artistSortKey] - The key the catalog files this item's artist under: that of its sort spelling when one is stated, else of its name (a track with no artist takes its album artist's), and for an audiobook, of its author. Comparing keys as plain strings orders artists by it, which is what a client sorting its own copy of a listing by artist sorts by; items that share a key are not ordered by it. Absent when the item names none of them, and for a podcast episode. 
 /// * [durationMs] - Duration in milliseconds. For a multi-file audiobook this is the total across all parts; for a not-yet-fetched podcast episode it is the feed-declared duration, or 0 when the feed declares none. 
 /// * [artUrl] - Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
 /// * [genres] - The item's display genres, one each: a tag holding several (`Rock; Pop / Indie`) is split on `;`, `/` and `\\`, as the genre facet splits it. 
 /// * [year] - Release / publication year.
 /// * [bpm] - Stated tempo, whole. Absent or `0` for an item carrying none, which is most of them; nothing measures it, so this is the tag's number and not an analysis result. 
+/// * [trackTotal] - How many tracks the release holds, as the file states it beside `trackNumber`. Absent when the file states none. 
+/// * [discTotal] - How many discs the release holds, as the file states it beside `discNumber`. Absent when the file states none. 
+/// * [partTotal] - How many parts an audiobook's file says the book has. Absent for anything else and when the file states none. 
 /// * [codec] - Source audio codec.
 /// * [container] - Source file container.
 /// * [sampleRate] - Source sample rate in Hz.
@@ -44,20 +50,12 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   @BuiltValueField(wireName: r'container')
   String? get container;
 
-  /// Source audio codec.
-  @BuiltValueField(wireName: r'codec')
-  String? get codec;
-
   /// When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found. An episode's is when its show's feed first listed it here, whether or not its audio has been fetched. 
   @BuiltValueField(wireName: r'addedAt')
   DateTime? get addedAt;
 
   @BuiltValueField(wireName: r'artSource')
   ArtSource? get artSource;
-
-  /// How many copies the item holds beside its own files (getItemFiles lists them), counting those in libraries the caller can see. Absent when none. 
-  @BuiltValueField(wireName: r'copies')
-  int? get copies;
 
   /// MusicBrainz identifier for what this item is - a recording for a track, a release for a book. Absent unless the file was tagged with one or matching found one. 
   @BuiltValueField(wireName: r'mbid')
@@ -67,9 +65,9 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   @BuiltValueField(wireName: r'year')
   int? get year;
 
-  /// The item's display genres, one each: a tag holding several (`Rock; Pop / Indie`) is split on `;`, `/` and `\\`, as the genre facet splits it. 
-  @BuiltValueField(wireName: r'genres')
-  BuiltList<String>? get genres;
+  /// How many discs the release holds, as the file states it beside `discNumber`. Absent when the file states none. 
+  @BuiltValueField(wireName: r'discTotal')
+  int? get discTotal;
 
   /// Source bitrate in kilobits per second, when known.
   @BuiltValueField(wireName: r'bitrate')
@@ -83,9 +81,29 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   @BuiltValueField(wireName: r'sampleRate')
   int? get sampleRate;
 
+  /// Source audio codec.
+  @BuiltValueField(wireName: r'codec')
+  String? get codec;
+
+  /// How many copies the item holds beside its own files (getItemFiles lists them), counting those in libraries the caller can see. Absent when none. 
+  @BuiltValueField(wireName: r'copies')
+  int? get copies;
+
+  /// The item's display genres, one each: a tag holding several (`Rock; Pop / Indie`) is split on `;`, `/` and `\\`, as the genre facet splits it. 
+  @BuiltValueField(wireName: r'genres')
+  BuiltList<String>? get genres;
+
   /// Stated tempo, whole. Absent or `0` for an item carrying none, which is most of them; nothing measures it, so this is the tag's number and not an analysis result. 
   @BuiltValueField(wireName: r'bpm')
   int? get bpm;
+
+  /// How many parts an audiobook's file says the book has. Absent for anything else and when the file states none. 
+  @BuiltValueField(wireName: r'partTotal')
+  int? get partTotal;
+
+  /// How many tracks the release holds, as the file states it beside `trackNumber`. Absent when the file states none. 
+  @BuiltValueField(wireName: r'trackTotal')
+  int? get trackTotal;
 
   Item._();
 
@@ -124,25 +142,11 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(DateTime),
       );
     }
-    if (object.artSource != null) {
-      yield r'artSource';
-      yield serializers.serialize(
-        object.artSource,
-        specifiedType: const FullType(ArtSource),
-      );
-    }
     if (object.mbid != null) {
       yield r'mbid';
       yield serializers.serialize(
         object.mbid,
         specifiedType: const FullType(String),
-      );
-    }
-    if (object.trackNumber != null) {
-      yield r'trackNumber';
-      yield serializers.serialize(
-        object.trackNumber,
-        specifiedType: const FullType(int),
       );
     }
     if (object.year != null) {
@@ -159,10 +163,10 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(String),
       );
     }
-    if (object.album != null) {
-      yield r'album';
+    if (object.artistSortKey != null) {
+      yield r'artistSortKey';
       yield serializers.serialize(
-        object.album,
+        object.artistSortKey,
         specifiedType: const FullType(String),
       );
     }
@@ -173,35 +177,16 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(int),
       );
     }
-    if (object.isrc != null) {
-      yield r'isrc';
-      yield serializers.serialize(
-        object.isrc,
-        specifiedType: const FullType(String),
-      );
-    }
     yield r'pid';
     yield serializers.serialize(
       object.pid,
       specifiedType: const FullType(String),
-    );
-    yield r'mediaType';
-    yield serializers.serialize(
-      object.mediaType,
-      specifiedType: const FullType(MediaType),
     );
     yield r'title';
     yield serializers.serialize(
       object.title,
       specifiedType: const FullType(String),
     );
-    if (object.sampleRate != null) {
-      yield r'sampleRate';
-      yield serializers.serialize(
-        object.sampleRate,
-        specifiedType: const FullType(int),
-      );
-    }
     if (object.albumPid != null) {
       yield r'albumPid';
       yield serializers.serialize(
@@ -209,17 +194,17 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(String),
       );
     }
+    if (object.artistSort != null) {
+      yield r'artistSort';
+      yield serializers.serialize(
+        object.artistSort,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.artUrl != null) {
       yield r'artUrl';
       yield serializers.serialize(
         object.artUrl,
-        specifiedType: const FullType(String),
-      );
-    }
-    if (object.codec != null) {
-      yield r'codec';
-      yield serializers.serialize(
-        object.codec,
         specifiedType: const FullType(String),
       );
     }
@@ -244,6 +229,81 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(BuiltList, [FullType(String)]),
       );
     }
+    if (object.bpm != null) {
+      yield r'bpm';
+      yield serializers.serialize(
+        object.bpm,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.partTotal != null) {
+      yield r'partTotal';
+      yield serializers.serialize(
+        object.partTotal,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.artSource != null) {
+      yield r'artSource';
+      yield serializers.serialize(
+        object.artSource,
+        specifiedType: const FullType(ArtSource),
+      );
+    }
+    if (object.trackNumber != null) {
+      yield r'trackNumber';
+      yield serializers.serialize(
+        object.trackNumber,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.album != null) {
+      yield r'album';
+      yield serializers.serialize(
+        object.album,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.discTotal != null) {
+      yield r'discTotal';
+      yield serializers.serialize(
+        object.discTotal,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.isrc != null) {
+      yield r'isrc';
+      yield serializers.serialize(
+        object.isrc,
+        specifiedType: const FullType(String),
+      );
+    }
+    yield r'mediaType';
+    yield serializers.serialize(
+      object.mediaType,
+      specifiedType: const FullType(MediaType),
+    );
+    if (object.sampleRate != null) {
+      yield r'sampleRate';
+      yield serializers.serialize(
+        object.sampleRate,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.codec != null) {
+      yield r'codec';
+      yield serializers.serialize(
+        object.codec,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.sortKey != null) {
+      yield r'sortKey';
+      yield serializers.serialize(
+        object.sortKey,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.artistPid != null) {
       yield r'artistPid';
       yield serializers.serialize(
@@ -256,10 +316,10 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
       object.durationMs,
       specifiedType: const FullType(int),
     );
-    if (object.bpm != null) {
-      yield r'bpm';
+    if (object.trackTotal != null) {
+      yield r'trackTotal';
       yield serializers.serialize(
-        object.bpm,
+        object.trackTotal,
         specifiedType: const FullType(int),
       );
     }
@@ -302,14 +362,6 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           if (valueDes == null) continue;
           result.addedAt = valueDes;
           break;
-        case r'artSource':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType.nullable(ArtSource),
-          ) as ArtSource?;
-          if (valueDes == null) continue;
-          result.artSource.replace(valueDes);
-          break;
         case r'mbid':
           final valueDes = serializers.deserialize(
             value,
@@ -317,14 +369,6 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as String?;
           if (valueDes == null) continue;
           result.mbid = valueDes;
-          break;
-        case r'trackNumber':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType.nullable(int),
-          ) as int?;
-          if (valueDes == null) continue;
-          result.trackNumber = valueDes;
           break;
         case r'year':
           final valueDes = serializers.deserialize(
@@ -342,13 +386,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           if (valueDes == null) continue;
           result.artist = valueDes;
           break;
-        case r'album':
+        case r'artistSortKey':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType.nullable(String),
           ) as String?;
           if (valueDes == null) continue;
-          result.album = valueDes;
+          result.artistSortKey = valueDes;
           break;
         case r'bitrate':
           final valueDes = serializers.deserialize(
@@ -358,14 +402,6 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           if (valueDes == null) continue;
           result.bitrate = valueDes;
           break;
-        case r'isrc':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType.nullable(String),
-          ) as String?;
-          if (valueDes == null) continue;
-          result.isrc = valueDes;
-          break;
         case r'pid':
           final valueDes = serializers.deserialize(
             value,
@@ -373,27 +409,12 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as String;
           result.pid = valueDes;
           break;
-        case r'mediaType':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(MediaType),
-          ) as MediaType;
-          result.mediaType = valueDes;
-          break;
         case r'title':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(String),
           ) as String;
           result.title = valueDes;
-          break;
-        case r'sampleRate':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType.nullable(int),
-          ) as int?;
-          if (valueDes == null) continue;
-          result.sampleRate = valueDes;
           break;
         case r'albumPid':
           final valueDes = serializers.deserialize(
@@ -403,6 +424,14 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           if (valueDes == null) continue;
           result.albumPid = valueDes;
           break;
+        case r'artistSort':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.artistSort = valueDes;
+          break;
         case r'artUrl':
           final valueDes = serializers.deserialize(
             value,
@@ -410,14 +439,6 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as String?;
           if (valueDes == null) continue;
           result.artUrl = valueDes;
-          break;
-        case r'codec':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType.nullable(String),
-          ) as String?;
-          if (valueDes == null) continue;
-          result.codec = valueDes;
           break;
         case r'discNumber':
           final valueDes = serializers.deserialize(
@@ -443,6 +464,93 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           if (valueDes == null) continue;
           result.genres.replace(valueDes);
           break;
+        case r'bpm':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.bpm = valueDes;
+          break;
+        case r'partTotal':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.partTotal = valueDes;
+          break;
+        case r'artSource':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(ArtSource),
+          ) as ArtSource?;
+          if (valueDes == null) continue;
+          result.artSource.replace(valueDes);
+          break;
+        case r'trackNumber':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.trackNumber = valueDes;
+          break;
+        case r'album':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.album = valueDes;
+          break;
+        case r'discTotal':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.discTotal = valueDes;
+          break;
+        case r'isrc':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.isrc = valueDes;
+          break;
+        case r'mediaType':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(MediaType),
+          ) as MediaType;
+          result.mediaType = valueDes;
+          break;
+        case r'sampleRate':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.sampleRate = valueDes;
+          break;
+        case r'codec':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.codec = valueDes;
+          break;
+        case r'sortKey':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.sortKey = valueDes;
+          break;
         case r'artistPid':
           final valueDes = serializers.deserialize(
             value,
@@ -458,13 +566,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as int;
           result.durationMs = valueDes;
           break;
-        case r'bpm':
+        case r'trackTotal':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType.nullable(int),
           ) as int?;
           if (valueDes == null) continue;
-          result.bpm = valueDes;
+          result.trackTotal = valueDes;
           break;
         default:
           unhandled.add(key);

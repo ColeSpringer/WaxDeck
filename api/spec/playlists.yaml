@@ -167,7 +167,13 @@ paths:
         reported, never invented; an empty document yields an empty
         playlist. A path naming an item the caller cannot see is
         reported as unmatched, exactly like a path that names
-        nothing.
+        nothing. A line naming the item of the line before it through
+        a different path to it (another of its files, such as a book's
+        next part or a copy, or another spelling of the same file) adds
+        no second entry and is counted in neither; the same path given
+        twice in a row is two entries. A document naming more than
+        2000 paths is refused. Ask `POST /playlists/m3u/preview` first
+        to see how each line matches.
       tags: [playlists]
       requestBody:
         required: true
@@ -189,6 +195,47 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /playlists/m3u/preview:
+    post:
+      operationId: previewPlaylistM3u
+      summary: Preview an M3U8 import
+      description: >
+        How each path line of an M3U8 document matches, in document
+        order, read exactly as `POST /playlists/m3u` reads it. Nothing
+        is created or written and no name is needed, so it answers on a
+        read-only server too. A document naming more than 2000 paths is
+        refused, as the import refuses it.
+
+
+        A line is `matched` when it becomes an entry, `merged` when it
+        names the item of the line before it through a different path
+        to it (another of its files, such as a book's next part or a
+        copy, or another spelling of the same file), which the import
+        adds once, and `unmatched` when it names nothing. The same path
+        given twice in a row is two `matched` lines. A line naming an
+        item the caller cannot see is `unmatched` and carries no item,
+        exactly like one that names nothing.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/M3uPreviewRequest"
+      responses:
+        "200":
+          description: Each line's outcome, in document order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/M3uPreview"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /playlists/nsp:
     post:
       operationId: importPlaylistNsp
@@ -197,7 +244,8 @@ paths:
         Creates a **smart** playlist from an NSP document, which is the
         request body itself. The document's `name` names the playlist
         (the `name` parameter overrides it, and is what lets a nameless
-        document be imported) and `public` sets its visibility;
+        document be imported; either may be at most 200 characters) and
+        `public` sets its visibility;
         `comment` is read and discarded, since a WaxDeck playlist has
         no comment. Keys match exactly, so `Public` is an unrecognised
         key rather than the visibility.
@@ -1070,7 +1118,8 @@ components:
           maxLength: 200
           description: >
             Name for the created playlist. Defaults to a name found in
-            the export, or `Imported playlist`.
+            the export, or `Imported playlist`; a name found in the
+            export past 200 characters is refused as one given here is.
         payload:
           type: string
           maxLength: 4000000
@@ -1995,6 +2044,62 @@ components:
           pattern: "^[0-9a-f]{16}$"
         rule:
           $ref: "#/components/schemas/SmartRule"
+
+    M3uPreviewRequest:
+      type: object
+      description: An M3U8 document to match without importing it.
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: The M3U8 document text.
+          maxLength: 1048576
+
+    M3uPreview:
+      type: object
+      description: >
+        How every path line of an M3U8 document matches. The three
+        counts add up to the lines in `entries`.
+      required: [matched, merged, unmatched, entries]
+      properties:
+        matched:
+          type: integer
+          description: Lines that become entries of the playlist.
+        merged:
+          type: integer
+          description: >
+            Lines naming the item of the line before them through a
+            different path to it (another of its files, or another
+            spelling of the same file), which add no entry.
+        unmatched:
+          type: integer
+          description: Lines naming nothing the caller can see.
+        entries:
+          type: array
+          description: Every path line, in document order.
+          items:
+            $ref: "#/components/schemas/M3uPreviewEntry"
+
+    M3uPreviewEntry:
+      type: object
+      description: >
+        One path line and what it matched; `item` is present on a
+        `matched` or `merged` line.
+      required: [path, outcome]
+      properties:
+        path:
+          type: string
+          description: The line's path, as the document gives it.
+        outcome:
+          type: string
+          description: >
+            `matched`, `merged` (the item of the line before it, through
+            a different path to it: another of its files, or another
+            spelling of the same file) or `unmatched`. The same path given
+            twice in a row is `matched` both times.
+          enum: [matched, merged, unmatched]
+        item:
+          $ref: "#/components/schemas/ItemSummary"
 
     M3uImport:
       type: object

@@ -19,7 +19,7 @@ func spendAttempts(t *testing.T, ctx context.Context, svc *Library, taskID strin
 // drainOnce leases and works one task as the worker would now.
 func drainOnce(t *testing.T, ctx context.Context, svc *Library) {
 	t.Helper()
-	if !svc.drainToolTasksAt(ctx, wdb.TaskTypes{Except: taskTypeHealthFix}, time.Now().UnixNano()) {
+	if !svc.drainToolTasksAt(ctx, wdb.TaskTypes{Except: longToolTasks}, time.Now().UnixNano()) {
 		t.Fatal("the worker found no task to run")
 	}
 }

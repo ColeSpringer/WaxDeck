@@ -583,6 +583,136 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminEnrichmentWalkColumn => 'Recorrido';
 
   @override
+  String get adminFoldsAlreadyUnfolded => 'Ese nombre ya estaba separado';
+
+  @override
+  String adminFoldsApartOf(String apart, int index, int count) {
+    return '$apart, $index de $count';
+  }
+
+  @override
+  String get adminFoldsColumnFilesUnder => 'Queda bajo';
+
+  @override
+  String get adminFoldsColumnSince => 'Fusionado';
+
+  @override
+  String get adminFoldsColumnSpelling => 'Grafía';
+
+  @override
+  String get adminFoldsEmptyMessage =>
+      'Una fusión une los nombres que elimina a la entrada que conserva, y los archivos que aún se escriben así quedan bajo ella.';
+
+  @override
+  String get adminFoldsEmptyTitle => 'No hay nombres fusionados';
+
+  @override
+  String adminFoldsEntry(String name, String kind) {
+    return '$name ($kind)';
+  }
+
+  @override
+  String get adminFoldsError =>
+      'No se han podido cargar los nombres fusionados';
+
+  @override
+  String adminFoldsFoldedAt(String when) {
+    return 'Fusionado el $when';
+  }
+
+  @override
+  String get adminFoldsGroupAlbum => 'Álbumes';
+
+  @override
+  String get adminFoldsGroupArtist => 'Artistas';
+
+  @override
+  String get adminFoldsGroupGenre => 'Géneros';
+
+  @override
+  String get adminFoldsGroupReleaseGroup => 'Grupos de lanzamiento';
+
+  @override
+  String get adminFoldsGroupSeries => 'Series';
+
+  @override
+  String adminFoldsInFolder(String folder, String library) {
+    return 'En $folder de $library';
+  }
+
+  @override
+  String adminFoldsInLibrary(String library) {
+    return 'En la carpeta principal de $library';
+  }
+
+  @override
+  String get adminFoldsKindAlbum => 'Álbum';
+
+  @override
+  String get adminFoldsKindArtist => 'Artista';
+
+  @override
+  String get adminFoldsKindGenre => 'Género';
+
+  @override
+  String get adminFoldsKindMood => 'Estado de ánimo';
+
+  @override
+  String get adminFoldsKindReleaseGroup => 'Grupo de lanzamiento';
+
+  @override
+  String get adminFoldsKindSeries => 'Serie';
+
+  @override
+  String adminFoldsMerged(int count, String survivor) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count grafías quedan ahora bajo $survivor',
+      one: '1 grafía queda ahora bajo $survivor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminFoldsOverline =>
+      'Grafías antiguas que quedan bajo otro nombre';
+
+  @override
+  String adminFoldsQuoted(String spelling) {
+    return '\"$spelling\"';
+  }
+
+  @override
+  String adminFoldsQuotedApart(String spelling, String apart) {
+    return '\"$spelling\" ($apart)';
+  }
+
+  @override
+  String get adminFoldsTitle => 'Nombres fusionados';
+
+  @override
+  String adminFoldsUnfold(String fold) {
+    return 'Separar $fold';
+  }
+
+  @override
+  String get adminFoldsUnfoldAction => 'Separar';
+
+  @override
+  String adminFoldsUnfoldBody(String fold, String name) {
+    return 'Los archivos escritos $fold que la biblioteca lea como nuevos o cambiados (añadidos, movidos, sustituidos o reetiquetados) vuelven a quedar bajo su propio nombre. Los que \"$name\" ya tiene se quedan con él, incluso al volver a escanear con Releer los archivos sin cambios, hasta que cambien o se muevan.';
+  }
+
+  @override
+  String get adminFoldsUnfoldTitle => '¿Separar este nombre?';
+
+  @override
+  String adminFoldsUnfolded(String fold) {
+    return '$fold se ha separado';
+  }
+
+  @override
   String get adminForbiddenMessage =>
       'La consola de administración es para las cuentas con el rol de administrador. Pide lo que necesites de ella a una persona administradora.';
 
@@ -3874,6 +4004,111 @@ class AppLocalizationsEs extends AppLocalizations {
       'Esta pista es parte de un archivo más grande, que otro dispositivo todavía no puede reproducir. Reprodúcela en este.';
 
   @override
+  String get healthCatalogAlbumYears => 'Años de álbumes desactualizados';
+
+  @override
+  String get healthCatalogArtistTotals => 'Totales de artistas desactualizados';
+
+  @override
+  String get healthCatalogBlurb =>
+      'Compara lo que el catálogo guarda junto a tus archivos (el índice de búsqueda, los totales, las claves de orden y los años) con un recuento nuevo a partir de sus propios registros. Rara vez hace falta: un catálogo que el servidor creó desde cero sale coherente.';
+
+  @override
+  String get healthCatalogBookIsbnKeys =>
+      'Claves ISBN de libros desactualizadas';
+
+  @override
+  String get healthCatalogBookLengths => 'Duraciones de libros desactualizadas';
+
+  @override
+  String healthCatalogCheckedAt(String stamp) {
+    return 'Comprobado el $stamp';
+  }
+
+  @override
+  String get healthCatalogClean => 'Coherente: nada desajustado.';
+
+  @override
+  String get healthCatalogDrift =>
+      'Desajustado. Una reparación vuelve a calcular lo que aparece debajo.';
+
+  @override
+  String get healthCatalogGenreTotals => 'Totales de géneros desactualizados';
+
+  @override
+  String get healthCatalogMissingFromSearch =>
+      'Elementos que la búsqueda no encuentra';
+
+  @override
+  String get healthCatalogOrphanSearchRows =>
+      'Entradas de búsqueda sin elemento';
+
+  @override
+  String get healthCatalogOverline =>
+      'Búsqueda, totales, claves de orden y años';
+
+  @override
+  String get healthCatalogPlaylistNumbering => 'Listas numeradas con huecos';
+
+  @override
+  String get healthCatalogRefusedTagRows =>
+      'Etiquetas con nombres que ya no se aceptan';
+
+  @override
+  String get healthCatalogReleaseGroupTotals =>
+      'Totales de grupos de lanzamiento desactualizados';
+
+  @override
+  String get healthCatalogReleaseYears => 'Años de publicación desactualizados';
+
+  @override
+  String get healthCatalogRepair => 'Reparar';
+
+  @override
+  String get healthCatalogRepairBody =>
+      'La reparación vuelve a contar lo que cuenta la comprobación a partir de los propios registros del catálogo y elimina lo que nada usa. Mantiene el bloqueo de escritura del catálogo mientras escribe, así que las ediciones y los escaneos esperan. Tus archivos no se tocan.';
+
+  @override
+  String get healthCatalogRepairRunning =>
+      'Ya hay una reparación en marcha. Síguela en Tareas.';
+
+  @override
+  String get healthCatalogRepairSpoken => 'Reparar el catálogo';
+
+  @override
+  String get healthCatalogRepairStarted =>
+      'Reparación iniciada. Síguela en Tareas.';
+
+  @override
+  String get healthCatalogRepairTitle => '¿Reparar el catálogo?';
+
+  @override
+  String get healthCatalogReservedTagRecords =>
+      'Registros de etiquetas con nombres reservados';
+
+  @override
+  String get healthCatalogSortKeys => 'Nombres que se ordenan fuera de lugar';
+
+  @override
+  String get healthCatalogTidy =>
+      'Coherente. Una reparación ordena lo que aparece debajo.';
+
+  @override
+  String get healthCatalogTitle => 'Comprobación del catálogo';
+
+  @override
+  String get healthCatalogUnusedImages => 'Imágenes sin usar';
+
+  @override
+  String get healthCatalogUnusedThumbnails => 'Miniaturas sin usar';
+
+  @override
+  String get healthCatalogVerify => 'Verificar';
+
+  @override
+  String get healthCatalogVerifySpoken => 'Verificar el catálogo';
+
+  @override
   String get healthColumnAbsorbs => 'Absorbe';
 
   @override
@@ -4528,6 +4763,17 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String libraryDeletePreviewSidecars(int count, String list) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos acompañantes',
+      one: '1 archivo acompañante',
+    );
+    return '$_temp0: $list';
+  }
+
+  @override
   String libraryDeleteRipAction(int count) {
     return 'Eliminar las $count pistas...';
   }
@@ -4555,6 +4801,17 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String libraryDeleteRipTooMany(int max) {
     return 'Con las pistas que comparten sus archivos, son más de $max pistas, demasiadas para eliminarlas de una vez.';
+  }
+
+  @override
+  String libraryDeleteSidecarsHeading(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'También elimina $count archivos acompañantes:',
+      one: 'También elimina 1 archivo acompañante:',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -4592,6 +4849,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryFactsContainer => 'Contenedor';
 
   @override
+  String get libraryFactsDisc => 'Disco';
+
+  @override
   String get libraryFactsDuration => 'Duración';
 
   @override
@@ -4616,6 +4876,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryFactsNeverPlayed => 'Nunca';
 
   @override
+  String libraryFactsNumberOf(int number, int total) {
+    return '$number de $total';
+  }
+
+  @override
+  String get libraryFactsParts => 'Partes';
+
+  @override
   String get libraryFactsPlayCount => 'Reproducciones';
 
   @override
@@ -4623,6 +4891,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get libraryFactsTitle => 'Detalles';
+
+  @override
+  String get libraryFactsTrack => 'Pista';
 
   @override
   String get libraryFactsYear => 'Año';
@@ -6441,6 +6712,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String get organizeProfileAudiobookLabel => 'Plantilla de audiolibros';
 
   @override
+  String get organizeProfileCompilationHelp =>
+      'Various Artists salvo que se indique; vacía, cada recopilatorio va bajo su artista del álbum etiquetado';
+
+  @override
+  String get organizeProfileCompilationLabel => 'Carpeta de recopilatorios';
+
+  @override
+  String get organizeProfileCompilationOwn =>
+      'El artista del álbum etiquetado de cada uno';
+
+  @override
+  String get organizeProfileCompilationUnset => 'Various Artists';
+
+  @override
   String get organizeProfileDelete => 'Eliminar perfil';
 
   @override
@@ -6491,6 +6776,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String organizeProfileSampleBook(String path) {
     return 'Libro: $path';
+  }
+
+  @override
+  String organizeProfileSampleCompilation(String path) {
+    return 'Recopilatorio: $path';
   }
 
   @override
@@ -7443,6 +7733,57 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get playlistLoadError =>
       'No se ha podido cargar esta lista de reproducción';
+
+  @override
+  String get playlistM3uPreviewChecking =>
+      'Comprobando cada línea del archivo. Uno largo tarda un rato.';
+
+  @override
+  String playlistM3uPreviewCounts(int matched, int merged, int unmatched) {
+    String _temp0 = intl.Intl.pluralLogic(
+      matched,
+      locale: localeName,
+      other: '$matched líneas se convierten en entradas',
+      one: '1 línea se convierte en una entrada',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      merged,
+      locale: localeName,
+      other: ', $merged se unen a la entrada anterior',
+      one: ', 1 se une a la entrada anterior',
+      zero: '',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      unmatched,
+      locale: localeName,
+      other: ', $unmatched no coinciden con nada de la biblioteca',
+      one: ', 1 no coincide con nada de la biblioteca',
+      zero: '',
+    );
+    return '$_temp0$_temp1$_temp2.';
+  }
+
+  @override
+  String get playlistM3uPreviewImporting =>
+      'Importando la lista. Un archivo largo tarda un rato.';
+
+  @override
+  String playlistM3uPreviewItem(String artist, String title) {
+    return '$artist - $title';
+  }
+
+  @override
+  String get playlistM3uPreviewMatched => 'Entrada';
+
+  @override
+  String get playlistM3uPreviewMerged => 'Se une a la entrada anterior';
+
+  @override
+  String get playlistM3uPreviewStillImporting =>
+      'Este archivo todavía se está importando. Se podrá volver a importar cuando termine.';
+
+  @override
+  String get playlistM3uPreviewUnmatched => 'Sin coincidencia en la biblioteca';
 
   @override
   String get playlistMakePrivate => 'Hacerla privada';
@@ -10208,6 +10549,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get searchTitle => 'Buscar';
 
   @override
+  String get searchTopResult => 'Mejor resultado';
+
+  @override
   String get searchTruncated =>
       'Hay más coincidencias de las que caben aquí. Afina la búsqueda para reducirlas.';
 
@@ -12288,6 +12632,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String toolsCountEntriesRemoved(int count) {
+    return 'entradas vacías eliminadas $count';
+  }
+
+  @override
   String toolsCountErrored(int count) {
     return 'con errores $count';
   }
@@ -12353,8 +12702,23 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String toolsCountReclaimed(int count) {
+    return 'filas sin usar recuperadas $count';
+  }
+
+  @override
+  String toolsCountSearchRows(int count) {
+    return 'filas de búsqueda reconstruidas $count';
+  }
+
+  @override
   String toolsCountSkipped(int count) {
     return 'omitidos $count';
+  }
+
+  @override
+  String toolsCountSortKeys(int count) {
+    return 'claves de orden reescritas $count';
   }
 
   @override
@@ -12519,6 +12883,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get toolsStateWaiting => 'En espera';
 
   @override
+  String get toolsSummaryConsistent => 'coherente';
+
+  @override
+  String toolsSummaryDriftLeft(int count) {
+    return 'aún desajustadas $count';
+  }
+
+  @override
   String toolsSummaryListens(String count) {
     return 'escuchas $count';
   }
@@ -12531,6 +12903,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String toolsSummaryRefused(String count) {
     return 'rechazadas $count';
+  }
+
+  @override
+  String toolsSummaryTied(String count) {
+    return 'empatadas $count';
   }
 
   @override
@@ -12555,6 +12932,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get toolsTaskBookSplit => 'División de libro';
+
+  @override
+  String get toolsTaskCatalogRepair => 'Reparación del catálogo';
 
   @override
   String get toolsTaskCueSplit => 'División por CUE';

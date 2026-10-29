@@ -447,9 +447,9 @@ func TestMissingArtIsFixableWithOneOfItsSources(t *testing.T) {
 	waitForJob(t, ctx, svc, pid)
 }
 
-// A health fix, which can run for hours, has a worker of its own: the
+// A health fix, which can run for hours, runs on the long-task worker: the
 // tool worker takes the task queued after it, and never the fix.
-func TestHealthFixesHaveAWorkerOfTheirOwn(t *testing.T) {
+func TestHealthFixesRunOnTheLongTaskWorker(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"})
 	fix, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil)
@@ -472,10 +472,10 @@ func TestHealthFixesHaveAWorkerOfTheirOwn(t *testing.T) {
 	if fixed, normalized := state(fix.TaskID), state(other.ID); fixed != taskStateQueued || normalized != taskStateDone {
 		t.Fatalf("after the tool worker: fix %s, normalize %s; want the fix still queued", fixed, normalized)
 	}
-	for svc.DrainHealthFixes(ctx) {
+	for svc.DrainLongToolTasks(ctx) {
 	}
 	if fixed := state(fix.TaskID); fixed != taskStateDone {
-		t.Fatalf("after the fix worker: fix %s, want done", fixed)
+		t.Fatalf("after the long-task worker: fix %s, want done", fixed)
 	}
 }
 
@@ -489,7 +489,7 @@ func TestAFixTaskMarksHealthOnceItsEndLands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainHealthFixes(ctx) {
+	for svc.DrainLongToolTasks(ctx) {
 	}
 	evs, _, err := svc.db.EventsSince(ctx, uc.ID, 0, 1000)
 	if err != nil {
@@ -527,7 +527,7 @@ func TestAFixTaskThatGaveUpTellsItsStarter(t *testing.T) {
 		t.Fatal("a running fix task does not read as fixing")
 	}
 	seen := markers(t, ctx, svc, uc.ID, eventHealth, "")
-	svc.DrainHealthFixes(ctx)
+	svc.DrainLongToolTasks(ctx)
 	if task, err := svc.GetToolTaskFor(ctx, uc, id); err != nil || task.State != taskStateFailed {
 		t.Fatalf("task = %+v (%v), want it retired", task, err)
 	}
@@ -575,7 +575,7 @@ func TestAScopedFixRechecksOnlyWhatItNames(t *testing.T) {
 	if _, err := svc.StartHealthFix(ctx, uc, ruleMissingLyrics, []string{apiPID(PrefixTrack, track)}); err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainHealthFixes(ctx) {
+	for svc.DrainLongToolTasks(ctx) {
 	}
 	if _, err := svc.db.HealthRowByItem(ctx, other); err != nil {
 		t.Fatalf("a row the fix never named = %v, want it left for the sweep", err)
@@ -594,7 +594,7 @@ func TestATaskSaysItsProgressApartFromItsNews(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainHealthFixes(ctx) {
+	for svc.DrainLongToolTasks(ctx) {
 	}
 	evs, _, err := svc.db.EventsSince(ctx, uc.ID, 0, 1000)
 	if err != nil {
@@ -745,7 +745,7 @@ func setServerReadOnly(t *testing.T, ctx context.Context, svc *Library, readOnly
 // which has to have finished.
 func fixSummary(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, taskID string) healthFixSummary {
 	t.Helper()
-	for svc.DrainHealthFixes(ctx) {
+	for svc.DrainLongToolTasks(ctx) {
 	}
 	task, err := svc.GetToolTaskFor(ctx, uc, taskID)
 	if err != nil {

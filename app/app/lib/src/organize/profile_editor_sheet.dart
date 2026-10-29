@@ -14,7 +14,8 @@ import 'organize_screen.dart';
 const _sampleDebounce = Duration(milliseconds: 300);
 
 /// Edits an organize profile, or makes one when [profile] is null: its
-/// templates, tag writing, and where they lay out the sample items.
+/// templates, compilation folder, tag writing, and where they lay out the
+/// sample items.
 Future<void> showOrganizeProfileEditor(
   BuildContext context, {
   OrganizeProfile? profile,
@@ -46,6 +47,14 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
   late final _podcast = TextEditingController(
     text: widget.profile?.saved?.podcast ?? '',
   );
+  late final _compilation = TextEditingController(
+    text: widget.profile?.compilationFolder ?? '',
+  );
+
+  /// The profile's own, null for the catalog's default, until typed in:
+  /// an untouched field sends what it had, an emptied one files
+  /// compilations under their own album artist.
+  late String? _compilationFolder = widget.profile?.compilationFolder;
   late var _tagWrite = widget.profile?.tagWrite ?? false;
   late OrganizeSample? _sample = widget.profile?.sample;
   String? _sampleError;
@@ -67,6 +76,7 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
     _music.dispose();
     _audiobook.dispose();
     _podcast.dispose();
+    _compilation.dispose();
     super.dispose();
   }
 
@@ -86,6 +96,7 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
             musicTemplate: _music.text,
             audiobookTemplate: _audiobook.text,
             podcastTemplate: _podcast.text,
+            compilationFolder: _compilationFolder,
           );
       if (mounted && request == _sampleRequest) {
         setState(() {
@@ -131,6 +142,7 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
             audiobookTemplate: _audiobook.text,
             podcastTemplate: _podcast.text,
             tagWrite: _tagWrite,
+            compilationFolder: _compilationFolder,
           );
       container.invalidate(organizeProfilesProvider);
       messenger.show(l10n.organizeProfileSaved(name));
@@ -278,6 +290,22 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
                 SemanticsIds.organizeProfilePodcast,
                 inherited(profile?.saved?.podcast, profile?.podcastTemplate),
               ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: WaxSpace.s12),
+                child: WaxTextField(
+                  label: l10n.organizeProfileCompilationLabel,
+                  hint: _compilationFolder == null
+                      ? l10n.organizeProfileCompilationUnset
+                      : l10n.organizeProfileCompilationOwn,
+                  helperText: l10n.organizeProfileCompilationHelp,
+                  controller: _compilation,
+                  semanticsId: SemanticsIds.organizeProfileCompilation,
+                  onChanged: (text) {
+                    setState(() => _compilationFolder = text);
+                    _templatesChanged();
+                  },
+                ),
+              ),
               WaxSettingRow(
                 title: l10n.organizeProfileTagWrite,
                 help: l10n.organizeProfileTagWriteHelp,
@@ -312,6 +340,9 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
                         l10n.organizeProfileSampleMusic(line(sample.music)),
                         l10n.organizeProfileSampleBook(line(sample.audiobook)),
                         l10n.organizeProfileSamplePodcast(line(sample.podcast)),
+                        l10n.organizeProfileSampleCompilation(
+                          line(sample.compilation),
+                        ),
                       ])
                         Text(
                           text,

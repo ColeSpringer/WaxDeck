@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -10,6 +12,57 @@ import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
 import 'prose.dart';
+
+/// Holds a value to [max] code points, which is how a server's length
+/// bound counts. It enforces as the framework's own length limit does on
+/// this platform: where that waits for an input method to finish composing
+/// before it cuts, so does this, and on Android and Windows, whose input
+/// methods compose even Latin text, it cuts at once.
+class _CodePointLimit extends TextInputFormatter {
+  const _CodePointLimit(this.max);
+
+  final int max;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.runes.length <= max) return newValue;
+    final full = oldValue.text.runes.length == max;
+    switch (LengthLimitingTextInputFormatter.getDefaultMaxLengthEnforcement()) {
+      case MaxLengthEnforcement.none:
+        return newValue;
+      case MaxLengthEnforcement.enforced:
+        if (full && oldValue.selection.isCollapsed) return oldValue;
+        return _cut(newValue);
+      case MaxLengthEnforcement.truncateAfterCompositionEnds:
+        if (full && !oldValue.composing.isValid) return oldValue;
+        if (newValue.composing.isValid) return newValue;
+        return _cut(newValue);
+    }
+  }
+
+  /// [value] cut to [max] code points, its selection and composing range
+  /// clamped to what is left.
+  TextEditingValue _cut(TextEditingValue value) {
+    final cut = String.fromCharCodes(value.text.runes.take(max));
+    final composing = value.composing;
+    return TextEditingValue(
+      text: cut,
+      selection: value.selection.copyWith(
+        baseOffset: math.min(value.selection.start, cut.length),
+        extentOffset: math.min(value.selection.end, cut.length),
+      ),
+      composing: !composing.isCollapsed && cut.length > composing.start
+          ? TextRange(
+              start: composing.start,
+              end: math.min(composing.end, cut.length),
+            )
+          : TextRange.empty,
+    );
+  }
+}
 
 /// A single-line text input.
 ///
@@ -31,6 +84,7 @@ class WaxTextField extends StatefulWidget {
     this.keyboardType,
     this.obscureText = false,
     this.digitsOnly = false,
+    this.maxCharacters,
     this.maxLines = 1,
     this.errorText,
     this.helperText,
@@ -94,6 +148,12 @@ class WaxTextField extends StatefulWidget {
   /// as typed rather than as a validation message afterwards, so the
   /// field never holds a value it would have to complain about.
   final bool digitsOnly;
+
+  /// Holds the text to this many characters as it is typed, counted in
+  /// code points as a server's length bound counts them, so a value past
+  /// it is cut where it is typed rather than refused once sent. Null
+  /// leaves the length open.
+  final int? maxCharacters;
 
   /// How tall the field grows before it scrolls. Above one it takes the
   /// card radius and drops its clear button, which a paragraph should
@@ -236,11 +296,12 @@ class _WaxTextFieldState extends State<WaxTextField> {
                   keyboardType: widget.digitsOnly
                       ? TextInputType.number
                       : widget.keyboardType,
-                  inputFormatters: widget.digitsOnly
-                      ? <TextInputFormatter>[
-                          FilteringTextInputFormatter.digitsOnly,
-                        ]
-                      : null,
+                  inputFormatters: <TextInputFormatter>[
+                    if (widget.digitsOnly)
+                      FilteringTextInputFormatter.digitsOnly,
+                    if (widget.maxCharacters case final max?)
+                      _CodePointLimit(max),
+                  ],
                   obscureText: widget.obscureText,
                   maxLines: widget.maxLines,
                   onChanged: widget.onChanged,

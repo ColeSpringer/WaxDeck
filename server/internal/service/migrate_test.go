@@ -47,6 +47,14 @@ type migrateFixture struct {
 
 func newMigrateFixture(t *testing.T) (context.Context, *migrateFixture) {
 	t.Helper()
+	return newMigrateFixtureWith(t, nil)
+}
+
+// newMigrateFixtureWith is newMigrateFixture with media of a test's own
+// written into the library before it is scanned, and any more libraries
+// the test names, scanned with it.
+func newMigrateFixtureWith(t *testing.T, extra func(t *testing.T, libDir string), roots ...Root) (context.Context, *migrateFixture) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -59,6 +67,9 @@ func newMigrateFixture(t *testing.T) (context.Context, *migrateFixture) {
 	}
 	if _, err := fixtures.GenerateChapteredBook(libDir); err != nil {
 		t.Fatalf("generating chaptered book fixture: %v", err)
+	}
+	if extra != nil {
+		extra(t, libDir)
 	}
 
 	dataDir := t.TempDir()
@@ -73,7 +84,7 @@ func newMigrateFixture(t *testing.T) (context.Context, *migrateFixture) {
 	group := supervise.NewGroup(log)
 	svc, err := Open(ctx, Config{
 		DataDir: dataDir,
-		Roots:   []Root{{Name: "lib", Path: libDir}},
+		Roots:   append([]Root{{Name: "lib", Path: libDir}}, roots...),
 		Sealer:  sealer,
 		// The fake source servers listen on loopback, which the SSRF
 		// guard would otherwise refuse; the flag is the same LAN opt-in

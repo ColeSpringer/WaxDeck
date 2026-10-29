@@ -17,6 +17,9 @@ type Event struct {
 	UserID  string
 	Kind    string
 	ItemPID string
+	// WrittenAtNS is when the event was written, which tells it apart from
+	// another a log put back to an earlier copy gives the same id.
+	WrittenAtNS int64
 }
 
 // AppendEvent records one server change and returns its stream id.
@@ -39,7 +42,7 @@ func (d *DB) AppendEvent(ctx context.Context, userID, kind, itemPID string) (int
 // ascending, and whether more remain past the returned page.
 func (d *DB) EventsSince(ctx context.Context, userID string, sinceID int64, limit int) ([]Event, bool, error) {
 	rows, err := d.r.QueryContext(ctx, `
-		SELECT id, user_id, kind, item_pid FROM event_log
+		SELECT id, user_id, kind, item_pid, created_at_ns FROM event_log
 		WHERE user_id = ? AND id > ? ORDER BY id LIMIT ?`,
 		userID, sinceID, limit+1)
 	if err != nil {
@@ -49,7 +52,7 @@ func (d *DB) EventsSince(ctx context.Context, userID string, sinceID int64, limi
 	var out []Event
 	for rows.Next() {
 		var e Event
-		if err := rows.Scan(&e.ID, &e.UserID, &e.Kind, &e.ItemPID); err != nil {
+		if err := rows.Scan(&e.ID, &e.UserID, &e.Kind, &e.ItemPID, &e.WrittenAtNS); err != nil {
 			return nil, false, fmt.Errorf("db: reading events: %w", err)
 		}
 		out = append(out, e)
@@ -64,15 +67,32 @@ func (d *DB) EventsSince(ctx context.Context, userID string, sinceID int64, limi
 	return out, more, nil
 }
 
-// LatestEventID returns the stream's current tail (0 when empty).
-func (d *DB) LatestEventID(ctx context.Context) (int64, error) {
-	var id int64
-	err := d.r.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(id), 0) FROM event_log`).Scan(&id)
-	if err != nil {
-		return 0, fmt.Errorf("db: reading event tail: %w", err)
+// LatestEvent returns the stream's current tail and when that event was
+// written (both 0 when the log is empty).
+func (d *DB) LatestEvent(ctx context.Context) (id, writtenAtNS int64, err error) {
+	err = d.r.QueryRowContext(ctx,
+		`SELECT id, created_at_ns FROM event_log ORDER BY id DESC LIMIT 1`).Scan(&id, &writtenAtNS)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, nil
 	}
-	return id, nil
+	if err != nil {
+		return 0, 0, fmt.Errorf("db: reading event tail: %w", err)
+	}
+	return id, writtenAtNS, nil
+}
+
+// EventWrittenAt returns when the event with id was written; found is false
+// when the log keeps no such event.
+func (d *DB) EventWrittenAt(ctx context.Context, id int64) (writtenAtNS int64, found bool, err error) {
+	err = d.r.QueryRowContext(ctx,
+		`SELECT created_at_ns FROM event_log WHERE id = ?`, id).Scan(&writtenAtNS)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("db: reading event %d: %w", id, err)
+	}
+	return writtenAtNS, true, nil
 }
 
 // LatestEventIDForUser returns the newest event id belonging to one

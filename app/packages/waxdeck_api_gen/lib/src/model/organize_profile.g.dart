@@ -18,6 +18,8 @@ class _$OrganizeProfile extends OrganizeProfile {
   @override
   final bool tagWrite;
   @override
+  final String? compilationFolder;
+  @override
   final bool builtIn;
   @override
   final OrganizeSample sample;
@@ -33,6 +35,7 @@ class _$OrganizeProfile extends OrganizeProfile {
     required this.audiobookTemplate,
     required this.podcastTemplate,
     required this.tagWrite,
+    this.compilationFolder,
     required this.builtIn,
     required this.sample,
     this.saved,
@@ -53,6 +56,7 @@ class _$OrganizeProfile extends OrganizeProfile {
         audiobookTemplate == other.audiobookTemplate &&
         podcastTemplate == other.podcastTemplate &&
         tagWrite == other.tagWrite &&
+        compilationFolder == other.compilationFolder &&
         builtIn == other.builtIn &&
         sample == other.sample &&
         saved == other.saved;
@@ -66,6 +70,7 @@ class _$OrganizeProfile extends OrganizeProfile {
     _$hash = $jc(_$hash, audiobookTemplate.hashCode);
     _$hash = $jc(_$hash, podcastTemplate.hashCode);
     _$hash = $jc(_$hash, tagWrite.hashCode);
+    _$hash = $jc(_$hash, compilationFolder.hashCode);
     _$hash = $jc(_$hash, builtIn.hashCode);
     _$hash = $jc(_$hash, sample.hashCode);
     _$hash = $jc(_$hash, saved.hashCode);
@@ -81,6 +86,7 @@ class _$OrganizeProfile extends OrganizeProfile {
           ..add('audiobookTemplate', audiobookTemplate)
           ..add('podcastTemplate', podcastTemplate)
           ..add('tagWrite', tagWrite)
+          ..add('compilationFolder', compilationFolder)
           ..add('builtIn', builtIn)
           ..add('sample', sample)
           ..add('saved', saved))
@@ -115,6 +121,11 @@ class OrganizeProfileBuilder
   bool? get tagWrite => _$this._tagWrite;
   set tagWrite(bool? tagWrite) => _$this._tagWrite = tagWrite;
 
+  String? _compilationFolder;
+  String? get compilationFolder => _$this._compilationFolder;
+  set compilationFolder(String? compilationFolder) =>
+      _$this._compilationFolder = compilationFolder;
+
   bool? _builtIn;
   bool? get builtIn => _$this._builtIn;
   set builtIn(bool? builtIn) => _$this._builtIn = builtIn;
@@ -141,6 +152,7 @@ class OrganizeProfileBuilder
       _audiobookTemplate = $v.audiobookTemplate;
       _podcastTemplate = $v.podcastTemplate;
       _tagWrite = $v.tagWrite;
+      _compilationFolder = $v.compilationFolder;
       _builtIn = $v.builtIn;
       _sample = $v.sample.toBuilder();
       _saved = $v.saved?.toBuilder();
@@ -193,6 +205,7 @@ class OrganizeProfileBuilder
               r'OrganizeProfile',
               'tagWrite',
             ),
+            compilationFolder: compilationFolder,
             builtIn: BuiltValueNullFieldError.checkNotNull(
               builtIn,
               r'OrganizeProfile',

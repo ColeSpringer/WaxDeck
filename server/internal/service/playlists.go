@@ -1,15 +1,18 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
@@ -139,6 +142,31 @@ type M3uImportOutcome struct {
 	Matched        int
 	Unmatched      int
 	UnmatchedPaths []string
+}
+
+// How one path line of an M3U8 document reads: an entry, the item of the
+// line before it through a different path to it (another of its files,
+// or another spelling of the same file), or nothing the caller can see.
+const (
+	M3uMatched   = "matched"
+	M3uMerged    = "merged"
+	M3uUnmatched = "unmatched"
+)
+
+// M3uPreviewLine is one path line of an M3U8 document and what it
+// matched; Item is nil on an unmatched line.
+type M3uPreviewLine struct {
+	Path    string
+	Outcome string
+	Item    *ItemSummary
+}
+
+// M3uPreview reports how an M3U8 document would import, line by line.
+type M3uPreview struct {
+	Matched   int
+	Merged    int
+	Unmatched int
+	Lines     []M3uPreviewLine
 }
 
 // Rule bounds enforced on write, mirroring the spec.
@@ -1195,6 +1223,9 @@ func (l *Library) CreatePlaylist(ctx context.Context, uc *UserCtx, req PlaylistC
 	if name == "" {
 		return Playlist{}, errInvalid("a playlist needs a name")
 	}
+	if err := checkPlaylistName(name); err != nil {
+		return Playlist{}, err
+	}
 	vis, err := playlistVisibility(req.Visibility)
 	if err != nil {
 		return Playlist{}, err
@@ -1296,6 +1327,9 @@ func (l *Library) UpdatePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 		name = strings.TrimSpace(*req.Name)
 		if name == "" {
 			return Playlist{}, errInvalid("a playlist needs a name")
+		}
+		if err := checkPlaylistName(name); err != nil {
+			return Playlist{}, err
 		}
 	}
 	vis := pl.Visibility
@@ -1731,6 +1765,9 @@ func (l *Library) ImportPlaylistM3U(ctx context.Context, uc *UserCtx, name, visi
 	if name == "" {
 		return M3uImportOutcome{}, errInvalid("a playlist needs a name")
 	}
+	if err := checkPlaylistName(name); err != nil {
+		return M3uImportOutcome{}, err
+	}
 	vis, err := playlistVisibility(visibility)
 	if err != nil {
 		return M3uImportOutcome{}, err
@@ -1739,34 +1776,19 @@ func (l *Library) ImportPlaylistM3U(ctx context.Context, uc *UserCtx, name, visi
 	if err := l.lib.Playlists().CheckImport(ctx, name, owner, vis); err != nil {
 		return M3uImportOutcome{}, classify(err)
 	}
-	// Resolve, filter, then create: a path naming an item the caller
-	// cannot see reads as unmatched, never as stored and then dropped. A
-	// merged line names the item of the line before it, so it shares that
-	// line's verdict.
-	matches, err := l.lib.Playlists().ResolveM3U8(ctx, strings.NewReader(content))
-	if err != nil {
-		return M3uImportOutcome{}, classify(err)
-	}
-	var found []*model.ItemView
-	for _, m := range matches {
-		if m.Item != nil {
-			found = append(found, m.Item)
-		}
-	}
-	f, err := l.withTagVerdicts(ctx, memberFilter{uc: uc, subs: l.newSubscriptionFilter(uc)}, found)
+	lines, err := l.resolveM3U(ctx, uc, content)
 	if err != nil {
 		return M3uImportOutcome{}, err
 	}
 	out := M3uImportOutcome{}
 	var keep []model.PID
-	for _, m := range matches {
-		switch {
-		case m.Item == nil || !l.memberVisible(ctx, f, m.Item):
+	for _, ln := range lines {
+		switch ln.outcome {
+		case M3uUnmatched:
 			out.Unmatched++
-			out.UnmatchedPaths = append(out.UnmatchedPaths, m.Path)
-		case m.Merged:
-		default:
-			keep = append(keep, m.Item.PID)
+			out.UnmatchedPaths = append(out.UnmatchedPaths, ln.path)
+		case M3uMatched:
+			keep = append(keep, ln.item.PID)
 		}
 	}
 	pid, err := l.createStaticWith(ctx, name, owner, vis, keep)
@@ -1781,6 +1803,107 @@ func (l *Library) ImportPlaylistM3U(ctx context.Context, uc *UserCtx, name, visi
 	out.Playlist = l.playlistDTO(ctx, uc, pl, true, nil)
 	out.Matched = len(keep)
 	return out, nil
+}
+
+// PreviewPlaylistM3U reports how an M3U8 document would import for the
+// caller, line by line, and writes nothing.
+func (l *Library) PreviewPlaylistM3U(ctx context.Context, uc *UserCtx, content string) (M3uPreview, error) {
+	lines, err := l.resolveM3U(ctx, uc, content)
+	if err != nil {
+		return M3uPreview{}, err
+	}
+	out := M3uPreview{Lines: make([]M3uPreviewLine, 0, len(lines))}
+	for _, ln := range lines {
+		row := M3uPreviewLine{Path: ln.path, Outcome: ln.outcome}
+		switch ln.outcome {
+		case M3uMatched:
+			out.Matched++
+		case M3uMerged:
+			out.Merged++
+		default:
+			out.Unmatched++
+		}
+		if ln.item != nil {
+			s := summary(ln.item)
+			row.Item = &s
+		}
+		out.Lines = append(out.Lines, row)
+	}
+	return out, nil
+}
+
+// maxM3UChars is the bound the contract declares on an M3U8 document,
+// in characters as its maxLength counts them.
+const maxM3UChars = 1 << 20
+
+// maxM3ULines bounds the path lines one document may name. The catalog
+// resolves a relative line by scanning every file's path, about 13 ms a
+// line on a 20,000-file catalog, so this keeps one document under half a
+// minute there.
+const maxM3ULines = 2000
+
+// m3uPathLines counts the path lines of an M3U8 document as the
+// catalog's parser reads them: not blank, and not a directive.
+func m3uPathLines(content string) int {
+	n := 0
+	for line := range strings.Lines(strings.TrimPrefix(content, "\ufeff")) {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			n++
+		}
+	}
+	return n
+}
+
+// m3uLine is one path line of an M3U8 document as the caller would
+// import it; item is nil on an unmatched line.
+type m3uLine struct {
+	path    string
+	outcome string
+	item    *model.ItemView
+}
+
+// resolveM3U reads every path line of an M3U8 document for the caller,
+// in document order. The import builds from it and the preview reports
+// it, so the two cannot disagree. A path naming an item the caller
+// cannot see reads as unmatched, never as stored and then dropped; a
+// merged line names the item of the line before it, so it shares that
+// line's verdict.
+func (l *Library) resolveM3U(ctx context.Context, uc *UserCtx, content string) ([]m3uLine, error) {
+	if utf8.RuneCountInString(content) > maxM3UChars {
+		return nil, errInvalid(fmt.Sprintf("an M3U8 document may be at most %d characters", maxM3UChars))
+	}
+	if m3uPathLines(content) > maxM3ULines {
+		return nil, errInvalid(fmt.Sprintf("an M3U8 document may name at most %d paths; split a longer one and import it in parts", maxM3ULines))
+	}
+	matches, err := l.m3uMatches(ctx, content)
+	if errors.Is(err, bufio.ErrTooLong) {
+		return nil, errInvalid("a line of the M3U8 document is too long to be a path")
+	}
+	if err != nil {
+		return nil, classify(err)
+	}
+	var found []*model.ItemView
+	for _, m := range matches {
+		if m.Item != nil {
+			found = append(found, m.Item)
+		}
+	}
+	f, err := l.withTagVerdicts(ctx, memberFilter{uc: uc, subs: l.newSubscriptionFilter(uc)}, found)
+	if err != nil {
+		return nil, err
+	}
+	lines := make([]m3uLine, 0, len(matches))
+	for _, m := range matches {
+		switch {
+		case m.Item == nil || !l.memberVisible(ctx, f, m.Item):
+			lines = append(lines, m3uLine{path: m.Path, outcome: M3uUnmatched})
+		case m.Merged:
+			lines = append(lines, m3uLine{path: m.Path, outcome: M3uMerged, item: m.Item})
+		default:
+			lines = append(lines, m3uLine{path: m.Path, outcome: M3uMatched, item: m.Item})
+		}
+	}
+	return lines, nil
 }
 
 // resolveItemPIDs validates item pids against the caller's visibility
@@ -1807,6 +1930,18 @@ func playlistVisibility(v string) (model.PlaylistVisibility, error) {
 		return model.VisibilityShared, nil
 	}
 	return "", errInvalid("visibility must be private or shared")
+}
+
+// maxPlaylistName is the bound the contract declares on a playlist's
+// name, in characters.
+const maxPlaylistName = 200
+
+// checkPlaylistName refuses a trimmed name past that bound.
+func checkPlaylistName(name string) error {
+	if utf8.RuneCountInString(name) > maxPlaylistName {
+		return errInvalid(fmt.Sprintf("a playlist name may be at most %d characters", maxPlaylistName))
+	}
+	return nil
 }
 
 // emitPlaylistEvent appends playlist change events: always to the

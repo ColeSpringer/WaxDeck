@@ -380,13 +380,41 @@ String _typescript(List<_Group> groups) {
       "export const SEMANTICS_ATTRIBUTE = 'flt-semantics-identifier';",
     )
     ..writeln()
-    ..writeln('/// The attribute selector Flutter renders an identifier as.')
-    ..writeln("export const sem = (id: string) =>")
-    ..writeln('  `[\${SEMANTICS_ATTRIBUTE}="\${id}"]`;')
-    ..writeln()
-    ..writeln('/// The same selector, matching every identifier that starts')
-    ..writeln('/// with [prefix] - a `SemanticsIdPrefixes` member.')
-    ..writeln('export const semPrefix = (prefix: string) =>')
-    ..writeln('  `[\${SEMANTICS_ATTRIBUTE}^="\${prefix}"]`;');
+    ..write(_selectors());
   return buffer.toString();
 }
+
+/// What a CSS double-quoted string cannot hold as itself, and what stands
+/// in for each. The generated `cssString` applies exactly these, and
+/// app/app/test/semantics_selectors_test.dart reads them back from it.
+const _cssStringEscapes = {
+  '"': r'\"',
+  r'\': r'\\',
+  '\n': r'\a ',
+  '\r': r'\d ',
+  '\f': r'\c ',
+};
+
+/// The selector helpers, which escape what they put inside the quotes.
+String _selectors() =>
+    '''
+/// What a CSS double-quoted string cannot hold as itself, and what stands
+/// in for each: an id built from a server's data (a fold key holds a
+/// tag's text) can carry one.
+const CSS_STRING_ESCAPES: Readonly<Record<string, string>> = ${jsonEncode(_cssStringEscapes)};
+
+''' +
+    r'''
+/// [value] as the inside of a CSS double-quoted string.
+const cssString = (value: string) =>
+  Array.from(value, (c) => CSS_STRING_ESCAPES[c] ?? c).join('');
+
+/// The attribute selector Flutter renders an identifier as.
+export const sem = (id: string) =>
+  `[${SEMANTICS_ATTRIBUTE}="${cssString(id)}"]`;
+
+/// The same selector, matching every identifier that starts
+/// with [prefix] - a `SemanticsIdPrefixes` member.
+export const semPrefix = (prefix: string) =>
+  `[${SEMANTICS_ATTRIBUTE}^="${cssString(prefix)}"]`;
+''';

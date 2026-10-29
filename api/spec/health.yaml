@@ -289,7 +289,9 @@ paths:
       description: >
         Merges the losers into the survivor atomically. The losers'
         children, credits, and play history re-parent onto the
-        survivor; identifiers union. Administrators only.
+        survivor; identifiers union. Each loser's name folds into the
+        survivor (see `GET /library/folds`), and so do the names already
+        folded into a loser. Administrators only.
       tags: [health]
       requestBody:
         required: true
@@ -314,6 +316,84 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/folds:
+    get:
+      operationId: listEntityFolds
+      summary: List folded names
+      description: >
+        The names a merge folded into an entity, and those an entity
+        rename that locks left behind: a file still spelled a folded way
+        files under the entity the fold names instead of bringing back
+        the one the merge or the rename did away with. Every type's folds,
+        ordered by `entityType`, then by `key`, a page at a time.
+        Administrators only.
+      tags: [health]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum folds per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of folds.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityFoldPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/folds/unfold:
+    post:
+      operationId: unfoldEntities
+      summary: Unfold names
+      description: >
+        Forgets folds of one entity type by their keys, all of them or
+        none: a key no fold holds is `not-found`, the message naming it,
+        and nothing is forgotten. Nothing moves: a file spelled an
+        unfolded way is filed under an entity of its own name once it is
+        added, moved, replaced or retagged, and the files the fold already
+        filed under the entity stay with it until they change or move; a
+        rescan, `force` included, leaves an unchanged file where it is.
+        Audited as `entity.unfold`. Administrators only.
+      tags: [health]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnfoldRequest"
+      responses:
+        "204":
+          description: Unfolded.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -724,7 +804,7 @@ components:
     MergeResult:
       type: object
       description: The merge outcome.
-      required: [merged, childrenMoved]
+      required: [merged, childrenMoved, folds]
       properties:
         merged:
           type: integer
@@ -732,6 +812,108 @@ components:
         childrenMoved:
           type: integer
           description: Children re-parented onto the survivor.
+        folds:
+          type: array
+          description: >
+            The keys the merge now folds into the survivor, one per
+            loser, as `GET /library/folds` lists them.
+          items:
+            type: string
+
+    EntityFoldPage:
+      type: object
+      description: One page of folded names.
+      required: [folds]
+      properties:
+        folds:
+          type: array
+          description: Folds, ordered by `entityType`, then by `key`.
+          items:
+            $ref: "#/components/schemas/EntityFold"
+        nextCursor:
+          type: string
+          description: >
+            Cursor for the next page, which can come back empty; omitted
+            when no fold can follow.
+
+    EntityFold:
+      type: object
+      description: >
+        One name folded into an entity: a file whose tags still spell it
+        files under that entity.
+      required: [entityType, key, spelling, entityPid, entityName, createdAt]
+      properties:
+        entityType:
+          type: string
+          description: "`album`, `artist`, `genre`, `release-group`, or `series`."
+        key:
+          type: string
+          description: >
+            The folded name as the catalog matches it, the handle
+            `POST /library/folds/unfold` takes. Opaque: it can hold
+            separator characters.
+        spelling:
+          type: string
+          description: >
+            The key as a person reads it: the name lower-cased, with
+            accents and punctuation folded away; an album's or a release
+            group's as its artist and title joined by ` - `; one keyed by
+            a MusicBrainz id as `MusicBrainz` and the id. Two folds can
+            spell alike, and `facet`, or `folder` and `library`, then tell
+            them apart, or `createdAt` for album folds no file places.
+          example: the beatles - abbey road
+        facet:
+          type: string
+          description: >
+            A genre fold's facet, `genre` or `mood`: one name folds apart
+            in each.
+        folder:
+          type: string
+          description: >
+            An album fold's folder as a path within its library, read off
+            a file of the album that sits in it: copies of one release in
+            different folders fold apart. Absent for an album at the top
+            of its library, for one known by its own MusicBrainz id, and
+            for a fold no present file of its album places (its files have
+            left the folder, or two folders fold to its key alike);
+            `createdAt` still tells such folds apart when they were folded
+            at different times.
+          example: Joni/Blue Again
+        library:
+          type: string
+          description: >
+            The name of the library holding an album fold's folder, given
+            whenever the fold is placed: with `folder`, or alone for an
+            album at the top of its library.
+        entityPid:
+          type: string
+          description: >
+            The entity the name files under: prefixed (`ar-`, `al-`,
+            `rg-`, `sr-`) where the type has a prefix, and a genre's bare,
+            as the genre listing takes it.
+        entityName:
+          type: string
+          description: The entity's display name.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the name was folded.
+
+    UnfoldRequest:
+      type: object
+      description: Folds of one entity type to forget.
+      required: [entityType, keys]
+      properties:
+        entityType:
+          type: string
+          enum: [album, artist, release-group, genre, series]
+        keys:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Fold keys exactly as `GET /library/folds` lists them.
+          items:
+            type: string
 
     UpgradeGroups:
       type: object

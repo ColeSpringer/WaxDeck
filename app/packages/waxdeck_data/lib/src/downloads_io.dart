@@ -10,6 +10,7 @@ import 'database.dart';
 import 'downloads_port.dart';
 import 'media_url_life.dart';
 import 'mirror_pages.dart';
+import 'pending_frees.dart';
 import 'transfer_engine.dart';
 import 'transfer_engine_io.dart'
     if (dart.library.js_interop) 'transfer_engine_stub.dart';
@@ -71,6 +72,10 @@ class _Item {
   var fetching = false;
   var failures = 0;
   Timer? retry;
+
+  /// The server whose not-found left the item waiting. It is not asked
+  /// again: another server, or the next start, reads the item.
+  String? parkedOn;
 }
 
 /// The download manager: a queue of files handed to a [TransferEnginePort]
@@ -112,7 +117,9 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     this.clock = DateTime.now,
     this.maxRunning = 3,
     this.timer = Timer.new,
-  }) : engine = engine ?? BackgroundTransferEngine() {
+    bool Function(List<File> files)? foldsCase,
+  }) : engine = engine ?? BackgroundTransferEngine(),
+       foldsCase = foldsCase ?? _foldsCase {
     _events = this.engine.events.listen(
       (event) => _later(() => _onEvent(event)),
     );
@@ -139,6 +146,11 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   /// Schedules a retry; a seam for tests.
   final Timer Function(Duration, void Function()) timer;
+
+  /// Whether the media directory takes names that differ only in case for
+  /// one file, asked of the files listed in it; a seam for tests, whose
+  /// filesystem does not fold.
+  final bool Function(List<File> files) foldsCase;
 
   /// Resolved per call, never captured: the manager outlives a server
   /// switch on purpose (it owns every in-flight transfer), so the
@@ -216,19 +228,26 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   @override
   Future<void> download(String pid) async {
-    final info = await repository().getDownloadInfo(pid);
+    final server = repository();
+    final info = await server.getDownloadInfo(pid);
     final received = clock();
     if (info.files.isEmpty) return;
     unawaited(_ensureNotifications());
     await _serialize(() async {
-      await _adopt(pid, info, received);
+      await _adopt(pid, info, received, from: server.baseUrl);
       await _pump();
     });
   }
 
-  /// Takes an item's download-info: files already on disk catch their
-  /// records up, and the rest are recorded and queued.
-  Future<void> _adopt(String pid, DownloadInfo info, DateTime received) async {
+  /// Takes an item's download-info, which the server at [from] answered:
+  /// files already on disk catch their records up, and the rest are
+  /// recorded and queued. Either way the records name that server.
+  Future<void> _adopt(
+    String pid,
+    DownloadInfo info,
+    DateTime received, {
+    required String from,
+  }) async {
     final item = _items[pid] ?? _Item(pid);
     final parts = <_Part>[];
     for (var i = 0; i < info.files.length; i++) {
@@ -243,13 +262,16 @@ class BackgroundDownloadManager implements DownloadManagerPort {
         // Same audio on disk; a retag changes nothing about the bytes. The
         // record still catches up, which is how an item downloaded before
         // durations existed gains them without re-fetching.
-        if (existing.durationMs != f.durationMs || existing.etag != f.etag) {
+        if (existing.durationMs != f.durationMs ||
+            existing.etag != f.etag ||
+            existing.server != from) {
           await (db.update(
             db.downloadRecords,
           )..where((t) => t.pid.equals(pid) & t.fileIndex.equals(i))).write(
             DownloadRecordsCompanion(
               durationMs: Value(f.durationMs),
               etag: Value(f.etag),
+              server: Value(from),
             ),
           );
         }
@@ -260,6 +282,11 @@ class BackgroundDownloadManager implements DownloadManagerPort {
           .where((part) => part.index == i && part.fileName == fileName)
           .firstOrNull;
       if (known != null) {
+        if (existing != null && existing.server != from) {
+          await (db.update(db.downloadRecords)
+                ..where((t) => t.pid.equals(pid) & t.fileIndex.equals(i)))
+              .write(DownloadRecordsCompanion(server: Value(from)));
+        }
         parts.add(known);
         continue;
       }
@@ -278,6 +305,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
               state: item.paused ? 'paused' : 'pending',
               spanStartMs: Value(info.spanStartMs),
               spanEndMs: Value(info.spanEndMs),
+              server: Value(from),
             ),
           );
       parts.add(_Part(i, fileName));
@@ -301,6 +329,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       ..title =
           (await mirrorItemByPid(db, pid))?.title ?? info.files.first.fileName
       ..failures = 0
+      ..parkedOn = null
       ..retry?.cancel();
     _items[pid] = item;
     await _describe(item);
@@ -393,10 +422,15 @@ class BackgroundDownloadManager implements DownloadManagerPort {
   }
 
   /// Reads an item's download-info off the chain, unless a failed read is
-  /// waiting out its backoff. Answers whether a read is under way.
+  /// waiting out its backoff or a not-found from the server the app still
+  /// reaches parked the item. Answers whether a read is under way.
   bool _read(_Item item) {
     if (item.fetching) return true;
     if (item.retry?.isActive ?? false) return false;
+    if (item.parkedOn case final server?) {
+      if (server == repository().baseUrl) return false;
+      item.parkedOn = null;
+    }
     item.fetching = true;
     final done = _readInfo(item);
     _reads.add(done);
@@ -406,28 +440,72 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   /// An answer for an item dropped meanwhile is thrown away; a failure
   /// other than not-found is asked again later, less often each time.
+  ///
+  /// A not-found gives the item up when its rows name the server that
+  /// answered, or name none (written before rows named one) and that
+  /// server's removed-check names it gone for good. Any other not-found
+  /// says nothing of the item - another server's download, after a server
+  /// change - and giving up would delete the parts already landed, so the
+  /// item waits for another server or the next start ([_Item.parkedOn]).
   Future<void> _readInfo(_Item item) async {
+    final server = repository();
     DownloadInfo? info;
     Object? error;
     try {
-      info = await repository().getDownloadInfo(item.pid);
+      info = await server.getDownloadInfo(item.pid);
     } on Object catch (e) {
       error = e;
     }
+    final missing = error is WaxDeckApiException && error.code == 'not-found';
+    // Off the chain, like the read itself.
+    final gone =
+        missing &&
+        (await _serversOf(item.pid)).every((s) => s == null) &&
+        await _goneForGood(server, item.pid);
     final received = clock();
     await _serialize(() async {
       item.fetching = false;
       if (_items[item.pid] != item) return;
       if (info != null) {
-        await _adopt(item.pid, info, received);
+        await _adopt(item.pid, info, received, from: server.baseUrl);
         return _pump(first: item);
       }
-      if (error is WaxDeckApiException && error.code == 'not-found') {
-        return _giveUp(item.pid);
+      if (missing) {
+        final from = await _serversOf(item.pid);
+        if (from.contains(server.baseUrl) ||
+            (gone && from.every((s) => s == null))) {
+          return _giveUp(item.pid);
+        }
+        item.parkedOn = server.baseUrl;
+        return;
       }
       item.retry = timer(_backoff(++item.failures), () => _later(_pump));
     });
   }
+
+  /// The servers [pid]'s rows name as the one they came from; null for a
+  /// row written before rows named one.
+  Future<Set<String?>> _serversOf(String pid) async {
+    final t = db.downloadRecords;
+    final query = db.selectOnly(t, distinct: true)
+      ..addColumns([t.server])
+      ..where(t.pid.equals(pid));
+    return {for (final row in await query.get()) row.read(t.server)};
+  }
+
+  /// Whether [server]'s removed-check names [pid], which it does only for
+  /// an item it holds deleted for good. A failure names nothing.
+  static Future<bool> _goneForGood(WaxDeckRepository server, String pid) async {
+    try {
+      return (await server.syncCatalogRemoved([pid])).contains(pid);
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Says the app reaches another server now: an item a not-found left
+  /// waiting is read again, there.
+  void serverChanged() => _later(_pump);
 
   /// A gate opening is a new connection: reads waiting out a failure go
   /// at once.
@@ -513,7 +591,9 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   /// Picks up what a previous run left, before the engine replays it: the
   /// rows say what is unfinished and what the listener paused, the
-  /// plugin's records which transfers are still behind them.
+  /// plugin's records which transfers are still behind them. Then, once
+  /// per run, it sweeps the media directory of what no record names (see
+  /// [_sweepMedia]), before the plugin starts and while the chain is its.
   Future<void> recover() => _serialize(() async {
     try {
       var tracked = const <TrackedTransfer>[];
@@ -526,8 +606,13 @@ class BackgroundDownloadManager implements DownloadManagerPort {
         db.downloadRecords,
       )..orderBy([(t) => OrderingTerm.asc(t.fileIndex)])).get();
       final held = _items.keys.toSet();
+      // What a commit promised to free and a kill left unfinished is not
+      // resumed: its item is gone, and the free ends it. Left out of the
+      // items, its plugin transfer is no one's and goes below with the
+      // other strays, once a file it finished has been recorded.
+      final owed = (await PendingFrees(db).due()).toSet();
       for (final row in rows) {
-        if (held.contains(row.pid)) continue;
+        if (held.contains(row.pid) || owed.contains(row.pid)) continue;
         final item = _items.putIfAbsent(row.pid, () => _Item(row.pid));
         item.files++;
         if (row.state == 'complete') continue;
@@ -537,6 +622,17 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       _items.removeWhere((_, item) => item.parts.isEmpty);
       final stale = <String>[];
       for (final t in tracked) {
+        // An owed pid's transfer is no one's and goes with the strays, but
+        // a file the plugin finished while the app was down sits where the
+        // plugin puts it with no row naming it, and the free unlinks only
+        // what a row names: so the row learns the path first.
+        if (owed.contains(t.pid)) {
+          if (t.state == TransferState.complete) {
+            await _land(t.pid, t.fileName, t.path, announce: false);
+          }
+          stale.add(t.taskId);
+          continue;
+        }
         final item = _items[t.pid];
         final part = item?.parts
             .where((p) => p.fileName == t.fileName && p.taskId == null)
@@ -563,6 +659,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       }
       if (stale.isNotEmpty) await engine.cancel(stale);
       _items.removeWhere((_, item) => item.parts.isEmpty);
+      await _sweepMedia();
       for (final item in _items.values) {
         await _describe(item);
       }
@@ -580,6 +677,98 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       await _shut();
     }
   });
+
+  var _swept = false;
+
+  /// Deletes what a completion left in the media directory with no record
+  /// to name it: the file a transfer finished after its item was removed,
+  /// which nothing would ever name again. Once, at the start of a run, here
+  /// in the recovery: the plugin has not started, nothing can write to the
+  /// directory but a transfer that finished with its record still there,
+  /// and the manager's own chain, which holds every download, free and
+  /// removal back, is this one. Later in a run the directory is not quiet:
+  /// a finished file can be waiting for its completion to be landed.
+  ///
+  /// What stays, by what is live. A file a record names, by the path it
+  /// holds or by the destination it was started for (a transfer's row is
+  /// written before the transfer starts, so one that finishes has its name
+  /// there before its path): that is every file a running, paused or just
+  /// finished transfer will leave. The plugin's own temporary files, which
+  /// it keeps in the cache, support or temporary directory and falls back
+  /// to keeping beside the destination, hidden or not, when it cannot:
+  /// they are named for the plugin. Anything that is not a file, and
+  /// anything outside the directory, which is never walked into. Anything
+  /// that goes wrong leaves the rest to the next start.
+  Future<void> _sweepMedia() async {
+    if (_swept) return;
+    _swept = true;
+    try {
+      final path = await engine.mediaDirectory();
+      if (path == null) return;
+      final directory = Directory(path);
+      if (!directory.existsSync()) return;
+      final rows = await db.select(db.downloadRecords).get();
+      // Listed in full before anything is deleted, and without blocking
+      // the isolate on a directory of thousands.
+      final files = [
+        for (final entity in await directory.list(followLinks: false).toList())
+          if (entity is File) entity,
+      ];
+      // Where two spellings of a name are one file, a row names it in
+      // either: two items of one recording share a file whose spelling is
+      // the first transfer's.
+      final folds = foldsCase(files);
+      String key(String name) => folds ? name.toLowerCase() : name;
+      final named = {for (final r in rows) key(r.fileName)};
+      final placed = {
+        for (final r in rows)
+          if (r.localPath.isNotEmpty) key(p.normalize(r.localPath)),
+      };
+      for (final file in files) {
+        final name = p.basename(file.path);
+        if (named.contains(key(name)) ||
+            placed.contains(key(p.normalize(file.path))) ||
+            _isPluginTemp(name)) {
+          continue;
+        }
+        try {
+          await file.delete();
+        } on FileSystemException {
+          // Gone already, or held open: the next start tries again.
+        }
+      }
+    } on Object {
+      // Housekeeping: an unreadable directory is the next start's.
+    }
+  }
+
+  /// Whether the directory [files] were listed from takes names that
+  /// differ only in case for one file, read off the first whose name has a
+  /// letter: its name in the other case reaching the same file says so.
+  /// With nothing to read it off, or a read that fails, it is taken to: a
+  /// file kept for nothing costs less than one a row still names.
+  static bool _foldsCase(List<File> files) {
+    for (final file in files) {
+      final name = p.basename(file.path);
+      final upper = name.toUpperCase();
+      final other = upper == name ? name.toLowerCase() : upper;
+      if (other == name) continue;
+      try {
+        final twin = p.join(p.dirname(file.path), other);
+        return File(twin).existsSync() &&
+            FileSystemEntity.identicalSync(file.path, twin);
+      } on FileSystemException {
+        return true;
+      }
+    }
+    return true;
+  }
+
+  /// The name `background_downloader` gives its temporary files, with the
+  /// dot it adds when it keeps one beside the destination.
+  static bool _isPluginTemp(String name) =>
+      name.startsWith('.com.bbflight.background_downloader') ||
+      name.startsWith('com.bbflight.background_downloader');
 
   /// What the engine reports. A transfer this run holds no part for is
   /// placed by its own record: enough to land a completion, never to drop
@@ -658,8 +847,15 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     );
   }
 
-  /// Marks a file on disk, and says so once the item is whole.
-  Future<void> _land(String pid, String fileName, String? path) async {
+  /// Marks a file on disk, and says so once the item is whole, unless
+  /// [announce] is off: the record of an item that is going is kept without
+  /// telling a screen it has arrived.
+  Future<void> _land(
+    String pid,
+    String fileName,
+    String? path, {
+    bool announce = true,
+  }) async {
     await (db.update(
       db.downloadRecords,
     )..where((t) => t.pid.equals(pid) & t.fileName.equals(fileName))).write(
@@ -668,7 +864,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
         localPath: Value(path ?? ''),
       ),
     );
-    if (await isComplete(pid)) {
+    if (announce && await isComplete(pid)) {
       _emit(DownloadProgress(pid: pid, fraction: 1, complete: true));
     }
   }
@@ -749,6 +945,21 @@ class BackgroundDownloadManager implements DownloadManagerPort {
   @override
   Future<void> remove(String pid) => _serialize(() => _discard(pid));
 
+  /// Frees what a commit promised to free for [pid], and decides in this
+  /// manager's own chain whether it still is: a request queued ahead of it
+  /// has written its rows by the time it runs, and takes the pid out of the
+  /// promise (every byte kept). What it frees is the rows the promise lists
+  /// and no others, so a row that lands between the decision and the
+  /// delete is left alone. Answers null when nothing was owed, else the
+  /// covers the promise lists, which are the artwork store's to take.
+  @override
+  Future<List<OwedPin>?> freeOwed(String pid) => _serialize(() async {
+    final owed = await PendingFrees(db).owed(pid);
+    if (owed == null) return null;
+    await _discard(pid, only: owed.files);
+    return owed.pins;
+  });
+
   /// Holds the item until [resume]: its running file pauses and nothing
   /// more starts. The rows keep the pause across a restart.
   @override
@@ -804,9 +1015,10 @@ class BackgroundDownloadManager implements DownloadManagerPort {
           )..where((t) => t.pid.equals(pid) & t.state.equals('complete').not()))
           .write(DownloadRecordsCompanion(state: Value(state)));
 
-  /// Drops everything this device holds for [pid]: the transfers in
-  /// flight, the bytes on disk, and the records naming them.
-  Future<void> _discard(String pid) async {
+  /// Drops what this device holds for [pid]: the transfers in flight, the
+  /// bytes on disk, and the records naming them. Everything, or with [only]
+  /// the files listed and no others.
+  Future<void> _discard(String pid, {List<OwedFile>? only}) async {
     // Before anything is read or unlinked: a transfer still running would
     // write its file back after the unlink and report completion against
     // a row that no longer exists.
@@ -815,9 +1027,16 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       _forget(item);
       await _drop(item.parts);
     }
-    final rows = await (db.select(
+    final held = await (db.select(
       db.downloadRecords,
     )..where((t) => t.pid.equals(pid))).get();
+    final rows = only == null
+        ? held
+        : [
+            for (final r in held)
+              if (only.contains((index: r.fileIndex, essence: r.essenceHash)))
+                r,
+          ];
     // One at a time: the unlink asks whether another row holds the same
     // essence (CUE siblings share an image), which rows removed together
     // would each answer yes.
@@ -836,6 +1055,21 @@ class BackgroundDownloadManager implements DownloadManagerPort {
         }
       }
     }
-    await (db.delete(db.downloadRecords)..where((t) => t.pid.equals(pid))).go();
+    // The rows last, so a free cut short leaves rows the retry can find.
+    if (only == null) {
+      await (db.delete(
+        db.downloadRecords,
+      )..where((t) => t.pid.equals(pid))).go();
+      return;
+    }
+    for (final r in rows) {
+      await (db.delete(db.downloadRecords)..where(
+            (t) =>
+                t.pid.equals(pid) &
+                t.fileIndex.equals(r.fileIndex) &
+                t.essenceHash.equals(r.essenceHash),
+          ))
+          .go();
+    }
   }
 }

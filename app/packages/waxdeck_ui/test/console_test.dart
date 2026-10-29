@@ -334,6 +334,44 @@ void main() {
     });
   }
 
+  for (final (layout, width) in <(String, double)>[
+    ('table', 1000),
+    ('cards', 420),
+  ]) {
+    testWidgets('a row label says what its primary fields alone do not '
+        '($layout)', (tester) async {
+      await _pump(
+        tester,
+        WaxTable<_Row>(
+          columns: _columns(),
+          rows: _rows,
+          rowId: (r) => r.id,
+          rowSemanticsId: (id) => 'library-row-$id',
+          rowDetailSemanticsId: (id) => 'library-detail-$id',
+          rowLabel: (r) => '${r.name}, ${r.count} items',
+          onRowTap: (_) {},
+        ),
+        width: width,
+      );
+
+      expect(
+        tester.getSemantics(find.bySemanticsIdentifier('library-row-lb-2')),
+        isSemantics(label: 'audiobooks, 38 items', isButton: true),
+      );
+      if (layout == 'cards') {
+        expect(
+          tester.getSemantics(
+            find.bySemanticsIdentifier('library-detail-lb-2'),
+          ),
+          isSemantics(
+            label: 'Details for audiobooks, 38 items',
+            isButton: true,
+          ),
+        );
+      }
+    });
+  }
+
   testWidgets('rows sharing an id still draw', (tester) async {
     // A file with two diagnostics is two rows under one path.
     await _pump(

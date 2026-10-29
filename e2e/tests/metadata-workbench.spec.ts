@@ -1,9 +1,13 @@
 import { test, expect } from './fixtures';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { components } from './api-types';
 import { J, T, retryCatalogBusy } from './driver';
 import type { App } from './driver';
 import { clickThrough, clickToward } from './driver/gestures';
+import { SemanticsIds } from './semantics-ids';
+
+type EntityFold = components['schemas']['EntityFold'];
 
 // The release workbench journey: import an album of this run's own
 // through the upload pipeline, open its workbench, edit one member in
@@ -109,6 +113,20 @@ async function importOwnAlbum(
     )
     .toMatch(/^al-/);
   return { albumPid, trackPids };
+}
+
+/// Every folded name, all pages of it.
+async function allFolds(app: App): Promise<EntityFold[]> {
+  const folds: EntityFold[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await app.api.get('/library/folds', {
+      query: { cursor, limit: 500 },
+    });
+    folds.push(...page.folds);
+    cursor = page.nextCursor;
+  } while (cursor !== undefined);
+  return folds;
 }
 
 test('the workbench edits a member, bulk-writes the pair, and renames the release in place', async ({ app, page }) => {
@@ -253,4 +271,46 @@ test('the workbench edits a member, bulk-writes the pair, and renames the releas
       message: 'the workbench should stay on the renamed release',
     })
     .toContain(`/metadata/${albumPid}`);
+
+  // The rewrite locks what it writes, so the release's old name now
+  // folds into it, and so does its group's. Health lists the release's
+  // fold beside it and Unfold releases it. Found by this run's own pid
+  // and title, so no fold another worker leaves is touched.
+  const folds = await allFolds(app);
+  const fold = folds.find(
+    (f) => f.entityType === 'album' && f.entityPid === albumPid,
+  );
+  expect(fold, 'the locked rewrite should fold the old name').toBeTruthy();
+  await app.nav.enter('health');
+  const row = app.admin.control(SemanticsIds.foldRow('album', fold!.key));
+  await app.admin.intoView(row);
+  await expect(row).toContainText(fold!.spelling);
+  await expect(row).toContainText(renamed);
+  const confirm = app.admin.control(SemanticsIds.foldUnfoldConfirm);
+  await clickThrough(
+    app.admin.control(SemanticsIds.foldUnfold('album', fold!.key)),
+    confirm,
+  );
+  await clickToward(confirm, { gone: confirm });
+  await expect
+    .poll(
+      async () =>
+        (await allFolds(app)).some(
+          (f) => f.entityType === 'album' && f.key === fold!.key,
+        ),
+      { timeout: T.fetch, message: 'the unfold should release the name' },
+    )
+    .toBe(false);
+  await expect(row).toBeHidden();
+
+  // The group's fold goes too, so a later run's import of the same pair
+  // makes a release of its own rather than joining this one's group.
+  const groupFolds = folds.filter(
+    (f) => f.entityType === 'release-group' && f.entityName === renamed,
+  );
+  if (groupFolds.length > 0) {
+    await app.api.post('/library/folds/unfold', {
+      data: { entityType: 'release-group', keys: groupFolds.map((f) => f.key) },
+    });
+  }
 });

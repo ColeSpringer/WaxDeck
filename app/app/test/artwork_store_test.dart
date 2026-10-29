@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_precache.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
+import 'package:waxdeck_data/waxdeck_data.dart' show OwedPin;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 const _base = 'http://deck.local:4420';
@@ -651,6 +652,9 @@ class _AbsenceProbe extends ArtworkStore {
   Future<void> unpin(String pid) async {}
 
   @override
+  Future<void> unpinExact(String pid, List<OwedPin> owed) async {}
+
+  @override
   Future<void> evict(String artUrl) async {}
 
   @override
@@ -695,6 +699,9 @@ class _RecordingStore extends ArtworkStore {
 
   @override
   Future<void> unpin(String pid) async {}
+
+  @override
+  Future<void> unpinExact(String pid, List<OwedPin> owed) async {}
 
   @override
   Future<void> evict(String artUrl) async {}

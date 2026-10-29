@@ -55,6 +55,7 @@ import 'package:waxdeck_api_gen/src/model/cast_device_probe.dart';
 import 'package:waxdeck_api_gen/src/model/cast_device_verdict.dart';
 import 'package:waxdeck_api_gen/src/model/cast_preflight.dart';
 import 'package:waxdeck_api_gen/src/model/cast_preflight_base.dart';
+import 'package:waxdeck_api_gen/src/model/catalog_consistency.dart';
 import 'package:waxdeck_api_gen/src/model/catalog_sync_entry.dart';
 import 'package:waxdeck_api_gen/src/model/catalog_sync_page.dart';
 import 'package:waxdeck_api_gen/src/model/chapter_mark.dart';
@@ -113,6 +114,8 @@ import 'package:waxdeck_api_gen/src/model/entity_card_query.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curated_field.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curation.dart';
 import 'package:waxdeck_api_gen/src/model/entity_edit.dart';
+import 'package:waxdeck_api_gen/src/model/entity_fold.dart';
+import 'package:waxdeck_api_gen/src/model/entity_fold_page.dart';
 import 'package:waxdeck_api_gen/src/model/entity_play_state.dart';
 import 'package:waxdeck_api_gen/src/model/entity_rename.dart';
 import 'package:waxdeck_api_gen/src/model/entity_rename_result.dart';
@@ -191,6 +194,9 @@ import 'package:waxdeck_api_gen/src/model/lyrics_edit.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics_state.dart';
 import 'package:waxdeck_api_gen/src/model/m3u_import.dart';
 import 'package:waxdeck_api_gen/src/model/m3u_import_result.dart';
+import 'package:waxdeck_api_gen/src/model/m3u_preview.dart';
+import 'package:waxdeck_api_gen/src/model/m3u_preview_entry.dart';
+import 'package:waxdeck_api_gen/src/model/m3u_preview_request.dart';
 import 'package:waxdeck_api_gen/src/model/media_type.dart';
 import 'package:waxdeck_api_gen/src/model/media_type_listening.dart';
 import 'package:waxdeck_api_gen/src/model/merge_request.dart';
@@ -299,6 +305,8 @@ import 'package:waxdeck_api_gen/src/model/rejected_embedding.dart';
 import 'package:waxdeck_api_gen/src/model/rejected_listen.dart';
 import 'package:waxdeck_api_gen/src/model/release_status_edit.dart';
 import 'package:waxdeck_api_gen/src/model/rematch_result.dart';
+import 'package:waxdeck_api_gen/src/model/removed_item_list.dart';
+import 'package:waxdeck_api_gen/src/model/removed_items_query.dart';
 import 'package:waxdeck_api_gen/src/model/rescan_options.dart';
 import 'package:waxdeck_api_gen/src/model/resolve_rung_counts.dart';
 import 'package:waxdeck_api_gen/src/model/restore_plan.dart';
@@ -387,6 +395,7 @@ import 'package:waxdeck_api_gen/src/model/trash_empty_result.dart';
 import 'package:waxdeck_api_gen/src/model/trash_entry.dart';
 import 'package:waxdeck_api_gen/src/model/trash_list.dart';
 import 'package:waxdeck_api_gen/src/model/trash_purge_result.dart';
+import 'package:waxdeck_api_gen/src/model/unfold_request.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_group.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_groups.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_member.dart';
@@ -470,6 +479,7 @@ part 'serializers.g.dart';
   CastDeviceVerdict,
   CastPreflight,
   CastPreflightBase,
+  CatalogConsistency,
   CatalogSyncEntry,
   CatalogSyncPage,
   ChapterMark,
@@ -528,6 +538,8 @@ part 'serializers.g.dart';
   EntityCuratedField,
   EntityCuration,
   EntityEdit,
+  EntityFold,
+  EntityFoldPage,
   EntityPlayState,
   EntityRename,
   EntityRenameResult,
@@ -606,6 +618,9 @@ part 'serializers.g.dart';
   LyricsState,
   M3uImport,
   M3uImportResult,
+  M3uPreview,
+  M3uPreviewEntry,
+  M3uPreviewRequest,
   MediaType,
   MediaTypeListening,
   MergeRequest,
@@ -714,6 +729,8 @@ part 'serializers.g.dart';
   RejectedListen,
   ReleaseStatusEdit,
   RematchResult,
+  RemovedItemList,
+  RemovedItemsQuery,
   RescanOptions,
   ResolveRungCounts,
   RestorePlan,
@@ -802,6 +819,7 @@ part 'serializers.g.dart';
   TrashEntry,
   TrashList,
   TrashPurgeResult,
+  UnfoldRequest,
   UpgradeGroup,
   UpgradeGroups,
   UpgradeMember,
@@ -1249,6 +1267,14 @@ Serializers serializers = (_$serializers.toBuilder()
       ..addBuilderFactory(
         const FullType(BuiltMap, [FullType(String), FullType(int)]),
         () => MapBuilder<String, int>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(M3uPreviewEntry)]),
+        () => ListBuilder<M3uPreviewEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EntityFold)]),
+        () => ListBuilder<EntityFold>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(RadioSavedSong)]),

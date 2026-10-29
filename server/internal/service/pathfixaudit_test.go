@@ -128,7 +128,7 @@ func TestAPathFixRerunGoesOnFromItsLastChunk(t *testing.T) {
 		t.Helper()
 		at := time.Now().Add(time.Duration(n) * 2 * toolTaskLease).UnixNano()
 		row, err := svc.db.LeaseToolTask(ctx, at, toolTaskLease.Nanoseconds(), toolTaskMaxAttempts,
-			wdb.TaskTypes{Only: taskTypeHealthFix})
+			wdb.TaskTypes{Only: []string{taskTypeHealthFix}})
 		if err != nil {
 			t.Fatal(err)
 		}

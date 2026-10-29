@@ -373,7 +373,10 @@ them to every member in one batch. Because every member moves at once,
 the release is renamed in place: it keeps its entry, and its artwork,
 pins, curation and play history with it. A name another release
 already owns merges the two instead, and the workbench follows the pid
-the response reports either way. Editing only some of a release's
+the response reports either way. The rewrite locks what it writes, so
+the old name folds into the release (see Folded names under Duplicates
+and upgrades) and files still tagged that way stay with it.
+Editing only some of a release's
 members is the other case - those fork onto a new entry and the rest
 stay behind - which is what the bulk form over a checked subset does.
 The year lives on the tracks too but keys nothing: an album's year
@@ -482,8 +485,9 @@ library's dry run under way, and nothing moves until Apply is confirmed
 there. One misplaced file moves from its row in the rule's list with
 **Move into place**, which shows where the file is and where it goes
 before anything moves. Fixing named items, or tags that lag the
-catalog, runs a health-fix task that works item by item, on a worker of
-its own so a long fix holds up no other task; a path fix moves its
+catalog, runs a health-fix task that works item by item, on a worker it
+shares only with catalog repairs, so a long fix holds up nothing else; a
+path fix moves its
 items as organize runs, which the Organizer's history lists and can
 undo. Either is listed in Tasks while it runs. When it ends, the items
 it reached are re-checked (for a pass, every item failing the rule),
@@ -503,7 +507,25 @@ of a wall of red.
 The audit's duplicate findings (artists, albums, release groups,
 genres) surface with suggested survivors; merging re-parents
 everything onto the survivor, play history included, and survives
-rescans because the survivor keeps its identity. Quality upgrade
+rescans because the survivor keeps its identity. A merge also folds
+each loser's name into the survivor, so a file still tagged the old way
+files under the survivor when it is read again, and the merge's message
+says how many names it folded. **Folded names**, under the duplicates,
+lists them by type, each as the catalog matches it (lower-cased, without
+accents or punctuation) beside the entry it files under, which a row
+opens. A genre's says whether it is a genre or a mood, and an album's
+names its folder and the library holding it, read off a file of the
+album that sits there, since copies of one release in different
+folders fold apart; one whose files have left that folder, or whose
+folder reads like another's once folded, says when it was folded
+instead. A rename that locks folds the name it leaves too,
+and so does a series merged from a book.
+**Unfold** releases a name, for a merge that joined two things that
+were different after all. Nothing moves then: a file spelled that way
+is filed under its own name once it is added, moved, replaced or
+retagged, and the files already filed under the entry stay with it
+until they change or move; a rescan, even one with Re-read unchanged
+files, leaves them where they are. Quality upgrade
 groups list the same recording in different encodings: first the
 encodings one item holds, which need no analysis, then items the
 fingerprint index ties together once the library is analyzed. A group
@@ -522,9 +544,13 @@ catalog's built-in `waxbin-native` profile files music by album artist,
 album and numbered track, audiobooks by author, series and title, and
 podcasts by show. **New profile** and **Edit profile** open an editor
 for the three templates and tag writing, showing as you type where the
-profile would put a sample track, book and episode; an empty template
-keeps the built-in's, and saving a profile under the built-in's name
-overrides it. Each managed library is laid out by a profile of its own,
+profile would put a sample track, book, episode and compilation track;
+an empty template keeps the built-in's, and saving a profile under the
+built-in's name overrides it. Its compilation folder says where
+compilations go: Various Artists unless it is set, each one's own
+tagged album artist when it is set empty, and otherwise the folder
+named; tag writing gives them that album artist.
+Each managed library is laid out by a profile of its own,
 chosen on the Libraries screen, and a pass either uses each library's
 own or one profile for all of them. A profile a library is laid out by
 cannot be deleted until the library moves to another. Organizing works

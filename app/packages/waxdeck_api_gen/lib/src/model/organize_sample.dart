@@ -8,12 +8,13 @@ import 'package:built_value/serializer.dart';
 
 part 'organize_sample.g.dart';
 
-/// Where a profile lays out a fixed sample track, book and episode; an empty path is a template that renders none for that sample. 
+/// Where a profile lays out a fixed sample track, book, episode and compilation track; an empty path is a template that renders none for that sample. 
 ///
 /// Properties:
 /// * [music] 
 /// * [audiobook] 
 /// * [podcast] 
+/// * [compilation] - A track of a compilation tagged with an album artist of its own, so each compilation folder setting shows a path of its own. 
 @BuiltValue()
 abstract class OrganizeSample implements Built<OrganizeSample, OrganizeSampleBuilder> {
   @BuiltValueField(wireName: r'music')
@@ -24,6 +25,10 @@ abstract class OrganizeSample implements Built<OrganizeSample, OrganizeSampleBui
 
   @BuiltValueField(wireName: r'podcast')
   String get podcast;
+
+  /// A track of a compilation tagged with an album artist of its own, so each compilation folder setting shows a path of its own. 
+  @BuiltValueField(wireName: r'compilation')
+  String get compilation;
 
   OrganizeSample._();
 
@@ -61,6 +66,11 @@ class _$OrganizeSampleSerializer implements PrimitiveSerializer<OrganizeSample> 
     yield r'podcast';
     yield serializers.serialize(
       object.podcast,
+      specifiedType: const FullType(String),
+    );
+    yield r'compilation';
+    yield serializers.serialize(
+      object.compilation,
       specifiedType: const FullType(String),
     );
   }
@@ -106,6 +116,13 @@ class _$OrganizeSampleSerializer implements PrimitiveSerializer<OrganizeSample> 
             specifiedType: const FullType(String),
           ) as String;
           result.podcast = valueDes;
+          break;
+        case r'compilation':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.compilation = valueDes;
           break;
         default:
           unhandled.add(key);

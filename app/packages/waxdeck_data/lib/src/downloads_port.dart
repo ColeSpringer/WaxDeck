@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'pending_frees.dart';
+
 /// One downloaded backing file of an item: a track's only file, or one
 /// part of a multi-file audiobook.
 class LocalPart {
@@ -135,6 +137,19 @@ abstract interface class DownloadManagerPort {
   /// short of a sign-out will reclaim, so remove them together
   /// (`ArtworkStore.unpin`).
   Future<void> remove(String pid);
+
+  /// Frees what a commit promised to free for [pid] (see [PendingFrees]),
+  /// and only that. Whether the promise still holds is decided here, in
+  /// the manager's own chain and against what the device holds when this
+  /// runs, so a request queued ahead of it has written its rows by then
+  /// and takes the pid out of the promise: every byte kept. What is freed
+  /// is the files the promise lists and no others.
+  ///
+  /// Answers null when nothing was owed, else the pinned covers the
+  /// promise lists, which are the artwork store's to take
+  /// (`ArtworkStore.unpinExact`) for the reason [remove] leaves them.
+  Future<List<OwedPin>?> freeOwed(String pid);
+
   Future<LocalPlayback?> localFor(String pid);
   Future<bool> isComplete(String pid);
   Stream<DownloadProgress> get progress;

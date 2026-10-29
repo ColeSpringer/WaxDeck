@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/playlists/playlist_actions.dart';
 import 'package:waxdeck/src/playlists/playlist_import.dart';
@@ -36,9 +37,9 @@ Future<void> _openImport(
 ) async {
   await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistImport));
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.bySemanticsIdentifier(SemanticsIds.playlistImportSource(source.wire)),
-  );
+  // By its label: the centre of a row's identifier node is not always on
+  // the widget that takes the tap.
+  await tester.tap(find.text(source.labelOf(AppLocalizationsEn())));
   await tester.pumpAndSettle();
 }
 
@@ -136,8 +137,10 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
       '#EXTM3U\n/music/pony.flac\n',
     );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistM3uCheck));
+    await tester.pumpAndSettle();
     await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+      find.bySemanticsIdentifier(SemanticsIds.playlistM3uImport),
     );
     await tester.pumpAndSettle();
 
@@ -157,8 +160,12 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
       '#EXTM3U\n/music/pony.flac\n',
     );
+    // The check needs no name; the import it leads to does.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistM3uCheck));
+    await tester.pumpAndSettle();
+    expect(repo.previewedM3uContents, hasLength(1));
     await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+      find.bySemanticsIdentifier(SemanticsIds.playlistM3uImport),
     );
     await tester.pumpAndSettle();
 
@@ -169,6 +176,10 @@ void main() {
       findsOneWidget,
     );
     expect(repo.importedM3uContents, isEmpty);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistM3uPreview),
+      findsOneWidget,
+    );
   });
 
   testWidgets('export portable copies the refs JSON', (tester) async {

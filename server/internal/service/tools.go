@@ -66,8 +66,11 @@ const (
 
 // toolRunTimeoutFor is one attempt's bound for a task type.
 func toolRunTimeoutFor(typ string) time.Duration {
-	if typ == taskTypeHealthFix {
+	switch typ {
+	case taskTypeHealthFix:
 		return healthFixTimeout
+	case taskTypeCatalogRepair:
+		return catalogRepairTimeout
 	}
 	return toolRunTimeout
 }
@@ -704,18 +707,21 @@ func (l *Library) settleClearedTask(ctx context.Context, uc *UserCtx, t wdb.Tool
 	return toolRefusal(refusalOutputsHidden, why, "folder", folder, "cause", out.cause)
 }
 
+// longToolTasks are the task types one run of which can take hours, a
+// health fix and a catalog repair: they get a worker of their own, which
+// runs them one at a time, since an acquisition or a sync queued behind
+// one would wait as long.
+var longToolTasks = []string{taskTypeHealthFix, taskTypeCatalogRepair}
+
 // DrainToolTasks retires exhausted tasks and works one leased task other
-// than a health fix; false means the queue is idle so the caller can
-// sleep.
+// than a long one; false means the queue is idle so the caller can sleep.
 func (l *Library) DrainToolTasks(ctx context.Context) bool {
-	return l.drainToolTasks(ctx, wdb.TaskTypes{Except: taskTypeHealthFix})
+	return l.drainToolTasks(ctx, wdb.TaskTypes{Except: longToolTasks})
 }
 
-// DrainHealthFixes is DrainToolTasks for health fixes, which get a
-// worker of their own: one can run for hours, and an acquisition or a
-// sync queued behind it would wait as long.
-func (l *Library) DrainHealthFixes(ctx context.Context) bool {
-	return l.drainToolTasks(ctx, wdb.TaskTypes{Only: taskTypeHealthFix})
+// DrainLongToolTasks is DrainToolTasks for the long tasks.
+func (l *Library) DrainLongToolTasks(ctx context.Context) bool {
+	return l.drainToolTasks(ctx, wdb.TaskTypes{Only: longToolTasks})
 }
 
 func (l *Library) drainToolTasks(ctx context.Context, types wdb.TaskTypes) bool {
@@ -927,6 +933,8 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 		err = l.runGenreNormalize(ctx, t)
 	case t.Type == taskTypeHealthFix:
 		err = l.runHealthFixTask(ctx, t, p)
+	case t.Type == taskTypeCatalogRepair:
+		err = l.runCatalogRepair(ctx, t)
 	case strings.HasPrefix(t.Type, taskTypeMigratePrefix):
 		err = l.runMigrationTask(ctx, t)
 	default:
@@ -1858,8 +1866,11 @@ func (l *Library) toolTaskFor(uc *UserCtx, t wdb.ToolTask) ToolTaskDTO {
 // toolTaskEnded is what a task's end tells beyond its own marker, once
 // the end is recorded.
 func (l *Library) toolTaskEnded(ctx context.Context, t *wdb.ToolTask) {
-	if t.Type == taskTypeHealthFix {
+	switch t.Type {
+	case taskTypeHealthFix:
 		l.healthFixTaskEnded(ctx, t)
+	case taskTypeCatalogRepair:
+		l.catalogRepairEnded(ctx, t)
 	}
 }
 

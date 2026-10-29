@@ -10,19 +10,15 @@ class _$Item extends Item {
   @override
   final String? container;
   @override
-  final String? codec;
-  @override
   final DateTime? addedAt;
   @override
   final ArtSource? artSource;
-  @override
-  final int? copies;
   @override
   final String? mbid;
   @override
   final int? year;
   @override
-  final BuiltList<String>? genres;
+  final int? discTotal;
   @override
   final int? bitrate;
   @override
@@ -30,7 +26,17 @@ class _$Item extends Item {
   @override
   final int? sampleRate;
   @override
+  final String? codec;
+  @override
+  final int? copies;
+  @override
+  final BuiltList<String>? genres;
+  @override
   final int? bpm;
+  @override
+  final int? partTotal;
+  @override
+  final int? trackTotal;
   @override
   final String pid;
   @override
@@ -50,6 +56,12 @@ class _$Item extends Item {
   @override
   final int? discNumber;
   @override
+  final String? sortKey;
+  @override
+  final String? artistSort;
+  @override
+  final String? artistSortKey;
+  @override
   final int durationMs;
   @override
   final String? artUrl;
@@ -59,17 +71,20 @@ class _$Item extends Item {
 
   _$Item._({
     this.container,
-    this.codec,
     this.addedAt,
     this.artSource,
-    this.copies,
     this.mbid,
     this.year,
-    this.genres,
+    this.discTotal,
     this.bitrate,
     this.isrc,
     this.sampleRate,
+    this.codec,
+    this.copies,
+    this.genres,
     this.bpm,
+    this.partTotal,
+    this.trackTotal,
     required this.pid,
     required this.mediaType,
     required this.title,
@@ -79,6 +94,9 @@ class _$Item extends Item {
     this.albumPid,
     this.trackNumber,
     this.discNumber,
+    this.sortKey,
+    this.artistSort,
+    this.artistSortKey,
     required this.durationMs,
     this.artUrl,
   }) : super._();
@@ -94,17 +112,20 @@ class _$Item extends Item {
     if (identical(other, this)) return true;
     return other is Item &&
         container == other.container &&
-        codec == other.codec &&
         addedAt == other.addedAt &&
         artSource == other.artSource &&
-        copies == other.copies &&
         mbid == other.mbid &&
         year == other.year &&
-        genres == other.genres &&
+        discTotal == other.discTotal &&
         bitrate == other.bitrate &&
         isrc == other.isrc &&
         sampleRate == other.sampleRate &&
+        codec == other.codec &&
+        copies == other.copies &&
+        genres == other.genres &&
         bpm == other.bpm &&
+        partTotal == other.partTotal &&
+        trackTotal == other.trackTotal &&
         pid == other.pid &&
         mediaType == other.mediaType &&
         title == other.title &&
@@ -114,6 +135,9 @@ class _$Item extends Item {
         albumPid == other.albumPid &&
         trackNumber == other.trackNumber &&
         discNumber == other.discNumber &&
+        sortKey == other.sortKey &&
+        artistSort == other.artistSort &&
+        artistSortKey == other.artistSortKey &&
         durationMs == other.durationMs &&
         artUrl == other.artUrl;
   }
@@ -122,17 +146,20 @@ class _$Item extends Item {
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, container.hashCode);
-    _$hash = $jc(_$hash, codec.hashCode);
     _$hash = $jc(_$hash, addedAt.hashCode);
     _$hash = $jc(_$hash, artSource.hashCode);
-    _$hash = $jc(_$hash, copies.hashCode);
     _$hash = $jc(_$hash, mbid.hashCode);
     _$hash = $jc(_$hash, year.hashCode);
-    _$hash = $jc(_$hash, genres.hashCode);
+    _$hash = $jc(_$hash, discTotal.hashCode);
     _$hash = $jc(_$hash, bitrate.hashCode);
     _$hash = $jc(_$hash, isrc.hashCode);
     _$hash = $jc(_$hash, sampleRate.hashCode);
+    _$hash = $jc(_$hash, codec.hashCode);
+    _$hash = $jc(_$hash, copies.hashCode);
+    _$hash = $jc(_$hash, genres.hashCode);
     _$hash = $jc(_$hash, bpm.hashCode);
+    _$hash = $jc(_$hash, partTotal.hashCode);
+    _$hash = $jc(_$hash, trackTotal.hashCode);
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, mediaType.hashCode);
     _$hash = $jc(_$hash, title.hashCode);
@@ -142,6 +169,9 @@ class _$Item extends Item {
     _$hash = $jc(_$hash, albumPid.hashCode);
     _$hash = $jc(_$hash, trackNumber.hashCode);
     _$hash = $jc(_$hash, discNumber.hashCode);
+    _$hash = $jc(_$hash, sortKey.hashCode);
+    _$hash = $jc(_$hash, artistSort.hashCode);
+    _$hash = $jc(_$hash, artistSortKey.hashCode);
     _$hash = $jc(_$hash, durationMs.hashCode);
     _$hash = $jc(_$hash, artUrl.hashCode);
     _$hash = $jf(_$hash);
@@ -152,17 +182,20 @@ class _$Item extends Item {
   String toString() {
     return (newBuiltValueToStringHelper(r'Item')
           ..add('container', container)
-          ..add('codec', codec)
           ..add('addedAt', addedAt)
           ..add('artSource', artSource)
-          ..add('copies', copies)
           ..add('mbid', mbid)
           ..add('year', year)
-          ..add('genres', genres)
+          ..add('discTotal', discTotal)
           ..add('bitrate', bitrate)
           ..add('isrc', isrc)
           ..add('sampleRate', sampleRate)
+          ..add('codec', codec)
+          ..add('copies', copies)
+          ..add('genres', genres)
           ..add('bpm', bpm)
+          ..add('partTotal', partTotal)
+          ..add('trackTotal', trackTotal)
           ..add('pid', pid)
           ..add('mediaType', mediaType)
           ..add('title', title)
@@ -172,6 +205,9 @@ class _$Item extends Item {
           ..add('albumPid', albumPid)
           ..add('trackNumber', trackNumber)
           ..add('discNumber', discNumber)
+          ..add('sortKey', sortKey)
+          ..add('artistSort', artistSort)
+          ..add('artistSortKey', artistSortKey)
           ..add('durationMs', durationMs)
           ..add('artUrl', artUrl))
         .toString();
@@ -185,10 +221,6 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   String? get container => _$this._container;
   set container(covariant String? container) => _$this._container = container;
 
-  String? _codec;
-  String? get codec => _$this._codec;
-  set codec(covariant String? codec) => _$this._codec = codec;
-
   DateTime? _addedAt;
   DateTime? get addedAt => _$this._addedAt;
   set addedAt(covariant DateTime? addedAt) => _$this._addedAt = addedAt;
@@ -198,10 +230,6 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   set artSource(covariant ArtSourceBuilder? artSource) =>
       _$this._artSource = artSource;
 
-  int? _copies;
-  int? get copies => _$this._copies;
-  set copies(covariant int? copies) => _$this._copies = copies;
-
   String? _mbid;
   String? get mbid => _$this._mbid;
   set mbid(covariant String? mbid) => _$this._mbid = mbid;
@@ -210,9 +238,9 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   int? get year => _$this._year;
   set year(covariant int? year) => _$this._year = year;
 
-  ListBuilder<String>? _genres;
-  ListBuilder<String> get genres => _$this._genres ??= ListBuilder<String>();
-  set genres(covariant ListBuilder<String>? genres) => _$this._genres = genres;
+  int? _discTotal;
+  int? get discTotal => _$this._discTotal;
+  set discTotal(covariant int? discTotal) => _$this._discTotal = discTotal;
 
   int? _bitrate;
   int? get bitrate => _$this._bitrate;
@@ -226,9 +254,29 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   int? get sampleRate => _$this._sampleRate;
   set sampleRate(covariant int? sampleRate) => _$this._sampleRate = sampleRate;
 
+  String? _codec;
+  String? get codec => _$this._codec;
+  set codec(covariant String? codec) => _$this._codec = codec;
+
+  int? _copies;
+  int? get copies => _$this._copies;
+  set copies(covariant int? copies) => _$this._copies = copies;
+
+  ListBuilder<String>? _genres;
+  ListBuilder<String> get genres => _$this._genres ??= ListBuilder<String>();
+  set genres(covariant ListBuilder<String>? genres) => _$this._genres = genres;
+
   int? _bpm;
   int? get bpm => _$this._bpm;
   set bpm(covariant int? bpm) => _$this._bpm = bpm;
+
+  int? _partTotal;
+  int? get partTotal => _$this._partTotal;
+  set partTotal(covariant int? partTotal) => _$this._partTotal = partTotal;
+
+  int? _trackTotal;
+  int? get trackTotal => _$this._trackTotal;
+  set trackTotal(covariant int? trackTotal) => _$this._trackTotal = trackTotal;
 
   String? _pid;
   String? get pid => _$this._pid;
@@ -268,6 +316,20 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   int? get discNumber => _$this._discNumber;
   set discNumber(covariant int? discNumber) => _$this._discNumber = discNumber;
 
+  String? _sortKey;
+  String? get sortKey => _$this._sortKey;
+  set sortKey(covariant String? sortKey) => _$this._sortKey = sortKey;
+
+  String? _artistSort;
+  String? get artistSort => _$this._artistSort;
+  set artistSort(covariant String? artistSort) =>
+      _$this._artistSort = artistSort;
+
+  String? _artistSortKey;
+  String? get artistSortKey => _$this._artistSortKey;
+  set artistSortKey(covariant String? artistSortKey) =>
+      _$this._artistSortKey = artistSortKey;
+
   int? _durationMs;
   int? get durationMs => _$this._durationMs;
   set durationMs(covariant int? durationMs) => _$this._durationMs = durationMs;
@@ -284,17 +346,20 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
     final $v = _$v;
     if ($v != null) {
       _container = $v.container;
-      _codec = $v.codec;
       _addedAt = $v.addedAt;
       _artSource = $v.artSource?.toBuilder();
-      _copies = $v.copies;
       _mbid = $v.mbid;
       _year = $v.year;
-      _genres = $v.genres?.toBuilder();
+      _discTotal = $v.discTotal;
       _bitrate = $v.bitrate;
       _isrc = $v.isrc;
       _sampleRate = $v.sampleRate;
+      _codec = $v.codec;
+      _copies = $v.copies;
+      _genres = $v.genres?.toBuilder();
       _bpm = $v.bpm;
+      _partTotal = $v.partTotal;
+      _trackTotal = $v.trackTotal;
       _pid = $v.pid;
       _mediaType = $v.mediaType;
       _title = $v.title;
@@ -304,6 +369,9 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
       _albumPid = $v.albumPid;
       _trackNumber = $v.trackNumber;
       _discNumber = $v.discNumber;
+      _sortKey = $v.sortKey;
+      _artistSort = $v.artistSort;
+      _artistSortKey = $v.artistSortKey;
       _durationMs = $v.durationMs;
       _artUrl = $v.artUrl;
       _$v = null;
@@ -331,17 +399,20 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
           _$v ??
           _$Item._(
             container: container,
-            codec: codec,
             addedAt: addedAt,
             artSource: _artSource?.build(),
-            copies: copies,
             mbid: mbid,
             year: year,
-            genres: _genres?.build(),
+            discTotal: discTotal,
             bitrate: bitrate,
             isrc: isrc,
             sampleRate: sampleRate,
+            codec: codec,
+            copies: copies,
+            genres: _genres?.build(),
             bpm: bpm,
+            partTotal: partTotal,
+            trackTotal: trackTotal,
             pid: BuiltValueNullFieldError.checkNotNull(pid, r'Item', 'pid'),
             mediaType: BuiltValueNullFieldError.checkNotNull(
               mediaType,
@@ -359,6 +430,9 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
             albumPid: albumPid,
             trackNumber: trackNumber,
             discNumber: discNumber,
+            sortKey: sortKey,
+            artistSort: artistSort,
+            artistSortKey: artistSortKey,
             durationMs: BuiltValueNullFieldError.checkNotNull(
               durationMs,
               r'Item',

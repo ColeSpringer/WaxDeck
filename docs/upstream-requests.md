@@ -64,11 +64,41 @@ note.
   `ResolveRefWith` settles a tie by taking the present item with the
   lowest pid, blind to the caller, so when that pick is in a library the
   importing account cannot see and a copy sits in one it can, the entry
-  reads as missing. Wanted: a `ResolveOptions.Accept func(*model.ItemView)
-  bool` applied to each rung's candidates before the tie is settled.
-  Shipped workaround: WaxDeck resolves catalog-wide and turns every
-  match the caller cannot see into a miss, which never leaks but can
-  miss such a copy.
+  reads as missing. `ResolveM3U8` has the same root: a relative line's
+  candidates are the whole catalog's and its label pick names nothing
+  when several remain, so a line whose suffix also names a file in a
+  library the caller cannot see reads as unmatched even when only one
+  candidate is visible to the caller. Three imports meet it: the
+  playlist import, the migration import, which writes onto the account
+  it names, and the M3U import. Wanted: a
+  `ResolveOptions.Accept func(*model.ItemView) bool` applied to each
+  rung's candidates before the tie is settled, and the same filter on
+  `ResolveM3U8` before the label pick. Shipped workarounds: the playlist
+  and M3U imports resolve catalog-wide and turn every match the caller
+  cannot see into a miss, which never leaks an item but can miss such a
+  copy; the migration import takes the pick and leaves the check to the
+  target account's own writes, so a play of a pick that account may not
+  hold is refused and counted `refused` (a star, rating or position on
+  it is skipped), even where a copy it may hold exists.
+- **A tie does not say which items tied.** `RefMatch` carries the pick
+  and how many tied, not the copies, so a host cannot tell whether every
+  copy belongs to the album or artist it would star through the pick.
+  Wanted: the tied items on `RefMatch`. Shipped workaround: the migration
+  import lists a tie's copies by the pick's recording id and counts them
+  against the tie; a tie it cannot list that way (a descriptive one with
+  no id) decides a group star only when no member of the group matches
+  for sure.
+- **Resolving an M3U document costs a catalog scan per relative line.**
+  `ResolveM3U8` looks every path line up anew, so a line given twice is
+  resolved twice, and a relative line that misses the exact-path index
+  is matched by `display_path LIKE '%/<line>'`, which no index serves:
+  about 13 ms a line on a 20,000-file catalog, growing with its files.
+  Wanted: one lookup per distinct cleaned path within a document, and a
+  suffix match an index can serve (a reversed-path or file-name column
+  to seed it). Shipped workaround: WaxDeck refuses a document naming
+  more than 2,000 paths, which keeps one under half a minute there; and
+  a preview and the import after it share one resolution, held a few
+  minutes until the catalog's content changes.
 - **Exports write every member of a playlist.** `ExportM3U8` and
   `ExportPlaylistRefs` re-read the whole list themselves, so a host that
   may show a reader only some members cannot use them. Wanted: both
@@ -121,6 +151,18 @@ note.
   gone from their paths. Until then a book merge or split rerun after
   such a crash sees the part as still the book's, fails its trash and
   puts back what else went; the stranded part is moved back by hand.
+- **A delete plan does not say which folders the run will remove.**
+  `trash.Plan.Sidecars` lists the files named for each deleted file,
+  but when a delete leaves a folder in a managed library holding only
+  junk and companions (a folder cover, notes, rip logs), the run prunes
+  it and the companions go with it, and nothing before the run says so.
+  A trash delete keeps them in the trash's folder store, but a
+  permanent delete removes them for good; the report counts `DirsPruned`
+  after. Wanted: the plan listing the folders it would empty and the
+  companions that follow them, replayed the way `Sidecars` replays the
+  run. Shipped workaround: the delete preview names each file's sidecars
+  and the user doc says a folder's cover and notes go unlisted; the
+  applied result reports how many folders went.
 - **An import's report does not say which files joined an existing
   item.** `inbox.FileOutcome` names the item a file backs and whether
   it was attached as a copy, but not whether the item already existed:
@@ -229,6 +271,38 @@ note.
   (<reason>): <names>; <advice>"). Wanted: a `Reason` field with exported
   constants. Shipped workaround: WaxDeck parses the sentence, and a test
   runs the real audit so a reworded sentence fails there.
+- **A fold keeps no spelling a person can read.** `EntityFolds` answers
+  each fold's `Key`: an artist's bare match key (lower-cased, accents and
+  punctuation folded away), and for the other types the match key behind
+  a prefix (a genre's is its facet), a release group's and an album's
+  parts joined by `\x1f`, an album's ending in the match key of its
+  folder path from the filesystem's root. The name as spelled is not on
+  the fold: a merge deletes the loser and a locked rename replaces the
+  name, though for an artist WaxBin keeps the old name as an
+  `artist_alias` row of the entity the fold names, which no call returns.
+  Wanted: the folded name as spelled on `EntityFold` (an artist's from
+  `artist_alias`), and an album's folder as a path within its library.
+  Shipped workaround: WaxDeck derives a spelling from the key's shape
+  (the prefix dropped, artist and title joined, a MusicBrainz-keyed fold
+  named by its id), lists a genre fold's facet, and places an album
+  fold's folder by a present file of the album that sits in it, leaving
+  unplaced a folder no such file sits in any longer or one two places
+  fold to alike, a test pinning each key form.
+- **Folds are read a whole type at a time.** `EntityFolds(ctx, et)`
+  answers every fold of a type, so a host paging the folds re-reads
+  every fold of a type for each page of it. Wanted: a bounded
+  `EntityFolds(ctx, et, afterKey, limit)` in key order. Shipped
+  workaround: WaxDeck pages over the whole per-type reads, reading a type
+  only while a page has room.
+- **An unfold leaves the files the fold kept where they are.** After
+  `UnfoldEntity` a file spelled the unfolded way resolves under its own
+  name only once it is added, moved, replaced or retagged: a rescan,
+  forced or not, resolves no names again for a file whose bytes are
+  unchanged, so the files a merge filed under the survivor stay there.
+  Wanted: an unfold that resolves the names of the files the fold kept
+  again, or a rescan option that does so for unchanged files. Shipped
+  workaround: WaxDeck's unfold copy says the files already filed stay
+  until they change or move.
 - **A tag write owed does not say who set the value.** `FileDiagnostics`
   lists `tag_write_owed` rows with their `TagKey` alone, so telling a
   value a person or a source set from one a clean-up pass (a normalize)
@@ -348,6 +422,18 @@ note.
   `created` is its first track's file's `FirstSeen`, and `type=newest`
   folds the recently-added track list into albums (a music folder's own,
   for a folder).
+- **Titles collate by their text even when a sort spelling is stated.**
+  Artist, composer and author keys come from ARTISTSORT, COMPOSERSORT and
+  AUTHORSORT (`artistSortKey` and friends), but TITLESORT and ALBUMSORT
+  are read only to fill an empty title or album, so `playable_item` and
+  `album` sort keys always fold the title itself. A title whose order its
+  text cannot give, a kanji title with its reading in TITLESORT or a
+  deliberate custom order, sorts by code point. Wanted: both keys derived
+  from the stated spelling when there is one, as the artist key is, and
+  the spellings kept on `ItemView`. Shipped workaround: WaxDeck orders by
+  the catalog's own keys (`sortKey`, `artistSortKey` on every item), so
+  every list agrees with the server; a TITLESORT edit is kept as a custom
+  tag and orders nothing.
 - **The podcast library exists only after the first download.**
   `podcast.Service` creates it lazily (`EnsurePodcastLibrary`, reached
   from `Download` and `ImportEpisodeFile` only), and a host cannot
@@ -472,6 +558,17 @@ note.
   and no genre, and `sameArtistTracks`, one artist and one genre for the
   test about sharing them, carries the warning; drop the warning when
   this lands.
+- **`RefreshRollups` says nothing of what it rewrote.** The repair verb
+  recomputes every rollup, book length and ISBN key, album and release
+  year and playlist position and answers only an error, and the release
+  years it puts back are the key the newest list pages by, written with
+  no delta. A host cannot tell whether a run moved any list's order, so
+  it cannot tell clients holding page cursors to start again only when
+  one did. Wanted: what it rewrote, counted per kind, or item deltas for
+  the release years it moves, as `RefreshSortKeys` emits for the keys it
+  rewrites. Shipped workaround: when a catalog repair whose rollups step
+  ran ends, WaxDeck mints a new catalog sync generation, so every client
+  re-mirrors the catalog once, whether or not anything moved.
 - **Each scanned file reads every file in its library.**
   `fileByEssenceGoneTx` filters `file` on `essence_hash` and
   `library_id`, and with no `ANALYZE` statistics SQLite plans it on

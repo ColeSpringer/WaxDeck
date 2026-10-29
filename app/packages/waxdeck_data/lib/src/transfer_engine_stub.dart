@@ -15,6 +15,9 @@ class BackgroundTransferEngine implements TransferEnginePort {
       throw UnsupportedError('web');
 
   @override
+  Future<String?> mediaDirectory() => throw UnsupportedError('web');
+
+  @override
   Future<void> recover() => throw UnsupportedError('web');
 
   @override

@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
 import 'package:waxdeck/src/library/item_facts_sheet.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -80,6 +82,69 @@ void main() {
     expect(_value(tester, 'bitrate'), '986 kbps');
     expect(_value(tester, 'mbid'), 'b9b3d3f9-1e2b-4a1e-9a4a-1a2b3c4d5e6f');
     expect(_value(tester, 'isrc'), 'USRC17607839');
+  });
+
+  testWidgets('a track says where it sits on its release', (tester) async {
+    final repository =
+        FakeRepository(items: [testItem('tr-1', trackNumber: 3, discNumber: 1)])
+          ..itemDetailTrackTotal['tr-1'] = 12
+          ..itemDetailDiscTotal['tr-1'] = 2;
+
+    await _pump(tester, repository);
+
+    expect(_value(tester, 'track'), '3 of 12');
+    expect(_value(tester, 'disc'), '1 of 2');
+    expect(_row('parts'), findsNothing);
+  });
+
+  testWidgets('a number the file gives no total for is said alone', (
+    tester,
+  ) async {
+    final repository = FakeRepository(
+      items: [testItem('tr-1', trackNumber: 3)],
+    );
+
+    await _pump(tester, repository);
+
+    expect(_value(tester, 'track'), '3');
+    // No disc number, so no disc row to put a total on.
+    expect(_row('disc'), findsNothing);
+  });
+
+  testWidgets('a total with no number beside it draws no row', (tester) async {
+    final repository = FakeRepository(items: [testItem('tr-1')])
+      ..itemDetailTrackTotal['tr-1'] = 12
+      ..itemDetailDiscTotal['tr-1'] = 2;
+
+    await _pump(tester, repository);
+
+    expect(_row('track'), findsNothing);
+    expect(_row('disc'), findsNothing);
+  });
+
+  testWidgets('a book says how many parts its file counts', (tester) async {
+    final repository =
+        FakeRepository(
+            items: [testItem('bk-1', mediaType: MediaType.audiobook)],
+          )
+          ..itemDetailPartTotal['bk-1'] = 5
+          // Whatever a book's file says of tracks is not drawn for it.
+          ..itemDetailTrackTotal['bk-1'] = 9;
+
+    await _pump(
+      tester,
+      repository,
+      pid: 'bk-1',
+      mediaType: MediaType.audiobook,
+    );
+
+    expect(_value(tester, 'parts'), '5');
+    expect(_row('track'), findsNothing);
+  });
+
+  test('the position of a track reads the same in Spanish', () {
+    expect(AppLocalizationsEs().libraryFactsNumberOf(3, 12), '3 de 12');
+    expect(AppLocalizationsEn().libraryFactsNumberOf(3, 12), '3 of 12');
   });
 
   testWidgets('an item nobody has finished says never rather than a date', (

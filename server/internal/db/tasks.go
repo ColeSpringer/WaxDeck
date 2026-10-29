@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ToolTask is one background file-tooling task (book merge, chapter
@@ -221,10 +222,31 @@ func (d *DB) ListToolTasks(ctx context.Context, userID string, beforeNS int64, b
 	return out, rows.Err()
 }
 
-// TaskTypes narrows a lease to one task type, or to every type but one,
-// so a worker can keep to its own share of the queue.
+// TaskTypes narrows a lease to the task types in Only, when it names any,
+// and away from those in Except, so a worker can keep to its own share of
+// the queue. The zero value leases any type.
 type TaskTypes struct {
-	Only, Except string
+	Only, Except []string
+}
+
+// where is the narrowing as a condition on tool_tasks.type, and its
+// arguments.
+func (t TaskTypes) where() (string, []any) {
+	var cond string
+	var args []any
+	for _, set := range []struct {
+		op    string
+		types []string
+	}{{"IN", t.Only}, {"NOT IN", t.Except}} {
+		if len(set.types) == 0 {
+			continue
+		}
+		cond += " AND type " + set.op + " (" + strings.Repeat("?, ", len(set.types)-1) + "?)"
+		for _, typ := range set.types {
+			args = append(args, typ)
+		}
+	}
+	return cond, args
 }
 
 // LeaseToolTask claims the oldest queued task of types; ErrNotFound when
@@ -232,17 +254,17 @@ type TaskTypes struct {
 // execution must tolerate a duplicate attempt. A resumable task is
 // claimed whatever its attempts.
 func (d *DB) LeaseToolTask(ctx context.Context, nowNS, leaseNS int64, maxAttempts int, types TaskTypes) (ToolTask, error) {
+	cond, typeArgs := types.where()
 	row := d.w.QueryRowContext(ctx, `
 		UPDATE tool_tasks SET lease_until_ns = ? + ?, attempts = attempts + 1, state = 'running',
 			error = '', wait_reason = ''
 		WHERE id = (
 			SELECT id FROM tool_tasks
-			WHERE state IN ('queued', 'running') AND lease_until_ns < ? AND (attempts < ? OR resumable = 1)
-				AND (? = '' OR type = ?) AND (? = '' OR type <> ?)
+			WHERE state IN ('queued', 'running') AND lease_until_ns < ? AND (attempts < ? OR resumable = 1)`+cond+`
 			ORDER BY created_at_ns, id LIMIT 1
 		)
 		RETURNING `+taskCols,
-		nowNS, leaseNS, nowNS, maxAttempts, types.Only, types.Only, types.Except, types.Except)
+		append([]any{nowNS, leaseNS, nowNS, maxAttempts}, typeArgs...)...)
 	t, err := scanTask(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ToolTask{}, ErrNotFound

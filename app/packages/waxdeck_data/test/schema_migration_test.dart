@@ -221,6 +221,34 @@ final _v6Schema = [
     ),
 ];
 
+/// The schema as v7 shipped it: v6's with the account stamp on the
+/// cursor, the owner on both outboxes, and the bookmark table, as their
+/// migration builds them. The path v8 runs on, and no table differs
+/// between the two: what v8 changes is what a mirror row's key means.
+final _v7Schema = [
+  for (final statement in _v6Schema)
+    statement
+        .replaceFirst(
+          '"server_since" TEXT NULL, PRIMARY KEY ("id"));',
+          '"server_since" TEXT NULL, "server_account" TEXT NULL, '
+              'PRIMARY KEY ("id"));',
+        )
+        .replaceFirst(
+          '"payload" TEXT NULL);',
+          '"payload" TEXT NULL, "owner" TEXT NULL);',
+        )
+        .replaceFirst(
+          '"skipped_ms" INTEGER NULL, PRIMARY KEY ("session_id"));',
+          '"skipped_ms" INTEGER NULL, "owner" TEXT NULL, '
+              'PRIMARY KEY ("session_id"));',
+        ),
+  'CREATE TABLE "mirror_bookmarks" ("id" TEXT NOT NULL, '
+      '"owner" TEXT NOT NULL, "book_pid" TEXT NOT NULL, '
+      '"position_ms" INTEGER NOT NULL, "note" TEXT NULL, '
+      '"created_at" INTEGER NOT NULL, "sync_state" TEXT NOT NULL, '
+      '"refusal" TEXT NULL, "refusal_code" TEXT NULL, PRIMARY KEY ("id"));',
+];
+
 /// A database holding what a v1 install would hold, opened through the
 /// current schema so the upgrade path runs on first use.
 MirrorDatabase _upgradedFromV1() {
@@ -277,7 +305,9 @@ MirrorDatabase _upgradedFromV2() {
 }
 
 /// The same, for a v3 install: a downloaded multi-part book already on
-/// disk, whose records carry no per-file durations because v3 had none.
+/// disk, whose records carry no per-file durations because v3 had none,
+/// and a cursor pair, which is what an install that skipped the releases
+/// since still has to have its catalog half cleared.
 MirrorDatabase _upgradedFromV3() {
   return MirrorDatabase(
     NativeDatabase.memory(
@@ -293,6 +323,10 @@ MirrorDatabase _upgradedFromV3() {
             "'/tmp/media/ess$i.m4b', 4194304, 'complete');",
           );
         }
+        raw.execute(
+          'INSERT INTO sync_cursors (id, catalog_since, server_since) '
+          "VALUES (1, 'cur-1', 'scur-1');",
+        );
         raw.userVersion = 3;
       },
     ),
@@ -337,6 +371,92 @@ MirrorDatabase _upgradedFromV6() {
   );
 }
 
+/// The same, for a v7 install: a mirror filed under bare lowercase titles
+/// beside everything else the device keeps for its user (a download, a
+/// play state, a queued star and listen, a bookmark, a saved queue, a
+/// setting), none of which the move to the catalog's keys may cost.
+MirrorDatabase _upgradedFromV7() {
+  return MirrorDatabase(
+    NativeDatabase.memory(
+      setup: (raw) {
+        for (final statement in _v7Schema) {
+          raw.execute(statement);
+        }
+        raw.execute(
+          'INSERT INTO mirror_items (pid, ulid, media_type, title, duration_ms, '
+          "sort_key) VALUES ('tr-Z', 'Z', 'music', 'The Zebra Song', 1000, "
+          "'the zebra song'), ('tr-A', 'A', 'music', 'apple tune', 1000, "
+          "'apple tune');",
+        );
+        raw.execute(
+          'INSERT INTO sync_cursors (id, catalog_since, server_since, '
+          "server_account) VALUES (1, 'cur-7', 'scur-7', 'us-1');",
+        );
+        raw.execute(
+          'INSERT INTO download_records (pid, file_index, essence_hash, etag, '
+          'file_name, local_path, size_bytes, state, duration_ms) VALUES '
+          "('tr-Z', 0, 'ess', '1-1', 'zebra.flac', '/tmp/media/ess.flac', "
+          "4096, 'complete', 1000);",
+        );
+        raw.execute(
+          'INSERT INTO mirror_play_states (pid, position_ms, starred) '
+          "VALUES ('tr-Z', 1234, 1);",
+        );
+        raw.execute(
+          'INSERT INTO outbox_mutations (kind, pid, starred, recorded_at, '
+          "owner) VALUES ('star', 'tr-A', 1, 1758931200, 'us-1');",
+        );
+        raw.execute(
+          'INSERT INTO outbox_listens (session_id, pid, started_at, ms_played, '
+          'finished, client, skipped_ms, owner) VALUES ('
+          "'ls-7', 'tr-Z', 1700000000, 42000, 1, 'waxdeck-flutter-android', "
+          "3000, 'us-1');",
+        );
+        raw.execute(
+          'INSERT INTO mirror_bookmarks (id, owner, book_pid, position_ms, '
+          'note, created_at, sync_state) VALUES ('
+          "'bm-7', 'us-1', 'bk-A', 61000, 'the good part', 1758931200, "
+          "'pending');",
+        );
+        raw.execute(
+          'INSERT INTO queue_entries (queue_id, pid, position, source_rank) '
+          "VALUES ('q1', 'tr-Z', 0, 0);",
+        );
+        raw.execute(
+          'INSERT INTO client_settings (key, value) VALUES '
+          "('${ClientSettingKeys.sidebarCollapsed}', 'true');",
+        );
+        raw.userVersion = 7;
+      },
+    ),
+  );
+}
+
+/// The same, for a v8 install, whose tables are v7's: a download from
+/// before the device kept where one came from.
+MirrorDatabase _upgradedFromV8() {
+  return MirrorDatabase(
+    NativeDatabase.memory(
+      setup: (raw) {
+        for (final statement in _v7Schema) {
+          raw.execute(statement);
+        }
+        raw.execute(
+          'INSERT INTO download_records (pid, file_index, essence_hash, etag, '
+          'file_name, local_path, size_bytes, state, duration_ms) VALUES '
+          "('tr-Z', 0, 'ess', '1-1', 'zebra.flac', '/tmp/media/ess.flac', "
+          "4096, 'complete', 1000);",
+        );
+        raw.execute(
+          'INSERT INTO sync_cursors (id, catalog_since, server_since, '
+          "server_account) VALUES (1, 'cur-8', 'scur-8', 'us-1');",
+        );
+        raw.userVersion = 8;
+      },
+    ),
+  );
+}
+
 /// Every table's columns, as sqlite reports them: name, type, and
 /// whether it is required. What a migration has to end up matching.
 Future<Map<String, List<String>>> _columns(MirrorDatabase db) async {
@@ -358,6 +478,24 @@ Future<Map<String, List<String>>> _columns(MirrorDatabase db) async {
   };
 }
 
+/// A server whose catalog has not changed since the device last looked:
+/// it has no delta to send, and answers a snapshot with [snapshot].
+class _CatalogByKind extends ScriptedRepository {
+  CatalogSyncPage snapshot = const CatalogSyncPage(nextSince: 'cur-0');
+  final deltaCalls = <String>[];
+
+  @override
+  Future<CatalogSyncPage> syncCatalog({
+    String? since,
+    String? cursor,
+    int? limit,
+  }) async {
+    if (since == null) return snapshot;
+    deltaCalls.add(since);
+    return CatalogSyncPage(nextSince: since);
+  }
+}
+
 void main() {
   test('an upgraded schema is the schema a fresh install gets', () async {
     // The v1 statements below are transcribed, so they are only as
@@ -370,12 +508,16 @@ void main() {
     final fromV3 = _upgradedFromV3();
     final fromV5 = _upgradedFromV5();
     final fromV6 = _upgradedFromV6();
+    final fromV7 = _upgradedFromV7();
+    final fromV8 = _upgradedFromV8();
     final fresh = inMemoryMirrorDatabase();
     addTearDown(upgraded.close);
     addTearDown(fromV2.close);
     addTearDown(fromV3.close);
     addTearDown(fromV5.close);
     addTearDown(fromV6.close);
+    addTearDown(fromV7.close);
+    addTearDown(fromV8.close);
     addTearDown(fresh.close);
 
     // Touch each database so the create and the upgrade both run.
@@ -384,6 +526,8 @@ void main() {
     await fromV3.select(fromV3.mirrorItems).get();
     await fromV5.select(fromV5.mirrorItems).get();
     await fromV6.select(fromV6.mirrorItems).get();
+    await fromV7.select(fromV7.mirrorItems).get();
+    await fromV8.select(fromV8.mirrorItems).get();
     await fresh.select(fresh.mirrorItems).get();
 
     final target = await _columns(fresh);
@@ -394,7 +538,210 @@ void main() {
     expect(await _columns(fromV3), target);
     expect(await _columns(fromV5), target);
     expect(await _columns(fromV6), target);
+    expect(await _columns(fromV7), target);
+    expect(await _columns(fromV8), target);
   });
+
+  test(
+    'v7 upgrades: what the device keeps stays, the mirror is asked for again',
+    () async {
+      final db = _upgradedFromV7();
+      addTearDown(db.close);
+
+      // The one thing cleared is the cursor that said the mirror was caught
+      // up, so the next sync snapshots it afresh; the account's own cursor
+      // stays where it was.
+      final cursors = await db.select(db.syncCursors).getSingle();
+      expect(cursors.catalogSince, isNull);
+      expect(cursors.serverSince, 'scur-7');
+      expect(cursors.serverAccount, 'us-1');
+
+      // Everything else the device holds for its user is untouched.
+      expect(
+        (await db.select(db.downloadRecords).getSingle()).localPath,
+        '/tmp/media/ess.flac',
+      );
+      expect(
+        (await db.select(db.mirrorPlayStates).getSingle()).positionMs,
+        1234,
+      );
+      expect((await db.select(db.outboxMutations).getSingle()).kind, 'star');
+      final listen = await db.select(db.outboxListens).getSingle();
+      expect(
+        (listen.sessionId, listen.msPlayed, listen.skippedMs),
+        ('ls-7', 42000, 3000),
+      );
+      final mark = await db.select(db.mirrorBookmarks).getSingle();
+      expect(
+        (mark.id, mark.positionMs, mark.note, mark.syncState),
+        ('bm-7', 61000, 'the good part', 'pending'),
+      );
+      expect((await db.select(db.queueEntries).getSingle()).pid, 'tr-Z');
+      expect(
+        await DriftClientSettingsStore(
+          db,
+        ).read(ClientSettingKeys.sidebarCollapsed),
+        'true',
+      );
+      // The mirror waits for that snapshot, rows and all, and no row is
+      // filed under a new key beside the old ones before it comes.
+      expect(
+        (await db.select(db.mirrorItems).get()).map((r) => r.sortKey),
+        unorderedEquals(['the zebra song', 'apple tune']),
+      );
+
+      final version = await db.customSelect('pragma user_version').getSingle();
+      expect(version.data.values.first, db.schemaVersion);
+    },
+  );
+
+  test(
+    'the first sync after a v7 upgrade files every row under the catalog key',
+    () async {
+      final db = _upgradedFromV7();
+      final repo = _CatalogByKind();
+      final engine = SyncEngine(
+        db: db,
+        repository: repo,
+        channelFactory: neverConnects(),
+      );
+      addTearDown(() async {
+        engine.dispose();
+        await db.close();
+      });
+      repo.snapshot = CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-Z',
+            item: repo.item('tr-Z', 'The Zebra Song', sortKey: 'zebra song'),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-A',
+            item: repo.item('tr-A', 'apple tune', sortKey: 'apple tune'),
+          ),
+        ],
+        nextSince: 'cur-8',
+      );
+
+      await engine.pullCatalog();
+
+      // The server has no delta to send: nothing changed since the device
+      // last looked. The upgrade is what asks it for the whole catalog, so
+      // no bare lowercase title is left to sort beside a catalog key.
+      expect(repo.deltaCalls, isEmpty);
+      final page = await mirrorItemsPage(db);
+      expect(page.items.map((i) => (i.pid, i.sortKey)), [
+        ('tr-A', 'apple tune'),
+        ('tr-Z', 'zebra song'),
+      ]);
+      expect(
+        (await db.select(db.syncCursors).getSingle()).catalogSince,
+        'cur-8',
+      );
+      // And the device's own rows were not part of it.
+      expect(await db.select(db.downloadRecords).get(), hasLength(1));
+      expect(await db.select(db.mirrorPlayStates).get(), hasLength(1));
+      expect(await db.select(db.outboxMutations).get(), hasLength(1));
+      expect(await db.select(db.queueEntries).get(), hasLength(1));
+    },
+  );
+
+  test(
+    'v8 upgrades: a download stands, naming no server, and the mirror stays',
+    () async {
+      final db = _upgradedFromV8();
+      addTearDown(db.close);
+
+      final row = await db.select(db.downloadRecords).getSingle();
+      expect(
+        (row.pid, row.localPath, row.server),
+        ('tr-Z', '/tmp/media/ess.flac', null),
+      );
+      expect(
+        (await db.select(db.syncCursors).getSingle()).catalogSince,
+        'cur-8',
+      );
+      final version = await db.customSelect('pragma user_version').getSingle();
+      expect(version.data.values.first, db.schemaVersion);
+    },
+  );
+
+  test(
+    'the first sync after an upgrade keeps the downloads it cannot place',
+    () async {
+      // The upgrade sends every install through a full re-mirror, which
+      // carries no tombstones. A download from before the device kept
+      // where one came from may be another server's, so it is asked about
+      // by no server; one the snapshot lists is this server's from then
+      // on, and a later re-mirror asks after it once it is gone.
+      final db = _upgradedFromV7();
+      final repo = _CatalogByKind();
+      final engine = SyncEngine(
+        db: db,
+        repository: repo,
+        channelFactory: neverConnects(),
+      );
+      addTearDown(() async {
+        engine.dispose();
+        await db.close();
+      });
+      for (final pid in ['tr-GONE', 'tr-TRASH']) {
+        await db
+            .into(db.downloadRecords)
+            .insert(
+              DownloadRecordsCompanion.insert(
+                pid: pid,
+                fileIndex: 0,
+                essenceHash: pid,
+                etag: '1-1',
+                fileName: '$pid.flac',
+                localPath: '/tmp/media/$pid.flac',
+                sizeBytes: 4096,
+                state: 'complete',
+              ),
+            );
+      }
+      repo.removedForGood.addAll(['tr-GONE', 'tr-Z']);
+      repo.snapshot = CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-Z',
+            item: repo.item('tr-Z', 'The Zebra Song', sortKey: 'zebra song'),
+          ),
+        ],
+        nextSince: 'cur-8',
+      );
+      final reclaimed = <String>[];
+      final sub = engine.itemsRemoved.listen(reclaimed.add);
+      addTearDown(sub.cancel);
+
+      await engine.pullCatalog();
+      await pumpEventQueue();
+
+      expect(repo.removedAsked, isEmpty);
+      expect(reclaimed, isEmpty);
+      expect(
+        {
+          for (final r in await db.select(db.downloadRecords).get())
+            r.pid: r.server,
+        },
+        {'tr-Z': repo.baseUrl, 'tr-GONE': null, 'tr-TRASH': null},
+      );
+
+      // The zebra song deleted outright while the device was away.
+      repo.snapshot = const CatalogSyncPage(nextSince: 'cur-9');
+      await engine.resyncCatalog();
+      await pumpEventQueue();
+
+      expect(repo.removedAsked, [
+        ['tr-Z'],
+      ]);
+      expect(reclaimed, ['tr-Z']);
+    },
+  );
 
   test('v6 upgrades: a queued patch survives, bookmarks can be held', () async {
     final db = _upgradedFromV6();
@@ -457,6 +804,12 @@ void main() {
     expect(records, hasLength(2));
     expect(records.map((r) => r.durationMs), everyElement(isNull));
     expect(records.first.localPath, '/tmp/media/ess0.m4b');
+
+    // Skipping versions still runs the last step: the catalog cursor is
+    // cleared so the mirror is asked for again, the account's is kept.
+    final cursors = await db.select(db.syncCursors).getSingle();
+    expect(cursors.catalogSince, isNull);
+    expect(cursors.serverSince, 'scur-1');
 
     final version = await db.customSelect('pragma user_version').getSingle();
     expect(version.data.values.first, db.schemaVersion);

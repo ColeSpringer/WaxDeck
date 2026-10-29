@@ -12,6 +12,7 @@ library;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:waxdeck_data/waxdeck_data.dart' show OwedPin;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 /// The sizes artwork is ever requested at.
@@ -299,12 +300,22 @@ abstract class ArtworkStore {
   Future<void> warm(String artUrl, int px);
 
   /// Keeps [artUrl] on disk for [pid] until it is unpinned, so a
-  /// downloaded item has a cover with the server unreachable. A no-op
-  /// where there is no offline mode.
+  /// downloaded item has a cover with the server unreachable. Only while
+  /// the device holds a download for [pid] and is not freeing it: a cover
+  /// that arrives after that takes itself back. A no-op where there is no
+  /// offline mode.
   Future<void> pinForOffline(String pid, String? artUrl);
 
   /// Drops the pins for [pid] and the files behind them.
   Future<void> unpin(String pid);
+
+  /// Drops exactly the pins listed, each by its size and the instant it
+  /// was pinned, with the files behind them, and no others: a cover the
+  /// device pinned since is not what was listed and stays. Required of
+  /// every store, with no default, so one that keeps pins cannot forget it
+  /// and strand covers; one with no offline mode says so with a body that
+  /// does nothing.
+  Future<void> unpinExact(String pid, List<OwedPin> owed);
 
   /// Forgets everything held for [artUrl], at every size. Called when an
   /// entity's artwork is replaced: the URL is stable across a cover
@@ -397,6 +408,9 @@ class NetworkArtworkStore extends ArtworkStore {
 
   @override
   Future<void> unpin(String pid) async {}
+
+  @override
+  Future<void> unpinExact(String pid, List<OwedPin> owed) async {}
 
   @override
   Future<void> evict(String artUrl) async {

@@ -1320,6 +1320,100 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /admin/catalog/consistency:
+    get:
+      operationId: getCatalogConsistency
+      summary: Check the catalog's derived data
+      description: >
+        Recomputes what the catalog keeps derived from its own rows (the
+        artist, genre and release-group totals, sort keys, book lengths
+        and ISBN keys, album and release years, playlist positions) and
+        counts the rows that disagree; checks the search index for
+        coverage, counting the present items it has no entry for and
+        the entries with no item (an entry's content is not read); and
+        counts the stored images, thumbnails and custom-tag rows nothing
+        uses, which a repair deletes. Artists, albums, release groups,
+        genres and series with no items are not counted; a repair has a
+        step of its own for them. Read-only, so it runs beside scans and
+        edits. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: The counts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogConsistency"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /admin/catalog/repair:
+    post:
+      operationId: repairCatalog
+      summary: Repair the catalog's derived data
+      description: >
+        Queues a `catalog-repair` task that recomputes everything the
+        check counts, in this order: the totals, book lengths and ISBN
+        keys, album and release years and playlist positions; the sort
+        keys; the artists, albums, release groups, genres and series
+        with no items (deleted when an earlier repair found them so at
+        least a day before, otherwise noted for the next one); the
+        images and thumbnails nothing uses; the custom-tag rows under
+        keys the catalog no longer takes; the search index, whose
+        entries are rewritten where their content went stale as well as
+        added where missing and dropped where orphaned. It then
+        checks again, and the finished task's `summary` says what each
+        step did and what the check counted after (see `ToolTask`), and
+        in `runs` what each run of the task did: the steps it finished,
+        in order, with `error` saying why a run stopped short and
+        `handedOff` marking one a catalog hand-off cut short.
+        It holds the catalog's write lock while it writes, so edits and
+        scans wait for it. It runs beside the other tool tasks, but one at
+        a time with health fixes, which can run as long. Each run has six
+        hours. A run cut short for a reason that may pass (an error, its
+        time running out, the server stopping) is followed by one that
+        starts after the last step a run finished, since every step
+        recomputes from the catalog's own rows, three attempts in all. A
+        run a catalog hand-off cuts short waits the hand-off out without
+        spending an attempt, and the next starts over. A step the catalog
+        refuses ends the repair as failed, and so does a third attempt
+        that fails. It writes no file in any
+        library, so it runs on a read-only server too. The release years
+        a repair puts back, and the sort keys it rewrites other than an
+        item's own, reach no sync delta, so a repair that got past its
+        first step makes every client re-mirror the catalog once, when
+        it ends: every catalog sync cursor handed out before then
+        answers 410 `sync-reset` at its next use, and connected clients
+        are told to pull at once. One at a time:
+        `conflict` while one is queued or running. Administrators only.
+      tags: [admin]
+      responses:
+        "202":
+          description: The repair task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >
+            A repair is already queued or running (`conflict`, with
+            `params.reason` `task-running` and `params.task` naming its
+            task).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /admin/enrichment-cache:
     get:
       operationId: getEnrichmentCache
@@ -1462,7 +1556,10 @@ paths:
         ladder (identifiers, then fingerprints, then descriptive
         metadata); play history lands as import-source listen
         sessions with deterministic idempotency ids, so re-running an
-        import never doubles anything. Last.fm, ListenBrainz and
+        import never doubles anything. An entry naming a recording the
+        library holds more than once, with nothing in it to tell the
+        copies apart, matches the present copy with the lowest id, and
+        the summary counts it under `ties`. Last.fm, ListenBrainz and
         Spotify carry a time per play, so their history lands at the
         times it happened; the sources that report only a play count
         are spread backwards a week apart. Imported listens are never
@@ -2417,6 +2514,102 @@ components:
           description: >
             What they held. Freed inside the catalog file rather than
             returned to the filesystem.
+
+    CatalogConsistency:
+      type: object
+      description: >
+        The catalog's derived data against a fresh recompute from its own
+        rows. Each count is rows that disagree, or unused rows a repair
+        deletes.
+      required:
+        [itemsMissingFromSearch, orphanSearchRows, artistRollupDrift,
+        genreRollupDrift, releaseGroupRollupDrift, sortKeyDrift,
+        bookDurationDrift, bookIsbnKeyDrift, albumYearDrift,
+        releaseYearDrift, playlistPositionDrift, orphanArtSources,
+        orphanThumbnails, orphanTagProvenance, strandedTagRows,
+        consistent, reclaimable]
+      properties:
+        itemsMissingFromSearch:
+          type: integer
+          description: >
+            Present items with no search index row, which search cannot
+            find.
+        orphanSearchRows:
+          type: integer
+          description: Search index rows whose item is gone.
+        artistRollupDrift:
+          type: integer
+          description: >
+            Artists whose stored totals differ from a recount of their
+            items.
+        genreRollupDrift:
+          type: integer
+          description: >
+            Genres whose stored totals differ from a recount of their
+            items.
+        releaseGroupRollupDrift:
+          type: integer
+          description: >
+            Release groups whose stored totals differ from a recount of
+            their albums.
+        sortKeyDrift:
+          type: integer
+          description: >
+            Names whose stored sort key is not the one the catalog
+            generates for them now, so they list out of place.
+        bookDurationDrift:
+          type: integer
+          description: >
+            Books whose stored length differs from the sum of their
+            parts.
+        bookIsbnKeyDrift:
+          type: integer
+          description: >
+            Books whose stored ISBN match key is not the one their ISBN
+            gives.
+        albumYearDrift:
+          type: integer
+          description: Albums whose year is not the one their tracks give.
+        releaseYearDrift:
+          type: integer
+          description: >
+            Items whose release year differs from their track's or
+            book's year.
+        playlistPositionDrift:
+          type: integer
+          description: >
+            Static playlists whose entry positions are not numbered from
+            0 without gaps. Their order reads the same either way, so
+            they do not count against `consistent`.
+        orphanArtSources:
+          type: integer
+          description: Stored images no entity uses.
+        orphanThumbnails:
+          type: integer
+          description: Cached thumbnails of images no entity uses.
+        orphanTagProvenance:
+          type: integer
+          description: >
+            Custom-tag edit records under a key the catalog has since
+            reserved, which nothing can read, edit or unlock.
+        strandedTagRows:
+          type: integer
+          description: >
+            Custom-tag values and locks under a key the catalog no longer
+            accepts, and tag writes owed under a key no file can carry.
+        consistent:
+          type: boolean
+          description: >
+            True when every count is zero but `playlistPositionDrift`
+            and the four unused-row counts (`orphanArtSources`,
+            `orphanThumbnails`, `orphanTagProvenance`,
+            `strandedTagRows`).
+        reclaimable:
+          type: boolean
+          description: >
+            True when any of the four unused-row counts is above zero:
+            rows a repair deletes, which do not count against
+            `consistent`.
 
     EnrichmentCacheReport:
       type: object

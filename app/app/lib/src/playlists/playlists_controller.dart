@@ -133,6 +133,26 @@ final playlistsProvider =
       retry: retryUnlessRefused,
     );
 
+/// The M3U documents being imported right now. An import outlives the
+/// dialog that started it, so a dialog asks here before starting another
+/// import of the same document.
+class M3uImportsRunning extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const <String>{};
+
+  /// Claims [content] for an import; false while one of it is running.
+  bool claim(String content) {
+    if (state.contains(content)) return false;
+    state = {...state, content};
+    return true;
+  }
+
+  void release(String content) => state = {...state}..remove(content);
+}
+
+final m3uImportsRunningProvider =
+    NotifierProvider<M3uImportsRunning, Set<String>>(M3uImportsRunning.new);
+
 /// One playlist's header plus its full member list. Playlist pages are
 /// fetched to completion: a playlist is a bounded, user-curated list,
 /// and the screens want exact counts and durations.

@@ -685,6 +685,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/catalog/consistency": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check the catalog's derived data
+         * @description Recomputes what the catalog keeps derived from its own rows (the artist, genre and release-group totals, sort keys, book lengths and ISBN keys, album and release years, playlist positions) and counts the rows that disagree; checks the search index for coverage, counting the present items it has no entry for and the entries with no item (an entry's content is not read); and counts the stored images, thumbnails and custom-tag rows nothing uses, which a repair deletes. Artists, albums, release groups, genres and series with no items are not counted; a repair has a step of its own for them. Read-only, so it runs beside scans and edits. Administrators only.
+         */
+        get: operations["getCatalogConsistency"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/catalog/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Repair the catalog's derived data
+         * @description Queues a `catalog-repair` task that recomputes everything the check counts, in this order: the totals, book lengths and ISBN keys, album and release years and playlist positions; the sort keys; the artists, albums, release groups, genres and series with no items (deleted when an earlier repair found them so at least a day before, otherwise noted for the next one); the images and thumbnails nothing uses; the custom-tag rows under keys the catalog no longer takes; the search index, whose entries are rewritten where their content went stale as well as added where missing and dropped where orphaned. It then checks again, and the finished task's `summary` says what each step did and what the check counted after (see `ToolTask`), and in `runs` what each run of the task did: the steps it finished, in order, with `error` saying why a run stopped short and `handedOff` marking one a catalog hand-off cut short. It holds the catalog's write lock while it writes, so edits and scans wait for it. It runs beside the other tool tasks, but one at a time with health fixes, which can run as long. Each run has six hours. A run cut short for a reason that may pass (an error, its time running out, the server stopping) is followed by one that starts after the last step a run finished, since every step recomputes from the catalog's own rows, three attempts in all. A run a catalog hand-off cuts short waits the hand-off out without spending an attempt, and the next starts over. A step the catalog refuses ends the repair as failed, and so does a third attempt that fails. It writes no file in any library, so it runs on a read-only server too. The release years a repair puts back, and the sort keys it rewrites other than an item's own, reach no sync delta, so a repair that got past its first step makes every client re-mirror the catalog once, when it ends: every catalog sync cursor handed out before then answers 410 `sync-reset` at its next use, and connected clients are told to pull at once. One at a time: `conflict` while one is queued or running. Administrators only.
+         */
+        post: operations["repairCatalog"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/enrichment-cache": {
         parameters: {
             query?: never;
@@ -776,7 +816,7 @@ export interface paths {
         put?: never;
         /**
          * Import listening state from another server
-         * @description Starts a migration import as a background task and answers with the tool task to follow (type `import-<source>`; the finished task's `summary` carries the report: what matched, what did not, and what was written). Sources: `navidrome` and `subsonic` pull stars, ratings, play counts, and bookmarks from a running server over its Subsonic API (`serverUrl` + `username` + `password`); `audiobookshelf` pulls book progress over its REST API (`serverUrl` + `token`); `jellyfin` pulls favourites, play counts and positions over its REST API (`serverUrl` + `username` with either `password` or an API key in `token`); `lastfm` and `listenbrainz` pull scrobbling history for a `username`; and `spotify` reads an account data export uploaded first (`exportId`). Podcast subscriptions migrate via the existing OPML import. Items are matched through the portable-ref ladder (identifiers, then fingerprints, then descriptive metadata); play history lands as import-source listen sessions with deterministic idempotency ids, so re-running an import never doubles anything. Last.fm, ListenBrainz and Spotify carry a time per play, so their history lands at the times it happened; the sources that report only a play count are spread backwards a week apart. Imported listens are never forwarded to connected scrobblers. `dryRun` matches and reports without writing. A URL must resolve to a global address unless the server allows private fetches. Credentials are held only for the task's duration. Administrators only.
+         * @description Starts a migration import as a background task and answers with the tool task to follow (type `import-<source>`; the finished task's `summary` carries the report: what matched, what did not, and what was written). Sources: `navidrome` and `subsonic` pull stars, ratings, play counts, and bookmarks from a running server over its Subsonic API (`serverUrl` + `username` + `password`); `audiobookshelf` pulls book progress over its REST API (`serverUrl` + `token`); `jellyfin` pulls favourites, play counts and positions over its REST API (`serverUrl` + `username` with either `password` or an API key in `token`); `lastfm` and `listenbrainz` pull scrobbling history for a `username`; and `spotify` reads an account data export uploaded first (`exportId`). Podcast subscriptions migrate via the existing OPML import. Items are matched through the portable-ref ladder (identifiers, then fingerprints, then descriptive metadata); play history lands as import-source listen sessions with deterministic idempotency ids, so re-running an import never doubles anything. An entry naming a recording the library holds more than once, with nothing in it to tell the copies apart, matches the present copy with the lowest id, and the summary counts it under `ties`. Last.fm, ListenBrainz and Spotify carry a time per play, so their history lands at the times it happened; the sources that report only a play count are spread backwards a week apart. Imported listens are never forwarded to connected scrobblers. `dryRun` matches and reports without writing. A URL must resolve to a global address unless the server allows private fetches. Credentials are held only for the task's duration. Administrators only.
          */
         post: operations["createMigration"];
         delete?: never;
@@ -1462,9 +1502,49 @@ export interface paths {
         put?: never;
         /**
          * Merge duplicate entities
-         * @description Merges the losers into the survivor atomically. The losers' children, credits, and play history re-parent onto the survivor; identifiers union. Administrators only.
+         * @description Merges the losers into the survivor atomically. The losers' children, credits, and play history re-parent onto the survivor; identifiers union. Each loser's name folds into the survivor (see `GET /library/folds`), and so do the names already folded into a loser. Administrators only.
          */
         post: operations["mergeDuplicates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/library/folds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List folded names
+         * @description The names a merge folded into an entity, and those an entity rename that locks left behind: a file still spelled a folded way files under the entity the fold names instead of bringing back the one the merge or the rename did away with. Every type's folds, ordered by `entityType`, then by `key`, a page at a time. Administrators only.
+         */
+        get: operations["listEntityFolds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/library/folds/unfold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unfold names
+         * @description Forgets folds of one entity type by their keys, all of them or none: a key no fold holds is `not-found`, the message naming it, and nothing is forgotten. Nothing moves: a file spelled an unfolded way is filed under an entity of its own name once it is added, moved, replaced or retagged, and the files the fold already filed under the entity stay with it until they change or move; a rescan, `force` included, leaves an unchanged file where it is. Audited as `entity.unfold`. Administrators only.
+         */
+        post: operations["unfoldEntities"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1767,7 +1847,7 @@ export interface paths {
         put?: never;
         /**
          * Delete library items
-         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. An item's copies (getItemFiles) go with it, except one in a read-only library or a library the caller cannot see, which stays and keeps the item (`itemSurvives`). A read-only library holding the item's own file answers `read-only`. Podcast episodes are not deletable here, and one anywhere in `pids` refuses the whole call (`invalid-request`): the podcast download tree owns its own files, and removing an episode's download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. The tracks a cue sheet carves out of one file go together: naming some but not all is `invalid-request` with `params.reason` `cue-rip`. A file the filesystem will not move stays where it is and is never reported gone. When no file went, the call answers `storage-unwritable` for a folder that refused the move (its permissions, or a read-only mount) and `internal` for any other failure, and nothing changed. When some went, it answers what did: `entries` count the files that went, each entry's `failed` and `error` say what stayed of its item and why, and the result totals both.
+         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files and the sidecars that go with them, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. An item's copies (getItemFiles) go with it, except one in a read-only library or a library the caller cannot see, which stays and keeps the item (`itemSurvives`). A read-only library holding the item's own file answers `read-only`. Podcast episodes are not deletable here, and one anywhere in `pids` refuses the whole call (`invalid-request`): the podcast download tree owns its own files, and removing an episode's download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. The tracks a cue sheet carves out of one file go together: naming some but not all is `invalid-request` with `params.reason` `cue-rip`. A file the filesystem will not move stays where it is and is never reported gone. When no file went, the call answers `storage-unwritable` for a folder that refused the move (its permissions, or a read-only mount) and `internal` for any other failure, and nothing changed. When some went, it answers what did: `entries` count the files that went, each entry's `failed` and `error` say what stayed of its item and why, and the result totals both.
          */
         post: operations["deleteLibraryItems"];
         delete?: never;
@@ -3430,9 +3510,31 @@ export interface paths {
         put?: never;
         /**
          * Import an M3U8 playlist
-         * @description Creates a static playlist from an M3U8 document, matching each entry to a cataloged item by exact path or unique relative-path suffix. Unmatched paths are skipped and reported, never invented; an empty document yields an empty playlist. A path naming an item the caller cannot see is reported as unmatched, exactly like a path that names nothing.
+         * @description Creates a static playlist from an M3U8 document, matching each entry to a cataloged item by exact path or unique relative-path suffix. Unmatched paths are skipped and reported, never invented; an empty document yields an empty playlist. A path naming an item the caller cannot see is reported as unmatched, exactly like a path that names nothing. A line naming the item of the line before it through a different path to it (another of its files, such as a book's next part or a copy, or another spelling of the same file) adds no second entry and is counted in neither; the same path given twice in a row is two entries. A document naming more than 2000 paths is refused. Ask `POST /playlists/m3u/preview` first to see how each line matches.
          */
         post: operations["importPlaylistM3u"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/playlists/m3u/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview an M3U8 import
+         * @description How each path line of an M3U8 document matches, in document order, read exactly as `POST /playlists/m3u` reads it. Nothing is created or written and no name is needed, so it answers on a read-only server too. A document naming more than 2000 paths is refused, as the import refuses it.
+         *
+         *     A line is `matched` when it becomes an entry, `merged` when it names the item of the line before it through a different path to it (another of its files, such as a book's next part or a copy, or another spelling of the same file), which the import adds once, and `unmatched` when it names nothing. The same path given twice in a row is two `matched` lines. A line naming an item the caller cannot see is `unmatched` and carries no item, exactly like one that names nothing.
+         */
+        post: operations["previewPlaylistM3u"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3450,7 +3552,7 @@ export interface paths {
         put?: never;
         /**
          * Import a Navidrome smart playlist (NSP)
-         * @description Creates a **smart** playlist from an NSP document, which is the request body itself. The document's `name` names the playlist (the `name` parameter overrides it, and is what lets a nameless document be imported) and `public` sets its visibility; `comment` is read and discarded, since a WaxDeck playlist has no comment. Keys match exactly, so `Public` is an unrecognised key rather than the visibility.
+         * @description Creates a **smart** playlist from an NSP document, which is the request body itself. The document's `name` names the playlist (the `name` parameter overrides it, and is what lets a nameless document be imported; either may be at most 200 characters) and `public` sets its visibility; `comment` is read and discarded, since a WaxDeck playlist has no comment. Keys match exactly, so `Public` is an unrecognised key rather than the visibility.
          *
          *     Fields map onto the rule vocabulary (`GET /playlists/rule-fields`) whatever their case: `title`, `album`, `artist`, `albumartist`, `composer`, `genre`, `year`, `bpm`, `tracknumber`, `discnumber`, `rating` and `playcount` to the fields of the same name; `loved` to `starred`, `duration` to `durationMs`, `filepath` to `relPath`, `catalognumber` to `albumCatalogNumber`, and `mbz_recording_id`, `mbz_album_id` and `mbz_release_group_id` to `recordingMbid`, `albumMbid` and `releaseGroupMbid`; the dates `dateadded`, `lastplayed` and `dateloved` to `addedAt`, `lastPlayedAt` and `starredAt`.
          *
@@ -4758,11 +4860,31 @@ export interface paths {
         };
         /**
          * Mirror the catalog (snapshot or changed-since delta)
-         * @description The catalog half of delta sync, feeding client-side library mirrors with hydrated item summaries (episodes carry their full episode summaries, and podcast shows ride the same stream as `upsert-show` entries; see the entry schema). Shows and episodes are scoped to the caller's own subscriptions, and a subscription change retires the caller's cursors the same way a visibility grant change does (410 `sync-reset`, then re-mirror). Two modes. Without `since`: a snapshot, keyset-paged via `cursor`; every page carries `nextSince`, an opaque change cursor captured at or before the first page's read, which the client stores and syncs from after mirroring every page (changes landing mid-snapshot are covered by the first delta). With `since`: the changes after that cursor, as `upsert` entries carrying fresh summaries and `delete` tombstones for items that no longer exist or whose change left them outside the caller's library visibility (a file re-homed under an ungranted root keeps its item PID; a tombstone for an item never mirrored is a no-op); entries are coalesced within a page (an item may recur on later pages; application is idempotent, latest wins). The returned `nextSince` advances the cursor, and `more` signals another page should be fetched immediately. Snapshots contain only items the caller can see, and a change to the caller's visibility grants invalidates their catalog cursors, so the next delta answers 410 `sync-reset` and the re-snapshot reflects the new grants. 410 likewise answers any cursor the server can no longer serve contiguously (pruned change history, a rebuilt catalog): drop the mirror and snapshot again. Snapshot-minted cursors stay serviceable for at least the server's change retention horizon. The WebSocket channel (`api/events.md`) signals when to pull deltas; polling works without it.
+         * @description The catalog half of delta sync, feeding client-side library mirrors with hydrated item summaries (episodes carry their full episode summaries, and podcast shows ride the same stream as `upsert-show` entries; see the entry schema). Shows and episodes are scoped to the caller's own subscriptions, and a subscription change retires the caller's cursors the same way a visibility grant change does (410 `sync-reset`, then re-mirror). Two modes. Without `since`: a snapshot, keyset-paged via `cursor`; every page carries `nextSince`, an opaque change cursor captured at or before the first page's read, which the client stores and syncs from after mirroring every page (changes landing mid-snapshot are covered by the first delta). With `since`: the changes after that cursor, as `upsert` entries carrying fresh summaries and `delete` tombstones for items that no longer exist or whose change left them outside the caller's library visibility (a file re-homed under an ungranted root keeps its item PID; a tombstone for an item never mirrored is a no-op); entries are coalesced within a page (an item may recur on later pages; application is idempotent, latest wins). The returned `nextSince` advances the cursor, and `more` signals another page should be fetched immediately. Snapshots contain only items the caller can see, and a change to the caller's visibility grants invalidates their catalog cursors, so the next delta answers 410 `sync-reset` and the re-snapshot reflects the new grants. 410 likewise answers any cursor the server can no longer serve contiguously: one behind its pruned change history, one past the end of its history, one from a history it has since rolled back (a full restore of the server), even once that history has grown past the cursor again, one from a rebuilt catalog, and one handed out before a catalog repair (`POST /admin/catalog/repair`) that got past its first step, since what the repair rewrites reaches no delta: drop the mirror and snapshot again. Short of those, snapshot-minted cursors stay serviceable for at least the server's change retention horizon. A snapshot carries no tombstones, so a client that re-mirrors learns which of the items it holds downloads for are gone for good from `POST /sync/catalog/removed`. The WebSocket channel (`api/events.md`) signals when to pull deltas; polling works without it.
          */
         get: operations["syncCatalog"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sync/catalog/removed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Which of these items are gone for good
+         * @description Names, of the items asked about, those the server can never put back: the question a snapshot cannot answer, since it lists only what is present. It names an item the catalog still holds whose audio was deleted outright, or that is in the trash with nothing left to restore it from, which is when a `delete` tombstone for it carries the `removed` reason (see the entry schema). An item that is out of the caller's sight but could return (not granted, a show not subscribed to) or is in the trash with its undo journal is not named, so a device keeps what it downloaded of it. Nor is a PID the catalog holds no row for, whether its item was dropped or was never in this catalog (a download another server gave the device): the device keeps those bytes. A PID without an item prefix (an album's, an artist's), or no PID at all, is never named. A POST because the PID list rides the body; nothing changes server-side. The response repeats each named PID as it was asked, in request order.
+         */
+        post: operations["syncCatalogRemoved"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4778,7 +4900,7 @@ export interface paths {
         };
         /**
          * Mirror the caller's server-side state (changed-since delta)
-         * @description The server half of delta sync: the calling user's own state changes (playback state, preferences, podcast subscriptions, per-book settings, playlists), on the server change cursor. Without `since` it mints a fresh cursor (`nextSince` with no events): new mirrors start there and hydrate the play states they care about through `/play-states` (play states are only meaningful for items a client holds), subscriptions through `/podcasts`, book settings through the book detail, and playlists through `/playlists`. With `since` it returns the caller's events after that cursor with freshly hydrated state, coalesced within a page (an item may recur on later pages; application is idempotent), plus `more` for immediate continuation. Only state visible to the caller ever appears here; that is the caller's own state, plus `playlist` events for other users' shared playlists (shared playlists are visible to everyone, so their changes reach every user's stream). A `since` the server can no longer serve contiguously answers 410 `sync-reset`: re-mint and re-hydrate.
+         * @description The server half of delta sync: the calling user's own state changes (playback state, preferences, podcast subscriptions, per-book settings, playlists), on the server change cursor. Without `since` it mints a fresh cursor (`nextSince` with no events): new mirrors start there and hydrate the play states they care about through `/play-states` (play states are only meaningful for items a client holds), subscriptions through `/podcasts`, book settings through the book detail, and playlists through `/playlists`. With `since` it returns the caller's events after that cursor with freshly hydrated state, coalesced within a page (an item may recur on later pages; application is idempotent), plus `more` for immediate continuation. Only state visible to the caller ever appears here; that is the caller's own state, plus `playlist` events for other users' shared playlists (shared playlists are visible to everyone, so their changes reach every user's stream). A `since` the server can no longer serve contiguously answers 410 `sync-reset`, as for the catalog: one behind the pruned history, past its end, or from a history the server has since rolled back. Re-mint and re-hydrate.
          */
         get: operations["syncServer"];
         put?: never;
@@ -5519,6 +5641,18 @@ export interface components {
             /** @description Disc number within a multi-disc release (music). Absent for a single-disc release and for anything that is not a track. */
             discNumber?: number;
             /**
+             * @description The key the catalog files this item's title under. Comparing keys as plain strings orders titles as a title-sorted listing does, which is what a client keeping its own copy of a listing sorts it by; titles that share a key are not ordered by it. Absent for an empty title.
+             * @example prancing pony blues
+             */
+            sortKey?: string;
+            /** @description The artist's sort spelling as the file or an edit states it (`Beatles, The`); for an audiobook, its author's. Absent when none is stated, which is most items. A spelling to show, not to sort by: `artistSortKey` is. */
+            artistSort?: string;
+            /**
+             * @description The key the catalog files this item's artist under: that of its sort spelling when one is stated, else of its name (a track with no artist takes its album artist's), and for an audiobook, of its author. Comparing keys as plain strings orders artists by it, which is what a client sorting its own copy of a listing by artist sorts by; items that share a key are not ordered by it. Absent when the item names none of them, and for a podcast episode.
+             * @example beatles, the
+             */
+            artistSortKey?: string;
+            /**
              * Format: int64
              * @description Duration in milliseconds. For a multi-file audiobook this is the total across all parts; for a not-yet-fetched podcast episode it is the feed-declared duration, or 0 when the feed declares none.
              * @example 214000
@@ -6031,6 +6165,43 @@ export interface components {
              * @description What they held. Freed inside the catalog file rather than returned to the filesystem.
              */
             freedBytes: number;
+        };
+        /** @description The catalog's derived data against a fresh recompute from its own rows. Each count is rows that disagree, or unused rows a repair deletes. */
+        CatalogConsistency: {
+            /** @description Present items with no search index row, which search cannot find. */
+            itemsMissingFromSearch: number;
+            /** @description Search index rows whose item is gone. */
+            orphanSearchRows: number;
+            /** @description Artists whose stored totals differ from a recount of their items. */
+            artistRollupDrift: number;
+            /** @description Genres whose stored totals differ from a recount of their items. */
+            genreRollupDrift: number;
+            /** @description Release groups whose stored totals differ from a recount of their albums. */
+            releaseGroupRollupDrift: number;
+            /** @description Names whose stored sort key is not the one the catalog generates for them now, so they list out of place. */
+            sortKeyDrift: number;
+            /** @description Books whose stored length differs from the sum of their parts. */
+            bookDurationDrift: number;
+            /** @description Books whose stored ISBN match key is not the one their ISBN gives. */
+            bookIsbnKeyDrift: number;
+            /** @description Albums whose year is not the one their tracks give. */
+            albumYearDrift: number;
+            /** @description Items whose release year differs from their track's or book's year. */
+            releaseYearDrift: number;
+            /** @description Static playlists whose entry positions are not numbered from 0 without gaps. Their order reads the same either way, so they do not count against `consistent`. */
+            playlistPositionDrift: number;
+            /** @description Stored images no entity uses. */
+            orphanArtSources: number;
+            /** @description Cached thumbnails of images no entity uses. */
+            orphanThumbnails: number;
+            /** @description Custom-tag edit records under a key the catalog has since reserved, which nothing can read, edit or unlock. */
+            orphanTagProvenance: number;
+            /** @description Custom-tag values and locks under a key the catalog no longer accepts, and tag writes owed under a key no file can carry. */
+            strandedTagRows: number;
+            /** @description True when every count is zero but `playlistPositionDrift` and the four unused-row counts (`orphanArtSources`, `orphanThumbnails`, `orphanTagProvenance`, `strandedTagRows`). */
+            consistent: boolean;
+            /** @description True when any of the four unused-row counts is above zero: rows a repair deletes, which do not count against `consistent`. */
+            reclaimable: boolean;
         };
         /** @description What the enrichment response cache holds. */
         EnrichmentCacheReport: {
@@ -7312,6 +7483,52 @@ export interface components {
             merged: number;
             /** @description Children re-parented onto the survivor. */
             childrenMoved: number;
+            /** @description The keys the merge now folds into the survivor, one per loser, as `GET /library/folds` lists them. */
+            folds: string[];
+        };
+        /** @description One page of folded names. */
+        EntityFoldPage: {
+            /** @description Folds, ordered by `entityType`, then by `key`. */
+            folds: components["schemas"]["EntityFold"][];
+            /** @description Cursor for the next page, which can come back empty; omitted when no fold can follow. */
+            nextCursor?: string;
+        };
+        /** @description One name folded into an entity: a file whose tags still spell it files under that entity. */
+        EntityFold: {
+            /** @description `album`, `artist`, `genre`, `release-group`, or `series`. */
+            entityType: string;
+            /** @description The folded name as the catalog matches it, the handle `POST /library/folds/unfold` takes. Opaque: it can hold separator characters. */
+            key: string;
+            /**
+             * @description The key as a person reads it: the name lower-cased, with accents and punctuation folded away; an album's or a release group's as its artist and title joined by ` - `; one keyed by a MusicBrainz id as `MusicBrainz` and the id. Two folds can spell alike, and `facet`, or `folder` and `library`, then tell them apart, or `createdAt` for album folds no file places.
+             * @example the beatles - abbey road
+             */
+            spelling: string;
+            /** @description A genre fold's facet, `genre` or `mood`: one name folds apart in each. */
+            facet?: string;
+            /**
+             * @description An album fold's folder as a path within its library, read off a file of the album that sits in it: copies of one release in different folders fold apart. Absent for an album at the top of its library, for one known by its own MusicBrainz id, and for a fold no present file of its album places (its files have left the folder, or two folders fold to its key alike); `createdAt` still tells such folds apart when they were folded at different times.
+             * @example Joni/Blue Again
+             */
+            folder?: string;
+            /** @description The name of the library holding an album fold's folder, given whenever the fold is placed: with `folder`, or alone for an album at the top of its library. */
+            library?: string;
+            /** @description The entity the name files under: prefixed (`ar-`, `al-`, `rg-`, `sr-`) where the type has a prefix, and a genre's bare, as the genre listing takes it. */
+            entityPid: string;
+            /** @description The entity's display name. */
+            entityName: string;
+            /**
+             * Format: date-time
+             * @description When the name was folded.
+             */
+            createdAt: string;
+        };
+        /** @description Folds of one entity type to forget. */
+        UnfoldRequest: {
+            /** @enum {string} */
+            entityType: "album" | "artist" | "release-group" | "genre" | "series";
+            /** @description Fold keys exactly as `GET /library/folds` lists them. */
+            keys: string[];
         };
         /** @description Same-recording different-encoding groups. */
         UpgradeGroups: {
@@ -7483,6 +7700,8 @@ export interface components {
             title: string;
             /** @description Context line (artist for a track, author for a book). */
             subtitle?: string;
+            /** @description True on an artist or album whose own name is the query, ignoring case, accents, punctuation and spacing (`jayz` finds `Jay-Z`), so a client can lead with it. Absent on every other hit. */
+            exact?: boolean;
         };
         /** @description Search results grouped by kind, ranked within each group. */
         SearchResults: {
@@ -7599,6 +7818,21 @@ export interface components {
              */
             bpm?: number;
             /**
+             * @description How many tracks the release holds, as the file states it beside `trackNumber`. Absent when the file states none.
+             * @example 12
+             */
+            trackTotal?: number;
+            /**
+             * @description How many discs the release holds, as the file states it beside `discNumber`. Absent when the file states none.
+             * @example 2
+             */
+            discTotal?: number;
+            /**
+             * @description How many parts an audiobook's file says the book has. Absent for anything else and when the file states none.
+             * @example 5
+             */
+            partTotal?: number;
+            /**
              * @description Source audio codec.
              * @example flac
              */
@@ -7706,6 +7940,8 @@ export interface components {
             fileList?: components["schemas"]["DeletePlanFile"][];
             /** @description Where the files `fileList` names are, in the same order, each relative to its library's root, so two files of one name in different folders read apart. Absent with `fileList`. */
             paths?: string[];
+            /** @description The sidecars that go with this entry's files, each relative to its library's root as `paths` are: the covers, lyrics, cue sheets and other files named for a file being deleted. A sidecar another file of its name still uses stays, and is listed with the last of those files to go. In an applied result, only those that left with their files. Absent when none goes. */
+            sidecars?: string[];
             /** @description Files of this item the deletion tried to remove and could not; they stayed, and `files` does not count them. Absent from a plan and when every file went. */
             failed?: number;
             /** @description Why the first of the `failed` files stayed, in words without the server's folders. */
@@ -8790,6 +9026,8 @@ export interface components {
             podcastTemplate: string;
             /** @description Whether organizing also writes tags. */
             tagWrite: boolean;
+            /** @description The folder compilations file under, and the album artist the tag write gives them. An empty string files each under its own tagged album artist (Various Artists for one tagged with none); absent files them under Various Artists. */
+            compilationFolder?: string;
             /** @description A built-in no saved profile overrides; it cannot be deleted. */
             builtIn: boolean;
             sample: components["schemas"]["OrganizeSample"];
@@ -8801,12 +9039,17 @@ export interface components {
             audiobookTemplate: string;
             podcastTemplate: string;
         };
-        /** @description Where a profile lays out a fixed sample track, book and episode; an empty path is a template that renders none for that sample. */
+        /** @description Where a profile lays out a fixed sample track, book, episode and compilation track; an empty path is a template that renders none for that sample. */
         OrganizeSample: {
             /** @example Test Ensemble/Signal Garden (2024)/1-03 - Amber Waves.flac */
             music: string;
             audiobook: string;
             podcast: string;
+            /**
+             * @description A track of a compilation tagged with an album artist of its own, so each compilation folder setting shows a path of its own.
+             * @example Various Artists/Coastal Nights (2023)/1-04 - Night Drive.flac
+             */
+            compilation: string;
         };
         /** @description A profile to save. An empty or absent template inherits the built-in of the same name, or the native layout. */
         OrganizeProfileInput: {
@@ -8815,6 +9058,8 @@ export interface components {
             podcastTemplate?: string;
             /** @default false */
             tagWrite: boolean;
+            /** @description The folder compilations file under, which the tag write also gives them as album artist. An empty string files each under its own tagged album artist (Various Artists for one tagged with none); absent files them under Various Artists, and a save replaces the whole profile, so a save without it does too. Surrounding space is trimmed; a folder that names none (only dots, say) is `invalid-request`. */
+            compilationFolder?: string;
         };
         /** @description A profile to render samples for; `name` picks what an empty template inherits. */
         OrganizeProfilePreview: {
@@ -8824,6 +9069,8 @@ export interface components {
             podcastTemplate?: string;
             /** @default false */
             tagWrite: boolean;
+            /** @description Where compilations file, as a saved profile's `compilationFolder`. */
+            compilationFolder?: string;
         };
         /** @description The scope of an organize pass. */
         OrganizeRequest: {
@@ -9688,7 +9935,7 @@ export interface components {
              * @enum {string}
              */
             source: "spotify" | "applemusic" | "ytmusic" | "csv" | "text" | "portable";
-            /** @description Name for the created playlist. Defaults to a name found in the export, or `Imported playlist`. */
+            /** @description Name for the created playlist. Defaults to a name found in the export, or `Imported playlist`; a name found in the export past 200 characters is refused as one given here is. */
             name?: string;
             /** @description The export file's text content (text sources). */
             payload?: string;
@@ -10146,6 +10393,33 @@ export interface components {
             /** @description Export only: names the rule this report was read from, to pass back as the export's `ruleHash`. */
             ruleHash?: string;
             rule?: components["schemas"]["SmartRule"];
+        };
+        /** @description An M3U8 document to match without importing it. */
+        M3uPreviewRequest: {
+            /** @description The M3U8 document text. */
+            content: string;
+        };
+        /** @description How every path line of an M3U8 document matches. The three counts add up to the lines in `entries`. */
+        M3uPreview: {
+            /** @description Lines that become entries of the playlist. */
+            matched: number;
+            /** @description Lines naming the item of the line before them through a different path to it (another of its files, or another spelling of the same file), which add no entry. */
+            merged: number;
+            /** @description Lines naming nothing the caller can see. */
+            unmatched: number;
+            /** @description Every path line, in document order. */
+            entries: components["schemas"]["M3uPreviewEntry"][];
+        };
+        /** @description One path line and what it matched; `item` is present on a `matched` or `merged` line. */
+        M3uPreviewEntry: {
+            /** @description The line's path, as the document gives it. */
+            path: string;
+            /**
+             * @description `matched`, `merged` (the item of the line before it, through a different path to it: another of its files, or another spelling of the same file) or `unmatched`. The same path given twice in a row is `matched` both times.
+             * @enum {string}
+             */
+            outcome: "matched" | "merged" | "unmatched";
+            item?: components["schemas"]["ItemSummary"];
         };
         /** @description An M3U8 document to import as a static playlist. */
         M3uImport: {
@@ -11457,6 +11731,16 @@ export interface components {
             /** @description True when another delta page is already available; fetch it immediately with `since` set to this page's `nextSince`. Absent in snapshot mode (`nextCursor` plays that role). */
             more?: boolean;
         };
+        /** @description The items to ask about. */
+        RemovedItemsQuery: {
+            /** @description Items a device holds downloads of from this server that its latest snapshot did not list. */
+            pids: string[];
+        };
+        /** @description The asked-about items that are gone for good. */
+        RemovedItemList: {
+            /** @description The requested PIDs the server can never put back, as asked. An item not named here may still return. */
+            pids: string[];
+        };
         /** @description One change to server-side state visible to the calling user (their own state, plus other users' shared playlists), with the current value hydrated fresh. `kind` is a string, not a closed enum, so new kinds can appear; clients must skip events whose `kind` they do not recognize. Hydrated `playlist` payloads omit a smart playlist's computed `itemCount`, like list pages. */
         ServerSyncEvent: {
             /**
@@ -11561,7 +11845,7 @@ export interface components {
              * @example tk-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             id: string;
-            /** @description The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`, or an `import-` migration (`import-jellyfin`, `import-subsonic`, ...). A string, not a closed enum. */
+            /** @description The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`, `catalog-repair`, or an `import-` migration (`import-jellyfin`, `import-subsonic`, ...). A string, not a closed enum. */
             type: string;
             /** @description `queued`, `running`, `done`, `failed`, or `parked`: a book merge or split, or a CUE split, whose runs kept ending with the server. Parked is terminal and counts as failed: the task is not run again, the delete, Clear finished and the retention prune take it as they take a failed task, and until one does it keeps the book or rip it works on from another merge or split. A string, not a closed enum. */
             state: string;
@@ -11574,9 +11858,9 @@ export interface components {
              * @description Progress in percent when the engine reports it.
              */
             progressPct?: number;
-            /** @description Why the task failed, when `failed`, or stopped, when `parked`, where it also says where each file the run made or moved is (new files waiting beside the book, originals in the trash) and what clearing the task does with new files still hidden. While a book merge or split, or a CUE split, is `running` it can say what the task waits out instead, in the server's words beside `waitReason`. */
+            /** @description Why the task failed, when `failed`, or stopped, when `parked`, where it also says where each file the run made or moved is (new files waiting beside the book, originals in the trash) and what clearing the task does with new files still hidden. While a book merge or split, a CUE split, or a catalog repair is `running` it can say what the task waits out instead, in the server's words beside `waitReason`. */
             error?: string;
-            /** @description Set while a `running` book merge or split, or CUE split, waits to try again on its own, at `retryAt`: `catalog-busy` (another job holds the catalog), `catalog-maintenance`, `read-only` (a library it works in is flagged read-only), `storage-unwritable` (a folder refuses the server), `engine-unavailable`, `part-missing` (a file the catalog has is not where it says), `put-back-blocked` (a file going back from the trash cannot), `stopped` (the server stopped or the run ran out of time), or `other`. A task waits at most six hours in a row, then ends safely for how far it went. A string, not a closed enum. */
+            /** @description Set while a `running` book merge or split, or CUE split, waits to try again on its own, at `retryAt`: `catalog-busy` (another job holds the catalog), `catalog-maintenance`, `read-only` (a library it works in is flagged read-only), `storage-unwritable` (a folder refuses the server), `engine-unavailable`, `part-missing` (a file the catalog has is not where it says), `put-back-blocked` (a file going back from the trash cannot), `stopped` (the server stopped or the run ran out of time), or `other`. A `catalog-repair` that a catalog hand-off cut short waits too, with `catalog-maintenance`, and starts over once the catalog is back. A book merge or split, or CUE split, waits at most six hours in a row, then ends safely for how far it went. A string, not a closed enum. */
             waitReason?: string;
             /**
              * Format: date-time
@@ -11597,7 +11881,7 @@ export interface components {
              * @description When it reached a terminal state.
              */
             finishedAt?: string;
-            /** @description Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...); a `path-mismatch` fix also carries `moved` (the items it moved), `held` (by hold code) and `jobPids` (the organize jobs that moved them). */
+            /** @description Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...); a `path-mismatch` fix also carries `moved` (the items it moved), `held` (by hold code) and `jobPids` (the organize jobs that moved them). A `catalog-repair` task carries each step's count once that step has run, added up over its attempts and absent for a step none has reached: `sortKeysRewritten`, `orphansDeleted` (entities with no items deleted), `orphansPending` (those its last orphans step noted for the next repair), `artSourcesReclaimed`, `thumbnailsReclaimed`, `tagProvenanceReclaimed`, `strandedTagRowsReclaimed` and `searchRowsRebuilt` (entries written or dropped); `runs`, what each run of the task did: the steps it finished, in order, with `error` saying why a run stopped short and `handedOff` marking one a catalog hand-off cut short; and once it has run, `after`, the `CatalogConsistency` its closing check read. */
             summary?: {
                 [key: string]: unknown;
             };
@@ -12380,7 +12664,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The sync cursor predates the retained change history or belongs to a previous catalog generation (code `sync-reset`). Drop the local mirror and re-mirror from a fresh snapshot. */
+        /** @description The sync cursor predates the retained change history, lies past its end or in a history the server has rolled back, or belongs to a previous catalog generation (code `sync-reset`). Drop the local mirror and re-mirror from a fresh snapshot. */
         SyncReset: {
             headers: {
                 [name: string]: unknown;
@@ -13536,6 +13820,61 @@ export interface operations {
             503: components["responses"]["CatalogMaintenance"];
         };
     };
+    getCatalogConsistency: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogConsistency"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    repairCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The repair task. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolTask"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description A repair is already queued or running (`conflict`, with `params.reason` `task-running` and `params.task` naming its task). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
     getEnrichmentCache: {
         parameters: {
             query?: never;
@@ -14669,6 +15008,62 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    listEntityFolds: {
+        parameters: {
+            query?: {
+                /** @description Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. */
+                cursor?: string;
+                /** @description Maximum folds per page. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of folds. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityFoldPage"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    unfoldEntities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnfoldRequest"];
+            };
+        };
+        responses: {
+            /** @description Unfolded. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -17943,6 +18338,33 @@ export interface operations {
             503: components["responses"]["CatalogMaintenance"];
         };
     };
+    previewPlaylistM3u: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["M3uPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Each line's outcome, in document order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["M3uPreview"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
     importPlaylistNsp: {
         parameters: {
             query?: {
@@ -20258,6 +20680,33 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             410: components["responses"]["SyncReset"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    syncCatalogRemoved: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemovedItemsQuery"];
+            };
+        };
+        responses: {
+            /** @description The requested items that are gone for good. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovedItemList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };

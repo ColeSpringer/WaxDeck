@@ -33,7 +33,7 @@ func (s *Server) ListOrganizeProfiles(ctx context.Context, _ ListOrganizeProfile
 func organizeProfileJSON(p service.OrganizeProfileDTO) OrganizeProfile {
 	out := OrganizeProfile{
 		Name: p.Name, MusicTemplate: p.Music, AudiobookTemplate: p.Audiobook, PodcastTemplate: p.Podcast,
-		TagWrite: p.TagWrite, BuiltIn: p.BuiltIn, Sample: organizeSampleJSON(p.Sample),
+		TagWrite: p.TagWrite, CompilationFolder: p.CompilationFolder, BuiltIn: p.BuiltIn, Sample: organizeSampleJSON(p.Sample),
 	}
 	if p.Saved != nil {
 		out.Saved = &OrganizeTemplates{MusicTemplate: p.Saved.Music, AudiobookTemplate: p.Saved.Audiobook,
@@ -43,7 +43,7 @@ func organizeProfileJSON(p service.OrganizeProfileDTO) OrganizeProfile {
 }
 
 func organizeSampleJSON(s service.OrganizeSampleDTO) OrganizeSample {
-	return OrganizeSample{Music: s.Music, Audiobook: s.Audiobook, Podcast: s.Podcast}
+	return OrganizeSample{Music: s.Music, Audiobook: s.Audiobook, Podcast: s.Podcast, Compilation: s.Compilation}
 }
 
 func (s *Server) PutOrganizeProfile(ctx context.Context, req PutOrganizeProfileRequestObject) (PutOrganizeProfileResponseObject, error) {
@@ -57,6 +57,7 @@ func (s *Server) PutOrganizeProfile(ctx context.Context, req PutOrganizeProfileR
 	in := service.OrganizeProfileInput{
 		Music: deref(req.Body.MusicTemplate), Audiobook: deref(req.Body.AudiobookTemplate),
 		Podcast: deref(req.Body.PodcastTemplate), TagWrite: derefBool(req.Body.TagWrite),
+		CompilationFolder: req.Body.CompilationFolder,
 	}
 	p, err := s.svc.PutOrganizeProfile(ctx, uc, req.Name, in)
 	if err != nil {
@@ -103,6 +104,7 @@ func (s *Server) PreviewOrganizeProfile(ctx context.Context, req PreviewOrganize
 	in := service.OrganizeProfileInput{
 		Music: deref(req.Body.MusicTemplate), Audiobook: deref(req.Body.AudiobookTemplate),
 		Podcast: deref(req.Body.PodcastTemplate), TagWrite: derefBool(req.Body.TagWrite),
+		CompilationFolder: req.Body.CompilationFolder,
 	}
 	sample, err := s.svc.PreviewOrganizeProfile(ctx, uc, deref(req.Body.Name), in)
 	if err != nil {

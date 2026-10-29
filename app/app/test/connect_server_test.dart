@@ -449,6 +449,9 @@ class _NoTransfers implements TransferEnginePort {
   Future<List<TrackedTransfer>> trackedTransfers() async => const [];
 
   @override
+  Future<String?> mediaDirectory() async => null;
+
+  @override
   Future<void> recover() async {}
 
   @override

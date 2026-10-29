@@ -34,7 +34,7 @@ func TestRenameEntityKeepsThePid(t *testing.T) {
 		t.Fatalf("rename status = %d", resp.StatusCode)
 	}
 	out := decode[EntityRenameResult](t, resp)
-	if out.Outcome != Renamed {
+	if out.Outcome != EntityRenameResultOutcomeRenamed {
 		t.Fatalf("outcome = %q, want renamed", out.Outcome)
 	}
 	if out.EntityPid != album {
@@ -71,7 +71,7 @@ func TestRenameEntityKeepsThePid(t *testing.T) {
 		t.Fatalf("case-only rename status = %d", resp.StatusCode)
 	}
 	cased := decode[EntityRenameResult](t, resp)
-	if cased.Outcome != Refreshed {
+	if cased.Outcome != EntityRenameResultOutcomeRefreshed {
 		t.Fatalf("case-only outcome = %q, want refreshed", cased.Outcome)
 	}
 	if cased.EntityPid != album {
@@ -124,7 +124,7 @@ func TestRenameEntityMergesOntoATakenName(t *testing.T) {
 		t.Fatalf("merging rename status = %d", resp.StatusCode)
 	}
 	out := decode[EntityRenameResult](t, resp)
-	if out.Outcome != Merged {
+	if out.Outcome != EntityRenameResultOutcomeMerged {
 		t.Fatalf("outcome = %q, want merged", out.Outcome)
 	}
 	if out.MergedInto == nil || *out.MergedInto != album {

@@ -891,8 +891,9 @@ paths:
         Deletes items' files, to the catalog trash by default
         (reversible from the trash surface) or permanently (`mode`
         `permanent`, administrators only). `dryRun` answers the plan
-        (which files, how many bytes) without deleting, and the
-        response reports the same entries when it applies. Deleting
+        (which files and the sidecars that go with them, how many
+        bytes) without deleting, and the response reports the same
+        entries when it applies. Deleting
         needs the `delete` permission or the admin role, and every
         pid must be visible to the caller (`not-found` otherwise).
         Items keep their catalog identity: an item that loses its
@@ -1121,6 +1122,13 @@ components:
         subtitle:
           type: string
           description: Context line (artist for a track, author for a book).
+        exact:
+          type: boolean
+          description: >
+            True on an artist or album whose own name is the query,
+            ignoring case, accents, punctuation and spacing (`jayz`
+            finds `Jay-Z`), so a client can lead with it. Absent on every
+            other hit.
 
     SearchResults:
       type: object
@@ -1341,6 +1349,24 @@ components:
                 none, which is most of them; nothing measures it, so
                 this is the tag's number and not an analysis result.
               example: 128
+            trackTotal:
+              type: integer
+              description: >
+                How many tracks the release holds, as the file states it
+                beside `trackNumber`. Absent when the file states none.
+              example: 12
+            discTotal:
+              type: integer
+              description: >
+                How many discs the release holds, as the file states it
+                beside `discNumber`. Absent when the file states none.
+              example: 2
+            partTotal:
+              type: integer
+              description: >
+                How many parts an audiobook's file says the book has.
+                Absent for anything else and when the file states none.
+              example: 5
             codec:
               type: string
               description: Source audio codec.
@@ -1523,6 +1549,19 @@ components:
           items:
             type: string
             example: Hum Collective/Shell Songs/01 - Hell Shell.m4a
+        sidecars:
+          type: array
+          description: >
+            The sidecars that go with this entry's files, each relative
+            to its library's root as `paths` are: the covers, lyrics,
+            cue sheets and other files named for a file being deleted.
+            A sidecar another file of its name still uses stays, and is
+            listed with the last of those files to go. In an applied
+            result, only those that left with their files. Absent when
+            none goes.
+          items:
+            type: string
+            example: Hum Collective/Shell Songs/01 - Hell Shell.lrc
         failed:
           type: integer
           description: >

@@ -490,15 +490,15 @@ func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 			Album:      s.Album,
 			DurationMS: s.Duration * 1000,
 		}
-		it, rung, err := l.resolveMigrationRef(ctx, ref)
+		it, copies, err := l.resolveMigrationRef(ctx, ref)
 		if err != nil {
 			return sum, classify(err)
 		}
-		if it == nil || rung == model.MatchNone {
+		if it == nil {
 			sum.noteUnmatched(s.Artist, s.Title)
 			continue
 		}
-		sum.Matched++
+		sum.noteMatch(s.Artist, s.Title, copies)
 		pid := apiPID(PrefixTrack, it.PID)
 		// write runs one state write unless this is a dry run; a
 		// skippable failure (the item vanished mid-import) drops that
@@ -599,8 +599,10 @@ func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 // are per starred group, not per library item.
 func (l *Library) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *subsonicClient, prog *toolProgress, starred subsonicStarred, sum *migrationSummary, cache *albumSongCache) error {
 	// resolveMember walks candidate source albums, and every song
-	// within one, until the resolve ladder matches a local item, which
-	// is the item whose entity handles name what to star.
+	// within one, until the resolve ladder matches a local item for sure
+	// (see resolveGroupMember), which is the item whose entity handles
+	// name what to star. The first tie it passes is the answer only when
+	// no member is sure.
 	//
 	// The search does not stop at the first song or the first album: one
 	// remote song missing locally says nothing about the rest of the
@@ -610,7 +612,8 @@ func (l *Library) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask
 	// (memoized, so the main walk's fetches and albums shared between
 	// starred artists are not re-requested), and a local lookup per song
 	// until one matches.
-	resolveMember := func(albumIDs []string) (*model.ItemView, error) {
+	resolveMember := func(albumIDs []string, entity func(*model.ItemView) model.PID) (*model.ItemView, error) {
+		var fallback *model.ItemView
 		for _, albumID := range albumIDs {
 			songs, err := cache.get(ctx, albumID)
 			if err != nil {
@@ -620,30 +623,33 @@ func (l *Library) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
 				}
-				it, rung, err := l.resolveMigrationRef(ctx, model.PortableRef{
+				sure, tie, err := l.resolveGroupMember(ctx, model.PortableRef{
 					Kind:       model.KindTrack,
 					MBID:       s.MusicBrainzID,
 					Artist:     s.Artist,
 					Title:      s.Title,
 					Album:      s.Album,
 					DurationMS: s.Duration * 1000,
-				})
+				}, entity)
 				if err != nil {
 					return nil, classify(err)
 				}
-				if it != nil && rung != model.MatchNone {
-					return it, nil
+				if sure != nil {
+					return sure, nil
+				}
+				if fallback == nil {
+					fallback = tie
 				}
 			}
 		}
-		return nil, nil
+		return fallback, nil
 	}
 
 	// star records the entity star for a group, given the local item one
 	// of its members resolved to. A group that matches nothing local is
 	// an unmatched sample, like a song that misses.
 	star := func(albumIDs []string, label string, entityPID func(*model.ItemView) model.PID, prefix string, at string, count *int) error {
-		it, err := resolveMember(albumIDs)
+		it, err := resolveMember(albumIDs, entityPID)
 		if err != nil {
 			return err
 		}

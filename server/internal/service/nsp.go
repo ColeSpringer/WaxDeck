@@ -147,6 +147,9 @@ func (l *Library) ImportPlaylistNSP(ctx context.Context, uc *UserCtx, doc []byte
 	if name == "" {
 		return Playlist{}, errInvalid("the NSP document has no name; supply one with the name parameter")
 	}
+	if err := checkPlaylistName(name); err != nil {
+		return Playlist{}, err
+	}
 	var q query.Query
 	if partial {
 		// Still refuses a malformed document, a broken file rather than

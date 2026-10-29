@@ -45,18 +45,105 @@ void main() {
     expect(pins.single.etag, 'W/"new"');
   });
 
-  test('removing answers what it dropped, so the files can go too', () async {
-    await store.put(_pin('tr-A', 1024));
-    await store.put(_pin('tr-A', 256));
-    await store.put(_pin('tr-B', 1024));
+  group('removing exactly', () {
+    ArtworkPinRecord at(String pid, int sizePx, DateTime when) =>
+        ArtworkPinRecord(
+          pid: pid,
+          sizePx: sizePx,
+          artUrl: 'https://deck.example/api/v1/items/$pid/art',
+          etag: 'W/"a"',
+          localPath: '/art/$pid-$sizePx.img',
+          sizeBytes: sizePx * 100,
+          pinnedAt: when,
+        );
 
-    final dropped = await store.remove('tr-A');
-    expect(dropped.map((p) => p.localPath), <String>[
-      '/art/tr-A-1024.img',
-      '/art/tr-A-256.img',
-    ]);
-    expect(await store.pinsFor('tr-A'), isEmpty);
-    expect(await store.pinsFor('tr-B'), hasLength(1));
+    final first = DateTime.utc(2026, 10, 1);
+    final later = DateTime.utc(2026, 10, 2);
+
+    test('takes the pins listed and leaves every other', () async {
+      await store.put(at('tr-A', 1024, first));
+      await store.put(at('tr-A', 256, first));
+      await store.put(at('tr-B', 1024, first));
+      // A cover the device pinned after the list was made.
+      await store.put(at('tr-A', 512, later));
+
+      await store.removeExactly('tr-A', [
+        (sizePx: 1024, pinnedAt: first),
+        (sizePx: 256, pinnedAt: first),
+      ]);
+
+      expect((await store.pinsFor('tr-A')).map((p) => p.sizePx), [512]);
+      expect(await store.pinsFor('tr-B'), hasLength(1));
+    });
+
+    test('leaves a size pinned again since, which is not the cover that '
+        'was listed', () async {
+      await store.put(at('tr-A', 1024, first));
+      await store.put(at('tr-A', 1024, later));
+
+      await store.removeExactly('tr-A', [(sizePx: 1024, pinnedAt: first)]);
+
+      final held = await store.pinsFor('tr-A');
+      expect(held, hasLength(1));
+      expect(held.single.pinnedAt.toUtc(), later);
+    });
+  });
+
+  group('whether a cover may be pinned', () {
+    Future<void> download(String pid) => db
+        .into(db.downloadRecords)
+        .insert(
+          DownloadRecordsCompanion.insert(
+            pid: pid,
+            fileIndex: 0,
+            essenceHash: 'e-$pid',
+            etag: 'x',
+            fileName: 'e.mp3',
+            localPath: '/downloads/e.mp3',
+            sizeBytes: 1,
+            state: 'complete',
+          ),
+        );
+
+    test('not for an item the device holds no download of', () async {
+      expect(await store.mayPin('tr-A'), isFalse);
+    });
+
+    test('for one it holds, when no free is owed for it', () async {
+      await download('tr-A');
+
+      expect(await store.mayPin('tr-A'), isTrue);
+    });
+
+    test('not for one a commit has promised to free', () async {
+      await download('tr-A');
+      await db.transaction(() => PendingFrees(db).condemn('tr-A'));
+
+      expect(await store.mayPin('tr-A'), isFalse);
+    });
+
+    test('for one whose promise is no longer owed', () async {
+      await download('tr-A');
+      await db.transaction(() => PendingFrees(db).condemn('tr-A'));
+      await db
+          .into(db.mirrorItems)
+          .insert(
+            MirrorItemsCompanion.insert(
+              pid: 'tr-A',
+              ulid: 'A',
+              mediaType: 'music',
+              title: 'Back',
+              durationMs: 1,
+              sortKey: 'back',
+            ),
+          );
+
+      expect(await store.mayPin('tr-A'), isTrue);
+    });
+
+    test('the no-op store never pins', () async {
+      expect(await const NoArtworkPinStore().mayPin('tr-A'), isFalse);
+    });
   });
 
   test('clearing drops every account-held pin', () async {
@@ -71,7 +158,9 @@ void main() {
     const none = NoArtworkPinStore();
     await none.put(_pin('tr-A', 1024));
     expect(await none.pinsFor('tr-A'), isEmpty);
-    expect(await none.remove('tr-A'), isEmpty);
+    await none.removeExactly('tr-A', [
+      (sizePx: 1024, pinnedAt: DateTime.utc(2026, 7, 27, 9)),
+    ]);
     expect(await none.clear(), isEmpty);
   });
 
@@ -97,7 +186,9 @@ void main() {
       'bk-$ulid',
     ]);
     expect(await store.pinsFor('tr-$ulid'), isEmpty);
-    expect(await store.remove('tr-$ulid'), isEmpty);
+    await store.removeExactly('tr-$ulid', [
+      (sizePx: 1024, pinnedAt: DateTime.utc(2026, 7, 27, 9)),
+    ]);
     expect(await store.pinsFor('bk-$ulid'), hasLength(1));
     expect(await store.pinsToDraw('tr-01JZX5N8QW3F4V9T2B7KDOTHER1'), isEmpty);
   });

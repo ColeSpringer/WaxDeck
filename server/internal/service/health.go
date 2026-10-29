@@ -193,10 +193,12 @@ type DuplicateGroupDTO struct {
 	Losers     []DuplicateEntityDTO
 }
 
-// MergeResultDTO is a duplicate merge outcome.
+// MergeResultDTO is a duplicate merge outcome. Folds are the keys the
+// merge now folds into the survivor, one per loser.
 type MergeResultDTO struct {
 	Merged        int
 	ChildrenMoved int
+	Folds         []string
 }
 
 // UpgradeMemberDTO is one encoding of a recording: an item, and the file
@@ -1007,13 +1009,14 @@ func (l *Library) MergeDuplicates(ctx context.Context, uc *UserCtx, entityType, 
 	if err != nil {
 		return MergeResultDTO{}, classify(err)
 	}
-	res := MergeResultDTO{Merged: len(reports)}
+	res := MergeResultDTO{Merged: len(reports), Folds: []string{}}
 	for _, r := range reports {
 		res.ChildrenMoved += r.Children
+		res.Folds = append(res.Folds, r.Folds...)
 	}
 	l.Audit(ctx, uc, "entity.merge",
 		AuditTarget{Kind: entityType, PID: survivorPid},
-		map[string]any{"losers": loserPids, "childrenMoved": res.ChildrenMoved})
+		map[string]any{"losers": loserPids, "childrenMoved": res.ChildrenMoved, "folds": res.Folds})
 	return res, nil
 }
 
