@@ -403,10 +403,11 @@ const searchMaxCandidates = 5000
 // ranking. `MaxCandidates` now bounds the pool to the newest N matches
 // *in those states*, which is the pairing that makes one pass enough.
 //
-// The remaining filters bite only a restricted caller and run after the
-// per-group cap, so a group can still come back short of `limit` for
-// them. That was true before the widening pass existed and is what it
-// deliberately never tried to fix.
+// The remaining filters run after the per-group cap, so a group can
+// still come back short of `limit` for them: grants and content rules
+// for a restricted caller, and for everyone the episode group's
+// subscriptions. That was true before the widening pass existed and is
+// what it deliberately never tried to fix.
 func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) (SearchResults, error) {
 	// A restricted caller with no granted libraries can see nothing: every
 	// item hit fails the visibility check below and entity groups are
@@ -523,9 +524,10 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 	convItem := func(hits []read.SearchHit, prefix string) []SearchHit {
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
-			// Every filter here runs after the catalog's per-group cap, and
-			// every one of them bites only a restricted caller: the state
-			// rule that applied to everybody rides the query now.
+			// Every filter here runs after the catalog's per-group cap. The
+			// episode arm bites everyone; the rest only a restricted
+			// caller, since the state rule that applied to everybody rides
+			// the query now.
 			if prefix == PrefixEpisode {
 				// Title and transcript matches alike, by the podcast
 				// library and the caller's subscriptions, as every list

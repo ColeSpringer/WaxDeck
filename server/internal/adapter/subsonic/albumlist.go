@@ -84,7 +84,7 @@ func indexOrder(idx *index, q listQuery) ([]*album, bool) {
 		return idx.albumsByArtist(), true
 	case "byYear":
 		// The range runs either way; a reversed one lists newest first.
-		// Year zero is unknown, kept only by a range that starts there.
+		// Year zero is unknown, kept only by a range that reaches it.
 		lo, hi := min(q.from, q.to), max(q.from, q.to)
 		var albums []*album
 		for _, al := range idx.albums {

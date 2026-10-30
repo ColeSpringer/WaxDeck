@@ -378,6 +378,27 @@ func AccountChanges(before, after *Account) map[string]map[string]any {
 	return changes
 }
 
+// AccountGrants is what an account holds, under AccountChanges' names:
+// its roles, library access, uploads and permissions.
+func AccountGrants(a *Account) map[string]any {
+	u, p := a.User, permissionsOf(a.User)
+	return map[string]any{
+		"roles":                        append([]string{}, u.Roles...),
+		"uploadEnabled":                u.UploadEnabled,
+		"uploadQuotaBytes":             u.UploadQuotaBytes,
+		"libraryAccess.mode":           u.LibraryAccess,
+		"libraryAccess.libraryPids":    append([]string{}, a.LibraryPIDs...),
+		"permissions.download":         p.Download,
+		"permissions.delete":           p.Delete,
+		"permissions.explicitContent":  p.Explicit,
+		"permissions.sharedOutputs":    p.SharedOutputs,
+		"permissions.managePodcasts":   p.ManagePodcasts,
+		"permissions.maxTranscodeKbps": p.MaxTranscodeKbps,
+		"permissions.tagAllow":         append([]TagRule{}, p.TagAllow...),
+		"permissions.tagDeny":          append([]TagRule{}, p.TagDeny...),
+	}
+}
+
 // What becomes of the playlists an account owns when it is deleted.
 const (
 	PlaylistsTransfer = "transfer"

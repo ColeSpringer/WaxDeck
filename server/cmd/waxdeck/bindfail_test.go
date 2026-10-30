@@ -84,6 +84,7 @@ func TestABadSettingStartsNothing(t *testing.T) {
 		{"a trusted proxy that is not an address", []string{"-trusted-proxies", "not-a-proxy"}, "trusted proxies"},
 		{"single sign-on without a public base", []string{"-oidc-issuer", "https://idp.example"}, "WAXDECK_PUBLIC_BASE"},
 		{"a streaming engine url without a host", []string{"-flow-url", "waxflow:4418"}, "waxflow:4418"},
+		{"a web dir without an index", []string{"-web-dir", t.TempDir()}, "has no index.html"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()

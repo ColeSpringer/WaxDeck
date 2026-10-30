@@ -197,8 +197,11 @@ void main() {
       await session.start(autoplay: false);
 
       // Loaded, not played. The step is owed to the first play and has
-      // not been taken yet.
+      // not been taken yet, and the load wrote nothing that would make
+      // the place look freshly left.
       expect(engine.position, const Duration(milliseconds: 120000));
+      await pumpEventQueue();
+      expect(repo.putPlayStateCalls, isEmpty);
 
       // Closing without playing writes the checkpoint back, so a step
       // taken here would walk the book backwards once per launch: ten

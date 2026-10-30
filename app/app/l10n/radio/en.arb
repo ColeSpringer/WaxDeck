@@ -39,7 +39,7 @@
   },
   "radioCouldNotTune": "Could not tune {name}",
   "@radioCouldNotTune": {
-    "description": "Snackbar when a station's stream would not open, which is the engine's failure rather than the server's.",
+    "description": "Snackbar when a station's stream would not open or failed after it opened.",
     "placeholders": {
       "name": {
         "type": "String",

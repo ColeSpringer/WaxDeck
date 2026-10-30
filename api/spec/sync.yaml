@@ -20,8 +20,9 @@ paths:
         the first delta). With `since`: the changes after that cursor, as
         `upsert` entries carrying fresh summaries and `delete` tombstones
         for items that no longer exist or whose change left them outside
-        the caller's library visibility (a file re-homed under an
-        ungranted root keeps its item PID; a tombstone for an item never
+        what the caller can see (its library visibility or content
+        settings; a file re-homed under an ungranted root keeps its item
+        PID; a tombstone for an item never
         mirrored is a no-op); entries are coalesced within a page (an item may
         recur on later pages; application is idempotent, latest wins).
         The returned `nextSince` advances the cursor, and `more` signals
@@ -241,8 +242,8 @@ components:
             deleted outright rather than to the trash, or the catalog
             dropped the row. `hidden` means it left this caller's view
             and is recoverable: deleted to the trash with its undo
-            journal, or a file re-homed under a library they are not
-            granted.
+            journal, a file re-homed under a library they are not
+            granted, or an item their content settings now deny.
 
 
             Unsubscribing from a show sends no tombstone at all. It bumps

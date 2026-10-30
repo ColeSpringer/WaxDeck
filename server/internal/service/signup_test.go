@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -176,6 +177,148 @@ func TestInviteLifecycle(t *testing.T) {
 	}
 	if _, _, err := svc.Signup(ctx, "uncle", "password123", "", iv3.Token); KindOf(err) != KindForbidden {
 		t.Fatalf("revoked invite: got %v, want forbidden", err)
+	}
+}
+
+// onlyAuditEntry is the one entry an action left in the log.
+func onlyAuditEntry(t *testing.T, ctx context.Context, svc *Library, action string) AuditEventDTO {
+	t.Helper()
+	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: action}, "", 10)
+	if err != nil || len(page.Events) != 1 {
+		t.Fatalf("%s audit = %+v (%v), want one entry", action, page.Events, err)
+	}
+	return page.Events[0]
+}
+
+// A revoked invite is recorded under its note, the one name an
+// administrator knows it by; one made without a note has none, and one
+// that is not there is revoked by no one.
+func TestAnInviteRevokeNamesItsInvite(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newAdminFixture(t)
+	noted, err := svc.CreateInvite(ctx, admin, InviteCreate{Note: "for grandma"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RevokeInvite(ctx, admin, noted.ID); err != nil {
+		t.Fatal(err)
+	}
+	e := onlyAuditEntry(t, ctx, svc, "invite.revoke")
+	if e.TargetPID != noted.ID || e.TargetName != "for grandma" || e.ActorID != admin.ID {
+		t.Fatalf("invite.revoke = %+v, want %s named for grandma, revoked by %s", e, noted.ID, admin.ID)
+	}
+
+	bare, err := svc.CreateInvite(ctx, admin, InviteCreate{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RevokeInvite(ctx, admin, bare.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RevokeInvite(ctx, admin, PrefixInvite+"-nobody"); KindOf(err) != KindNotFound {
+		t.Fatalf("revoking an absent invite: got %v, want not found", err)
+	}
+	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "invite.revoke"}, "", 10)
+	if err != nil || len(page.Events) != 2 || page.Events[0].TargetPID != bare.ID || page.Events[0].TargetName != "" {
+		t.Fatalf("invite.revoke entries = %+v (%v), want the note-less invite's after the first, unnamed, and none for the absent one",
+			page.Events, err)
+	}
+}
+
+// An approval records everything it left the account holding, roles,
+// library access, uploads and permissions alike, lists reading [] when
+// empty, under the names an account edit lists them by.
+func TestAnApprovalRecordsWhatItAssigned(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newAdminFixture(t)
+	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	libs, err := svc.Libraries(ctx)
+	if err != nil || len(libs) != 1 {
+		t.Fatalf("libraries = %+v (%v), want the fixture's one", libs, err)
+	}
+	upload, quota := true, int64(1<<20)
+	for _, c := range []struct {
+		name     string
+		approval SignupApproval
+		want     map[string]string
+	}{
+		{"sam", SignupApproval{Roles: []string{"admin"}, AccessMode: "granted", LibraryPIDs: []string{libs[0].PID},
+			Permissions:   &Permissions{Download: true, MaxTranscodeKbps: 192},
+			UploadEnabled: &upload, UploadQuotaBytes: &quota}, map[string]string{
+			"roles": "[admin]", "libraryAccess.mode": "granted", "libraryAccess.libraryPids": "[" + libs[0].PID + "]",
+			"uploadEnabled": "true", "uploadQuotaBytes": "1.048576e+06",
+			"permissions.download": "true", "permissions.delete": "false", "permissions.maxTranscodeKbps": "192",
+			"permissions.tagDeny": "[]",
+		}},
+		{"kim", SignupApproval{}, map[string]string{
+			"roles": "[user]", "libraryAccess.mode": "all", "libraryAccess.libraryPids": "[]", "uploadEnabled": "false",
+		}},
+	} {
+		acct, _, err := svc.Signup(ctx, c.name, "password123", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.ApproveSignup(ctx, admin, acct.User.ID, c.approval); err != nil {
+			t.Fatal(err)
+		}
+		page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "user.approve", TargetPID: acct.User.ID}, "", 10)
+		if err != nil || len(page.Events) != 1 {
+			t.Fatalf("%s: user.approve entries = %+v (%v), want one", c.name, page.Events, err)
+		}
+		d := page.Events[0].Detail
+		for k, want := range c.want {
+			if got := fmt.Sprint(d[k]); got != want {
+				t.Errorf("%s: user.approve %s = %s, want %s (detail %v)", c.name, k, got, want, d)
+			}
+		}
+		for _, k := range []string{"permissions.explicitContent", "permissions.sharedOutputs", "permissions.managePodcasts", "permissions.tagAllow"} {
+			if _, ok := d[k]; !ok {
+				t.Errorf("%s: user.approve detail %v names no %s", c.name, d, k)
+			}
+		}
+	}
+}
+
+// An account that signed up with an invite is the actor of its own signup
+// entry, which names the invite and the administrator who made it; the
+// log does not credit the server.
+func TestAnInvitedSignupIsTheNewAccountsOwnAct(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newAdminFixture(t)
+	iv, err := svc.CreateInvite(ctx, admin, InviteCreate{Note: "for grandma"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	acct, _, err := svc.Signup(ctx, "grandma", "password123", "", iv.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := onlyAuditEntry(t, ctx, svc, "user.signup")
+	if e.ActorID != acct.User.ID || e.ActorName != "grandma" || e.TargetPID != acct.User.ID || e.TargetName != "grandma" {
+		t.Errorf("user.signup = %+v, want grandma acting on her own account", e)
+	}
+	if e.Detail["invite"] != iv.ID || e.Detail["inviteNote"] != "for grandma" || e.Detail["invitedBy"] != "admin" {
+		t.Errorf("user.signup detail = %v, want invite %s, note for grandma, invited by admin", e.Detail, iv.ID)
+	}
+}
+
+// A request to join is the requester's own act as well, so the two ways
+// to sign up read alike in the log.
+func TestASignupRequestIsTheRequestersOwnAct(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newAdminFixture(t)
+	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	acct, _, err := svc.Signup(ctx, "sam", "password123", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := onlyAuditEntry(t, ctx, svc, "user.request")
+	if e.ActorID != acct.User.ID || e.ActorName != "sam" || e.TargetPID != acct.User.ID || e.TargetName != "sam" {
+		t.Errorf("user.request = %+v, want sam acting on the request", e)
 	}
 }
 

@@ -8,7 +8,7 @@ import 'package:built_value/serializer.dart';
 
 part 'file_diagnostic.g.dart';
 
-/// One persisted observation about a library file, keyed for display by its path (files are not a first-class API resource, so no file id is surfaced). 
+/// One persisted observation about a library file, keyed for display by its path. 
 ///
 /// Properties:
 /// * [path] - The file's display path.

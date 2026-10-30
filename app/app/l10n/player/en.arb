@@ -359,7 +359,7 @@
   },
   "playerOfflineStart": "You're offline. Playback will continue when the connection is back.",
   "@playerOfflineStart": {
-    "description": "Message on the shell when an item could not start because the server cannot be reached; playback starts by itself once the connection returns, and the message also carries a Retry action."
+    "description": "Message on the shell when an item could not start, or stopped part way, because the server cannot be reached; playback continues by itself once the connection returns, and the message also carries a Retry action."
   },
   "playerOpenPlayer": "Open the player",
   "@playerOpenPlayer": {

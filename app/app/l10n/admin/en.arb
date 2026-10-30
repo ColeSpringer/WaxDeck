@@ -1434,7 +1434,7 @@
       }
     }
   },
-  "adminLibraryMediaToBooksBody": "Every audio file in {name} becomes a book on the scan this starts, the parts in one folder gathered into one book. Items whose kind was set by hand keep it.",
+  "adminLibraryMediaToBooksBody": "Every audio file in {name} becomes a book on the scan this starts: parts sharing an album and author are one book, and numbered parts with no album join the book their folder holds. Items whose kind was set by hand keep it.",
   "@adminLibraryMediaToBooksBody": {
     "description": "Body of the dialog confirming a library becomes a Books library. {name} is the library's name.",
     "placeholders": {

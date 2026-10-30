@@ -452,8 +452,13 @@ Audiobook libraries and the podcast library are never music folders.
 Books and episodes appear as songs in the starred lists (unless
 `musicFolderId` narrows them), playlists, bookmarks, `getNowPlaying`
 and `getSong` on their own ids, and episodes in `getPodcasts` and
-`getNewestPodcasts`. They never appear in the browse views, the album
-lists, search, `getRandomSongs`, `getSongsByGenre`, `getGenres`,
+`getNewestPodcasts`. An episode names its show as its parent, and
+`getMusicDirectory` on the show's id lists those of the episodes
+`getPodcasts` lists for it (the newest 100) that can play, to whoever
+it lists them to; to anyone else the show is not found. Apart from that
+directory they never appear
+in the browse views, the album lists, search, `getRandomSongs`,
+`getSongsByGenre`, `getGenres`,
 `getTopSongs` or the similar-song views, and `getScanStatus` counts
 music alone.
 
@@ -461,7 +466,7 @@ Album lists answer every type: `random`, `newest` (recently added),
 `recent` (recently played), `frequent` (most played, an album's tracks
 added up), `highest` (your album ratings), `starred`,
 `alphabeticalByName`, `alphabeticalByArtist`, `byYear` (either
-direction; albums with no year only when the range starts at 0) and
+direction; albums with no year only when the range reaches 0) and
 `byGenre` (any album with a track of that genre). `recent`, `frequent`,
 `highest` and `starred` are the signed-in account's own; `recent` and
 `frequent` can lag a play by up to a minute. `newest` lists
@@ -480,8 +485,8 @@ there.
 
 Stars and ratings write the same state the WaxDeck apps show, and so do
 playlists (create, read, update, delete, reorder, remove by index,
-several indexes in one write; an index from a listing the playlist has
-since changed away from is refused rather than removing another track).
+several indexes in one write, each index naming the playlist as it
+stands when the call arrives).
 Scrobbles become listens with full dedup, and now-playing updates
 forward to connected scrobblers. A scrobble time in seconds,
 milliseconds, microseconds or nanoseconds lands when the play happened;
@@ -508,12 +513,21 @@ and `tokenInfo` names the account an API key belongs to. Podcasts are
 read-only (`getPodcasts`, `getNewestPodcasts`: your subscriptions); an
 episode plays whether or not the server has fetched it, relayed from
 the feed's own file where the server can relay it, and its status says
-whether it is on the server. The internet radio library is there too.
+whether it is on the server. A show and its episodes carry their
+feed's description as plain text, cut to its first 1,000 characters. A
+show you follow but may not hear (an explicit one, once your account
+loses explicit content) is left out of both lists; asked for by id it
+is not found. The internet radio library is there too.
 
 What clients will not find: `getPlayQueue` and `savePlayQueue` are
-refused, artist biographies are empty, and there are no share, jukebox,
-lyrics, scan or podcast-management verbs; `getUser` claims no share or
-podcast role, so clients hide those controls. A response naming more
+refused, artist biographies are empty (and not found for an id you
+cannot browse), and there are no share, jukebox, lyrics, scan or
+podcast-management verbs; `getUser` claims no share or podcast role, so
+clients hide those controls. Playlists keep no comment, so one sent
+with `createPlaylist` or `updatePlaylist` is not stored; `getPlaylists`
+lists only your own view, so naming another account in `username` is
+refused (error 50), for an administrator too; and the views answer GET,
+HEAD and POST, any other method HTTP 405. A response naming more
 than 500 artists and albums carries their stars but no ratings; only
 the first 500 files of a response carry a size, a bitrate and an added
 time; a track cut from a CD image by a cue sheet carries no size; and

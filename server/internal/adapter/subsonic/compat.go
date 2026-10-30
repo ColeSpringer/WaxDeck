@@ -65,6 +65,11 @@ func (h *Handler) getMusicDirectory(w http.ResponseWriter, r *http.Request, uc *
 		h.fail(w, r, 10, "missing id")
 		return
 	}
+	// An episode names its show as its parent.
+	if strings.HasPrefix(id, service.PrefixPodcast+"-") {
+		h.showDirectory(w, r, uc, id)
+		return
+	}
 	idx, err := h.index(r.Context(), uc)
 	if err != nil {
 		h.fail(w, r, 0, "reading the library failed")
@@ -89,6 +94,35 @@ func (h *Handler) getMusicDirectory(w http.ResponseWriter, r *http.Request, uc *
 		return
 	}
 	h.fail(w, r, 70, "no such directory")
+}
+
+// showDirectory answers a podcast show as the directory of the episodes
+// getPodcasts lists for it that can play, built from the same reads, so it
+// is a directory exactly to the callers getPodcasts lists them to.
+func (h *Handler) showDirectory(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, id string) {
+	subs, err := h.followedShows(r.Context(), uc, id)
+	if err != nil {
+		h.failFromService(w, r, err, "no such directory")
+		return
+	}
+	if len(subs) == 0 {
+		h.fail(w, r, 70, "no such directory")
+		return
+	}
+	show := subs[0].Show
+	eps, err := h.channelEpisodes(r.Context(), uc, show.PID, episodesPerChannel)
+	if err != nil {
+		h.failFromService(w, r, err, "no such directory")
+		return
+	}
+	out := &directory{ID: show.PID, Name: show.Title, Children: make([]child, 0, len(eps))}
+	for _, ep := range eps {
+		// A child is a song, with no streamId to say it has nothing to play.
+		if e := episodeShape(ep, show); e.StreamID != "" {
+			out.Children = append(out.Children, e.child)
+		}
+	}
+	h.ok(w, r, envelope{Directory: out})
 }
 
 func (h *Handler) getAlbumList(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
@@ -222,21 +256,59 @@ func (h *Handler) getScanStatus(w http.ResponseWriter, r *http.Request, uc *serv
 }
 
 // Artist biographies have no backing source on this server; the empty
-// shapes keep client artist pages rendering.
-func (h *Handler) getArtistInfo(w http.ResponseWriter, r *http.Request) {
-	if r.Form.Get("id") == "" {
-		h.fail(w, r, 10, "missing id")
+// shapes keep client artist pages rendering, for an id the caller can
+// browse: an artist, and for getArtistInfo an album or a song too, as
+// the protocol has it.
+func (h *Handler) getArtistInfo(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
+	// A show is a directory too, to whoever getMusicDirectory opens it for.
+	if id := r.Form.Get("id"); strings.HasPrefix(id, service.PrefixPodcast+"-") {
+		subs, err := h.followedShows(r.Context(), uc, id)
+		switch {
+		case err != nil:
+			h.failFromService(w, r, err, "no such artist")
+		case len(subs) == 0:
+			h.fail(w, r, 70, "no such artist")
+		default:
+			h.ok(w, r, envelope{ArtistInfo: &artistInfo{}})
+		}
+		return
+	}
+	idx, ok := h.artistInfoIndex(w, r, uc)
+	if !ok {
+		return
+	}
+	if id := r.Form.Get("id"); idx.findArtist(id) == nil && idx.findAlbum(id) == nil && idx.trackByPID[id] == nil {
+		h.fail(w, r, 70, "no such artist")
 		return
 	}
 	h.ok(w, r, envelope{ArtistInfo: &artistInfo{}})
 }
 
-func (h *Handler) getArtistInfo2(w http.ResponseWriter, r *http.Request) {
-	if r.Form.Get("id") == "" {
-		h.fail(w, r, 10, "missing id")
+func (h *Handler) getArtistInfo2(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
+	idx, ok := h.artistInfoIndex(w, r, uc)
+	if !ok {
+		return
+	}
+	if idx.findArtist(r.Form.Get("id")) == nil {
+		h.fail(w, r, 70, "no such artist")
 		return
 	}
 	h.ok(w, r, envelope{ArtistInfo2: &artistInfo{}})
+}
+
+// artistInfoIndex is the caller's index for an artist info request that
+// names an id. False means the failure is written.
+func (h *Handler) artistInfoIndex(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) (*index, bool) {
+	if r.Form.Get("id") == "" {
+		h.fail(w, r, 10, "missing id")
+		return nil, false
+	}
+	idx, err := h.index(r.Context(), uc)
+	if err != nil {
+		h.fail(w, r, 0, "reading the library failed")
+		return nil, false
+	}
+	return idx, true
 }
 
 // getTopSongs is an artist's tracks the caller has played, most played
@@ -299,30 +371,34 @@ const episodesPerChannel = 100
 func (h *Handler) getPodcasts(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
 	includeEpisodes := r.Form.Get("includeEpisodes") != "false"
 	onlyID := r.Form.Get("id")
-	subs, err := h.allSubscriptions(r.Context(), uc)
+	subs, err := h.followedShows(r.Context(), uc, onlyID)
 	if err != nil {
 		h.failFromService(w, r, err, "listing subscriptions failed")
 		return
 	}
 	out := &podcastsShape{Channels: []podcastChannel{}}
 	for _, sub := range subs {
-		if onlyID != "" && sub.Show.PID != onlyID {
-			continue
-		}
 		ch := podcastChannel{
-			ID:       sub.Show.PID,
-			URL:      sub.Show.FeedURL,
-			Title:    sub.Show.Title,
-			CoverArt: sub.Show.PID,
-			Status:   "completed",
+			ID:          sub.Show.PID,
+			URL:         sub.Show.FeedURL,
+			Title:       sub.Show.Title,
+			Description: sub.Show.DescriptionText(),
+			CoverArt:    sub.Show.PID,
+			Status:      "completed",
 		}
 		if includeEpisodes {
-			eps, err := h.channelEpisodes(r.Context(), uc, sub.Show, episodesPerChannel)
+			eps, err := h.channelEpisodes(r.Context(), uc, sub.Show.PID, episodesPerChannel)
+			if onlyID == "" && service.KindOf(err) == service.KindNotFound {
+				continue // gone since the listing, not the whole list's failure
+			}
 			if err != nil {
 				h.failFromService(w, r, err, "listing episodes failed")
 				return
 			}
-			ch.Episodes = eps
+			ch.Episodes = make([]podcastEpisode, 0, len(eps))
+			for _, ep := range eps {
+				ch.Episodes = append(ch.Episodes, podcastEntry(ep, sub.Show))
+			}
 		}
 		out.Channels = append(out.Channels, ch)
 	}
@@ -340,23 +416,53 @@ func (h *Handler) getNewestPodcasts(w http.ResponseWriter, r *http.Request, uc *
 		h.failFromService(w, r, err, "listing subscriptions failed")
 		return
 	}
-	var all []podcastEpisode
-	for _, sub := range subs {
+	type dated struct {
+		ep   service.EpisodeSummary
+		show *service.PodcastShow
+		at   string
+	}
+	var all []dated
+	for i := range subs {
 		// Episode pages are newest-first, so the global newest count
 		// can only come from each show's newest count; fetching more
 		// per show would be materialized and thrown away.
-		eps, err := h.channelEpisodes(r.Context(), uc, sub.Show, count)
+		eps, err := h.channelEpisodes(r.Context(), uc, subs[i].Show.PID, count)
+		if service.KindOf(err) == service.KindNotFound {
+			continue // gone since the listing, as in getPodcasts
+		}
 		if err != nil {
 			h.failFromService(w, r, err, "listing episodes failed")
 			return
 		}
-		all = append(all, eps...)
+		for _, ep := range eps {
+			all = append(all, dated{ep: ep, show: &subs[i].Show, at: publishDate(ep)})
+		}
 	}
-	sort.SliceStable(all, func(i, j int) bool { return all[i].PublishDate > all[j].PublishDate })
-	if len(all) > count {
-		all = all[:count]
+	sort.SliceStable(all, func(i, j int) bool { return all[i].at > all[j].at })
+	// Shaped after the cut, so only the episodes answered are described.
+	out := &newestPodcasts{Episodes: make([]podcastEpisode, 0, min(count, len(all)))}
+	for _, d := range all[:min(count, len(all))] {
+		out.Episodes = append(out.Episodes, podcastEntry(d.ep, *d.show))
 	}
-	h.ok(w, r, envelope{NewestPodcasts: &newestPodcasts{Episodes: all}})
+	h.ok(w, r, envelope{NewestPodcasts: out})
+}
+
+// followedShows are the shows getPodcasts lists: the caller's
+// subscriptions it may hear, or with only, that show alone if it is one,
+// read on its own.
+func (h *Handler) followedShows(ctx context.Context, uc *service.UserCtx, only string) ([]service.Subscription, error) {
+	if only == "" {
+		return h.allSubscriptions(ctx, uc)
+	}
+	d, err := h.svc.PodcastDetailFor(ctx, uc, only)
+	if k := service.KindOf(err); k == service.KindNotFound || k == service.KindInvalid {
+		return nil, nil
+	}
+	// The pid as the show has it: a respelled one names no channel here.
+	if err != nil || !d.Subscribed || d.Show.PID != only {
+		return nil, err
+	}
+	return []service.Subscription{{Show: d.Show, Settings: *d.Settings}}, nil
 }
 
 func (h *Handler) allSubscriptions(ctx context.Context, uc *service.UserCtx) ([]service.Subscription, error) {
@@ -367,7 +473,11 @@ func (h *Handler) allSubscriptions(ctx context.Context, uc *service.UserCtx) ([]
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, page...)
+		for _, sub := range page {
+			if !sub.Withheld {
+				out = append(out, sub)
+			}
+		}
 		if next == "" {
 			break
 		}
@@ -376,16 +486,17 @@ func (h *Handler) allSubscriptions(ctx context.Context, uc *service.UserCtx) ([]
 	return out, nil
 }
 
-func (h *Handler) channelEpisodes(ctx context.Context, uc *service.UserCtx, show service.PodcastShow, cap int) ([]podcastEpisode, error) {
-	eps := []podcastEpisode{}
+// channelEpisodes reads a followed show's newest episodes, at most cap.
+func (h *Handler) channelEpisodes(ctx context.Context, uc *service.UserCtx, showPID string, cap int) ([]service.EpisodeSummary, error) {
+	eps := []service.EpisodeSummary{}
 	cursor := ""
 	for len(eps) < cap {
-		page, next, err := h.svc.Episodes(ctx, uc, show.PID, cursor, min(cap, 100))
+		page, next, err := h.svc.Episodes(ctx, uc, showPID, cursor, min(cap, 100))
 		if err != nil {
 			return nil, err
 		}
 		for _, ep := range page {
-			eps = append(eps, episodeShape(ep, show))
+			eps = append(eps, ep)
 			if len(eps) >= cap {
 				break
 			}
@@ -425,10 +536,8 @@ func episodeShape(ep service.EpisodeSummary, show service.PodcastShow) podcastEp
 			Suffix:      suffix,
 			ContentType: contentType,
 		},
-		ChannelID: showPID,
-	}
-	if ep.PublishedNS > 0 {
-		out.PublishDate = time.Unix(0, ep.PublishedNS).UTC().Format(time.RFC3339)
+		ChannelID:   showPID,
+		PublishDate: publishDate(ep),
 	}
 	if ep.Explicit || show.Explicit {
 		// The show's own flag counts, not just the episode's: a feed that
@@ -459,6 +568,23 @@ func episodeShape(ep service.EpisodeSummary, show service.PodcastShow) podcastEp
 		out.Status = "skipped"
 	}
 	return out
+}
+
+// podcastEntry is one episode as the podcast views list it: its shape and
+// the feed's description, which only those views carry.
+func podcastEntry(ep service.EpisodeSummary, show service.PodcastShow) podcastEpisode {
+	out := episodeShape(ep, show)
+	out.Description = ep.DescriptionText()
+	return out
+}
+
+// publishDate is when an episode was published, as the protocol writes
+// it; empty when the feed dated it nothing.
+func publishDate(ep service.EpisodeSummary) string {
+	if ep.PublishedNS <= 0 {
+		return ""
+	}
+	return time.Unix(0, ep.PublishedNS).UTC().Format(time.RFC3339)
 }
 
 // clampCount bounds client-supplied list sizes.

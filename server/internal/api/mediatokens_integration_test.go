@@ -75,6 +75,15 @@ func TestMediaTokenOpensOnlyItsRouteAndShape(t *testing.T) {
 	if code := fetchStatus(t, h, pi.Url+"&t=1"); code != 200 {
 		t.Errorf("a seek = %d, want 200", code)
 	}
+	// A URL minted with no cap binds the empty shape, so a format added to
+	// it is as much an edit as one changed on a capped URL.
+	plain := decode[PlayInfo](t, get(t, h.ts, "/api/v1/items/"+pid+"/play-info", h.token))
+	if code := fetchStatus(t, h, plain.Url); code != 200 {
+		t.Fatalf("the uncapped stream = %d", code)
+	}
+	if code := fetchStatus(t, h, plain.Url+"&fmt=flac"); code != http.StatusUnauthorized {
+		t.Errorf("a format added to an uncapped stream = %d, want 401", code)
+	}
 
 	art, _ := h.media.MintFor(auth.MediaClaims{User: adminUserID(t, h), Purpose: auth.PurposeArt, PID: pid}, 0)
 	if code := fetchStatus(t, h, "/media/stream?pid="+url.QueryEscape(pid)+"&mt="+url.QueryEscape(art)); code != http.StatusUnauthorized {

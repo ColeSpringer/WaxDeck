@@ -133,6 +133,10 @@
   "@errorFeedHostError": {
     "description": "Error sentence for `feed-unreachable` with the reason host-error: the host of a feed or of its transcript answered a server error or asked to be tried later, which can pass on its own."
   },
+  "errorFeedHostUnreachable": "The host could not be reached. Try again later.",
+  "@errorFeedHostUnreachable": {
+    "description": "Error sentence for `feed-unreachable` with the reason unreachable: the host of a feed or of its transcript took no connection or gave no answer in time, which can pass on its own."
+  },
   "errorFeedNotAFeed": "That address answered, but not with anything a podcast app can read.",
   "@errorFeedNotAFeed": {
     "description": "Error sentence for the reason not-a-feed, under `invalid-request` (a subscribe the table words, such as from a directory match) or `feed-unreachable` (a refresh or a transcript): the address returned something that is not a feed or a transcript."
@@ -151,7 +155,7 @@
   },
   "errorFeedUnreachable": "The feed's own server did not answer, or did not answer with a feed.",
   "@errorFeedUnreachable": {
-    "description": "Error sentence for the spec code `feed-unreachable`, and for the reasons under it this client has no sentence of its own for, a host out of reach among them."
+    "description": "Error sentence for the spec code `feed-unreachable` with no reason, or one this client has no sentence of its own for."
   },
   "errorFieldLocked": "That field is locked. Unlock it, or save with the override.",
   "@errorFieldLocked": {

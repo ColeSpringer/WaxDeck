@@ -135,7 +135,8 @@ always current (rolling stats, not a December-only event); ask for
 any year with data.
 
 `GET /api/v1/stats/server-year-in-review` is the same recap for the
-whole server, aggregated across users. Participation is opt-out: the
+whole server, aggregated across users; its top artists, tracks and
+genres leave out what you cannot see. Participation is opt-out: the
 `sharedStatsOptOut` preference removes your listening from every
 server-wide figure while leaving your personal stats untouched. Each
 participant's sessions are bucketed in their own timezone.

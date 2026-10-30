@@ -97,7 +97,7 @@
   "@organizeHistoryMore": {
     "description": "Button under the organize history that lists the next, older page of runs. Shown while the server holds older ones."
   },
-  "organizeHistoryOverline": "Every run can be undone while its journal lasts",
+  "organizeHistoryOverline": "A run can be undone while its journal lasts",
   "@organizeHistoryOverline": {
     "description": "Overline of the list of runs: the scheduled prune drops a run's journal, and its undo, after the task retention window."
   },

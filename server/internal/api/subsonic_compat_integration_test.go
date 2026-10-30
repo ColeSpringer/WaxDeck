@@ -3,14 +3,18 @@ package api
 import (
 	"context"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 // rawSubsonic fetches one /rest URL as it is and answers the status, the
@@ -127,6 +131,228 @@ func TestSubsonicMissingParametersAreError10(t *testing.T) {
 			t.Errorf("%s with no parameters = %v, want error 10", view, env)
 		}
 	}
+}
+
+// Artist info is empty here, and answered only for what the caller can
+// browse: getArtistInfo2 for an artist, getArtistInfo for an artist, an
+// album or a song. Anything else, an artist outside the caller's libraries
+// included, is error 70.
+func TestSubsonicArtistInfoOfAnUnknownIDIs70(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, service.Root{Name: "other", Path: t.TempDir()})
+	secret := newSubsonicSecret(t, h)
+	var artist string
+	for _, sec := range jlist(jmap(mustOK(t, h, secret, "test", "getArtists", "")["artists"])["index"]) {
+		for _, a := range jlist(jmap(sec)["artist"]) {
+			if jmap(a)["name"] == "Fixture Artist" {
+				artist, _ = jmap(a)["id"].(string)
+			}
+		}
+	}
+	_, albums := albumListNames(t, h, secret, "&type=alphabeticalByName")
+	album, _ := albums["Fixture Album"]["id"].(string)
+	if !strings.HasPrefix(artist, "ar-") || !strings.HasPrefix(album, "al-") {
+		t.Fatalf("artist %q, album %q: want entity ids", artist, album)
+	}
+	minted := "A!" + base64.RawURLEncoding.EncodeToString([]byte("Fixture Artist"))
+	nobody := "A!" + base64.RawURLEncoding.EncodeToString([]byte("Nobody At All"))
+	song := subsonicSongID(t, h, secret, "Alpha")
+	const unknown = "ar-01JZX5N8QW3F4V9T2B7KD3M9R6"
+	for _, tc := range []struct {
+		view, id string
+		known    bool
+	}{
+		{"getArtistInfo2", artist, true},
+		{"getArtistInfo2", minted, true},
+		{"getArtistInfo", artist, true},
+		{"getArtistInfo", album, true},
+		{"getArtistInfo2", album, false},
+		{"getArtistInfo2", unknown, false},
+		{"getArtistInfo", unknown, false},
+		{"getArtistInfo2", nobody, false},
+		{"getArtistInfo", "nonsense", false},
+		{"getArtistInfo", song, true},
+		{"getArtistInfo2", song, false},
+	} {
+		env := clientCall(t, h, secret, "test", tc.view, "&id="+url.QueryEscape(tc.id))
+		info := "artistInfo"
+		if tc.view == "getArtistInfo2" {
+			info = "artistInfo2"
+		}
+		switch {
+		case tc.known && (env["status"] != "ok" || env[info] == nil):
+			t.Errorf("%s of %s = %v, want the empty info", tc.view, tc.id, env)
+		case !tc.known && (env["status"] != "failed" || jmap(env["error"])["code"] != float64(70)):
+			t.Errorf("%s of %s = %v, want error 70", tc.view, tc.id, env)
+		}
+	}
+	who := subsonicAccountWithGrants(t, h, "other-only", "other")
+	for _, view := range []string{"getArtistInfo", "getArtistInfo2"} {
+		if env := clientCallAs(t, h, who, view, "&id="+url.QueryEscape(artist)); env["status"] != "failed" ||
+			jmap(env["error"])["code"] != float64(70) {
+			t.Errorf("%s of an artist outside the caller's libraries = %v, want error 70", view, env)
+		}
+	}
+}
+
+// The protocol is GET and its form-post twin, so the surface answers GET,
+// HEAD and POST. Any other method is HTTP 405 naming those three, with the
+// protocol's error in the format asked for, and reaches no view.
+func TestSubsonicRefusesOtherMethods(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	song := subsonicSongID(t, h, secret, "Alpha")
+	send := func(method, path string) (*http.Response, string) {
+		t.Helper()
+		req, err := http.NewRequest(method, h.ts.URL+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp, string(body)
+	}
+	for _, method := range []string{http.MethodPut, http.MethodDelete, http.MethodPatch, http.MethodOptions, "PROPFIND"} {
+		resp, body := send(method, "/rest/star.view?apiKey="+secret+"&f=json&id="+song)
+		if resp.StatusCode != http.StatusMethodNotAllowed || resp.Header.Get("Allow") != "GET, HEAD, POST" ||
+			resp.Header.Get("Content-Type") != "application/json" || envelopeCode(t, body) != 0 {
+			t.Errorf("%s star = %d, Allow %q, %q: %s; want 405 naming GET, HEAD, POST with error 0",
+				method, resp.StatusCode, resp.Header.Get("Allow"), resp.Header.Get("Content-Type"), body)
+		}
+		resp, body = send(method, "/rest/ping?apiKey="+secret)
+		if resp.StatusCode != http.StatusMethodNotAllowed || resp.Header.Get("Allow") != "GET, HEAD, POST" ||
+			resp.Header.Get("Content-Type") != "application/xml" || !strings.Contains(body, `<error code="0"`) {
+			t.Errorf("%s ping = %d, Allow %q, %q: %s; want 405 with error 0 in XML",
+				method, resp.StatusCode, resp.Header.Get("Allow"), resp.Header.Get("Content-Type"), body)
+		}
+	}
+	if songs := jlist(jmap(mustOK(t, h, secret, "test", "getStarred2", "")["starred2"])["song"]); len(songs) != 0 {
+		t.Errorf("starred songs after the refused writes = %v, want none", songs)
+	}
+	resp, body := send(http.MethodHead, "/rest/ping?apiKey="+secret)
+	if resp.StatusCode != 200 || resp.Header.Get("Allow") != "" || body != "" {
+		t.Errorf("HEAD ping = %d, Allow %q, body %q; want 200 and no body", resp.StatusCode, resp.Header.Get("Allow"), body)
+	}
+	clientPostOK(t, h, secret, "test", "ping", url.Values{})
+	mustOK(t, h, secret, "test", "ping", "")
+}
+
+// getPlaylists with another account's username is error 50 for anyone,
+// administrators included, since no read lists another account's
+// playlists; the caller's own name, in any case, is the plain listing.
+func TestSubsonicPlaylistsOfAnotherAccountAreRefused(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	admin := subsonicAccount{username: "admin", secret: secret}
+	member := otherSubsonicAccount(t, h, "pl-member")
+	if env := clientCallAs(t, h, member, "createPlaylist", "&name=Member+Mix"); env["status"] != "ok" {
+		t.Fatalf("createPlaylist as the member = %v", env)
+	}
+	names := func(who subsonicAccount, extra string) map[string]bool {
+		t.Helper()
+		env := clientCallAs(t, h, who, "getPlaylists", extra)
+		if env["status"] != "ok" {
+			t.Fatalf("getPlaylists%s as %s = %v", extra, who.username, env)
+		}
+		out := map[string]bool{}
+		for _, p := range jlist(jmap(env["playlists"])["playlist"]) {
+			out[jmap(p)["name"].(string)] = true
+		}
+		return out
+	}
+	if own := names(admin, ""); own["Member Mix"] || len(own) == 0 {
+		t.Fatalf("the administrator's own playlists = %v, want its own and not the member's private one", own)
+	}
+	if own := names(member, "&username=PL-Member"); !own["Member Mix"] {
+		t.Errorf("the member naming itself = %v, want its own list", own)
+	}
+	for _, tc := range []struct {
+		who  subsonicAccount
+		name string
+	}{
+		{admin, "pl-member"},
+		{admin, "nobody-by-this-name"},
+		{member, "admin"},
+		{member, "nobody-by-this-name"},
+	} {
+		env := clientCallAs(t, h, tc.who, "getPlaylists", "&username="+tc.name)
+		if env["status"] != "failed" || jmap(env["error"])["code"] != float64(50) {
+			t.Errorf("getPlaylists of %s as %s = %v, want error 50", tc.name, tc.who.username, env)
+		}
+	}
+}
+
+// Playlists keep no comment, so a comment a client sends is not kept, and
+// a call carrying one answers exactly as it would without it: DSub's
+// details editor sends the name, the comment and the public flag together,
+// and some clients send a comment on create.
+func TestSubsonicPlaylistCommentChangesNothing(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	member := otherSubsonicAccount(t, h, "comment-member")
+	const c = "DSub"
+	songs := ""
+	for _, it := range h.items(t, "").Items[:2] {
+		songs += "&songId=" + url.QueryEscape(it.Pid)
+	}
+	// The playlist element as the client reads it, less what differs
+	// between two playlists made a moment apart.
+	shape := func(env map[string]any) map[string]any {
+		t.Helper()
+		pl := jmap(env["playlist"])
+		if pl == nil {
+			return env
+		}
+		for _, k := range []string{"id", "created", "changed"} {
+			delete(pl, k)
+		}
+		return env
+	}
+	same := func(step string, with, without map[string]any) {
+		t.Helper()
+		a, _ := json.Marshal(with)
+		b, _ := json.Marshal(without)
+		if string(a) != string(b) {
+			t.Errorf("%s: with a comment = %s\nwithout = %s", step, a, b)
+		}
+	}
+	same("create", shape(mustOK(t, h, secret, c, "createPlaylist", "&name=Road+Mix&comment=for+the+drive"+songs)),
+		shape(mustOK(t, h, secret, c, "createPlaylist", "&name=Road+Mix"+songs)))
+
+	created := mustOK(t, h, secret, c, "createPlaylist", "&name=Edit+Me"+songs)
+	id := url.QueryEscape(fmt.Sprint(jmap(created["playlist"])["id"]))
+	read := func() map[string]any {
+		t.Helper()
+		return jmap(mustOK(t, h, secret, c, "getPlaylist", "&id="+id)["playlist"])
+	}
+	before := read()
+	same("comment only", clientCall(t, h, secret, c, "updatePlaylist", "&playlistId="+id+"&comment=just+a+note"),
+		clientCall(t, h, secret, c, "updatePlaylist", "&playlistId="+id))
+	if after := read(); after["name"] != before["name"] || after["public"] != before["public"] ||
+		after["songCount"] != before["songCount"] {
+		t.Errorf("a comment-only update changed the playlist: %v, was %v", after, before)
+	}
+	edited := clientCall(t, h, secret, c, "updatePlaylist", "&playlistId="+id+"&name=Renamed&comment=a+note&public=true")
+	if after := read(); after["name"] != "Renamed" || after["public"] != true || after["songCount"] != before["songCount"] {
+		t.Errorf("the details edit = %v, want Renamed and public with the same songs", after)
+	}
+	same("details", edited, clientCall(t, h, secret, c, "updatePlaylist", "&playlistId="+id+"&name=Renamed&public=true"))
+
+	// Somebody else's playlist answers the same refusal either way.
+	theirs := clientCallAs(t, h, member, "createPlaylist", "&name=Not+Yours")
+	other := url.QueryEscape(fmt.Sprint(jmap(theirs["playlist"])["id"]))
+	refused := clientCall(t, h, secret, c, "updatePlaylist", "&playlistId="+other+"&name=Mine")
+	if refused["status"] != "failed" {
+		t.Fatalf("renaming another account's playlist = %v, want a refusal", refused)
+	}
+	same("not the caller's", clientCall(t, h, secret, c, "updatePlaylist", "&playlistId="+other+"&name=Mine&comment=x"), refused)
 }
 
 // The format is any case; jsonp wraps the document in the callback

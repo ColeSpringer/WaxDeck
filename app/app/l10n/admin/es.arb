@@ -289,7 +289,7 @@
   "adminLibraryMediaRereadBody": "Cada archivo de {name} se vuelve a leer para ver qué contiene, lo que puede tardar. En Música, un libro que las etiquetas de sus partes no forman se lee como pistas; en Mixta, un libro cuyas partes ya lo forman se mantiene. Los elementos cuyo tipo se fijó a mano lo conservan.",
   "adminLibraryMediaScanWaits": "Hay otra tarea en marcha. Cuando termine, vuelve a escanear para aplicar el cambio a {name}.",
   "adminLibraryMediaScanWaitsReread": "Hay otra tarea en marcha. Cuando termine, vuelve a escanear con Releer los archivos sin cambios activado para aplicar el cambio a {name}.",
-  "adminLibraryMediaToBooksBody": "Cada archivo de audio de {name} se convierte en un libro en el escaneo que esto inicia, con las partes de una misma carpeta reunidas en un libro. Los elementos cuyo tipo se fijó a mano lo conservan.",
+  "adminLibraryMediaToBooksBody": "Cada archivo de audio de {name} se convierte en un libro en el escaneo que esto inicia: las partes que comparten álbum y autor son un libro, y las partes numeradas sin álbum se unen al libro de su carpeta. Los elementos cuyo tipo se fijó a mano lo conservan.",
   "adminLibraryNameHint": "También es el nombre de la raíz de WaxFlow que sirve este directorio",
   "adminLibraryNameLabel": "Nombre",
   "adminLibraryNamePathRequired": "Hacen falta un nombre y una ruta absoluta",

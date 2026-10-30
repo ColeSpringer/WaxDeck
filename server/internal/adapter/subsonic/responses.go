@@ -150,19 +150,24 @@ type podcastsShape struct {
 	Channels []podcastChannel `xml:"channel" json:"channel"`
 }
 
+// podcastChannel and podcastEpisode carry the feed's description as plain
+// text: the protocol's attribute is text, so markup in it would show as
+// tags.
 type podcastChannel struct {
-	ID       string           `xml:"id,attr" json:"id"`
-	URL      string           `xml:"url,attr,omitempty" json:"url,omitempty"`
-	Title    string           `xml:"title,attr" json:"title"`
-	CoverArt string           `xml:"coverArt,attr,omitempty" json:"coverArt,omitempty"`
-	Status   string           `xml:"status,attr" json:"status"`
-	Episodes []podcastEpisode `xml:"episode" json:"episode,omitempty"`
+	ID          string           `xml:"id,attr" json:"id"`
+	URL         string           `xml:"url,attr,omitempty" json:"url,omitempty"`
+	Title       string           `xml:"title,attr" json:"title"`
+	Description string           `xml:"description,attr,omitempty" json:"description,omitempty"`
+	CoverArt    string           `xml:"coverArt,attr,omitempty" json:"coverArt,omitempty"`
+	Status      string           `xml:"status,attr" json:"status"`
+	Episodes    []podcastEpisode `xml:"episode" json:"episode,omitempty"`
 }
 
 type podcastEpisode struct {
 	child
 	StreamID    string `xml:"streamId,attr,omitempty" json:"streamId,omitempty"`
 	ChannelID   string `xml:"channelId,attr" json:"channelId"`
+	Description string `xml:"description,attr,omitempty" json:"description,omitempty"`
 	Status      string `xml:"status,attr" json:"status"`
 	PublishDate string `xml:"publishDate,attr,omitempty" json:"publishDate,omitempty"`
 }

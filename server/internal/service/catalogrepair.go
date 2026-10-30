@@ -327,9 +327,9 @@ func (l *Library) catalogRepairStop(run *catalogRepairRun, step string, err erro
 // catalogRepairEnded records a repair's end, however it ended: who asked
 // for it and what it did. One whose rollups step ran gives the reset it
 // owes, sending every client back to a snapshot of the catalog, once: the
-// release years that step puts back, and the sort keys the step after it
-// rewrites for artists and albums, reach no delta, and they order what
-// clients list.
+// release years that step puts back emit no delta, and the sort keys the
+// step after it rewrites for artists and albums emit only artist and
+// album deltas, which reach no client; both order what clients list.
 func (l *Library) catalogRepairEnded(ctx context.Context, t *wdb.ToolTask) {
 	if l.catalogRepairEndHook != nil && l.catalogRepairEndHook() {
 		return

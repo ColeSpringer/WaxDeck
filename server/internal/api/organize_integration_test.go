@@ -1,8 +1,12 @@
 package api
 
 import (
+	"maps"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/colespringer/waxdeck/fixtures"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -135,4 +139,44 @@ func TestOrganizeProfilesAreEditedAtRuntime(t *testing.T) {
 	wantStatus(t, h.deleteReq(t, "/api/v1/organize/profiles/waxbin-native"), 400, "delete the built-in")
 	wantStatus(t, h.deleteReq(t, "/api/v1/organize/profiles/gone"), 404, "delete an unknown profile")
 	wantStatus(t, h.putJSON(t, "/api/v1/libraries/"+lib.Pid+"/profile", map[string]any{"profile": "gone"}), 400, "an unknown profile")
+}
+
+// A preview carries the moves the catalog holds back beside the ones it
+// plans: counted by code and listed with the item, where it is and why,
+// rather than left out without a word.
+func TestOrganizePreviewNamesTheMovesItHolds(t *testing.T) {
+	t.Parallel()
+	h := newManagedHarness(t)
+	// An item with no artist or album, which the catalog has no place to file.
+	if _, err := fixtures.Generate(h.library, fixtures.Spec{
+		Name: "nameless", Codec: fixtures.CodecFLAC, Duration: 2500 * time.Millisecond,
+		Tags: map[string]string{"TITLE": "Nameless"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	nameless := h.itemTitled(t, h.token, "Nameless")
+
+	plan := decodeStatus[OrganizePlan](t, h.postJSON(t, "/api/v1/organize/preview", map[string]any{}), 200, "preview")
+	if plan.TotalActions != 4 || plan.Held != 1 || len(plan.Actions) != 4 {
+		t.Fatalf("plan = %d moves (%d listed), %d held; want the four demo tracks moved and one held",
+			plan.TotalActions, len(plan.Actions), plan.Held)
+	}
+	if plan.HeldByCode == nil || !maps.Equal(*plan.HeldByCode, map[string]int{"untagged": 1}) {
+		t.Fatalf("heldByCode = %v, want the one untagged hold", plan.HeldByCode)
+	}
+	holds := deref2(plan.Holds)
+	if len(holds) != 1 {
+		t.Fatalf("holds = %+v, want the one", holds)
+	}
+	hold := holds[0]
+	if hold.Code != OrganizeHoldCodeUntagged || deref(hold.ItemPid) != nameless.Pid ||
+		!strings.HasSuffix(hold.From, "nameless.flac") || hold.To == nil || hold.Reason == "" {
+		t.Fatalf("hold = %+v, want the untagged %s at nameless.flac with a place and the catalog's reason", hold, nameless.Pid)
+	}
+	for _, a := range plan.Actions {
+		if a.ItemPid == nameless.Pid {
+			t.Errorf("the held item is also planned to move: %+v", a)
+		}
+	}
 }

@@ -37,10 +37,10 @@ type AuditPage struct {
 }
 
 // Audit records an administrative or destructive action. A nil actor
-// means the server itself (scheduled jobs, startup restore, signup
-// self-service). Recording is deliberately best-effort: the action
-// already happened, and failing it over its record would trade a
-// consistent audit trail for an inconsistent system.
+// means the server itself (scheduled jobs, startup restore). Recording
+// is deliberately best-effort: the action already happened, and failing
+// it over its record would trade a consistent audit trail for an
+// inconsistent system.
 func (l *Library) Audit(ctx context.Context, actor *UserCtx, action string, target AuditTarget, detail map[string]any) {
 	e := wdb.AuditEvent{
 		Action:      action,

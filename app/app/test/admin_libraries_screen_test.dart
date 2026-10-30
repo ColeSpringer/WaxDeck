@@ -356,8 +356,9 @@ void main() {
     expect(
       find.text(
         'Every audio file in spoken becomes a book on the scan this '
-        'starts, the parts in one folder gathered into one book. Items '
-        'whose kind was set by hand keep it.',
+        'starts: parts sharing an album and author are one book, and '
+        'numbered parts with no album join the book their folder holds. '
+        'Items whose kind was set by hand keep it.',
       ),
       findsOneWidget,
     );

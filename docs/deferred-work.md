@@ -23,7 +23,6 @@ Every entry carries a gate tag saying what actually blocks it:
 
 ## Playback and apps
 
-
 - `[third-party]` **The Linux tray icon does not come back when the
   panel restarts.** cnativeapi (under tray_manager 0.6+) registers the
   StatusNotifierItem with the watcher once, at creation, and never
@@ -115,7 +114,8 @@ Every entry carries a gate tag saying what actually blocks it:
   friends) were picked one at a time and never compared, nothing says
   which provider a self-hoster with no keys ends up on, and iTunes sits
   awkwardly: its terms restrict artwork use to promoting store content,
-  and it shares a per-IP budget with the radio path if both ever ask it.
+  and a radio cover chain that asked it too would share its per-IP
+  budget.
   Radio's cover chain (`CoverChain` in
   `server/internal/providers/coverart.go`) deliberately does not follow
   the operator's order: it is built once at boot, Deezer first for speed
@@ -193,35 +193,25 @@ Every entry carries a gate tag saying what actually blocks it:
 
 - `[in-repo]` **How far ahead the artwork precacher warms is a guess.**
   The music listing and the music indexes call it when a scroll stops,
-  naming the two viewports past the one on screen. Two viewports and "when the scroll stops" are
-  the numbers the entry that wired this deliberately left for the perf
-  run - one constant apiece (`_viewportsAhead`, the
-  `ScrollEndNotification` gate) in `artwork_precache.dart`.
+  naming the two viewports past the one on screen. Two viewports and
+  "when the scroll stops" are the numbers the entry that wired this
+  deliberately left for the perf run: `_viewportsAhead` in
+  `artwork_precache.dart`, and the `ScrollEndNotification` gate in
+  `music/index_screen.dart` and `music/listing_screen.dart`.
 
-  Two things the run should weigh first, both about web. A warm is
-  only plainly cheap where there is a cache of our own to fill: on web
-  the cache is the browser's, the only way to fill it is a real request
+  The run should weigh one thing first, about web. A warm is only
+  plainly cheap where there is a cache of our own to fill: on web the
+  cache is the browser's, the only way to fill it is a real request
   through dio into the Dart heap, and that request shares a connection
-  pool and a main isolate with the media element. And the web warm asks
-  the server a slightly different question than the draw does: the warm
-  requests `size=artworkRung(px)` and the draw `size=artworkDrawSize(px)`.
-  The server answers both from the same rung, but a browser caches by
-  URL, and the two strings differ wherever the draw step is not itself a
-  rung - a row's 40 points at pixel ratio 2 is 80, drawing at 96 and
-  warming at 128 - so on such a display the warm fills a cache entry the
-  row never reads. A note here once blamed a
-  `web-gapless.spec.ts` failure on the web warm and switched it off; the
-  failure was the sidecar's FLAC init segment declaring the wrong depth,
-  since fixed upstream, which the precacher had nothing to do with. The
-  switch is gone and the claim is withdrawn. Take it with the
+  pool and a main isolate with the media element. Take it with the
   perf-measurement entry above.
 - `[decision]` **The web build skips tracks the browser cannot decode.**
   Monkey's Audio, WavPack, WMA, Musepack and (outside Safari) AIFF stream
   as the file is, and a browser refuses them (media error 4), so the queue
   skips each one as a failed start. Play-info's `maxBitrateKbps` is not
   enough: it re-encodes only a lossless source (APE, WavPack, WMA
-  Lossless, AIFF) or a lossy one above
-  the cap, so a 128 kbps WMA or a Musepack file would still stream as-is.
+  Lossless, AIFF) or a lossy one above the cap or of unknown bitrate,
+  so a 128 kbps WMA or a Musepack file would still stream as-is.
   The fix is for the client to say which formats it can decode (from
   `canPlayType`) and the server to encode the rest, counted against the
   caller's transcode limits. Held by the owner's call of 2026-09-27,
@@ -299,17 +289,6 @@ Every entry carries a gate tag saying what actually blocks it:
   private-address guard refuses a mirror on a private address unless
   `WAXDECK_ALLOW_PRIVATE_FEED_HOSTS` is on, so it wants a decision on
   whether a configured mirror is exempt.
-
-- `[in-repo]` **An upload that declined identification waits for
-  review when its import meets a busy catalog.** It imports inside the
-  completing request (`importDeclinedEntry`), so when a scan or
-  organize holds the file-mutation scope the import answers
-  catalog-busy and the entry is left pending as "Ready for review"
-  rather than landing once the scope frees. Retrying in the request
-  would stall it for as long as a scan runs; the fix is a background
-  retry of declined entries that failed only for being busy, marked so
-  the ones waiting on a duplicate or a read-only library are not
-  re-notified on every pass.
 
 - `[in-repo]` **A folded-away item that was playing stops rather than
   carrying on in its book.** When a kind change folds the item playing
@@ -394,58 +373,33 @@ Every entry carries a gate tag saying what actually blocks it:
   Kotlin version it is pinned against sits ten lines above it in the
   same file.
 
-- `[in-repo]` **The e2e renderer hang is diagnosed: a memory race
-  inside multi-threaded skwasm.** The old shape - one suite run in
-  about four, a random spec stalls mid-step, page unresponsive,
-  generic timeout - is the aftermath of a wasm fault. The page throws
-  `RuntimeError: memory access out of bounds` inside skwasm's
-  allocator on the paragraph-layout path (`ParagraphImpl::layout`,
-  `TArray<Block>` copy, `sk_malloc`, `emscripten_builtin_malloc`), and
-  from then on the renderer main thread and the skwasm render worker
-  both spin at full CPU forever, so evaluate, rAF, and even compositor
-  screenshot capture stall against it. Every spec now runs through
-  `tests/fixtures.ts`, whose page fixture buffers console and
-  pageerror from birth and, when a test fails or times out, races
-  responsiveness probes (main thread, CDP, compositor, each worker)
-  and snapshots every chromium thread twice - state, wait channel,
-  CPU delta - into `hang-evidence.json` beside the trace. The first
-  capture (audiobooks, second suite run of the night) showed exactly
-  that dual spin with everything else idle. `e2e/skwasm-repro/`
-  reproduces it with no WaxDeck code in three to five seconds: fresh
-  multi-span paragraphs laid out every frame while the worker
-  rasterizes the previous one. Captured stacks land in or under
-  `SkStrike`, Skia's shared glyph cache, from both the layout side
-  (`skhb_glyph_h_advances`) and the raster side
-  (`onDrawGlyphRunList`), in four flavors including unaligned atomics
-  on torn pointers. Forcing single-threaded skwasm - same build, the
-  `forceSingleThreadedSkwasm` engine flag, injected suite-wide through
-  a temporary knob during the investigation - ran the same hammer clean
-  to its cap
-  and ten suite runs without a hang (two of the ten failed on an
-  unrelated desktop-loopback child-process flake, page responsive per
-  the probe, under heavy background load). Engine revision
-  83675ed27633283e7fc296c8bca22e841224c096, Flutter 3.44. Filed as
-  flutter/flutter#190039, and the app now ships skwasm single-threaded
+- `[third-party]` **Skwasm runs single-threaded until a Flutter release
+  carries its heap-race fix.** Multi-threaded skwasm corrupts its shared
+  heap under concurrent text layout and rasterization (`RuntimeError:
+  memory access out of bounds` in its allocator on the paragraph-layout
+  path, stacks in or under `SkStrike`, Skia's shared glyph cache), and
+  from then on the renderer main thread and the render worker spin at
+  full CPU: the old e2e stall, a random spec stopping mid-step about
+  one suite run in four. Filed against engine
+  83675ed27633283e7fc296c8bca22e841224c096 (Flutter 3.44) as
+  flutter/flutter#190039, which closed on #190048 and #191014
+  (thread-local strike caches, `skia_enable_threadlocal_strikecache` in
+  the engine's canvaskit `BUILD.gn`). The pinned Flutter 3.47 does not
+  carry them; 3.49.0-0.1.pre is the first tag that does (checked
+  2026-10-29). Meanwhile the app ships skwasm single-threaded
   (`web/index.html` owns the loader call and passes
-  `forceSingleThreadedSkwasm` - the same block also sets
-  `canvasKitBaseUrl` so the engine loads from the embedded bundle
-  instead of Google's CDN, which the stock bootstrap reaches for and a
-  LAN-only instance cannot). What remains is the un-forcing: when the
-  issue closes or an engine upgrade lands, `e2e/skwasm-repro/` answers
-  in seconds whether the race is gone, `WAXDECK_E2E_MT_SKWASM=1` runs
-  the real suite multi-threaded to confirm, and the `perf-web` gate
-  against the 100k corpus prices whatever raster-thread difference
-  remains before the force is removed. Checked 2026-07-27: the issue is
-  still open and the pinned engine has not moved
-  (83675ed27633283e7fc296c8bca22e841224c096, Flutter 3.44.6), so the
-  repro was not re-run and the force stays. The report was triaged that
-  day, labeled for the web team and routed to it for evaluation, and a
-  candidate fix is open as flutter/flutter#190048, "Link multithreaded
-  skwasm in emscripten hybrid mode". That PR merging and an engine roll
-  carrying it is the specific trigger to re-check, sharper than "when
-  the issue closes": the issue can close on the PR alone, which changes
-  nothing here until the pinned engine ships it.
-- `[in-repo]` **`make test-app-chrome` cannot run on Windows.**
+  `forceSingleThreadedSkwasm`; the same block sets `canvasKitBaseUrl`
+  so the engine loads from the embedded bundle instead of Google's CDN,
+  which a LAN-only instance cannot reach), and every spec runs through
+  `tests/fixtures.ts`, whose page fixture buffers console and pageerror
+  from birth and, when a test fails or times out, probes responsiveness
+  and snapshots every chromium thread twice into `hang-evidence.json`
+  beside the trace. Once the pinned Flutter carries the fix,
+  `WAXDECK_E2E_MT_SKWASM=1` runs the real suite multi-threaded to
+  confirm, and the `perf-web` gate against the 100k corpus prices
+  whatever raster-thread difference remains before the force is
+  removed.
+- `[third-party]` **`make test-app-chrome` cannot run on Windows.**
   flutter_tools' own test server answers every CanvasKit request with a
   404: `_localCanvasKitHandler` gates on
   `path.fromUri(request.url).startsWith('canvaskit/')`, and `fromUri`
@@ -461,7 +415,7 @@ Every entry carries a gate tag saying what actually blocks it:
   runs an `@TestOn('browser')` suite, and `-d chrome` is not the
   replacement - `flutter test -d` applies to `package:integration_test`
   alone, which rejects web devices outright. If the flag does go, these
-  two suites move to `flutter drive` plus chromedriver, or into the
+  suites move to `flutter drive` plus chromedriver, or into the
   Playwright suite under `e2e/`.
 
 ## Discovery and stats
@@ -495,15 +449,18 @@ Every entry carries a gate tag saying what actually blocks it:
   **Two candidate probes were ruled out on evidence, and both would have
   shipped a regression.** A `hasArt` boolean computed from `ArtRoles`
   reports only the entity's own `art_map` rows, while scans store cover
-  art at track level and album art is derived on read
-  (`store/sqlite/art.go`: "Album art is derived on read from current
-  track maps, so a re-cover, retag, or delete cannot leave a stale album
-  mapping behind"). For a normally scanned album `/art` answers 200 and
-  `ArtRoles(al-...)` is empty, so gating on it would have turned the album
-  index into a wall of monograms. `ResolveArt(ref, front, 0)` is not the
-  escape either: the `size <= 0` early return does skip the thumbnail,
-  but it fires *after* the full source blob is loaded, so a 100-bucket
-  page becomes 100 whole-image reads.
+  art at track level and album art is derived on read from the current
+  track maps (`store/sqlite/art.go`, which keeps a re-cover or delete
+  from leaving a stale cover behind). For a normally scanned album
+  `/art` answers 200 and `ArtRoles(al-...)` is empty, so gating on it
+  would have turned the album index into a wall of monograms.
+  `ResolveArt(ref, front, 0)` is not the escape either: the `size <= 0`
+  early return does skip the thumbnail, but it fires *after* the full
+  source blob is loaded, so a 100-bucket page becomes 100 whole-image
+  reads. `ArtProvenance(ref, front)` follows the same chain without
+  loading the picture (the detail reads use it), but it is still a
+  chain walk per bucket on every facet read, for a signal the negative
+  cache already bounds.
 
   **The negative cache's own limit, for whoever touches it next.** It is
   cleared by a catalog invalidation, by a cover editor's `evict`, and by
@@ -520,13 +477,3 @@ Every entry carries a gate tag saying what actually blocks it:
   (pre-fetch and decode before the one frame is captured, monogram
   where a cover is missing), which is what makes this a card to draw
   rather than a pipeline to design.
-- `[hardware]` **The Android share path for a card is unverified.**
-  Exporting a card on Android writes it into a FileProvider-scoped
-  cache directory and opens `ACTION_SEND` over the `waxdeck/share`
-  channel. There is no device here and no Android build
-  in CI, so the Kotlin handler, the manifest `<provider>`, and the
-  `res/xml/file_paths.xml` scope have never run. What to check: the
-  chooser opens, the receiving app can read the image (a wrong
-  authority or an unscoped path fails here), the temp-then-rename
-  leaves no `.tmp` behind, and a second export of the same card
-  replaces rather than duplicates.

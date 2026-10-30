@@ -1914,7 +1914,7 @@ abstract class AppLocalizations {
   /// Body of the dialog confirming a library becomes a Books library. {name} is the library's name.
   ///
   /// In en, this message translates to:
-  /// **'Every audio file in {name} becomes a book on the scan this starts, the parts in one folder gathered into one book. Items whose kind was set by hand keep it.'**
+  /// **'Every audio file in {name} becomes a book on the scan this starts: parts sharing an album and author are one book, and numbered parts with no album join the book their folder holds. Items whose kind was set by hand keep it.'**
   String adminLibraryMediaToBooksBody(String name);
 
   /// Hint in the library name field. WaxFlow is the streaming sidecar and serves a root of the same name, so the name is not free-form decoration.
@@ -6225,6 +6225,12 @@ abstract class AppLocalizations {
   /// **'The host answered with an error. Try again later.'**
   String get errorFeedHostError;
 
+  /// Error sentence for `feed-unreachable` with the reason unreachable: the host of a feed or of its transcript took no connection or gave no answer in time, which can pass on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'The host could not be reached. Try again later.'**
+  String get errorFeedHostUnreachable;
+
   /// Error sentence for the reason not-a-feed, under `invalid-request` (a subscribe the table words, such as from a directory match) or `feed-unreachable` (a refresh or a transcript): the address returned something that is not a feed or a transcript.
   ///
   /// In en, this message translates to:
@@ -6249,7 +6255,7 @@ abstract class AppLocalizations {
   /// **'What that address sent back is larger than this server accepts.'**
   String get errorFeedTooLarge;
 
-  /// Error sentence for the spec code `feed-unreachable`, and for the reasons under it this client has no sentence of its own for, a host out of reach among them.
+  /// Error sentence for the spec code `feed-unreachable` with no reason, or one this client has no sentence of its own for.
   ///
   /// In en, this message translates to:
   /// **'The feed\'s own server did not answer, or did not answer with a feed.'**
@@ -10146,7 +10152,7 @@ abstract class AppLocalizations {
   /// Overline of the list of runs: the scheduled prune drops a run's journal, and its undo, after the task retention window.
   ///
   /// In en, this message translates to:
-  /// **'Every run can be undone while its journal lasts'**
+  /// **'A run can be undone while its journal lasts'**
   String get organizeHistoryOverline;
 
   /// One organize run in the history: how many files it moved, and when it started.
@@ -10917,7 +10923,7 @@ abstract class AppLocalizations {
   /// **'Pick up where you left off'**
   String get playerOfferResume;
 
-  /// Message on the shell when an item could not start because the server cannot be reached; playback starts by itself once the connection returns, and the message also carries a Retry action.
+  /// Message on the shell when an item could not start, or stopped part way, because the server cannot be reached; playback continues by itself once the connection returns, and the message also carries a Retry action.
   ///
   /// In en, this message translates to:
   /// **'You\'re offline. Playback will continue when the connection is back.'**
@@ -14662,7 +14668,7 @@ abstract class AppLocalizations {
   /// **'Could not stop {name}'**
   String radioCouldNotStop(String name);
 
-  /// Snackbar when a station's stream would not open, which is the engine's failure rather than the server's.
+  /// Snackbar when a station's stream would not open or failed after it opened.
   ///
   /// In en, this message translates to:
   /// **'Could not tune {name}'**
@@ -17760,7 +17766,7 @@ abstract class AppLocalizations {
   /// The line under the streaming quality settings, naming the trade a cap makes so it arrives as a known one.
   ///
   /// In en, this message translates to:
-  /// **'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads'**
+  /// **'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which can turn off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads'**
   String get settingsStreamQualityHelp;
 
   /// Streaming quality option: the 320 kbps cap. The number stays in the help line, never in this label.
@@ -17946,7 +17952,7 @@ abstract class AppLocalizations {
   /// The line under the gapless switch when the server refused to render the queue because its transcode session limit is reached. Temporary, unlike the other refusals.
   ///
   /// In en, this message translates to:
-  /// **'The server is at its transcoding limit, so tracks play one at a time for now'**
+  /// **'The server is at its transcoding limit, so gapless playback is off for now'**
   String get settingsWebGaplessBusy;
 
   /// The line under the gapless switch when the server rendered the queue in a format this browser cannot decode.

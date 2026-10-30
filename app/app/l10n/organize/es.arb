@@ -20,7 +20,7 @@
   "organizeHeldTile": "Retenidos",
   "organizeHint": "La previsualización comprueba cada biblioteca gestionada con este perfil, así que encuentra archivos añadidos o movidos desde la última vez aunque no haya cambiado nada más. No se mueve nada hasta que apliques.",
   "organizeHistoryMore": "Mostrar ejecuciones anteriores",
-  "organizeHistoryOverline": "Cada ejecución se puede deshacer mientras dure su registro",
+  "organizeHistoryOverline": "Una ejecución se puede deshacer mientras dure su registro",
   "organizeHistoryRow": "Organizar - {moved, plural, =1{1 movido} other{{moved} movidos}} - {when}",
   "organizeHistoryTitle": "Historial",
   "organizeHistoryUndoRow": "Deshacer - {moved, plural, =1{1 devuelto} other{{moved} devueltos}} - {when}",

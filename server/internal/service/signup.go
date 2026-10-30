@@ -159,8 +159,10 @@ func (l *Library) Signup(ctx context.Context, username, password, displayName, i
 		l.db.UnconsumeInvite(ctx, iv.ID)
 		return nil, "", err
 	}
-	l.Audit(ctx, nil, "user.signup", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
-		map[string]any{"invite": iv.ID, "inviteNote": iv.Note})
+	// The new account is the actor, as for a request: the server did
+	// nothing here, and "system" would hide who came in on whose invite.
+	l.Audit(ctx, &UserCtx{ID: acct.User.ID}, "user.signup", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
+		map[string]any{"invite": iv.ID, "inviteNote": iv.Note, "invitedBy": iv.CreatedBy})
 	return acct, SignupActive, nil
 }
 
@@ -171,7 +173,7 @@ func (l *Library) notifyAdminsOfSignup(ctx context.Context, acct *Account) {
 	l.EmitServerNotification(ctx, "signup-requested",
 		"New account request",
 		acct.User.Username+" requested an account and is waiting for approval.")
-	l.Audit(ctx, nil, "user.request", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username}, nil)
+	l.Audit(ctx, &UserCtx{ID: acct.User.ID}, "user.request", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username}, nil)
 }
 
 // PendingAccounts pages pending registrations, oldest first. The cursor
@@ -248,8 +250,15 @@ func (l *Library) ApproveSignup(ctx context.Context, actor *UserCtx, userID stri
 	// An approval of a row somebody disabled meanwhile still gets none:
 	// the predicate lives in the helper, not here.
 	l.seedStartersFor(ctx, u)
-	l.Audit(ctx, actor, "user.approve", AuditTarget{Kind: "user", PID: u.ID, Name: u.Username}, nil)
-	return l.accountFor(ctx, u)
+	acct, err := l.accountFor(ctx, u)
+	// Everything the approval left the account holding; an account that
+	// cannot be read back is still recorded as approved.
+	var detail map[string]any
+	if err == nil {
+		detail = AccountGrants(acct)
+	}
+	l.Audit(ctx, actor, "user.approve", AuditTarget{Kind: "user", PID: u.ID, Name: u.Username}, detail)
+	return acct, err
 }
 
 // RejectSignup deletes a pending account; reject never deletes an
@@ -353,13 +362,18 @@ func (l *Library) Invites(ctx context.Context) ([]InviteDTO, error) {
 // RevokeInvite stops an invite's token from working; admitted accounts
 // are unaffected.
 func (l *Library) RevokeInvite(ctx context.Context, actor *UserCtx, id string) error {
-	if err := l.db.RevokeInvite(ctx, id); err != nil {
+	// Read first, so the entry can name the invite by its note.
+	iv, err := l.db.InviteByID(ctx, id)
+	if err == nil {
+		err = l.db.RevokeInvite(ctx, id)
+	}
+	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
 			return errNotFound("no invite with id " + id)
 		}
 		return &Error{Kind: KindInternal, Err: err}
 	}
-	l.Audit(ctx, actor, "invite.revoke", AuditTarget{Kind: "invite", PID: id}, nil)
+	l.Audit(ctx, actor, "invite.revoke", AuditTarget{Kind: "invite", PID: id, Name: iv.Note}, nil)
 	return nil
 }
 

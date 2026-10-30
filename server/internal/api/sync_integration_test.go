@@ -1483,6 +1483,28 @@ func TestJobDetailIsAdministratorsOnly(t *testing.T) {
 	wantStatus(t, get(t, h.ts, "/api/v1/jobs/"+job.Pid, tokens[0]), 403, "another account's read")
 }
 
+// A timeline mint that outlasts its inline wait answers a job, and the job
+// reads for the account that minted it alone: another account's read is a
+// 404, not a refusal that tells it the pid exists.
+func TestTimelineJobIsReadByItsMinterAlone(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.pendingTimeline.Store(true)
+	items := h.items(t, "").Items
+	job := decodeStatus[Job](t, h.postJSON(t, "/api/v1/player/timeline", map[string]any{
+		"itemPids": []string{items[0].Pid, items[1].Pid},
+	}), 202, "a timeline mint the engine is still measuring")
+	if !strings.HasPrefix(job.Pid, "jb-") || job.Kind != "timeline" {
+		t.Fatalf("job = %+v, want a timeline job", job)
+	}
+	read := decodeStatus[Job](t, get(t, h.ts, "/api/v1/jobs/"+job.Pid, h.token), 200, "the minter's read")
+	if read.Pid != job.Pid || read.Kind != "timeline" || read.State != "running" {
+		t.Fatalf("minter's read = %+v, want the running timeline job", read)
+	}
+	_, tokens, _ := wsAccount(t, h, "bystander")
+	wantStatus(t, get(t, h.ts, "/api/v1/jobs/"+job.Pid, tokens[0]), 404, "another account's read")
+}
+
 // The catalog mirror carries what its caller can see, content rules
 // included: a snapshot leaves out what a rule hides, and an item flagged
 // after the snapshot leaves the mirror through a hidden tombstone rather

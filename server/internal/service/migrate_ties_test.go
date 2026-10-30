@@ -197,3 +197,34 @@ func TestMigrateKeepsTheCopyTheAlbumNames(t *testing.T) {
 		t.Fatalf("the star did not land on the %s copy alone", named.Album)
 	}
 }
+
+// A symbol in an artist's name does not stop a play matching: Curren$y's
+// track, held once, is found from a play that names no album, and the
+// report counts no tie.
+func TestMigrateSpotifyMatchesASymbolBearingNameHeldOnce(t *testing.T) {
+	t.Parallel()
+	ctx, f := newMigrateFixtureWith(t, func(t *testing.T, libDir string) {
+		t.Helper()
+		if _, err := fixtures.Generate(filepath.Join(libDir, "champagne"), fixtures.Spec{
+			Name: "junior-mints", Codec: fixtures.CodecFLAC, Duration: 3 * time.Second,
+			Tags: map[string]string{"TITLE": "Junior Mints", "ARTIST": "Curren$y", "ALBUM": "The Champagne Files", "TRACKNUMBER": "3"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	held := f.itemsTitled(t, ctx, "Junior Mints")
+	if len(held) != 1 {
+		t.Fatalf("held = %d items, want the track once", len(held))
+	}
+
+	sum := f.runSpotify(t, ctx, spotifyPlays(t, [3]string{"Junior Mints", "Curren$y", ""}))
+	if sum.Matched != 1 || sum.Unmatched != 0 || sum.Ties != 0 || sum.Listens != 1 {
+		t.Fatalf("summary = %+v, want the play matched once with no tie", sum)
+	}
+	if len(sum.Samples.Ties) != 0 || len(sum.Samples.Unmatched) != 0 {
+		t.Errorf("samples = %+v, want neither a tie nor a miss", sum.Samples)
+	}
+	if st := f.playState(t, ctx, apiPID(PrefixTrack, held[0].PID)); st.PlayCount != 1 {
+		t.Errorf("the track's play count = %d, want the play", st.PlayCount)
+	}
+}

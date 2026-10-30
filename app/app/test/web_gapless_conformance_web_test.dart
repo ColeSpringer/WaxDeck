@@ -99,6 +99,15 @@ class WebGaplessHarness extends AudioEngineHarness {
     );
   }
 
+  /// A single item plays on the standard half, so its failure is the
+  /// fake's, and what is under test is the composite passing it on.
+  @override
+  bool get canFailPlayback => true;
+
+  @override
+  Future<void> failPlayback(AudioEnginePort engine) async =>
+      _standards[engine]!.failPlayback();
+
   @override
   Future<void> loseTimeline(AudioEnginePort engine) async {
     fireHlsError(status: 410);

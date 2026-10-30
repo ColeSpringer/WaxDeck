@@ -221,10 +221,10 @@
     // nothing here may reach the network, and the server embeds the
     // whole canvaskit directory), and multi-threaded skwasm corrupts
     // its shared heap under concurrent text layout and rasterization,
-    // freezing the page at full CPU. Single-threaded until
-    // flutter/flutter#190039 is fixed; e2e can flip threading back on
-    // per run (WAXDECK_E2E_MT_SKWASM=1) to re-test a new engine, and
-    // e2e/skwasm-repro answers the same question in seconds.
+    // freezing the page at full CPU. Single-threaded until the pinned
+    // Flutter carries the fix for flutter/flutter#190039; e2e can flip
+    // threading back on per run (WAXDECK_E2E_MT_SKWASM=1) to re-test a
+    // new engine.
     _flutter.loader.load({
       serviceWorkerSettings: {
         serviceWorkerVersion: {{flutter_service_worker_version}},

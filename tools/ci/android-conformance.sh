@@ -3,9 +3,9 @@
 #
 #   android-conformance.sh <out-dir> <tone-url> <saf-probe-dir> [serial]
 #
-# Two flutter test suites and the SAF picker probe, each under its own
-# budget (run-suite.sh), with logcat collected from before the first
-# install to after the last exit. A suite that fails is followed by the
+# Two flutter test suites, the SAF picker probe and the share chooser
+# probe, each under its own budget (run-suite.sh), with logcat collected
+# from before the first install to after the last exit. A suite that fails is followed by the
 # next; a suite that hangs is probed where it stands (probe-android.sh)
 # and ends the attempt, because a device that hung once answers little
 # when asked again and the retry's fresh emulator runs every suite
@@ -270,6 +270,7 @@ keep_first_try() {
   [ -e "$OUT/$name.report.json" ] && mv "$OUT/$name.report.json" "$OUT/$name.first-try.report.json"
   [ -e "$OUT/$name.verdict" ] && mv "$OUT/$name.verdict" "$OUT/$name.first-try.verdict"
   [ -d "$OUT/saf-capture" ] && mv "$OUT/saf-capture" "$OUT/saf-capture.first-try"
+  [ -d "$OUT/share-capture" ] && mv "$OUT/share-capture" "$OUT/share-capture.first-try"
   return 0
 }
 
@@ -347,6 +348,10 @@ suite load_fault 600 flutter test "${FLAGS[@]}" \
 WAX_FLUTTER_TEST_FLAGS="-v --reporter expanded --file-reporter json:$OUT/saf_channel.report.json" \
   SAF_ARTIFACTS="$OUT/saf-capture" \
   suite saf_channel 600 bash "$ROOT/e2e/tools/run-saf-probe.sh" "$SAF" "$SERIAL"
+# The share probe likewise, its chooser dismissed from outside.
+WAX_FLUTTER_TEST_FLAGS="-v --reporter expanded --file-reporter json:$OUT/share_channel.report.json" \
+  SHARE_ARTIFACTS="$OUT/share-capture" \
+  suite share_channel 600 bash "$ROOT/e2e/tools/run-share-probe.sh" "$SERIAL"
 
 stop_logcat
 

@@ -971,7 +971,7 @@ func (l *Library) DeleteUpload(ctx context.Context, uc *UserCtx, id string) erro
 	}
 	if l.pendingEntryHasLanded(ctx, u.ReviewEntryID) {
 		return &Error{Kind: KindConflict,
-			Msg: "part of this upload's review unit is already in the library; retry the decision, or delete the imported items first"}
+			Msg: "part of this upload's review unit is already in the library; retry the decision or discard the entry, or delete the imported items first"}
 	}
 	if err := os.RemoveAll(filepath.Join(l.stagingDir, u.ID)); err != nil {
 		return &Error{Kind: KindInternal, Err: err}

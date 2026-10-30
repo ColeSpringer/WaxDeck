@@ -442,3 +442,38 @@ func TestALaterPartOfAHeldBookIsNoCertainDuplicate(t *testing.T) {
 		t.Fatalf("the second part's duplicate = %+v, want no certain match on the release id", d)
 	}
 }
+
+// Other audio carrying the recording id of a track the library holds is
+// flagged as that track by the id alone: it shares no bytes, title or
+// artist with it.
+func TestAnUploadOfTheSameRecordingIsFlaggedById(t *testing.T) {
+	t.Parallel()
+	h, bob := joinHarness(t)
+	const recording = "00000000-0000-4000-8000-0000000000d1"
+	if _, err := fixtures.Generate(h.library, fixtures.Spec{
+		Name: "known", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second,
+		Tags: map[string]string{
+			"TITLE": "Known Recording", "ARTIST": "Session Band", "ALBUM": "Known Album",
+			"MUSICBRAINZ_TRACKID": recording,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	known := h.itemTitled(t, h.token, "Known Recording").Pid
+
+	paths, err := fixtures.Generate(t.TempDir(), fixtures.Spec{
+		Name: "elsewhere", Codec: fixtures.CodecFLAC, Duration: 3 * time.Second,
+		Tags: map[string]string{
+			"TITLE": "Heard Somewhere Else", "ARTIST": "Cover Act",
+			"MUSICBRAINZ_TRACKID": recording,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := uploadFile(t, h, bob, paths[0], "music", "")
+	if d := up.Duplicate; d == nil || d.Kind != "id" || d.ItemPid == nil || *d.ItemPid != known {
+		t.Fatalf("completion duplicate = %+v, want an id match on %s", d, known)
+	}
+}

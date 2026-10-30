@@ -173,10 +173,11 @@ silently serving diverged history.
 
 WaxBin's change log has no user dimension for `play_state`, `bookmark`,
 `play_queue`, and `playlist` rows. The hub filters those entity types out of
-catalog fan-out entirely. Play state is re-emitted user-scoped on the server
-cursor (WaxDeck is the sole writer, so it knows the acting user at write
-time); bookmarks and queues will ride the same path when their API surfaces
-land. No client ever sees another user's listening activity.
+catalog fan-out entirely. Play state and bookmarks are re-emitted user-scoped
+on the server cursor (`play-state` and `bookmarks`; WaxDeck is the sole
+writer, so it knows the acting user at write time); a queue travels no
+stream, and a device restores one from the account's playback session
+history. No client ever sees another user's listening activity.
 
 Playlists ride the `user` stream too (the `playlist` event kind on
 `/sync/server`): a mutation reaches the owner always, and a shared

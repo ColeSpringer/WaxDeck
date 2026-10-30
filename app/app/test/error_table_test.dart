@@ -355,6 +355,7 @@ void main() {
         'host-refused': (l) => l.errorFeedRefused,
         'host-missing': (l) => l.errorFeedNotFound,
         'host-error': (l) => l.errorFeedHostError,
+        'unreachable': (l) => l.errorFeedHostUnreachable,
       };
       for (final MapEntry(key: reason, value: sentence) in byReason.entries) {
         final e = failed('feed-unreachable', reason);
@@ -369,12 +370,11 @@ void main() {
         for (final s in byReason.values) s(en),
         en.errorFeedUnreachable,
       };
-      expect(sentences, hasLength(5), reason: 'each reason reads apart');
+      expect(sentences, hasLength(6), reason: 'each reason reads apart');
     });
 
-    test('a host out of reach, or a reason this build does not know, reads '
-        'as the code', () {
-      for (final reason in <String?>['unreachable', 'holo-outage', null]) {
+    test('a reason this build does not know, or none, reads as the code', () {
+      for (final reason in <String?>['holo-outage', null]) {
         expect(
           explainError(en, failed('feed-unreachable', reason)),
           en.errorFeedUnreachable,

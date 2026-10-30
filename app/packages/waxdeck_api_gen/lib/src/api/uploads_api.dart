@@ -518,7 +518,7 @@ class UploadsApi {
   }
 
   /// Abandon an upload
-  /// Deletes the session and its staged bytes. An upload whose file already entered the library cannot be deleted here (the item lives in the library now; delete it there); that answers &#x60;conflict&#x60;. 
+  /// Deletes the session and its staged bytes. An upload whose file already entered the library cannot be deleted here (the item lives in the library now; delete it there); that answers &#x60;conflict&#x60;, as does a staged file whose review unit already landed part of itself (retry the decision or discard the entry, or delete the imported items first). 
   ///
   /// Parameters:
   /// * [uploadId] - Upload PID (e.g. `up-01JZX5N8QW3F4V9T2B7KD3M9R6`).

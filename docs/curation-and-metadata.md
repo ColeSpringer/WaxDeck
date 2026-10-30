@@ -58,11 +58,12 @@ against it. Decisions:
   entries feed the calibration statistic the queue shows, so trust in
   auto-apply is measured, not asserted.
 
-A match applied on its own writes the files the same way. A unit with
-a file in a read-only library changes only the catalog, and the health
-rule for tags out of sync lists the values its files are owed; a file
-that cannot be written leaves the decision standing and is named in
-its warnings.
+A match applied on its own writes the files the same way. A file in a
+read-only library keeps its tags, which the health rule for tags out of
+sync lists as owed, while the unit's other files are written; a unit
+with no file that may be written changes only the catalog. A file that
+cannot be written leaves the decision standing and is named in its
+warnings.
 
 Per-library matching modes: `auto` (the default), `review` (nothing
 applies itself), and `off` for libraries the engine must never touch.
@@ -505,7 +506,9 @@ of a wall of red.
 ## Duplicates and upgrades
 
 The audit's duplicate findings (artists, albums, release groups,
-genres) surface with suggested survivors; merging re-parents
+genres) surface with suggested survivors (albums are also paired by
+name, where folders keep apart two albums of one title and album
+artist); merging re-parents
 everything onto the survivor, play history included, and survives
 rescans because the survivor keeps its identity. A merge also folds
 each loser's name into the survivor, so a file still tagged the old way
@@ -598,7 +601,8 @@ the undo, once the run is older than the task retention window
 With the streaming engine configured:
 
 - **Merge** a multi-file audiobook into one chaptered file: parts
-  join gaplessly, chapter marks land at the part boundaries with
+  join gaplessly, re-encoded to AAC so any mix of part formats
+  merges, chapter marks land at the part boundaries with
   sensible titles, tags and cover carry over, and everyone's resume
   position survives the merge. The merged file is written beside the
   parts in the book's own library, so who can see the book does not

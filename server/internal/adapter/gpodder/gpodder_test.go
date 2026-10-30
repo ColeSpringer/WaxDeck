@@ -293,9 +293,14 @@ func TestLoginSession(t *testing.T) {
 		return resp
 	}
 
-	// The cookie alone validates against login for the same user.
-	if resp := withCookie("POST", "/api/2/auth/alice/login.json"); resp.StatusCode != 200 {
+	// The cookie alone validates against login for the same user, and
+	// answers no new cookie: a cookie never extends itself.
+	resp = withCookie("POST", "/api/2/auth/alice/login.json")
+	if resp.StatusCode != 200 {
 		t.Fatalf("cookie-only login status = %d, want 200", resp.StatusCode)
+	}
+	if c := sessionCookieOf(resp); c != nil {
+		t.Fatalf("cookie-only login set a session cookie: %v", c)
 	}
 
 	// The cookie authenticates every other endpoint.
@@ -710,6 +715,24 @@ func TestLogoutInvalidatesTheCookie(t *testing.T) {
 	}
 	if got := e.withCookie(tablet, "GET", "/api/2/devices/alice.json", ""); got != 200 {
 		t.Errorf("the other device's cookie = %d, want 200", got)
+	}
+}
+
+// The cookie's account is compared with the path's the way every data
+// route compares them, case-insensitively: a path typed in another case
+// is no cross-user login or logout.
+func TestLoginAndLogoutAcceptAPathTypedInAnotherCase(t *testing.T) {
+	e := newEnv(t)
+	c := e.login("alice", e.secret)
+	if got := e.withCookie(c, "POST", "/api/2/auth/ALICE/login.json", ""); got != 200 {
+		t.Errorf("a cookie-only login on ALICE's path = %d, want 200", got)
+	}
+	if got := e.withCookie(c, "POST", "/api/2/auth/ALICE/logout.json", ""); got != 200 {
+		t.Errorf("logout on ALICE's path = %d, want 200", got)
+	}
+	// A refused logout would leave the session standing.
+	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 401 {
+		t.Errorf("the cookie after that logout = %d, want 401", got)
 	}
 }
 

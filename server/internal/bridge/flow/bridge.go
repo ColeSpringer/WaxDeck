@@ -6,6 +6,7 @@ package flow
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -93,7 +94,10 @@ type Config struct {
 	// Timelines persists minted timelines so their proxied URLs survive
 	// a restart. Nil keeps them in memory only.
 	Timelines TimelineStore
-	Logger    *slog.Logger
+	// TimelineInlineWait bounds how long a timeline mint waits on member
+	// measurement before it answers a job instead; zero is 15 s.
+	TimelineInlineWait time.Duration
+	Logger             *slog.Logger
 }
 
 // Bridge is the live bridge, holding the sidecar's capabilities while
@@ -158,6 +162,8 @@ type Bridge struct {
 	tlOnce  sync.Once
 	tl      *timelineState
 	tlStore TimelineStore
+	// inlineWait is Config.TimelineInlineWait, or timelineInlineWait.
+	inlineWait time.Duration
 }
 
 // CheckBaseURL refuses an engine address New cannot use, for a start that
@@ -204,6 +210,7 @@ func New(ctx context.Context, cfg Config) (*Bridge, error) {
 		client:       c,
 		log:          log,
 		tlStore:      cfg.Timelines,
+		inlineWait:   cmp.Or(cfg.TimelineInlineWait, timelineInlineWait),
 		kick:         make(chan struct{}, 1),
 		retryMin:     defaultRetryMin,
 		retryMax:     defaultRetryMax,

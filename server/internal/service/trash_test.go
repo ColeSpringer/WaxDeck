@@ -250,3 +250,84 @@ func TestTrashEntriesNameFilesWithinTheirLibrary(t *testing.T) {
 		t.Fatalf("trash entry name = %q, want Shelf/track.flac", got)
 	}
 }
+
+// coverInTrash reports whether a file named cover.jpg sits anywhere in a
+// library's trash.
+func coverInTrash(t *testing.T, root string) bool {
+	t.Helper()
+	found := false
+	err := filepath.WalkDir(filepath.Join(root, model.TrashDirName), func(path string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && d.Name() == "cover.jpg" {
+			found = true
+		}
+		return err
+	})
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	return found
+}
+
+// Deleting a managed folder's last track prunes the folder and counts
+// it. Its cover is the folder's, not a sidecar of the track: trashed in
+// a trash delete, gone in a permanent one.
+func TestADeleteOfAFoldersLastTrackPrunesTheFolder(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"trash", "permanent"} {
+		ctx, svc, admin, root, tracks := newTrashFixture(t, "Words")
+		pid := tracks["Words"].pid
+		folder := filepath.Join(root, "Words")
+		touchSidecarFiles(t, folder, "cover.jpg")
+
+		plan, err := svc.DeleteItems(ctx, admin, []string{pid}, mode, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := sidecarsAcross(plan); len(got) != 0 {
+			t.Errorf("%s plan sidecars = %q, want none: the cover belongs to the folder", mode, got)
+		}
+		res, err := svc.DeleteItems(ctx, admin, []string{pid}, mode, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.DirsPruned != 1 {
+			t.Errorf("%s delete pruned %d folders, want the one it emptied", mode, res.DirsPruned)
+		}
+		if got := sidecarsAcross(res); len(got) != 0 {
+			t.Errorf("%s delete sidecars = %q, want none: the cover belongs to the folder", mode, got)
+		}
+		if _, err := os.Stat(folder); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s delete left the emptied folder (%v)", mode, err)
+		}
+		if kept := coverInTrash(t, root); kept != (mode == "trash") {
+			t.Errorf("%s delete left the cover in the trash = %v", mode, kept)
+		}
+	}
+}
+
+// An in-place library's folder companions are the user's: the track goes
+// and the folder, with its cover, stays.
+func TestADeleteInAnInPlaceLibraryKeepsTheFolder(t *testing.T) {
+	t.Parallel()
+	var root string
+	ctx, svc, admin := openEnrichFixture(t, func(c *Config) { root = c.Roots[0].Path })
+	folder := filepath.Join(root, "Words")
+	if _, err := fixtures.Generate(folder, fixtures.Spec{
+		Name: "track", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second,
+		Tags: map[string]string{"TITLE": "Words Song", "ARTIST": "Trasher", "ALBUM": "Words", "TRACKNUMBER": "1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	touchSidecarFiles(t, folder, "cover.jpg")
+	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.DeleteItems(ctx, admin, []string{itemPIDByTitle(t, ctx, svc, admin, "Words Song")}, "trash", false)
+	if err != nil || res.Trashed != 1 || res.DirsPruned != 0 {
+		t.Fatalf("delete = %+v (%v), want the track trashed and no folder pruned", res, err)
+	}
+	trashFileStillThere(t, filepath.Join(folder, "cover.jpg"), "the in-place folder's cover")
+	if _, err := os.Stat(filepath.Join(folder, "track.flac")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the deleted track is still in its folder (%v)", err)
+	}
+}

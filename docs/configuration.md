@@ -134,8 +134,10 @@ Read by compose itself, not the server.
 - `WAXDECK_AUDIOBOOK_ROOTS`: root names (comma separated) that hold
   audiobooks. Every audio file in such a root is cataloged as a book, so
   a folder of plain MP3 parts needs no tagging. The setting wins at every
-  start: a named root changed to another type in the console is put back
-  to Books. Under compose, set `WAXDECK_AUDIOBOOKS` in `deploy/.env` to
+  start, so a named root is put back to Books whatever set it otherwise
+  (the `waxbin` CLI, or the console before the root was named); the
+  console does not offer to change it. Under compose, set
+  `WAXDECK_AUDIOBOOKS` in `deploy/.env` to
   your audiobook folder instead; `make up` mounts it as the root `books`
   and pins this to `books` (`deploy/compose.audiobooks.yaml`), over any
   value `deploy/.env` gives it.
@@ -152,8 +154,9 @@ Read by compose itself, not the server.
   instead re-read every file: the repair pass for rows written before
   a tag-parser fix (ALAC files scanned before waxlabel 1.4.2 store a
   wrong bit depth, and only a forced rescan heals them), or after a
-  library is moved off Books, whose files are then read again as
-  tracks. Curated edits survive it.
+  library is moved off Books when another job kept that move's own scan
+  from starting, so its files are classified by their tags again.
+  Curated edits survive it.
 - `WAXDECK_LIBRARY_WATCH` (default `true`): watch the library roots
   and catalog files placed there by hand without waiting for a rescan.
   Network mounts (NFS, SMB, 9p) rarely deliver change events; disable

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -71,7 +72,14 @@ func (h *Handler) playlistEntries(ctx context.Context, uc *service.UserCtx, id s
 	}
 }
 
-func (h *Handler) getPlaylists(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
+func (h *Handler) getPlaylists(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, username string) {
+	// No read lists another account's playlists, not even for an
+	// administrator, so naming one is refused rather than answered with
+	// the caller's own.
+	if asked := r.Form.Get("username"); asked != "" && !strings.EqualFold(asked, username) {
+		h.fail(w, r, 50, "only your own playlists can be listed")
+		return
+	}
 	rows, err := h.allPlaylists(r.Context(), uc)
 	if err != nil {
 		h.failFromService(w, r, err, "listing playlists failed")

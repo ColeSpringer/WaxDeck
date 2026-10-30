@@ -226,9 +226,10 @@ On a server with podcasts turned off (`-podcast-dir=""`) every add is
 refused and nothing waits. An address that is not an http or https URL
 naming a host is dropped as it arrives: the app is told to drop it on an
 incremental upload, and nothing is said in your notifications. A feed
-that cannot work as given (not a feed at all, a host that refuses or has
-nothing at the address, an address on a local network this server does
-not fetch from) is refused: the app is told to drop it (on an
+that cannot work as given (not a feed at all, a feed larger than this
+server accepts, a host that refuses or has nothing at the address, an
+address on a local network this server does not fetch from) is refused:
+the app is told to drop it (on an
 incremental upload; a full-list upload has no answer to carry that), and
 your WaxDeck notifications say why, as they do when a week of tries runs
 out. A feed given up after its week is refused, not tried or parked
@@ -331,7 +332,8 @@ timer with an end-of-chapter mode.
 End of chapter stops playback at the head of the next chapter, so
 pressing play picks up there, at any speed and whether or not the
 chapter ends where a file does. At the end of the last chapter the book
-simply stops: nothing queued after it starts under a sleeper. Seeking
+simply stops: nothing queued after it starts under a sleeper, and a
+play there moves on to what follows, or starts the book again. Seeking
 past the chapter end lets the timer go. A podcast episode whose feed
 publishes chapters offers the same mode, ending at those marks.
 
@@ -368,15 +370,15 @@ tag join the book their folder holds. In a Music or Mixed library each
 file is classified by its tags: it is a book when it is an `.m4b`,
 carries the audiobook media type, names a narrator, or has the genre
 Audiobook; Speech, Spoken Word and a composer on their own do not count.
-In a Mixed library the other parts of a book its file type, media type
-or narrator marks still join it; the genre marks only the file that
-carries it. A
-folder of untagged MP3s in a Music or Mixed library is music, so keep
+In a Mixed library the other parts of a book join it when its file
+type, media type or narrator marks it, or when it already has several
+parts; a genre on a lone file marks only that file. A folder of
+untagged MP3s in a Music or Mixed library is music, so keep
 audiobooks in a library of their own that holds Books (see
 [adding a library](admin-and-ops.md#adding-a-library-at-runtime), or
 `WAXDECK_AUDIOBOOK_ROOTS` in [configuration](configuration.md)).
 
-A narrator added to a track does not make it a book. **Treat as
+The editor takes no narrator on a track: **Treat as
 audiobook** on a track, or on an album to make its tracks one book,
 changes what it is, and **Treat as music** on a book's overflow goes
 back; the choice is kept through every later scan, and plays, stars
@@ -388,7 +390,7 @@ it, and their uploader gains nothing over it (where it sits in a
 library they cannot open, the change says only that they joined
 something there). An upload's media type does the same at import.
 
-Subsonic clients list music only: books reach them through bookmarks,
+Subsonic clients list no books: books reach them through bookmarks,
 so a library of MP3 audiobooks a Subsonic music client used to browse
 as albums leaves its listings once it holds Books. Books play in the
 WaxDeck apps. A book in parts that a Subsonic client plays from a

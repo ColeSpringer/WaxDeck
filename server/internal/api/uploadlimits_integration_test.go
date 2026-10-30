@@ -1,8 +1,13 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -272,6 +277,40 @@ func TestBindingErrorsNameTheFieldNotTheDecoder(t *testing.T) {
 			if strings.Contains(e.Message, leak) {
 				t.Errorf("%s: %q leaks %q", c.name, e.Message, leak)
 			}
+		}
+	}
+}
+
+// A session that opened with a duplicate warning answers every chunk with
+// it, naming the item as the create did.
+func TestChunkResponseCarriesTheSameDuplicateAsCreate(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	raw, err := os.ReadFile(filepath.Join(h.library, "alpha.flac"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	up := decodeStatus[Upload](t, h.postJSON(t, "/api/v1/uploads", map[string]any{
+		"fileName": "alpha-again.flac", "mediaType": "music", "sizeBytes": len(raw),
+		"sha256": hex.EncodeToString(sum[:]),
+	}), 201, "create")
+	want := up.Duplicate
+	if want == nil || want.Kind != "content" || !strings.HasPrefix(deref(want.ItemPid), "tr-") ||
+		deref(want.Title) != "Alpha Song" || deref(want.Artist) != "Fixture Artist" {
+		t.Fatalf("create duplicate = %+v, want a content match naming Alpha Song", want)
+	}
+	wantJSON, _ := json.Marshal(want)
+	half := len(raw) / 2
+	// The last request finds every byte already here and says so.
+	for i, chunk := range []struct {
+		offset int
+		data   []byte
+	}{{0, raw[:half]}, {half, raw[half:]}, {len(raw), nil}} {
+		resp := metadataPutBytes(t, h.ts, "/api/v1/uploads/"+up.Id+"/data?offset="+strconv.Itoa(chunk.offset), h.token, chunk.data)
+		got := decodeStatus[Upload](t, resp, 200, "chunk "+strconv.Itoa(i))
+		if gotJSON, _ := json.Marshal(got.Duplicate); string(gotJSON) != string(wantJSON) {
+			t.Errorf("chunk %d duplicate = %s, want the create's %s", i, gotJSON, wantJSON)
 		}
 	}
 }

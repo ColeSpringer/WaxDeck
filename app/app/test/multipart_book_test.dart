@@ -386,6 +386,14 @@ void main() {
       expect(engine.loadedUrl, contains('&t=50'));
     });
 
+    test('opening the book writes no checkpoint of its own', () async {
+      // A write here would stamp the place fresh on every cold start,
+      // and the smart rewind reads how long it rested from that stamp.
+      await started(at: 70000, play: false);
+      await pumpEventQueue();
+      expect(repo.putPlayStateCalls, isEmpty);
+    });
+
     test('a paused seek inside the part is written', () async {
       final session = await started(play: false);
       await session.seek(const Duration(seconds: 42));

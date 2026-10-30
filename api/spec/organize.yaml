@@ -121,7 +121,8 @@ paths:
       summary: Dry-run an organize pass
       description: >
         Plans a profile's moves for `itemPids`, or every managed library,
-        touching nothing; read-only files are counted rather than planned.
+        touching nothing; read-only libraries are left out of the plan
+        and counted in `readOnlyLibraries`.
         Lists the first 500 actions and the total, and the first 500 moves
         held back with why. Administrators only.
       tags: [organize]

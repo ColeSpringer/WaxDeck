@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/colespringer/waxdeck/fixtures"
 )
 
 // The landing page's readers are the least likely to speak the instance
@@ -421,4 +424,48 @@ func TestShareArtIsRevalidatedEveryTime(t *testing.T) {
 	wantStatus(t, art(`"elsewhere", `+etag), http.StatusNotModified, "revalidating with a list")
 	wantStatus(t, h.deleteReq(t, "/api/v1/shares/"+share.Pid), 204, "revoke the share")
 	wantStatus(t, art(etag), 404, "revalidating after the revoke")
+}
+
+// The landing page draws a cover only for a share whose first item has one
+// when the page is read, and the same link draws it once one arrives: the
+// page runs no script that could swap a broken image for the placeholder.
+func TestSharePageDrawsACoverOnlyWhereOneResolves(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	// An album of its own: a cover on the demo album reaches every track
+	// of it.
+	if _, err := fixtures.Generate(h.library, fixtures.Spec{
+		Name: "bare", Codec: fixtures.CodecMP3, Duration: 2 * time.Second,
+		Tags: map[string]string{"TITLE": "Bare Song", "ARTIST": "Bare Artist", "ALBUM": "Bare Album"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	covered, bare := h.itemTitled(t, h.token, "Alpha Song"), h.itemTitled(t, h.token, "Bare Song")
+	wantStatus(t, metadataPutBytes(t, h.ts, "/api/v1/items/"+covered.Pid+"/artwork", h.token, tinyPNG(t)), 200, "set a cover")
+	share := func(pid string) Share {
+		t.Helper()
+		return decodeStatus[Share](t, h.postJSON(t, "/api/v1/shares", map[string]any{"pid": pid}), 201, "share "+pid)
+	}
+	page := func(s Share) string {
+		t.Helper()
+		resp := get(t, h.ts, s.Url, "")
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("landing page status = %d, want 200", resp.StatusCode)
+		}
+		return string(body)
+	}
+	withCover, without := share(covered.Pid), share(bare.Pid)
+	if !strings.Contains(page(withCover), `<img class="art" src="`+withCover.Url+`/art"`) {
+		t.Error("a share of a track with a cover draws none")
+	}
+	if strings.Contains(page(without), "<img") {
+		t.Error("a share of a track with no cover draws an image")
+	}
+	wantStatus(t, metadataPutBytes(t, h.ts, "/api/v1/items/"+bare.Pid+"/artwork", h.token, tinyPNG(t)), 200, "give the other track a cover")
+	if !strings.Contains(page(without), `<img class="art" src="`+without.Url+`/art"`) {
+		t.Error("the same link, once its track has a cover, draws none")
+	}
 }

@@ -180,9 +180,8 @@ test.describe('large-library web gate', () => {
 
   test('index and bucket scroll pacing', async ({ browser, playwright }) => {
     // The music surfaces, which the first recorded run never visited and
-    // which the artwork negative cache changed. Artists first because it
-    // is the index that draws no artwork by design: it is the cheap
-    // case, and a miss there is not an artwork number.
+    // which the artwork negative cache changed. Both indexes draw
+    // artwork; a corpus built with -covers=false is the run without it.
     await waitForCorpus(() => playwright.request.newContext({ baseURL: base }));
     await measuring(browser, async (page) => {
       await login(page);

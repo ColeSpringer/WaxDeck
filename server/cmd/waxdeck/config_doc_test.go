@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Every WAXDECK_* env var the server binaries read must appear in
@@ -85,5 +87,34 @@ func TestEveryServerEnvVarIsDocumented(t *testing.T) {
 	sort.Strings(stale)
 	for _, key := range stale {
 		t.Errorf("%s is documented but nothing reads it (not in server code, compose.yaml, or .env.example)", key)
+	}
+}
+
+// The streaming engine's container waits for WaxDeck to be healthy, not
+// just started: the catalog it resolves pids against is WaxDeck's to
+// create, so a start order alone has it restart until that exists.
+func TestComposeStartsTheEngineOnceWaxDeckIsHealthy(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "compose.yaml"))
+	if err != nil {
+		t.Fatalf("reading deploy/compose.yaml: %v", err)
+	}
+	// depends_on is a list in one service and a map in another, so it is
+	// read loosely and each service's own form checked.
+	var compose struct {
+		Services map[string]struct {
+			DependsOn any `yaml:"depends_on"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(src, &compose); err != nil {
+		t.Fatalf("parsing deploy/compose.yaml: %v", err)
+	}
+	engine, ok := compose.Services["waxflow"]
+	if !ok {
+		t.Fatal("deploy/compose.yaml has no waxflow service")
+	}
+	deps, _ := engine.DependsOn.(map[string]any)
+	waxdeck, _ := deps["waxdeck"].(map[string]any)
+	if waxdeck["condition"] != "service_healthy" {
+		t.Errorf("waxflow depends_on = %v, want waxdeck with condition service_healthy", engine.DependsOn)
 	}
 }

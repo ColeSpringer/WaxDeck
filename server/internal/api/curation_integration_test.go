@@ -1208,6 +1208,18 @@ func TestAcquireFromURL(t *testing.T) {
 		t.Fatalf("single acquire entry = %+v", lone)
 	}
 
+	// An address that is not the web's is refused before any download, in
+	// the server's words rather than a decoder's.
+	for _, bad := range []string{"ftp://x", "tube.example/watch?v=lone"} {
+		resp = post(digger, "/api/v1/acquisitions", map[string]any{"url": bad, "mediaType": "music"})
+		if resp.StatusCode != 400 {
+			t.Fatalf("acquiring %q status = %d, want 400", bad, resp.StatusCode)
+		}
+		if e := decode[Error](t, resp); e.Code != "invalid-request" || e.Message != "the address must start with http:// or https://" {
+			t.Errorf("acquiring %q = %+v, want the http and https sentence", bad, e)
+		}
+	}
+
 	// Without any provider the endpoint answers the typed 501.
 	bare := newHarnessDirect(t)
 	resp = bare.postJSON(t, "/api/v1/acquisitions", map[string]any{

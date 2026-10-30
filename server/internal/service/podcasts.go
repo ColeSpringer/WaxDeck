@@ -59,7 +59,15 @@ type PodcastShow struct {
 	// hand-set replacement. Detail reads only, beside Persons: a
 	// subscription row draws no caption.
 	ArtSource ArtSourceDTO
+
+	// notes is the feed's own description, unsanitized, read only through
+	// DescriptionText: the sanitized form escapes what markup it drops.
+	notes string
 }
+
+// DescriptionText is the show's description as plain text, for a surface
+// that carries no markup.
+func (s PodcastShow) DescriptionText() string { return feedPlainText(s.notes) }
 
 // FeedPerson is one <podcast:person> credit at the show or episode level.
 // An empty Role reads as "host" per the podcast namespace.
@@ -195,6 +203,10 @@ type Subscription struct {
 	// would tell a client that just followed a four-hundred-episode
 	// show it has nothing waiting.
 	UnplayedCount *int
+	// Withheld is a subscription to a show the caller may not hear now
+	// (showWithheld): its episodes and its detail answer not found, and
+	// the row stays for the day that changes.
+	Withheld bool
 }
 
 // PodcastDetail is a show plus the caller's subscription state.
@@ -236,7 +248,15 @@ type EpisodeSummary struct {
 	// known.
 	Container string
 	MimeType  string
+
+	// notes is the feed's own description, unsanitized, read only through
+	// DescriptionText: reduced when asked, since most surfaces never ask.
+	notes string
 }
+
+// DescriptionText is the episode's description as plain text, for a
+// surface that carries no markup.
+func (e EpisodeSummary) DescriptionText() string { return feedPlainText(e.notes) }
 
 // EpisodeDetail is the full episode view.
 type EpisodeDetail struct {
@@ -384,7 +404,7 @@ func (l *Library) subscribe(ctx context.Context, uc *UserCtx, req SubscribeReque
 // attachSubscription subscribes the caller to a cataloged show and
 // records who holds it: meta's device, or the first-party apps.
 func (l *Library) attachSubscription(ctx context.Context, uc *UserCtx, pod *model.Podcast, req SubscribeRequest, meta subChangeMeta) (Subscription, bool, error) {
-	if pod.Explicit && !uc.Explicit {
+	if showWithheld(uc, pod) {
 		return Subscription{}, false, &Error{Kind: KindForbidden,
 			Msg: "this account cannot subscribe to explicit shows"}
 	}
@@ -861,7 +881,7 @@ func (l *Library) PodcastDetailFor(ctx context.Context, uc *UserCtx, apiShowPID 
 	if !l.podcastsVisible(ctx, uc) {
 		return PodcastDetail{}, errNotFound("no show with pid " + apiShowPID)
 	}
-	if pod.Explicit && !uc.Explicit {
+	if showWithheld(uc, pod) {
 		return PodcastDetail{}, errNotFound("no show with pid " + apiShowPID)
 	}
 	var out PodcastDetail
@@ -965,7 +985,7 @@ func (l *Library) Episodes(ctx context.Context, uc *UserCtx, apiShowPID, cursor 
 	if !l.podcastsVisible(ctx, uc) {
 		return nil, "", errNotFound("no show with pid " + apiShowPID)
 	}
-	if pod.Explicit && !uc.Explicit {
+	if showWithheld(uc, pod) {
 		return nil, "", errNotFound("no show with pid " + apiShowPID)
 	}
 	eps, err := l.lib.Podcasts().Episodes(ctx, pod.PID, 0)
@@ -1411,8 +1431,13 @@ func (l *Library) subscriptionRow(ctx context.Context, uc *UserCtx, pod *model.P
 		Show:           show,
 		Settings:       settingsDTO(row),
 		SubscribedAtNS: row.CreatedAtNS,
+		Withheld:       showWithheld(uc, pod),
 	}, nil
 }
+
+// showWithheld reports that uc may not hear pod: an explicit show, to an
+// account without explicit content.
+func showWithheld(uc *UserCtx, pod *model.Podcast) bool { return pod.Explicit && !uc.Explicit }
 
 func settingsDTO(row wdb.Subscription) SubscriptionSettings {
 	return SubscriptionSettings{
@@ -1444,6 +1469,7 @@ func (l *Library) showDTO(ctx context.Context, uc *UserCtx, pod *model.Podcast, 
 		Title:           clipFeedTitle(pod.Title),
 		Author:          pod.Author,
 		DescriptionHTML: sanitizeShowNotes(pod.Description),
+		notes:           pod.Description,
 		Link:            pod.Link,
 		SourceType:      string(pod.SourceType),
 		Explicit:        pod.Explicit,
@@ -1859,6 +1885,7 @@ func (l *Library) episodeSummary(ctx context.Context, ep *model.Episode, facts e
 		Downloaded:  ep.Downloaded,
 		Explicit:    ep.Explicit,
 		HasTx:       ep.TranscriptURL != "",
+		notes:       ep.Description,
 	}
 	// A show whose source cannot be read relays nothing, here as at the
 	// relay, so no row promises audio the relay would then refuse.

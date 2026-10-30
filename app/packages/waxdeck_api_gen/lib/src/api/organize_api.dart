@@ -372,7 +372,7 @@ class OrganizeApi {
   }
 
   /// Dry-run an organize pass
-  /// Plans a profile&#39;s moves for &#x60;itemPids&#x60;, or every managed library, touching nothing; read-only files are counted rather than planned. Lists the first 500 actions and the total, and the first 500 moves held back with why. Administrators only. 
+  /// Plans a profile&#39;s moves for &#x60;itemPids&#x60;, or every managed library, touching nothing; read-only libraries are left out of the plan and counted in &#x60;readOnlyLibraries&#x60;. Lists the first 500 actions and the total, and the first 500 moves held back with why. Administrators only. 
   ///
   /// Parameters:
   /// * [organizeRequest] 

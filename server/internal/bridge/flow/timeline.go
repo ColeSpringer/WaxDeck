@@ -34,7 +34,7 @@ import (
 // the signed playlists name.
 
 // timelineInlineWait bounds how long a mint absorbs upstream member
-// measurement before answering with a job instead.
+// measurement before answering with a job instead, unless Config says.
 const timelineInlineWait = 15 * time.Second
 
 // TimelinePIDPrefix opens a gapless rendering's pid on the API and in its
@@ -814,12 +814,12 @@ func (b *Bridge) mintTimeline(ctx context.Context, req client.TimelineRequest) (
 	if tl != nil {
 		return tl, "", nil
 	}
-	deadline := time.Now().Add(timelineInlineWait)
+	deadline := time.Now().Add(b.inlineWait)
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
-		case <-time.After(time.Second):
+		case <-time.After(min(time.Second, b.inlineWait)):
 		}
 		job, err := b.client.Job(ctx, jobID)
 		if err != nil {

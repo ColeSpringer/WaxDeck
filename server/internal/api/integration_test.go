@@ -42,6 +42,11 @@ type harness struct {
 	// engine being unwell rather than the queue being unrenderable.
 	refuseTimeline atomic.Bool
 	breakTimeline  atomic.Bool
+	// pendingTimeline makes the fake sidecar answer a timeline mint with a
+	// measurement job that never finishes, as it does for members it has
+	// to decode: the mint absorbs it for its inline wait, then hands the
+	// caller the job.
+	pendingTimeline atomic.Bool
 	// dropTimeline drops the timeline mint's connection unanswered, which
 	// is what a call meets when the engine dies under it.
 	dropTimeline atomic.Bool
@@ -376,6 +381,11 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 				io.WriteString(w, `{"code":"internal","error":"the encoder died"}`)
 				return
 			}
+			if h.pendingTimeline.Load() {
+				w.WriteHeader(http.StatusAccepted)
+				io.WriteString(w, `{"schemaVersion":2,"id":"measure1","state":"queued"}`)
+				return
+			}
 			if h.refuseTimeline.Load() {
 				// The engine's own envelope and its own vocabulary: the
 				// bridge tells a queue it will not render from a sidecar
@@ -452,6 +462,8 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 		case "/jobs/job1":
 			fmt.Fprint(w, `{"schemaVersion":2,"id":"job1","state":"done",
 				"analysis":{"integratedLufs":-20.5,"truePeakDb":-1.2,"rate":44100}}`)
+		case "/jobs/measure1":
+			fmt.Fprint(w, `{"schemaVersion":2,"id":"measure1","state":"running"}`)
 		case "/jobs/job1/result":
 			fmt.Fprint(w, `{"schemaVersion":1,"version":"silence-1","thresholdDb":-50,
 				"minSeconds":0.5,"rate":44100,"durationSeconds":5,
@@ -500,7 +512,10 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 		Roots:    flowRoots,
 		Tokens:   media,
 		Resolver: svc,
-		Logger:   log,
+		// The fake answers a mint at once unless pendingTimeline, whose
+		// job never finishes: no test waits a real mint's wait out.
+		TimelineInlineWait: 50 * time.Millisecond,
+		Logger:             log,
 	})
 	if err != nil {
 		t.Fatal(err)

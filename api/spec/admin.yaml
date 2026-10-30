@@ -1775,8 +1775,9 @@ components:
             `music` and `mixed` (the default) classify each file by its
             tags: an `.m4b` file, an audiobook media type, a narrator
             credit or an Audiobook genre makes a book, and in `mixed` the
-            other parts of a book the first three mark join it (the genre
-            marks only its own file). The class also routes
+            other parts join a book the first three mark, or one already
+            of several parts (a genre on a lone file marks only that
+            file). The class also routes
             managed placement. It can be changed with
             `PUT /libraries/{pid}/media`.
         managed:

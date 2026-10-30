@@ -222,7 +222,7 @@ String? explainFeedReason(AppLocalizations l, String? reason) =>
       'host-refused' => l.errorFeedRefused,
       'host-missing' => l.errorFeedNotFound,
       'host-error' => l.errorFeedHostError,
-      'unreachable' => l.errorFeedUnreachable,
+      'unreachable' => l.errorFeedHostUnreachable,
       _ => null,
     };
 

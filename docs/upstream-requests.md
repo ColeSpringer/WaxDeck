@@ -12,18 +12,20 @@ note.
 ## WaxBin
 
 - **Concurrent catalog reads stop scaling at a few cores.** Under load
-  the catalog-backed endpoints plateau near one client's throughput
-  (`/items/{pid}` goes from 781 to 987 requests a second between 1 and
-  50 clients, each request costing about three times the CPU), while
-  endpoints that never touch the catalog reach 13k a second. The
-  profile points at modernc.org/sqlite's libc: one allocator mutex
-  around every malloc and free, and one LRU mutex per page fetch. WaxBin
-  opens one writer and eight readers, so the pool is not the limit, and
-  WaxBin owns the dependency. Wanted: a concurrent-read benchmark
-  (`RunParallel` over the read paths) and the report to modernc with it
-  attached. Shipped workaround: WaxDeck keeps the statements per request
-  down (batch reads rather than a point read per row), which lowers the
-  cost without lifting the ceiling.
+  the catalog-backed endpoints plateaued near one client's throughput
+  (`/items/{pid}` went from 781 to 987 requests a second between 1 and
+  50 clients, each request costing about three times the CPU, measured
+  before WaxBin cached its hot read statements), while endpoints that
+  never touch the catalog reach 13k a second. The profile points at
+  modernc.org/sqlite's libc: one allocator mutex around every malloc
+  and free, and one LRU mutex per page fetch. WaxBin opens one writer
+  and eight readers, so the pool is not the limit, and WaxBin owns the
+  dependency. Wanted: the report to modernc, with WaxBin's
+  `BenchmarkReadScaling` (`store/sqlite/readscale_bench_test.go`, a
+  `RunParallel` over the item, search and browse reads) attached.
+  Shipped workaround: WaxDeck keeps the statements per request down
+  (batch reads rather than a point read per row), which lowers the cost
+  without lifting the ceiling.
 - **Leaving thumbnails out of a backup costs a second full rewrite.**
   `port.TrimBackupFile` follows the `VACUUM INTO` with a `DELETE` and a
   plain `VACUUM` of the copy, which reads and writes it again and needs
@@ -37,14 +39,16 @@ note.
   an unmounted root turns every move into a `missing` hold. Wanted: a
   plan without the disk pass, for a caller that needs only where each
   file belongs. Shipped workaround: WaxDeck's path-mismatch health rule
-  counts a held move that still has a destination as misplaced, and
-  pays the disk pass on its daily sweep.
+  counts a move held for how the disk and catalog stand (its
+  destination taken, its file missing, another part of its book held)
+  as misplaced, and pays the disk pass on its daily sweep.
 - **The organize history is listed only whole.** `OrganizeHistory`
   groups every journal row before its limit applies (about 75 ms per
   100k moves), orders by the last move rather than the start, and no
   call reads one run's counts. Wanted: a keyset page by start time and a
   one-run read. Shipped workaround: WaxDeck keeps the sorted listing
-  until the catalog's change position moves (or its own prune runs),
+  until the catalog's change position moves (or its own prune runs, or
+  the catalog reopens),
   pages it in memory, and reads a killed run's committed count from it.
 - **`AddRoot` stats the root even with `AllowAbsent`, with no
   deadline.** `config.CheckFolder` stats the path to refuse a file, so
@@ -61,8 +65,9 @@ note.
   live catalog's stamp, and the start validates the extracted file with
   `port.ValidateBackup` before swapping it in.
 - **Ref resolution cannot be scoped to what a caller may hold.**
-  `ResolveRefWith` settles a tie by taking the present item with the
-  lowest pid, blind to the caller, so when that pick is in a library the
+  `ResolveRefWith`, asked to take ties between copies of one recording,
+  settles one by taking the present item with the lowest pid, blind to
+  the caller, so when that pick is in a library the
   importing account cannot see and a copy sits in one it can, the entry
   reads as missing. `ResolveM3U8` has the same root: a relative line's
   candidates are the whole catalog's and its label pick names nothing
@@ -131,7 +136,8 @@ note.
   trashed member advertises one more than it lists. Wanted: the counts
   over members not in the trash, or a trashed count beside them.
   Shipped workaround: a series detail counts the books it lists; the
-  album read and the series listing carry the catalog's numbers.
+  album read, the series listing and the entity cards carry the
+  catalog's numbers.
 - **A failed permanent delete does not say whether the file left the
   disk.** `trash.Service.apply` removes the file and then detaches it,
   and a store error at the detach is a `Failure` like any other, so a
@@ -148,9 +154,11 @@ note.
   cannot be restored, while the catalog lists it where it was. Wanted:
   the journal row written first (and dropped if the move fails), or a
   sweep at open that matches unjournaled trash files to cataloged files
-  gone from their paths. Until then a book merge or split rerun after
-  such a crash sees the part as still the book's, fails its trash and
-  puts back what else went; the stranded part is moved back by hand.
+  gone from their paths. Shipped workaround: a book merge or split
+  rerun after such a crash finds the part missing from where the
+  catalog has it, puts back what else its trash took and ends keeping
+  its output, naming the trash folder to look in; the stranded part is
+  moved back by hand.
 - **A delete plan does not say which folders the run will remove.**
   `trash.Plan.Sidecars` lists the files named for each deleted file,
   but when a delete leaves a folder in a managed library holding only
@@ -181,9 +189,9 @@ note.
   what folded where; `scan.Result` does not. Wanted: the same report
   (`Converted`, `Absorbed`, `Created`) from a scan. Shipped workaround:
   a track's share link refuses to serve the book its track became, so
-  nothing widens, but the folded tracks' listens, play-state stamps and
-  health rows keep their deleted pids, and a split's new parts grant
-  their book's uploader nothing.
+  nothing widens, but the folded tracks' listens and play-state stamps
+  keep their deleted pids (their health rows go at the next sweep), and
+  a split's new parts grant their book's uploader nothing.
 - **A missing file's own row blocks the upload that would restore it.**
   The import's collision check (`DisplayPathExistsFold`) counts a
   missing file's catalog row, so re-uploading that very audio quarantines
@@ -346,8 +354,10 @@ note.
   `chapters fetch failed`, `chapters parse failed` and `transcript fetch
   failed` (Debug) log `url` and an error that repeats it, `OPML import:
   feed failed` (Warn) logs the feed URL, and `watch: podcast sync failed`
-  (Warn) logs a sync error whose text names the feed, as every `netsafe`
-  error's text does. Wanted: the host alone in a log line, and `netsafe`
+  (Warn) logs a sync error whose text names the feed whenever the
+  request fails, the host answers with an error status or the body runs
+  past the cap, as those `netsafe` errors' texts do. Wanted: the host
+  alone in a log line, and `netsafe`
   errors that name the host rather than the URL, since their text
   reaches every caller's log. Shipped workaround: the logger WaxDeck
   hands WaxBin cuts every web address in a line, in its message or any
@@ -398,7 +408,7 @@ note.
   transcript client, and keeps the result in memory for hours (ten
   minutes when the fetch failed); chapters the catalog stored win. A
   credentialed show's document is read only for its subscribers, with the
-  show's credentials sent to the feed's own host and no other.
+  show's credentials sent at the feed's own origin and no other.
 - **Rated entities cannot be listed.** `StarredEntities` lists a user's
   starred artists or albums in one read, but nothing lists the rated
   ones: a rating comes only from `EntityPlayState`, one entity per read.
@@ -579,6 +589,23 @@ note.
   Wanted: the lookup planned on `file_essence` (`INDEXED BY`, an
   `(essence_hash, library_id)` index, or statistics). Shipped
   workaround: none.
+- **Playlists carry no description.** `model.Playlist` has a name and
+  no description, so the `comment` a Subsonic client sends with
+  `createPlaylist` or `updatePlaylist` has nowhere to go, and no
+  playlist answers one. Wanted: a description on a playlist, set and
+  read with it. Shipped workaround: none; the Subsonic surface takes
+  the parameter and stores nothing.
+- **The catalog finds `fpcalc` only on `PATH`.** `internal/caps` looks
+  it up once per process, and the analyze and enrichment passes run
+  that one, while the `fingerprint` package's own calls take a path. So
+  a host cannot point the catalog at a binary of its choosing, and a
+  test cannot hand it a stub without putting one on the whole test
+  binary's `PATH`. Wanted: the fpcalc path as a library option,
+  defaulting to the lookup. Shipped workaround: WaxDeck's own fpcalc
+  calls (an upload's completion, matching, acquisitions) take a path;
+  an upload flagged as a fingerprint duplicate of a library file has no
+  end-to-end test, since the library file's fingerprint comes from the
+  catalog's analysis.
 
 ## WaxTap
 

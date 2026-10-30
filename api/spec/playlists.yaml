@@ -525,10 +525,12 @@ paths:
         reorder primitive (send the same members in the new order).
         Owner only; static playlists only (a smart playlist's
         membership is its rule). Unknown or invisible items fail the
-        request. When the playlist holds members outside the owner's
-        current library visibility the replace is refused with
-        `conflict` (a list built from what the owner can see would
-        silently drop them); appends still work. Playlist edits are
+        request. When the playlist holds members the owner cannot be
+        offered now (outside their library visibility, denied by their
+        content settings, episodes of shows they do not follow, or in
+        the trash) the replace is refused with `conflict` (a list built
+        from what the owner can see would silently drop them); appends
+        still work. Playlist edits are
         live-only: clients must not queue them for offline replay
         (a stale full-list replay would revert another device's
         edits). The optional `baseUpdatedAt` precondition makes the

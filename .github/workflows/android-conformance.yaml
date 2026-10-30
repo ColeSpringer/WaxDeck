@@ -68,7 +68,9 @@
 # holds the device's one instrumentation slot, so the taps come from an
 # adb driver running beside it (e2e/tools/run-saf-probe.sh). Same
 # emulator, second suite: a picker this job already booted a device for
-# is not worth booting another one for.
+# is not worth booting another one for. The share card probe follows the
+# same way, its chooser dismissed by an adb driver
+# (e2e/tools/run-share-probe.sh).
 name: Android engine conformance
 
 on:
@@ -87,6 +89,9 @@ on:
       - "app/app/lib/src/uploads/saf_folder_picker.dart"
       - "e2e/tools/drive-saf-picker.sh"
       - "e2e/tools/run-saf-probe.sh"
+      # The Dart half of the waxdeck/share channel, and its driver.
+      - "app/app/lib/src/stats/share_card_export_io.dart"
+      - "e2e/tools/run-share-probe.sh"
       # The runner, the budgets, and the probes the job itself is made of.
       - "tools/ci/**"
       - ".github/workflows/android-conformance.yaml"

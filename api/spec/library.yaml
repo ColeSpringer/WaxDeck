@@ -227,11 +227,11 @@ paths:
         they have no artist, album, genre, or year for; the `kind`
         dimension counts them.
 
-        Counts are scoped to the libraries the caller may see. The
-        per-item rules the drill list also applies (podcast subscriptions,
-        content rules) are per-item decisions no aggregation can express,
-        so a bucket can read higher than the list it opens, the same way
-        any restricted listing can return a short page.
+        Counts are scoped to the libraries the caller may see and to
+        the caller's tag rules. They also count the explicit items a
+        caller without the explicit setting does not see and, under
+        `kind`, the episodes of shows the caller does not follow, so a
+        bucket can read higher than the list it opens.
       tags: [library]
       parameters:
         - name: dimension
@@ -400,17 +400,19 @@ paths:
 
 
         PIDs the caller cannot be answered for are silently omitted
-        rather than erroring: unknown, deleted, merged away, or in a
-        library outside the caller's grant all leave the list one card
-        shorter, which is what `Prefs.pinned` describes for a departed
+        rather than erroring: unknown, deleted, merged away, in a library
+        outside the caller's grant, or holding nothing the caller's
+        content settings allow all leave the list one card shorter,
+        which is what `Prefs.pinned` describes for a departed
         entity. A response shorter than the request is normal, and an
         empty request is an empty response.
 
 
         Of the omissions, `departed` names the subset that is gone for
         everyone - deleted, merged away, or never real - as opposed to
-        merely out of this caller's sight today (a grant, a lapsed
-        subscription, the trash), which stays an unnamed omission. A
+        merely out of this caller's sight today (a grant, a content
+        setting, a lapsed subscription, the trash), which stays an
+        unnamed omission. A
         client holding a pinned list may prune exactly the departed
         pids; pruning an unnamed omission would turn a state that can
         end into a loss that cannot.
@@ -502,8 +504,10 @@ paths:
       operationId: getItemArt
       summary: Get artwork
       description: >
-        Artwork as image bytes: the original at full size, or a square-fit
-        thumbnail when `size` is given. Besides item PIDs this endpoint also
+        Artwork as image bytes: the stored image, or a square-fit
+        thumbnail when `size` is given. The server stores a picture larger
+        than 2000 pixels on its longest side as a copy scaled to fit
+        when that copy is smaller. Besides item PIDs this endpoint also
         accepts album (`al-`), artist (`ar-`), podcast show (`pc-`), and
         playlist (`pl-`) PIDs, so search hits, subscription lists, and
         playlist grids can render artwork directly. A playlist answers its
@@ -553,7 +557,7 @@ paths:
           in: query
           description: >
             Longest-edge bound in pixels for a thumbnail. Omit for the
-            original image.
+            stored image.
 
 
             Best effort, and the two exceptions are worth knowing. A

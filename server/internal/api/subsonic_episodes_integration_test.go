@@ -2,8 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -183,5 +186,79 @@ func TestSubsonicGetSongOfAnEpisodeHoldsThePodcastGrant(t *testing.T) {
 		if env := getSong(pid); env["status"] != "failed" || jmap(env["error"])["code"] != float64(70) {
 			t.Errorf("getSong of %s without the podcast grant = %v, want error 70", pid, env)
 		}
+	}
+}
+
+// A show and its episodes carry their feed's description as plain text,
+// markup and script gone, on the channel and each episode getPodcasts
+// lists and each one getNewestPodcasts lists; a long one is cut to its
+// first thousand characters, as a feed title is.
+func TestSubsonicPodcastsCarryTheirDescriptions(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	secret := newSubsonicSecret(t, h)
+	feed := newFeedServer(t, 2)
+	wantStatus(t, h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()}), 201, "subscribing")
+	long := strings.Repeat("\u00f6", 3000)
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>Long Cast</title>
+<description><![CDATA[<p>%s</p>]]></description>
+<item><title>Long Episode</title><guid>long-1</guid><description><![CDATA[<b>%s</b>]]></description>
+<enclosure url="http://%s/one.mp3" type="audio/mpeg" length="10"/></item>
+</channel></rss>`, long, long, r.Host)
+	}))
+	t.Cleanup(host.Close)
+	wantStatus(t, h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": host.URL + "/feed.xml"}), 201, "subscribing")
+	// Self-closing raw-text tags still open, and swallow up to their end tag.
+	embed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>Embed Cast</title>
+<description><![CDATA[<script/>leak()</script><p>Embedded show</p>]]></description>
+<item><title>Embed Episode</title><guid>embed-1</guid><description><![CDATA[<iframe src="https://x.example/embed" width="560"/>fallback</iframe><p>Episode <em>notes</em></p>]]></description>
+<enclosure url="http://%s/one.mp3" type="audio/mpeg" length="10"/></item>
+</channel></rss>`, r.Host)
+	}))
+	t.Cleanup(embed.Close)
+	wantStatus(t, h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": embed.URL + "/feed.xml"}), 201, "subscribing")
+	cut := strings.Repeat("\u00f6", 1000)
+	want := map[string]string{
+		"Fixture Cast": "A show about fixtures.", "Episode 1": "Notes for episode 1", "Episode 2": "Notes for episode 2",
+		"Long Cast": cut, "Long Episode": cut,
+		"Embed Cast": "Embedded show", "Embed Episode": "Episode notes",
+	}
+	described := func(what string, m map[string]any) {
+		t.Helper()
+		if title := fmt.Sprint(m["title"]); m["description"] != want[title] {
+			t.Errorf("%s %q describes itself as %.80q, want %.80q", what, title, m["description"], want[title])
+		}
+	}
+
+	episodes := 0
+	for _, ch := range jlist(jmap(mustOK(t, h, secret, "test", "getPodcasts", "")["podcasts"])["channel"]) {
+		described("getPodcasts' channel", jmap(ch))
+		for _, ep := range jlist(jmap(ch)["episode"]) {
+			described("getPodcasts' episode", jmap(ep))
+			episodes++
+		}
+	}
+	if episodes != 4 {
+		t.Fatalf("getPodcasts lists %d episodes, want 4", episodes)
+	}
+	for _, ch := range jlist(jmap(mustOK(t, h, secret, "test", "getPodcasts", "&includeEpisodes=false")["podcasts"])["channel"]) {
+		described("getPodcasts' channel without episodes", jmap(ch))
+	}
+	newest := jlist(jmap(mustOK(t, h, secret, "test", "getNewestPodcasts", "&count=2")["newestPodcasts"])["episode"])
+	if len(newest) != 2 {
+		t.Fatalf("getNewestPodcasts lists %d, want 2", len(newest))
+	}
+	for _, ep := range newest {
+		described("getNewestPodcasts' episode", jmap(ep))
+	}
+	_, _, body := rawSubsonic(t, h, "/rest/getPodcasts?apiKey="+secret)
+	if !strings.Contains(body, ` description="Notes for episode 1"`) || !strings.Contains(body, ` description="A show about fixtures."`) ||
+		strings.Contains(body, "alert") || strings.Contains(body, "&lt;") ||
+		strings.Contains(body, "leak") || strings.Contains(body, "fallback") {
+		t.Errorf("getPodcasts in XML = %s", body)
 	}
 }

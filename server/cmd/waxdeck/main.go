@@ -290,32 +290,9 @@ func run() error {
 		return err
 	}
 
-	managed := map[string]bool{}
-	for name := range strings.SplitSeq(*managedRoots, ",") {
-		if name = strings.TrimSpace(name); name != "" {
-			managed[name] = true
-		}
-	}
-	books := map[string]bool{}
-	for _, name := range splitNonEmpty(*bookRoots, ",") {
-		books[name] = true
-	}
-	svcRoots := make([]service.Root, len(roots))
-	for i, r := range roots {
-		svcRoots[i] = service.Root{Name: r.Name, Path: r.Path, Managed: managed[r.Name]}
-		if books[r.Name] {
-			svcRoots[i].Media = "audiobook"
-		}
-		delete(managed, r.Name)
-		delete(books, r.Name)
-	}
-	if len(managed) > 0 {
-		for name := range managed {
-			return fmt.Errorf("WAXDECK_MANAGED_ROOTS names %q, which is not a configured library root", name)
-		}
-	}
-	for name := range books {
-		return fmt.Errorf("WAXDECK_AUDIOBOOK_ROOTS names %q, which is not a configured library root", name)
+	svcRoots, err := serviceRoots(roots, *managedRoots, *bookRoots)
+	if err != nil {
+		return err
 	}
 	*podcastDir = podcastDirFrom(*podcastDir, flagWasSet("podcast-dir"), os.LookupEnv, *dataDir)
 	if *podcastDir != "" {
@@ -1539,6 +1516,41 @@ func parseRoots(s string) ([]root, error) {
 		roots = append(roots, root{Name: name, Path: abs})
 	}
 	return roots, nil
+}
+
+// serviceRoots marks the configured roots that managedRoots and bookRoots
+// (comma-separated names) name as managed or as holding audiobooks. A name
+// that is no configured root is refused: a typo would otherwise leave a
+// root unmanaged, or its books cataloged as music, with nothing to say so.
+func serviceRoots(roots []root, managedRoots, bookRoots string) ([]service.Root, error) {
+	managed := map[string]bool{}
+	for name := range strings.SplitSeq(managedRoots, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			managed[name] = true
+		}
+	}
+	books := map[string]bool{}
+	for _, name := range splitNonEmpty(bookRoots, ",") {
+		books[name] = true
+	}
+	svcRoots := make([]service.Root, len(roots))
+	for i, r := range roots {
+		svcRoots[i] = service.Root{Name: r.Name, Path: r.Path, Managed: managed[r.Name]}
+		if books[r.Name] {
+			svcRoots[i].Media = "audiobook"
+		}
+		delete(managed, r.Name)
+		delete(books, r.Name)
+	}
+	if len(managed) > 0 {
+		for name := range managed {
+			return nil, fmt.Errorf("WAXDECK_MANAGED_ROOTS names %q, which is not a configured library root", name)
+		}
+	}
+	for name := range books {
+		return nil, fmt.Errorf("WAXDECK_AUDIOBOOK_ROOTS names %q, which is not a configured library root", name)
+	}
+	return svcRoots, nil
 }
 
 // podcastDirFrom resolves the podcast directory. Podcasts work out of

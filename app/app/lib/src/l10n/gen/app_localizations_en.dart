@@ -1074,7 +1074,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String adminLibraryMediaToBooksBody(String name) {
-    return 'Every audio file in $name becomes a book on the scan this starts, the parts in one folder gathered into one book. Items whose kind was set by hand keep it.';
+    return 'Every audio file in $name becomes a book on the scan this starts: parts sharing an album and author are one book, and numbered parts with no album join the book their folder holds. Items whose kind was set by hand keep it.';
   }
 
   @override
@@ -3800,6 +3800,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'The host answered with an error. Try again later.';
 
   @override
+  String get errorFeedHostUnreachable =>
+      'The host could not be reached. Try again later.';
+
+  @override
   String get errorFeedNotAFeed =>
       'That address answered, but not with anything a podcast app can read.';
 
@@ -6505,7 +6509,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get organizeHistoryOverline =>
-      'Every run can be undone while its journal lasts';
+      'A run can be undone while its journal lasts';
 
   @override
   String organizeHistoryRow(int moved, String when) {
@@ -11551,7 +11555,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsStreamQualityHelp =>
-      'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads';
+      'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which can turn off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads';
 
   @override
   String get settingsStreamQualityHigh => 'High';
@@ -11656,7 +11660,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWebGaplessBusy =>
-      'The server is at its transcoding limit, so tracks play one at a time for now';
+      'The server is at its transcoding limit, so gapless playback is off for now';
 
   @override
   String get settingsWebGaplessFormat =>

@@ -1028,8 +1028,7 @@ components:
       type: object
       description: >
         One persisted observation about a library file, keyed for display by
-        its path (files are not a first-class API resource, so no file id is
-        surfaced).
+        its path.
       required: [path, origin, code, severity, seenAt]
       properties:
         path:

@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -42,7 +43,8 @@ func TestShareCursorMalformed(t *testing.T) {
 func TestShareAuditsCreationAndAnAdministratorsRevoke(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	track := fixtureItemPIDs(t, ctx, svc, admin)[0]
+	const title = "Amber Waves"
+	track := itemPIDByTitle(t, ctx, svc, admin, title)
 	_, owner := shareOwner(t, ctx, svc, "publisher")
 	entries := func(action string) []AuditEventDTO {
 		t.Helper()
@@ -53,7 +55,7 @@ func TestShareAuditsCreationAndAnAdministratorsRevoke(t *testing.T) {
 		return page.Events
 	}
 
-	mine, err := svc.CreateShare(ctx, owner, track, 0, true, 0)
+	mine, err := svc.CreateShare(ctx, owner, track, time.Hour, true, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +63,14 @@ func TestShareAuditsCreationAndAnAdministratorsRevoke(t *testing.T) {
 	if len(created) != 1 || created[0].TargetPID != mine.ID || created[0].ActorID != owner.ID ||
 		created[0].Detail["targetPid"] != track || created[0].Detail["allowDownload"] != true {
 		t.Fatalf("share.create entries = %+v", created)
+	}
+	// The kind, the expiry and the title are what the entry keeps of what
+	// the link published.
+	if mine.ExpiresAt.IsZero() || created[0].Detail["targetKind"] != "track" ||
+		created[0].Detail["expiresAt"] != mine.ExpiresAt.Format(time.RFC3339) || created[0].TargetName != title {
+		t.Errorf("share.create = kind %v, expiresAt %v, name %q; want track, %s, %q",
+			created[0].Detail["targetKind"], created[0].Detail["expiresAt"], created[0].TargetName,
+			mine.ExpiresAt.Format(time.RFC3339), title)
 	}
 	if err := svc.RevokeShare(ctx, owner, mine.ID); err != nil {
 		t.Fatal(err)

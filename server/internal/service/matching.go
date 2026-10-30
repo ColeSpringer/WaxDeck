@@ -495,8 +495,15 @@ func (l *Library) notifyReviewReady(ctx context.Context, entry *wdb.ReviewEntry)
 	var payload reviewPayload
 	if json.Unmarshal([]byte(entry.Payload), &payload) == nil {
 		if landed := l.landedTracks(ctx, &payload); landed > 0 {
-			body = fmt.Sprintf("%s: %d of its %d files were added to the library; the rest wait for a decision.",
-				entryWhat(entry.Artist, entry.Title, entry.TrackCount), landed, len(payload.Tracks))
+			verb, rest := "were", "the rest wait"
+			if landed == 1 {
+				verb = "was"
+			}
+			if len(payload.Tracks)-landed == 1 {
+				rest = "the other waits"
+			}
+			body = fmt.Sprintf("%s: %d of its %d files %s added to the library; %s for a decision.",
+				entryWhat(entry.Artist, entry.Title, entry.TrackCount), landed, len(payload.Tracks), verb, rest)
 		}
 	}
 	l.EmitNotification(ctx, "review-ready", "Ready for review", body, l.reviewRecipients(ctx, entry.UploadedBy))

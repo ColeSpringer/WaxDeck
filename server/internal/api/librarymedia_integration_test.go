@@ -170,6 +170,19 @@ func TestAnAudiobookLibraryMakesBooksOfPlainMP3Folders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The kind facet is read before the library exists as well, so the
+	// count after it is the scan's and not a cached one.
+	kindCounts := func() map[string]int {
+		t.Helper()
+		out := map[string]int{}
+		for _, b := range facetPage(t, h, "?dimension=kind").Buckets {
+			out[b.Key] = b.Count
+		}
+		return out
+	}
+	if got := kindCounts(); got["book"] != 0 || got["track"] != 4 {
+		t.Fatalf("kind facet before the library = %v, want the 4 demo tracks and no book", got)
+	}
 	decodeStatus[Library](t, h.postJSON(t, "/api/v1/libraries", map[string]any{
 		"name": "spoken", "path": dir, "media": "audiobook",
 	}), 201, "an audiobook library")
@@ -180,6 +193,16 @@ func TestAnAudiobookLibraryMakesBooksOfPlainMP3Folders(t *testing.T) {
 	pid, names := bookOfParts(t, h, "The Loose Chapters")
 	if len(names) != 2 {
 		t.Fatalf("book %s parts = %q, want both chapters", pid, names)
+	}
+	// The facet follows the change feed, a moment behind the scan.
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		got := kindCounts()
+		if got["book"] == 1 && got["track"] == 4 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("kind facet after the scan = %v, want the one book and the 4 demo tracks, no part of it a track", got)
+		}
 	}
 
 	h.rescanAndWaitWith(t, `{"force": true}`)

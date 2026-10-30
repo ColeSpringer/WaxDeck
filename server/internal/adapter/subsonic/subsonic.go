@@ -156,8 +156,22 @@ func (h *Handler) WithSessions(src SessionSource) *Handler {
 	return h
 }
 
+// allowedMethods is what the protocol uses: GET, HEAD with it, and the
+// formPost extension's POST.
+const allowedMethods = "GET, HEAD, POST"
+
 // ServeHTTP dispatches one /rest/ request: authenticate, route, render.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodPost:
+	default:
+		// Refused before the body is read or anyone is authenticated; the
+		// query alone says which format the refusal is rendered in.
+		r.Form, _ = url.ParseQuery(r.URL.RawQuery)
+		w.Header().Set("Allow", allowedMethods)
+		h.failStatus(w, r, http.StatusMethodNotAllowed, 0, "this method is not allowed; use GET or POST")
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		h.fail(w, r, 10, "malformed request")
 		return
@@ -215,9 +229,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "getGenres":
 		h.getGenres(w, r, uc)
 	case "getArtistInfo":
-		h.getArtistInfo(w, r)
+		h.getArtistInfo(w, r, uc)
 	case "getArtistInfo2":
-		h.getArtistInfo2(w, r)
+		h.getArtistInfo2(w, r, uc)
 	case "getTopSongs":
 		h.getTopSongs(w, r, uc)
 	case "getSimilarSongs":
@@ -239,7 +253,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "download":
 		h.download(w, r, uc)
 	case "getPlaylists":
-		h.getPlaylists(w, r, uc)
+		h.getPlaylists(w, r, uc, u.Username)
 	case "getPlaylist":
 		h.getPlaylist(w, r, uc)
 	case "createPlaylist":

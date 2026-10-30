@@ -81,6 +81,18 @@ func (d *DB) ListInvites(ctx context.Context) ([]Invite, error) {
 	return out, rows.Err()
 }
 
+// InviteByID reads one invite; ErrNotFound when absent.
+func (d *DB) InviteByID(ctx context.Context, id string) (Invite, error) {
+	iv, err := scanInvite(d.r.QueryRowContext(ctx, `SELECT `+inviteCols+` FROM invites WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Invite{}, ErrNotFound
+	}
+	if err != nil {
+		return Invite{}, fmt.Errorf("db: reading invite: %w", err)
+	}
+	return iv, nil
+}
+
 // RevokeInvite marks the invite revoked; ErrNotFound when absent.
 func (d *DB) RevokeInvite(ctx context.Context, id string) error {
 	res, err := d.w.ExecContext(ctx, `UPDATE invites SET revoked = 1 WHERE id = ?`, id)

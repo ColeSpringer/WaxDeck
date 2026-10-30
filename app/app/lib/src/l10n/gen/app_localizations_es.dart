@@ -1098,7 +1098,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String adminLibraryMediaToBooksBody(String name) {
-    return 'Cada archivo de audio de $name se convierte en un libro en el escaneo que esto inicia, con las partes de una misma carpeta reunidas en un libro. Los elementos cuyo tipo se fijó a mano lo conservan.';
+    return 'Cada archivo de audio de $name se convierte en un libro en el escaneo que esto inicia: las partes que comparten álbum y autor son un libro, y las partes numeradas sin álbum se unen al libro de su carpeta. Los elementos cuyo tipo se fijó a mano lo conservan.';
   }
 
   @override
@@ -3857,6 +3857,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'El servidor de origen ha respondido con un error. Inténtalo más tarde.';
 
   @override
+  String get errorFeedHostUnreachable =>
+      'No se ha podido contactar con el servidor de origen. Inténtalo más tarde.';
+
+  @override
   String get errorFeedNotAFeed =>
       'Esa dirección ha respondido, pero no con algo que una aplicación de podcasts pueda leer.';
 
@@ -6590,7 +6594,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get organizeHistoryOverline =>
-      'Cada ejecución se puede deshacer mientras dure su registro';
+      'Una ejecución se puede deshacer mientras dure su registro';
 
   @override
   String organizeHistoryRow(int moved, String when) {
@@ -11721,7 +11725,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsStreamQualityHelp =>
-      'Automática transmite el original siempre que es posible. Un límite recodifica para ajustarse (Alta 320 kbps, Normal 192, Baja 128), lo que desactiva la reproducción sin pausas y hace que saltar tarde un momento, se aplica a partir de la siguiente pista y nunca afecta a las descargas';
+      'Automática transmite el original siempre que es posible. Un límite recodifica para ajustarse (Alta 320 kbps, Normal 192, Baja 128), lo que puede desactivar la reproducción sin pausas y hace que saltar tarde un momento, se aplica a partir de la siguiente pista y nunca afecta a las descargas';
 
   @override
   String get settingsStreamQualityHigh => 'Alta';
@@ -11827,7 +11831,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsWebGaplessBusy =>
-      'El servidor alcanzó su límite de transcodificación, así que por ahora las pistas se reproducen una a una';
+      'El servidor alcanzó su límite de transcodificación, así que por ahora la reproducción sin pausas está desactivada';
 
   @override
   String get settingsWebGaplessFormat =>

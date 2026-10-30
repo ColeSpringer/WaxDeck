@@ -304,8 +304,9 @@ info:
       expires or is revoked, no account needed, to what the share's owner
       can see when it is opened. Share pages send
       `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`, and
-      anonymous listeners' transcodes and bandwidth are billed against the
-      share owner's limits with per-share concurrency caps.
+      anonymous listeners' transcodes are billed against the share owner's
+      limits and their relayed episodes against the owner's relayed
+      streams, with per-share concurrency caps.
     - The similarity worker API (`/similarity/work`,
       `/similarity/embeddings`, and the audio pull at
       `/media/analysis/{pid}`) authenticates with a server-configured

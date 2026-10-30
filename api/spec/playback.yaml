@@ -210,7 +210,8 @@ paths:
         URLs die with the session that asked for them and stop with the
         account's download permission. The permission governs this
         surface (and the Subsonic `download` verb and a share's
-        `allowDownload`); a natively playable file's direct play is its
+        `allowDownload`), and an account without it is refused with
+        `forbidden`; a natively playable file's direct play is its
         original bytes whatever it says.
       tags: [playback]
       parameters:
@@ -224,6 +225,8 @@ paths:
                 $ref: "#/components/schemas/DownloadInfo"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "503":

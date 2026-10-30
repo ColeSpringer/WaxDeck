@@ -64,7 +64,7 @@ Two version numbers are not stamped from the tag, and both live in
   above whatever the previous `v*` tag's pubspec carried. It is checked
   rather than trusted because the failure is otherwise invisible. Two
   releases sharing a `versionCode` still install by hand, since Android
-  only refuses a downgrade — what they do not do is *update*. F-Droid
+  only refuses a downgrade; what they do not do is *update*. F-Droid
   and every other updater decide whether a new version exists by
   comparing that integer, so an unbumped release reaches nobody
   automatically, and re-tagging cannot fix it once the APK is

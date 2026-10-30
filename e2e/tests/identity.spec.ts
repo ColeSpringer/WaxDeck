@@ -81,8 +81,8 @@ test('revoking a session kills the device immediately', async ({ app }) => {
 });
 
 // A socket lives as long as the session that opened it: revoking a
-// device closes its socket at once with 4401, which a client reads as
-// "sign in again", not as a dropped link to retry.
+// device closes its socket at once with 4401, and a reconnect on that
+// session answers 401.
 test('revoking a session closes the socket it opened', async ({ app, device }) => {
   const phone = await device({ name: 'Playwright Socket Phone' });
   await phone.nav.enter('home');

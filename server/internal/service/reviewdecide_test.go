@@ -530,6 +530,40 @@ func TestAnImportNoticeSaysAHeldFileAddedNothing(t *testing.T) {
 	t.Fatalf("no import notice among %+v", page.Notifications)
 }
 
+// An entry stopped part-way says how many of its files landed, not that
+// it could not be imported: of two files with other audio for one place,
+// the first lands and the second is refused.
+func TestAReviewNoticeCountsTheFilesThatLanded(t *testing.T) {
+	ctx, svc, uc := managedUploadFixture(t)
+	dir := t.TempDir()
+	twins := []string{unitTrack(t, dir, "twin-a", "Twin", "1"), unitTrack(t, dir, "twin-b", "Twin", "1")}
+	no := false
+	b, err := svc.CreateUploadBatch(ctx, uc, UploadBatchCreateParams{Grouping: groupingAlbum, MediaType: "music", Identify: &no})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range twins {
+		uploadPathAsking(t, ctx, svc, uc, p, false, b.ID)
+	}
+	if _, err := svc.CompleteUploadBatch(ctx, uc, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	page, err := svc.Notifications(ctx, uc, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range page.Notifications {
+		if n.Event != "review-ready" {
+			continue
+		}
+		if !strings.Contains(n.Body, "1 of its 2 files was added to the library; the other waits for a decision") {
+			t.Fatalf("review notice = %q, want the file that landed counted", n.Body)
+		}
+		return
+	}
+	t.Fatalf("no review notice among %+v", page.Notifications)
+}
+
 // Marking an entry unofficial says which of its files it left unmarked
 // because the library held them before, as an approval says which it
 // left alone, even when an earlier attempt is what found them held.

@@ -76,8 +76,9 @@ permission toggles:
   itself and is not held to it, and neither is uncompressed audio for
   the jukebox or for a speaker that plays nothing else. A stream URL's
   format and bitrate are part of its credential, so nobody edits their
-  way past it; a lowered ceiling holds a lossy stream already playing
-  at once, and a lossless one started before it plays out.
+  way past it; a lowered ceiling holds a lossy stream from its next
+  fetch (an HLS stream at its next segment), and a lossless one started
+  before it plays out.
 
 Administrators hold every permission implicitly. A new account starts
 with everything granted except delete and upload, and no tag rules.
@@ -181,11 +182,18 @@ many were deleted, and how many public links ended with the account; a
 deletion that stopped records what it had done first, with `failed`, the
 reason, and `fixedCopyLeft` when a copy of a playlist could not be taken
 back, and a later one that finds such a copy names it in
-`fixedCopiesRemoved` or `fixedCopiesKept`. Server notification target
+`fixedCopiesRemoved` or `fixedCopiesKept`. An approval (`user.approve`)
+records everything it left the account holding (roles, library access,
+uploads and permissions), a revoked invite
+(`invite.revoke`) is named by its note, and an account that signs up or
+asks to join (`user.signup`, `user.request`) is the actor of its own
+entry; a signup by invite also names the invite and the administrator
+who made it (`invitedBy`). Server notification target
 changes (`notification-target.create`, `.update`, `.delete`) name the
 kind and label, never the address or its secrets. The library switches
-(`library.read-only`, `library.folder-fallback`, `library.matching`) name
-the library, and `trash.restore` names the file that came back. A
+(`library.read-only`, `library.folder-fallback`, `library.matching`,
+`library.media`, `library.profile`) name the library, and
+`trash.restore` names the file that came back. A
 migration that failed for good is recorded too (`migration.run` with
 `failed` and the reason, web addresses cut to their host), as one that
 finished is. An Organizer run and an undo of one are recorded when they
@@ -465,7 +473,9 @@ live on the data volume and are not part of backups (which hold only
 the databases). The uploads screen lists an uploader's own sessions;
 administrators see every account's, with who owns each. Any
 unfinished or undecided session can be deleted there, freeing
-its staged bytes and closing its pending review entry; a file that
+its staged bytes and closing its pending review entry, except one whose
+review entry already landed part of its unit, which stays until that
+entry is decided (its Discard drops what is still staged); a file that
 already entered the library is deleted in the library instead, like
 any other item, and it stopped counting against the pending upload
 limit the moment it was imported. A file that arrives whole but does
@@ -474,7 +484,7 @@ ends its session on the spot, so it never holds a place in the limit.
 Staging never needs manual sweeping: stalled
 transfers and staged files nobody decides on are reclaimed a week
 after the session opened, their pending review entries closed with
-them. Granting upload rights and setting quotas is covered above;
+them (a partly landed unit's are kept for its decision). Granting upload rights and setting quotas is covered above;
 the upload flow itself, grouping, and the review pipeline are in the
 [curation guide](curation-and-metadata.md).
 

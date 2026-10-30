@@ -467,3 +467,104 @@ func TestAPreviewCarriesHoldsWithTheirCodes(t *testing.T) {
 			plan.TotalActions, plan.Held, plan.HeldByCode, len(plan.Holds), want)
 	}
 }
+
+// A destination a file the catalog never read already holds is held
+// under its own code and listed with the move; an apply carries out the
+// others and moves nothing over it.
+func TestAPreviewHoldsAMoveWhoseDestinationIsOccupied(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, path, _ := managedTrackFixture(t)
+	root := filepath.Dir(path)
+	// A second track that does move, so the apply runs a job rather than
+	// finding nothing to do.
+	if _, err := fixtures.Generate(root, fixtures.Spec{
+		Name: "drifter", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second,
+		Tags: map[string]string{"TITLE": "Drift", "ARTIST": "Drifter", "ALBUM": "Roam", "TRACKNUMBER": "1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	profile := organize.DefaultProfileName
+	plan, err := svc.PreviewOrganize(ctx, uc, profile, nil)
+	if err != nil || plan.TotalActions != 2 || plan.Held != 0 {
+		t.Fatalf("preview = %+v (%v), want both tracks' moves", plan, err)
+	}
+	var strayTo string
+	for _, a := range plan.Actions {
+		if a.From == filepath.Base(path) {
+			strayTo = a.To
+		}
+	}
+	if strayTo == "" {
+		t.Fatalf("preview = %+v, want the stray's move", plan.Actions)
+	}
+
+	taken := filepath.Join(root, strayTo)
+	if err := os.MkdirAll(filepath.Dir(taken), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const squatter = "a file the catalog never read"
+	if err := os.WriteFile(taken, []byte(squatter), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{string(organize.HoldOccupied): 1}
+	plan, err = svc.PreviewOrganize(ctx, uc, profile, nil)
+	if err != nil || plan.TotalActions != 1 || plan.Held != 1 || !maps.Equal(plan.HeldByCode, want) {
+		t.Fatalf("preview = total %d, held %d by %v (%v); want the stray held as %v",
+			plan.TotalActions, plan.Held, plan.HeldByCode, err, want)
+	}
+	if h := plan.Holds[0]; h.Code != string(organize.HoldOccupied) || h.From != filepath.Base(path) || h.To != strayTo || h.Reason == "" {
+		t.Errorf("hold = %+v, want the stray's move to %s, with the catalog's words", h, strayTo)
+	}
+
+	rep, err := svc.ApplyOrganize(ctx, uc, profile, nil)
+	if err != nil || rep.Moved != 1 || rep.Held != 1 || rep.Failed != 0 {
+		t.Fatalf("apply = %+v (%v), want one moved and the stray held", rep, err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("the held track left its place: %v", err)
+	}
+	if got, err := os.ReadFile(taken); err != nil || string(got) != squatter {
+		t.Errorf("the file at the destination = %q (%v), want it untouched", got, err)
+	}
+}
+
+// Tracks tagged with two spellings of one artist, apart only by case or
+// by an accent, are filed under one artist folder, not under two and not
+// held for standing beside each other.
+func TestTwoSpellingsOfOneArtistFileUnderOneFolder(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
+		c.Roots[0].Managed = true
+		var specs []fixtures.Spec
+		for _, s := range []struct{ name, artist, album, track string }{
+			{"amir-a", "Amir Obe", "Debut", "1"}, {"amir-b", "Amir Obè", "Debut", "2"},
+			{"bj-a", "BJ The Chicago Kid", "Soul", "1"}, {"bj-b", "BJ the Chicago Kid", "Soul", "2"},
+		} {
+			specs = append(specs, fixtures.Spec{
+				Name: s.name, Codec: fixtures.CodecFLAC, Duration: 2 * time.Second,
+				Tags: map[string]string{"TITLE": s.name, "ARTIST": s.artist, "ALBUM": s.album, "TRACKNUMBER": s.track},
+			})
+		}
+		if _, err := fixtures.Generate(c.Roots[0].Path, specs...); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := svc.PreviewOrganize(ctx, uc, organize.DefaultProfileName, nil)
+	if err != nil || plan.TotalActions != 4 || plan.Held != 0 || plan.HeldByCode[string(organize.HoldOccupiedCase)] != 0 {
+		t.Fatalf("preview = total %d, held %d by %v (%v); want all four moves and no hold for case",
+			plan.TotalActions, plan.Held, plan.HeldByCode, err)
+	}
+	folder := map[string]string{}
+	for _, a := range plan.Actions {
+		folder[strings.TrimSuffix(a.From, ".flac")], _, _ = strings.Cut(filepath.ToSlash(a.To), "/")
+	}
+	if folder["amir-a"] == "" || folder["amir-a"] != folder["amir-b"] || folder["bj-a"] == "" || folder["bj-a"] != folder["bj-b"] {
+		t.Errorf("artist folders = %v, want one for each artist", folder)
+	}
+}

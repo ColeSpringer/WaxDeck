@@ -45,9 +45,9 @@ Options at creation:
 - `positionMs` - for episodes, copy-link-at-timestamp: the page
   starts playback at that position.
 
-Episodes of private feeds (feeds with credentials) refuse to be
-shared: a capability URL must never leak paid content. A playlist link
-leaves such episodes out.
+Episodes of [private shows](podcasts-and-audiobooks.md#private-feeds)
+refuse to be shared: a capability URL must never leak paid content. A
+playlist link leaves such episodes out.
 
 An episode the server has not fetched can still be shared, and plays
 straight away: the link relays it from the show's own host, and the

@@ -1,9 +1,0 @@
-# Deliberately accepted breaking changes, matched by `make oasdiff`.
-# Temporary by construction: this file rides the change that makes the
-# break and is deleted once the base ref contains it.
-#
-# No upload door takes the podcast label: podcasts are added by
-# subscribing to a feed.
-POST /acquisitions removed the enum value `podcast` of the request property `mediaType`
-POST /uploads removed the enum value `podcast` of the request property `mediaType`
-POST /uploads/batches removed the enum value `podcast` of the request property `mediaType`

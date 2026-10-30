@@ -148,8 +148,8 @@ func TestAPlayPositionSaysTheEnd(t *testing.T) {
 	}
 }
 
-// The nightly prune drops the change log's removals past a year and
-// keeps its adds, however old.
+// The nightly prune drops the change log's removals and the stored
+// episode actions past a year, and keeps the log's adds however old.
 func TestThePruneTrimsTheChangeLog(t *testing.T) {
 	ctx, svc, uc, _ := openPodcastFixture(t)
 	old := time.Now().Add(-gpodderActionRetention - 24*time.Hour).Unix()
@@ -161,6 +161,14 @@ func TestThePruneTrimsTheChangeLog(t *testing.T) {
 		if err := svc.db.AppendGpodderSubEvent(ctx, ev, gpodderRemovalsPerUser); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if _, err := svc.db.AppendGpodderActions(ctx, []wdb.GpodderAction{
+		{UserID: uc.ID, PodcastURL: "https://feeds.example/kept.xml", EpisodeURL: "https://feeds.example/old.mp3",
+			DeviceID: "phone", Action: "download", UploadedSec: old},
+		{UserID: uc.ID, PodcastURL: "https://feeds.example/kept.xml", EpisodeURL: "https://feeds.example/recent.mp3",
+			DeviceID: "phone", Action: "download", UploadedSec: time.Now().Unix()},
+	}, gpodderActionsPerUser); err != nil {
+		t.Fatal(err)
 	}
 	if err := svc.RunPrune(ctx); err != nil {
 		t.Fatal(err)
@@ -175,6 +183,17 @@ func TestThePruneTrimsTheChangeLog(t *testing.T) {
 	}
 	if !slices.Equal(left, []string{"https://feeds.example/kept.xml", "https://feeds.example/recent.xml"}) {
 		t.Fatalf("change log after the prune = %v, want the old add and the recent removal", left)
+	}
+	acts, err := svc.db.GpodderActionsSince(ctx, uc.ID, 0, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored []string
+	for _, a := range acts {
+		stored = append(stored, a.EpisodeURL)
+	}
+	if !slices.Equal(stored, []string{"https://feeds.example/recent.mp3"}) {
+		t.Fatalf("actions after the prune = %v, want the recent one alone", stored)
 	}
 }
 
