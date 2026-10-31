@@ -10,6 +10,7 @@ import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
 import 'prose.dart';
+import 'secondary_tap.dart';
 import 'view_data.dart';
 
 /// Artwork with its placeholder, its shape, and its resume ring.
@@ -36,8 +37,6 @@ class ArtworkImage extends StatelessWidget {
     this.progress,
     this.dimmed = false,
     this.semanticLabel,
-    this.onPlay,
-    this.playLabel,
     super.key,
   });
 
@@ -65,20 +64,6 @@ class ArtworkImage extends StatelessWidget {
   final bool dimmed;
 
   final String? semanticLabel;
-
-  /// What to play when the artwork is the thing that plays. Opt-in per
-  /// call site, and deliberately so: a cover in an editor, a settings
-  /// row, or an artwork manager is a picture rather than a control, and
-  /// a play button over it would be a lie.
-  ///
-  /// Drawn only while a pointer is over the artwork, which is what makes
-  /// it free on touch: a `MouseRegion` reports no hover to a finger, so
-  /// no affordance appears and nothing takes a tap the card wanted.
-  final VoidCallback? onPlay;
-
-  /// The spoken name for that control. Required alongside [onPlay]: the
-  /// component knows the picture, not what it is a picture of.
-  final String? playLabel;
 
   /// The corner a picture of [size] is drawn with, for what outlines one.
   static double cornerRadius(ArtworkShape shape, double size) =>
@@ -189,112 +174,149 @@ class ArtworkImage extends StatelessWidget {
             );
     }
 
-    final Widget picture = semanticLabel != null
+    return semanticLabel != null
         ? Semantics(image: true, label: semanticLabel, child: art)
         // Artwork beside a title says nothing a screen reader needs twice.
         : ExcludeSemantics(child: art);
-    if (onPlay == null) return picture;
-    // Outside the picture's own semantics, not inside: the affordance is
-    // a control and keeps its name, where the image it sits on has none
-    // to give. A caller that hides its whole subtree - a card announcing
-    // itself as one node - still hides this, which is its call to make.
-    return _HoverPlay(
-      onPlay: onPlay!,
-      label: playLabel ?? '',
-      radius: radius,
-      child: picture,
-    );
   }
 }
 
-/// The play affordance [ArtworkImage.onPlay] draws: a scrim and a glyph
-/// that fade in under a pointer.
+/// The shade a cover takes while it offers to play: paint only, so every
+/// press goes through it to whatever holds the cover.
 ///
-/// Built either way and faded rather than created on hover, which pops.
-/// Ignoring pointers while faded out is what keeps the artwork's own
-/// gesture - the card's tap, the row's - reaching it untouched.
-class _HoverPlay extends StatefulWidget {
-  const _HoverPlay({
-    required this.onPlay,
-    required this.label,
+/// Mounted either way and faded, rather than created on hover, which pops.
+class HoverPlayScrim extends StatelessWidget {
+  const HoverPlayScrim({
+    required this.opacity,
     required this.radius,
-    required this.child,
+    super.key,
   });
 
-  final VoidCallback onPlay;
-  final String label;
+  /// The one fade its holder runs for it and the [HoverPlayDisc] alike,
+  /// so the two cannot drift.
+  final Animation<double> opacity;
+
+  /// The cover's corner.
   final double radius;
-  final Widget child;
-
-  @override
-  State<_HoverPlay> createState() => _HoverPlayState();
-}
-
-class _HoverPlayState extends State<_HoverPlay> {
-  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final motion = WaxMotion.of(context);
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Stack(
-        children: <Widget>[
-          widget.child,
-          Positioned.fill(
-            // Out of the focus tree while it is invisible, not just out
-            // of the hit test. IgnorePointer and a zero opacity stop it
-            // being seen or clicked, and neither stops it being tabbed
-            // to - so a grid of cards became a run of invisible stops
-            // where Enter starts playback with nothing on screen to say
-            // why. The card itself is the keyboard path, and it already
-            // activates.
-            child: ExcludeFocus(
-              excluding: !_hovered,
-              child: IgnorePointer(
-                ignoring: !_hovered,
-                child: AnimatedOpacity(
-                  opacity: _hovered ? 1 : 0,
-                  duration: motion.quick,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(widget.radius),
-                    child: ColoredBox(
-                      // Not overly intrusive: enough to say the cover is a
-                      // control, and little enough that the artwork is
-                      // still the thing being looked at.
-                      color: colors.scrim.withValues(alpha: 0.35),
-                      child: Center(
-                        // On an opaque chip, on a tested surface pair, for
-                        // the reason the card's badge is: the scrim is
-                        // translucent, so a glyph in the text colour
-                        // composites to ink on ink over a dark cover in
-                        // light mode and disappears.
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: colors.surface1,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(WaxSpace.s8),
-                            child: WaxIconButton(
-                              glyph: WaxIcons.play,
-                              label: widget.label,
-                              size: 24,
-                              color: colors.textPrimary,
-                              onPressed: widget.onPlay,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+    return IgnorePointer(
+      child: FadeTransition(
+        opacity: opacity,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          // Not overly intrusive: enough to say the cover is a control,
+          // and little enough that the artwork is still the thing being
+          // looked at.
+          child: ColoredBox(color: colors.scrim.withValues(alpha: 0.35)),
+        ),
+      ),
+    );
+  }
+}
+
+/// The play disc over a cover: the disc is the button, so what is drawn,
+/// what takes the press and the semantics node are one 60 px square
+/// around one circle.
+///
+/// Mounted either way and faded. While hidden it takes no pointer and
+/// has no node, so a press on the cover reaches the cover's holder; it
+/// stays a tab stop, so the keyboard reaches it from either side, and
+/// its holder reveals it on that focus.
+class HoverPlayDisc extends StatelessWidget {
+  const HoverPlayDisc({
+    required this.visible,
+    required this.opacity,
+    required this.onPlay,
+    required this.label,
+    this.semanticsId,
+    this.onSecondaryTap,
+    super.key,
+  });
+
+  /// The disc's edge: a touch target and the chip's breathing room
+  /// around the glyph.
+  static const double size = WaxSpace.touchTarget + 2 * WaxSpace.s8;
+
+  /// Whether it is shown: a hidden disc takes no pointer and has no node,
+  /// even while it is still fading out.
+  final bool visible;
+
+  /// The fade its holder runs for it and the [HoverPlayScrim] alike.
+  final Animation<double> opacity;
+
+  final VoidCallback onPlay;
+
+  /// The control's spoken name, and its tooltip.
+  final String label;
+
+  /// The disc's own identifier.
+  final String? semanticsId;
+
+  /// A right click on the disc, for a host whose cover answers one: the
+  /// disc sits over that cover and would otherwise take the click away.
+  final VoidCallback? onSecondaryTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    Widget disc = WaxTappable(
+      label: label,
+      tooltip: label,
+      semanticsId: semanticsId,
+      borderRadius: WaxRadius.pill,
+      onPressed: onPlay,
+      child: DecoratedBox(
+        // On an opaque chip, on a tested surface pair, for the reason the
+        // card's badge is: the scrim is translucent, so a glyph in the text
+        // colour composites to ink on ink over a dark cover in light mode
+        // and disappears.
+        decoration: BoxDecoration(
+          color: colors.surface1,
+          shape: BoxShape.circle,
+        ),
+        // The disc's own ink, drawn over its ground rather than under it,
+        // wherever the disc stands.
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkResponse(
+            onTap: onPlay,
+            // The whole square presses, corners too: its semantics node is
+            // that square, and a web click there is the node's tap. The ink
+            // keeps to the circle.
+            highlightShape: BoxShape.circle,
+            customBorder: const CircleBorder(),
+            containedInkWell: true,
+            child: SizedBox.square(
+              dimension: size,
+              child: Center(
+                child: WaxIcon(
+                  WaxIcons.play,
+                  size: 24,
+                  color: colors.textPrimary,
                 ),
               ),
             ),
           ),
-        ],
+        ),
+      ),
+    );
+    if (onSecondaryTap case final secondary?) {
+      disc = WaxSecondaryTapRegion(
+        child: GestureDetector(
+          excludeFromSemantics: true,
+          onSecondaryTap: secondary,
+          child: disc,
+        ),
+      );
+    }
+    return ExcludeSemantics(
+      excluding: !visible,
+      child: IgnorePointer(
+        ignoring: !visible,
+        child: FadeTransition(opacity: opacity, child: disc),
       ),
     );
   }

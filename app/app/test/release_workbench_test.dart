@@ -10,11 +10,15 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'row_finders.dart';
 
 const _album = 'al-01JZX5N8QW3F4V9T2B7KDALBUM';
 const _regrouped = 'al-01JZX5N8QW3F4V9T2B7KDNEWER';
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
+
+Finder _trackRow(String pid) =>
+    rowWithIdentifier(SemanticsIds.workbenchRow(pid));
 
 FakeRepository _repo() {
   final repo = FakeRepository(
@@ -89,7 +93,7 @@ void main() {
     expect(_byId(SemanticsIds.albumEditor), findsOneWidget);
     expect(_byId(SemanticsIds.workbenchRow('tr-A')), findsOneWidget);
 
-    await tester.tap(_byId(SemanticsIds.workbenchRow('tr-A')));
+    await tester.tap(_trackRow('tr-A'));
     await tester.pumpAndSettle();
 
     // The item editor for the tapped member, in place of the album form.
@@ -106,9 +110,9 @@ void main() {
     final repo = _repo();
     await _pump(tester, repo);
 
-    await tester.longPress(_byId(SemanticsIds.workbenchRow('tr-A')));
+    await tester.longPress(_trackRow('tr-A'));
     await tester.pumpAndSettle();
-    await tester.tap(_byId(SemanticsIds.workbenchRow('tr-B')));
+    await tester.tap(_trackRow('tr-B'));
     await tester.pumpAndSettle();
 
     expect(_byId(SemanticsIds.workbenchBulkPane), findsOneWidget);
@@ -138,10 +142,7 @@ void main() {
     // the list header rather than in a virtualised row, so a scroll
     // down a long release can never dispose it.
     expect(_byId(SemanticsIds.workbenchSelectToggle), findsOneWidget);
-    await tester.tap(
-      _byId(SemanticsIds.workbenchSelectToggle),
-      warnIfMissed: false,
-    );
+    await tester.tap(_byId(SemanticsIds.workbenchSelectToggle));
     await tester.pumpAndSettle();
     expect(_byId(SemanticsIds.workbenchBulkPane), findsNothing);
   });
@@ -269,7 +270,7 @@ void main() {
     expect(_byId(SemanticsIds.workbenchPane), findsNothing);
     expect(_byId(SemanticsIds.albumEditor), findsNothing);
 
-    await tester.tap(_byId(SemanticsIds.workbenchRow('tr-A')));
+    await tester.tap(_trackRow('tr-A'));
     await tester.pumpAndSettle();
 
     // The member's canonical location, through the real route table.
@@ -292,7 +293,7 @@ void main() {
     final repo = _repo();
     await _pump(tester, repo, size: const Size(500, 900));
 
-    await tester.longPress(_byId(SemanticsIds.workbenchRow('tr-A')));
+    await tester.longPress(_trackRow('tr-A'));
     await tester.pumpAndSettle();
     expect(_byId(SemanticsIds.workbenchBulkBar), findsOneWidget);
 
@@ -307,7 +308,7 @@ void main() {
     final repo = _repo();
     await _pump(tester, repo);
 
-    await tester.tap(_byId(SemanticsIds.workbenchRow('tr-A')));
+    await tester.tap(_trackRow('tr-A'));
     await tester.pumpAndSettle();
     await tester.enterText(
       _byId(SemanticsIds.metadataField('title')),
@@ -333,7 +334,7 @@ void main() {
     expect(_byId(SemanticsIds.albumEditor), findsOneWidget);
 
     // A clean pane swaps without asking.
-    await tester.tap(_byId(SemanticsIds.workbenchRow('tr-B')));
+    await tester.tap(_trackRow('tr-B'));
     await tester.pumpAndSettle();
     expect(_byId(SemanticsIds.workbenchDiscardConfirm), findsNothing);
     expect(_byId(SemanticsIds.metadataField('title')), findsOneWidget);
@@ -344,9 +345,9 @@ void main() {
     final repo = _repo();
     await _pump(tester, repo);
 
-    await tester.longPress(_byId(SemanticsIds.workbenchRow('tr-A')));
+    await tester.longPress(_trackRow('tr-A'));
     await tester.pumpAndSettle();
-    await tester.tap(_byId(SemanticsIds.workbenchRow('tr-B')));
+    await tester.tap(_trackRow('tr-B'));
     await tester.pumpAndSettle();
 
     // The year disagrees across the pair, so it opens empty; typing
@@ -375,7 +376,7 @@ void main() {
     final repo = _repo();
     await _pump(tester, repo);
 
-    await tester.tap(_byId(SemanticsIds.workbenchRow('tr-A')));
+    await tester.tap(_trackRow('tr-A'));
     await tester.pumpAndSettle();
 
     // What the next fetch will say; without the pane's save

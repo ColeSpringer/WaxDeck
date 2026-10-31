@@ -54,7 +54,7 @@ Future<void> _openDeleteDialog(
   // wide placeholder font; what a test here asks of the layout is the
   // dialog's, so what the page behind it reports is not counted.
   tester.takeException();
-  await tester.tap(delete, warnIfMissed: false);
+  await tester.tap(delete);
   await tester.pumpAndSettle();
 }
 

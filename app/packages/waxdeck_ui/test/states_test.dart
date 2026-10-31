@@ -81,6 +81,31 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('an empty state with no message draws one line of text', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const EmptyState(title: 'Nothing here yet', semanticsId: 'empty'),
+        ),
+      );
+      final handle = tester.ensureSemantics();
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: find.byType(EmptyState),
+          matching: find.byType(Text),
+        ),
+        findsOne,
+      );
+      expect(find.text('Nothing here yet'), findsOne);
+      // The spoken name is the title alone, with no stray separator.
+      expect(_node(tester, 'empty').label, 'Nothing here yet');
+
+      handle.dispose();
+    });
+
     testWidgets('announces the error rather than an empty live region', (
       tester,
     ) async {

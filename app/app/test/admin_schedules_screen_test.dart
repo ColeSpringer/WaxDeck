@@ -85,7 +85,6 @@ void main() {
     );
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.scheduleSave('scan')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 
@@ -105,7 +104,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.scheduleEnabled('backup')),
-      warnIfMissed: false,
     );
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.scheduleCron('backup')),
@@ -113,7 +111,6 @@ void main() {
     );
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.scheduleSave('backup')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 

@@ -1,0 +1,3 @@
+# alchemist tags every goldenTest "golden"; declare it so the runner stops warning.
+tags:
+  golden:

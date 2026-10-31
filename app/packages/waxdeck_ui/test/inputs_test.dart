@@ -687,12 +687,6 @@ void main() {
       // A station tile hand-rolled these over the card: a star and a
       // menu button stacked at its (0, 0) while the card drew its own
       // overflow at (8, 8) - two of the same glyph eight pixels apart.
-      FocusManager.instance.highlightStrategy =
-          FocusHighlightStrategy.alwaysTraditional;
-      addTearDown(
-        () => FocusManager.instance.highlightStrategy =
-            FocusHighlightStrategy.automatic,
-      );
       var pinned = 0;
       await tester.pumpWidget(
         _host(
@@ -825,15 +819,6 @@ void main() {
     testWidgets('on hover they are faded out until the pointer arrives', (
       tester,
     ) async {
-      // A test binding starts in touch highlight mode, where a detector
-      // reports no hover at all. This mode is the one the setting is
-      // offered on: a machine with a pointer.
-      FocusManager.instance.highlightStrategy =
-          FocusHighlightStrategy.alwaysTraditional;
-      addTearDown(
-        () => FocusManager.instance.highlightStrategy =
-            FocusHighlightStrategy.automatic,
-      );
       await tester.pumpWidget(
         _host(
           MediaCard(
@@ -853,7 +838,9 @@ void main() {
       // A frame for the binding to notice a mouse exists at all: the
       // detector reports no hover until one is connected.
       await tester.pump();
-      await mouse.moveTo(tester.getCenter(find.byType(MediaCard)));
+      // The card's content: its box is the host's whole body, of which a
+      // card without chips answers to the content alone.
+      await mouse.moveTo(tester.getCenter(find.byType(ArtworkImage)));
       await tester.pumpAndSettle();
       expect(tester.widget<AnimatedOpacity>(captions()).opacity, 1);
     });
@@ -896,14 +883,6 @@ void main() {
     const tile = MediaTileData(title: 'Salt Harbour', subtitle: 'Nightjar');
 
     testWidgets('appears under a pointer and opens the menu', (tester) async {
-      // A test binding starts in touch highlight mode, where a detector
-      // reports no hover at all; see the caption-hover test above.
-      FocusManager.instance.highlightStrategy =
-          FocusHighlightStrategy.alwaysTraditional;
-      addTearDown(
-        () => FocusManager.instance.highlightStrategy =
-            FocusHighlightStrategy.automatic,
-      );
       var opened = 0;
       await tester.pumpWidget(
         _host(

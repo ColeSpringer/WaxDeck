@@ -100,20 +100,11 @@ void main() {
     await tester.pumpAndSettle();
 
     // Grant the admin role and uploads in the prefilled editor.
-    await tester.tap(
-      find.bySemanticsIdentifier('user-admin-role'),
-      warnIfMissed: false,
-    );
-    await tester.tap(
-      find.bySemanticsIdentifier('user-upload-enabled'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('user-admin-role'));
+    await tester.tap(find.bySemanticsIdentifier('user-upload-enabled'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.bySemanticsIdentifier('user-save'));
-    await tester.tap(
-      find.bySemanticsIdentifier('user-save'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('user-save'));
     await tester.pumpAndSettle();
 
     final call = repo.approveSignupCalls.single;
@@ -218,16 +209,10 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier('user-row-us-3'));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.userChildPreset),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userChildPreset));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.bySemanticsIdentifier('user-save'));
-    await tester.tap(
-      find.bySemanticsIdentifier('user-save'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('user-save'));
     await tester.pumpAndSettle();
 
     final stored = repo.usersById['us-3']!;

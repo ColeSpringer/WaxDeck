@@ -4611,12 +4611,16 @@ class FakeRepository implements WaxDeckRepository {
     tagsByPid[pid]?.remove(key);
   }
 
+  /// Held open, a lock write waits on it: a save in flight.
+  Completer<void>? setItemLocksGate;
+
   @override
   Future<List<String>> setItemLocks(
     String pid, {
     required List<String> fields,
     required bool locked,
   }) async {
+    await setItemLocksGate?.future;
     setItemLocksCalls.add((pid: pid, fields: List.of(fields), locked: locked));
     final locks = lockedFieldsByPid[pid] ??= {};
     locked ? locks.addAll(fields) : locks.removeAll(fields);

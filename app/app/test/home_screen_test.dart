@@ -218,7 +218,6 @@ void main() {
     // rows.
     await tester.longPress(
       _byId(SemanticsIds.shelfCard('recent', 'tr-01JZX5N8QW3F4V9T2B7KDMENU1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(find.text('Go to album'), findsOneWidget);
@@ -254,7 +253,6 @@ void main() {
 
     await tester.longPress(
       _byId(SemanticsIds.shelfCard('recent', 'tr-01JZX5N8QW3F4V9T2B7KDEPMENU')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(_byId(SemanticsIds.itemMenuShareItem), findsOneWidget);
@@ -274,7 +272,6 @@ void main() {
     // The card's menu names the episode's verbs.
     await tester.longPress(
       _byId(SemanticsIds.shelfCard('episodes', episodePid)),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(_byId(SemanticsIds.homeEpisodePlay), findsOneWidget);

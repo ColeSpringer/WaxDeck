@@ -1,10 +1,18 @@
 // Podcasts: the hub, a show, and its episodes.
 
-import { Locator } from '@playwright/test';
+import { Locator, expect } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickInView, clickThrough, openMenu, typeInto } from '../gestures';
+import {
+  chooseFromMenu,
+  clickInView,
+  clickThrough,
+  clickToward,
+  openMenu,
+  typeInto,
+  wheelIntoReach,
+} from '../gestures';
 
 export class Podcasts extends Surface {
   add(): Locator {
@@ -73,9 +81,21 @@ export class Podcasts extends Surface {
     await confirm.click();
   }
 
-  /// Open a show from the hub.
+  /// Open a show from the hub. A card cut off at the window's edge puts
+  /// the caption aim on its play disc, and a row landing late above the
+  /// grid can push it there between tries, so each try brings it clear
+  /// first, as `Books.open` does.
   async openShow(pid: string): Promise<void> {
-    await clickThrough(this.show(pid), this.unsubscribe());
+    const page = this.ctx.page;
+    const card = this.show(pid);
+    await card.waitFor({ timeout: T.nav });
+    await expect(async () => {
+      // A press that landed with the screen merely slow leaves the card
+      // gone, and a try that waited on it would never see the screen.
+      if (await this.unsubscribe().isVisible()) return;
+      await wheelIntoReach(page, card, { appear: T.step });
+      await clickToward(card, { shows: this.unsubscribe() }, { aim: 'caption' });
+    }).toPass({ timeout: T.nav });
   }
 
   /// A show screen's shareable location.

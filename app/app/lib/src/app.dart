@@ -42,6 +42,7 @@ class WaxDeckApp extends ConsumerWidget {
           captions: spec.captions,
         ),
         themeMode: spec.mode,
+        actions: waxAppActions(context),
         routerConfig: ref.watch(routerProvider),
         // The boot gate withholds the router until the session probes
         // answer; the warmup sits here, the highest place the resolved

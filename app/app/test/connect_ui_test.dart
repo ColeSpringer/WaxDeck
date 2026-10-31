@@ -425,6 +425,7 @@ void main() {
       isFalse,
       reason: 'the endpoint the session is on offers no trip to itself',
     );
+    // The row is inert, so the miss is the point: nothing may answer it.
     await tester.tap(row, warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(repo.transferPlaybackSessionCalls, isEmpty);
@@ -448,6 +449,17 @@ void main() {
 
     expect(find.text('Porch radio'), findsOneWidget);
     expect(find.text('Offline'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(
+            find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-porch')),
+          )
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isFalse,
+      reason: 'an offline endpoint offers no trip',
+    );
+    // An offline row is inert, so the miss is the point.
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-porch')),
       warnIfMissed: false,

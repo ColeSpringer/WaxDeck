@@ -62,6 +62,36 @@ Interaction _hoverAll(Finder finder) => (WidgetTester tester) async {
   };
 };
 
+/// A mouse on each card's cover, one device apiece as in [_hoverAll], and
+/// a fixed run of frames rather than a settle: a playing card's bars
+/// never come to rest, and the count pins the pose they are captured in.
+Interaction _hoverCovers() => (WidgetTester tester) async {
+  final pointers = <TestPointer>[];
+  var id = 1;
+  for (final element in find.byType(ArtworkImage).evaluate().toList()) {
+    final pointer = TestPointer(id, PointerDeviceKind.mouse, id);
+    id++;
+    pointers.add(pointer);
+    await tester.sendEventToBinding(
+      pointer.hover(tester.getCenter(find.byWidget(element.widget))),
+    );
+  }
+  for (var frame = 0; frame < 4; frame++) {
+    await tester.pump(const Duration(milliseconds: 120));
+  }
+  // Every card shows its disc, or the golden captured a resting card.
+  for (final disc in tester.widgetList<HoverPlayDisc>(
+    find.byType(HoverPlayDisc),
+  )) {
+    expect(disc.visible, isTrue);
+  }
+  return () async {
+    for (final pointer in pointers) {
+      await tester.sendEventToBinding(pointer.hover(Offset.zero));
+    }
+  };
+};
+
 /// A desktop machine whose mouse rests away from everything: the
 /// dimmed at-rest chevron state no hover interaction can capture.
 Future<AsyncCallback?> _desktopMouseAtRest(WidgetTester tester) async {
@@ -221,6 +251,44 @@ void main() {
                     const Text('Body text this has to line up with.'),
                     const SizedBox(height: 8),
                     const WaxButton(label: 'Disabled', onPressed: null),
+                    const SizedBox(height: 8),
+                    // The done share takes the filled form, label and all,
+                    // so each half of the label keeps a pair that reads.
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        WaxButton(
+                          label: 'Fetching',
+                          progress: 0.42,
+                          onPressed: null,
+                        ),
+                        SizedBox(width: 8),
+                        WaxButton(
+                          label: 'Downloading',
+                          kind: WaxButtonKind.tonal,
+                          icon: WaxIcons.downloads,
+                          progress: 0.42,
+                          onPressed: null,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const WaxButton(
+                      label: 'Queued for download',
+                      icon: WaxIcons.downloads,
+                      status: true,
+                      onPressed: null,
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: 200,
+                      child: WaxButton(
+                        label: 'Download every episode of this show',
+                        kind: WaxButtonKind.tonal,
+                        icon: WaxIcons.downloads,
+                        onPressed: () {},
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -499,31 +567,39 @@ void main() {
     goldenTest(
       'playable artwork offers to play under a pointer',
       fileName: 'card_hover_play',
-      whilePerforming: _hoverAll(find.byType(ArtworkImage)),
+      pumpBeforeTest: _pumpAnimated,
+      whilePerforming: _hoverCovers(),
       builder: () => GoldenTestGroup(
         columns: 2,
         children: <Widget>[
-          for (final variant in <WaxThemeVariant>[
-            WaxThemeVariant.dark,
-            WaxThemeVariant.light,
-          ])
-            GoldenTestScenario(
-              name: variant.name,
-              child: _themed(
-                variant,
-                SizedBox(
-                  width: 140,
-                  child: MediaCard(
-                    data: const MediaTileData(
-                      title: 'Salt Harbour',
-                      subtitle: 'Nightjar',
+          for (final badged in <bool>[false, true])
+            for (final variant in <WaxThemeVariant>[
+              WaxThemeVariant.dark,
+              WaxThemeVariant.light,
+            ])
+              GoldenTestScenario(
+                name: badged ? '${variant.name}, badged' : variant.name,
+                child: _themed(
+                  variant,
+                  SizedBox(
+                    width: 140,
+                    // Badged: the scrim falls under every badge, which
+                    // stays legible over it.
+                    child: MediaCard(
+                      data: MediaTileData(
+                        title: 'Salt Harbour',
+                        subtitle: 'Nightjar',
+                        badge: badged ? 'New' : null,
+                        unplayed: badged,
+                        downloaded: badged,
+                      ),
+                      playing: badged,
+                      width: 120,
+                      onPlay: () {},
                     ),
-                    width: 120,
-                    onPlay: () {},
                   ),
                 ),
               ),
-            ),
         ],
       ),
     );
@@ -532,7 +608,7 @@ void main() {
       'states say what happened and what to do next',
       fileName: 'states',
       builder: () => GoldenTestGroup(
-        columns: 2,
+        columns: 3,
         children: <Widget>[
           for (final variant in <WaxThemeVariant>[
             WaxThemeVariant.dark,
@@ -548,6 +624,21 @@ void main() {
                     glyph: WaxIcons.podcasts,
                     title: 'No podcasts yet',
                     message: 'Follow a show to see new episodes here.',
+                    actionLabel: 'Find podcasts',
+                    onAction: () {},
+                  ),
+                ),
+              ),
+            ),
+            GoldenTestScenario(
+              name: 'empty, no message ${variant.name}',
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 380,
+                  child: EmptyState(
+                    glyph: WaxIcons.podcasts,
+                    title: 'No podcasts yet',
                     actionLabel: 'Find podcasts',
                     onAction: () {},
                   ),

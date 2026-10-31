@@ -136,6 +136,24 @@
       }
     }
   },
+  "consoleStatWithCaption": "{label}, {value}, {caption}",
+  "@consoleStatWithCaption": {
+    "description": "A dashboard tile with a caption read as one node: what is being counted, the count, then the line under it.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Pending review"
+      },
+      "value": {
+        "type": "String",
+        "example": "12"
+      },
+      "caption": {
+        "type": "String",
+        "example": "albums waiting"
+      }
+    }
+  },
   "controlsBusy": "Working",
   "@controlsBusy": {
     "description": "Spoken with a control whose work is still running, which is why it takes no press until the work finishes."

@@ -12,6 +12,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'row_finders.dart';
 
 SearchResults _results({
   List<SearchHit> artists = const <SearchHit>[],
@@ -658,6 +659,8 @@ void main() {
     Finder topResult() =>
         find.bySemanticsIdentifier(SemanticsIds.searchTopResult);
 
+    Finder topResultRow() => rowWithIdentifier(SemanticsIds.searchTopResult);
+
     /// Where a text sits down the screen.
     double at(WidgetTester tester, Finder finder) =>
         tester.getTopLeft(finder.first).dy;
@@ -779,7 +782,7 @@ void main() {
         ];
       await _pump(tester, repository, initialQuery: 'night');
 
-      await tester.tap(topResult());
+      await tester.tap(topResultRow());
       await tester.pumpAndSettle();
 
       expect(find.byType(ArtistScreen), findsOneWidget);

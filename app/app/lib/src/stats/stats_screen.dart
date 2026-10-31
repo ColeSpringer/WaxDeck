@@ -119,22 +119,22 @@ class _ListeningSection extends ConsumerWidget {
             runSpacing: WaxSpace.s12,
             children: <Widget>[
               StatFigure(
-                keyName: 'stats-total',
+                key: const Key('stats-total'),
                 value: l10n.formatListenTime(value.totalMs),
-                label: l10n.statsListened,
+                caption: l10n.statsListened,
               ),
               StatFigure(
-                keyName: 'stats-sessions',
+                key: const Key('stats-sessions'),
                 value: '${value.sessions}',
-                label: l10n.statsSessions,
+                caption: l10n.statsSessions,
               ),
               // The general claim, now that it is true: the client
               // counts what playing faster saved as well as what
               // trimming skipped, so the honest word is the plain one.
               StatFigure(
-                keyName: 'stats-saved',
+                key: const Key('stats-saved'),
                 value: l10n.formatListenTime(value.timeSavedMs),
-                label: l10n.statsTimeSaved,
+                caption: l10n.statsTimeSaved,
               ),
             ],
           ),
@@ -223,55 +223,6 @@ class _ListeningSection extends ConsumerWidget {
       l10n.formatMonthDayNumericOnDay(buckets.last.start),
       l10n.formatListenTime(peak.ms),
       l10n.formatMonthDayNumericOnDay(peak.start),
-    );
-  }
-}
-
-/// One headline number with its caption underneath.
-///
-/// Not the design system's `StatTile`, which is a bordered console card
-/// with a glyph and somewhere to go; this is the bare figure a row of
-/// them is built from, and the listener's stats want the row.
-class StatFigure extends StatelessWidget {
-  const StatFigure({
-    super.key,
-    required this.keyName,
-    required this.value,
-    required this.label,
-  });
-
-  final String keyName;
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
-    // Merged, so the tile announces "2h 6m listened" as one thing. Left
-    // unmerged, three tiles side by side merge by geometry instead -
-    // every value on one line and every caption on the next, which reads
-    // as "2h 6m 10 1m listened sessions time saved" and is three
-    // numbers nobody can attach to anything.
-    return MergeSemantics(
-      child: Column(
-        key: Key(keyName),
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          // Mono, which keeps a row of figures from shifting sideways as
-          // they tick over.
-          Text(
-            value,
-            style: WaxType.titleEntity.copyWith(
-              color: colors.textPrimary,
-              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-            ),
-          ),
-          Text(
-            label,
-            style: WaxType.caption.copyWith(color: colors.textTertiary),
-          ),
-        ],
-      ),
     );
   }
 }

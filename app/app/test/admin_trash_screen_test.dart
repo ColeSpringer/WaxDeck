@@ -62,10 +62,7 @@ void main() {
     expect(find.text('music'), findsWidgets, reason: 'the library column');
     expect(find.bySemanticsIdentifier('trash-row-ts-2'), findsNothing);
 
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-include-restored'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-include-restored'));
     await tester.pumpAndSettle();
     expect(find.bySemanticsIdentifier('trash-row-ts-2'), findsOneWidget);
     expect(find.text('restored'), findsOneWidget);
@@ -98,10 +95,7 @@ void main() {
     await tester.pumpWidget(_host(repo, container));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-restore-ts-1'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-restore-ts-1'));
     await tester.pumpAndSettle();
 
     expect(repo.restoreTrashCalls, ['ts-1']);
@@ -121,15 +115,9 @@ void main() {
     await tester.pumpWidget(_host(repo, container));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-purge-ts-1'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-purge-ts-1'));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-purge-confirm'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-purge-confirm'));
     await tester.pumpAndSettle();
 
     expect(repo.purgeTrashCalls, ['ts-1']);
@@ -150,18 +138,12 @@ void main() {
     await tester.pumpWidget(_host(repo, container));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-empty'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-empty'));
     await tester.pumpAndSettle();
 
     // Emptying takes the typed word now: the confirm stays disabled
     // until it matches, so a muscle-memory double tap is not a purge.
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.confirmAccept),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
     await tester.pumpAndSettle();
     expect(repo.emptyTrashCalls, 0);
     expect(repo.trashEntries, isNotEmpty);
@@ -171,10 +153,7 @@ void main() {
       'EMPTY',
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.confirmAccept),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
     await tester.pumpAndSettle();
 
     expect(repo.emptyTrashCalls, 1);
@@ -195,20 +174,14 @@ void main() {
     await tester.pumpWidget(_host(repo, container));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-empty'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-empty'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.confirmField),
       'EMPTY',
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.confirmAccept),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
     await tester.pumpAndSettle();
 
     expect(
@@ -253,7 +226,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.thumbsClearConfirm),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 
@@ -280,20 +252,14 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-empty'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-empty'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.confirmField),
       'EMPTY',
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.confirmAccept),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
     await tester.pumpAndSettle();
     WaxButton empty() => tester.widget<WaxButton>(
       find.byWidgetPredicate(

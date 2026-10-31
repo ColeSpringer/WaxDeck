@@ -28,6 +28,7 @@ Future<void> _pump(
   TextDirection textDirection = TextDirection.ltr,
   bool Function(MediaTileData item)? itemHasActions,
   String Function(int index)? moreSemanticsIdAt,
+  String Function(int index)? playSemanticsIdAt,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -57,6 +58,7 @@ Future<void> _pump(
                   onMoreItem: (tile) => _menus.add(tile.title),
                   itemHasActions: itemHasActions,
                   moreSemanticsIdAt: moreSemanticsIdAt,
+                  playSemanticsIdAt: playSemanticsIdAt,
                   backSemanticsId: 'shelf-test-back',
                   forwardSemanticsId: 'shelf-test-forward',
                 ),
@@ -267,14 +269,6 @@ void main() {
   testWidgets('the overflow chip carries the handle the shelf names', (
     tester,
   ) async {
-    // A card reveals its chip under a mouse, which the default touch
-    // highlight mode of a test never reports.
-    FocusManager.instance.highlightStrategy =
-        FocusHighlightStrategy.alwaysTraditional;
-    addTearDown(
-      () => FocusManager.instance.highlightStrategy =
-          FocusHighlightStrategy.automatic,
-    );
     await _pump(tester, moreSemanticsIdAt: (index) => 'shelf-test-more-$index');
     final gesture = await _hover(tester);
     await gesture.moveTo(
@@ -284,6 +278,26 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier('shelf-test-more-1'));
     await tester.pumpAndSettle();
     expect(_menus, <String>['Card 1']);
+  });
+
+  testWidgets('the play affordance carries the handle the shelf names', (
+    tester,
+  ) async {
+    await _pump(tester, playSemanticsIdAt: (index) => 'shelf-test-play-$index');
+    final gesture = await _hover(tester);
+    await gesture.moveTo(
+      tester.getTopLeft(find.widgetWithText(MediaCard, 'Card 1')) +
+          const Offset(12, 12),
+    );
+    await tester.pumpAndSettle();
+    final play = find.semantics.byPredicate(
+      (node) => node.getSemanticsData().identifier == 'shelf-test-play-1',
+    );
+    expect(play, findsOne);
+    tester.semantics.tap(play);
+    await tester.pump();
+    expect(_plays, <String>['Card 1']);
+    expect(_taps, isEmpty);
   });
 
   testWidgets('a card that lands in front leaves the others their nodes', (

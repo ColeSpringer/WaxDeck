@@ -135,9 +135,16 @@ class WaxTappable extends StatefulWidget {
     required this.child,
     this.semanticsId,
     this.selected,
+    this.expanded,
     this.borderRadius = WaxRadius.thumb,
     this.surface,
     this.busy = false,
+    this.value,
+    this.hint,
+    this.tooltip,
+    this.tooltipOnLongPress = false,
+    this.inert = false,
+    this.onKeyPress,
     super.key,
   });
 
@@ -147,12 +154,21 @@ class WaxTappable extends StatefulWidget {
   /// Null disables the control, which is reported as well as drawn.
   final VoidCallback? onPressed;
 
+  /// Runs in place of [onPressed] when a key presses the focused control,
+  /// for one whose answer depends on what pressed it: the info tip takes
+  /// the keyboard into its popover only when a key opened it.
+  final VoidCallback? onKeyPress;
+
   final Widget child;
   final String? semanticsId;
 
   /// Set on controls that are one of a set, so the state is announced
   /// rather than left to colour.
   final bool? selected;
+
+  /// Set on a control that opens and closes what it heads, so whether it
+  /// is open is announced.
+  final bool? expanded;
 
   final BorderRadius borderRadius;
 
@@ -162,6 +178,31 @@ class WaxTappable extends StatefulWidget {
   /// Reported disabled and deaf to presses, its child's included, but it
   /// keeps the focus a keyboard press gave it.
   final bool busy;
+
+  /// The spoken value, such as how far a download has got. Defaults to
+  /// saying the control is working while [busy].
+  final String? value;
+
+  /// Read after the name, for what the label leaves out: why an action
+  /// failed, what a state is waiting on.
+  final String? hint;
+
+  /// A [WaxTooltip], held outside the busy guard so it opens in every
+  /// state, and opened by keyboard focus as by a resting pointer, so a
+  /// control with one is a tab stop in every state, disabled included. Its
+  /// words reach a reader only through [label] or [hint].
+  final String? tooltip;
+
+  /// Whether a long press shows [tooltip], which is how touch asks for
+  /// one. Off unless the caller asks: this adds no gesture of its own,
+  /// and a long press is often its holder's, such as a row's menu.
+  final bool tooltipOnLongPress;
+
+  /// A state to read rather than a control: no button and no press. It is
+  /// a tab stop only with a [tooltip] to show; without one it keeps only
+  /// the focus it held as a control, so a press that turns an action into
+  /// a state leaves the keyboard where it was.
+  final bool inert;
 
   @override
   State<WaxTappable> createState() => _WaxTappableState();
@@ -179,66 +220,186 @@ class _WaxTappableState extends State<WaxTappable> {
   }
 
   Object? _activate(Intent _) {
-    if (!widget.busy) widget.onPressed?.call();
+    if (widget.busy || widget.inert || widget.onPressed == null) return null;
+    (widget.onKeyPress ?? widget.onPressed)!();
     return null;
   }
+
+  /// Once an inert control loses its place to a neighbour it is no stop
+  /// at all.
+  void _focusChanged(bool focused) {
+    if (!focused && widget.inert) setState(() {});
+  }
+
+  /// Around the focus detector, so the control's own focus is focus inside
+  /// the tooltip. Built with no tooltip too, as one with nothing to say, so
+  /// the detector keeps its place, and its focus, as a tooltip comes and
+  /// goes.
+  Widget _withTooltip(Widget child) => WaxTooltip(
+    message: widget.tooltip,
+    excludeFromSemantics: true,
+    showOnFocus: true,
+    touchTrigger: widget.tooltipOnLongPress,
+    child: child,
+  );
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final enabled = widget.onPressed != null && !widget.busy;
-    final focusable = widget.onPressed != null || widget.busy;
+    final inert = widget.inert;
+    final enabled = !inert && widget.onPressed != null && !widget.busy;
+    // A tooltip is read by focusing it, so it makes a stop of any control.
+    // An inert control with nothing to show stays focusable while its
+    // scope would hand focus back to it (a dialog closing, the window
+    // coming back), and drops out once focus moves on to a neighbour.
+    final focusable =
+        widget.tooltip != null ||
+        (inert
+            ? _focus.hasFocus || _focus.enclosingScope?.focusedChild == _focus
+            : widget.onPressed != null || widget.busy);
     return Semantics(
       identifier: widget.semanticsId,
-      button: true,
-      enabled: enabled,
+      container: inert,
+      button: !inert,
+      enabled: inert ? null : enabled,
       selected: widget.selected,
+      expanded: widget.expanded,
       label: widget.label,
-      value: widget.busy ? context.waxL10n.controlsBusy : null,
+      value:
+          widget.value ?? (widget.busy ? context.waxL10n.controlsBusy : null),
+      hint: widget.hint,
       excludeSemantics: true,
       onTap: enabled ? widget.onPressed : null,
       focusable: focusable,
-      focused: _focused,
+      // Null off a stop: a false here would report the node focusable
+      // whatever the line above says.
+      focused: focusable ? _focused : null,
       // Gated with the flag beside it. Supplying a focus action marks a
       // node focusable whatever `focusable` says, so a disabled control
       // with one advertises itself as a tab stop that does nothing -
       // which is the opposite of what the line above declares.
       onFocus: focusable ? _focus.requestFocus : null,
-      child: FocusableActionDetector(
-        enabled: focusable,
-        focusNode: _focus,
-        // One stop, as it is one node to a reader: the ink a control
-        // draws with is focusable too, and was a second press of Tab.
-        descendantsAreTraversable: false,
-        mouseCursor: enabled
-            ? SystemMouseCursors.click
-            : SystemMouseCursors.basic,
-        onShowFocusHighlight: (value) => setState(() => _focused = value),
-        // Both: the web binds Enter to the button intent, Space to the other.
-        actions: <Type, Action<Intent>>{
-          ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: _activate),
-          ButtonActivateIntent: CallbackAction<ButtonActivateIntent>(
-            onInvoke: _activate,
-          ),
-        },
-        child: WaxFocusRing(
-          focused: _focused,
-          borderRadius: widget.borderRadius,
-          surface: widget.surface ?? colors.canvas,
-          // Busy, the child's ink hears nothing and the press is spent
-          // here rather than falling through to whatever holds the control.
-          child: GestureDetector(
-            behavior: widget.busy
-                ? HitTestBehavior.opaque
-                : HitTestBehavior.deferToChild,
-            excludeFromSemantics: true,
-            onTap: widget.busy ? () {} : null,
-            child: AbsorbPointer(absorbing: widget.busy, child: widget.child),
+      child: _withTooltip(
+        FocusableActionDetector(
+          enabled: focusable,
+          focusNode: _focus,
+          // One stop, as it is one node to a reader: the ink a control
+          // draws with is focusable too, and was a second press of Tab.
+          descendantsAreTraversable: false,
+          mouseCursor: enabled
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
+          onShowFocusHighlight: (value) => setState(() => _focused = value),
+          onFocusChange: _focusChanged,
+          // Both: the web binds Enter to the button intent, Space to the
+          // other.
+          actions: <Type, Action<Intent>>{
+            ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: _activate),
+            ButtonActivateIntent: CallbackAction<ButtonActivateIntent>(
+              onInvoke: _activate,
+            ),
+          },
+          child: WaxFocusRing(
+            focused: _focused,
+            borderRadius: widget.borderRadius,
+            surface: widget.surface ?? colors.canvas,
+            // Busy, the child's ink hears nothing and the press is spent
+            // here rather than falling through to whatever holds the
+            // control.
+            child: GestureDetector(
+              behavior: widget.busy
+                  ? HitTestBehavior.opaque
+                  : HitTestBehavior.deferToChild,
+              excludeFromSemantics: true,
+              onTap: widget.busy ? () {} : null,
+              child: AbsorbPointer(absorbing: widget.busy, child: widget.child),
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// A custom row or tile that is one control: [WaxTappable]'s semantics,
+/// focus and ring around a [Material] ground and the [InkWell] that takes
+/// the press.
+///
+/// [WaxTappable] adds no gesture, so a row built on it alone answers a key
+/// and a screen reader but no pointer; this one answers all three. The
+/// node and the ink take the one callback, never two that do the same
+/// thing: on web a click on the node is the node's tap, so the two have
+/// to be the same press.
+class WaxInkTappable extends StatelessWidget {
+  const WaxInkTappable({
+    required this.label,
+    required this.onPressed,
+    required this.child,
+    this.semanticsId,
+    this.selected,
+    this.expanded,
+    this.color = Colors.transparent,
+    this.borderRadius,
+    this.surface,
+    this.tooltip,
+    this.tooltipOnLongPress = false,
+    super.key,
+  });
+
+  /// The accessible name: what the row is, said once.
+  final String label;
+
+  /// Null disables it, which is reported as well as drawn.
+  final VoidCallback? onPressed;
+
+  final Widget child;
+  final String? semanticsId;
+
+  /// Set on a row that is one of a set, as on [WaxTappable].
+  final bool? selected;
+
+  /// Set on a row that opens and closes what it heads, as on
+  /// [WaxTappable].
+  final bool? expanded;
+
+  /// The ground the ink spreads on.
+  final Color color;
+
+  /// The corner the ground, the ink and the focus ring share. Null is
+  /// square.
+  final BorderRadius? borderRadius;
+
+  /// The colour immediately under the ring, for its inner stroke.
+  final Color? surface;
+
+  /// What the row leaves out, as on [WaxTappable]: hover or keyboard
+  /// focus shows it, and a long press where [tooltipOnLongPress] asks.
+  final String? tooltip;
+
+  /// As on [WaxTappable].
+  final bool tooltipOnLongPress;
+
+  @override
+  Widget build(BuildContext context) => WaxTappable(
+    label: label,
+    onPressed: onPressed,
+    semanticsId: semanticsId,
+    selected: selected,
+    expanded: expanded,
+    borderRadius: borderRadius ?? BorderRadius.zero,
+    surface: surface,
+    tooltip: tooltip,
+    tooltipOnLongPress: tooltipOnLongPress,
+    child: Material(
+      color: color,
+      borderRadius: borderRadius,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: borderRadius,
+        child: child,
+      ),
+    ),
+  );
 }
 
 /// How much weight a button carries.
@@ -267,13 +428,19 @@ enum WaxButtonKind {
   destructive,
 }
 
-/// The side padding a pill-shaped button keeps around its label.
-const _pillPadding = EdgeInsets.symmetric(horizontal: WaxSpace.s20);
+/// The padding a pill-shaped button keeps around its label. The
+/// vertical share sits inside the touch target, so it only shows once a
+/// label wraps or large text outgrows it.
+const _pillPadding = EdgeInsets.symmetric(
+  horizontal: WaxSpace.s20,
+  vertical: WaxSpace.s8,
+);
 
 /// The button.
 ///
 /// Labels are sentence case and name their verb ("Save changes", "Add to
-/// queue"), never "Submit" or a bare "OK".
+/// queue"), never "Submit" or a bare "OK". A label too long for the room
+/// wraps, so large text grows the pill downwards rather than clipping it.
 class WaxButton extends StatelessWidget {
   const WaxButton({
     required this.label,
@@ -284,8 +451,14 @@ class WaxButton extends StatelessWidget {
     this.semanticsId,
     this.expand = false,
     this.busy = false,
+    this.progress,
+    this.status = false,
+    this.detail,
     super.key,
-  });
+  }) : assert(
+         progress == null ? !(busy && status) : !busy && !status,
+         'busy, progress and status are one state at a time',
+       );
 
   final String label;
 
@@ -310,11 +483,34 @@ class WaxButton extends StatelessWidget {
   /// a [WaxSpinner] for its glyph, or over its label, at the same size.
   final bool busy;
 
+  /// How far that work has got, from 0 to 1, when it can say: the
+  /// leading share of the pill is drawn in the filled form, label
+  /// included, and the share is its spoken value. In every other way
+  /// it is [busy]: live colours, and no press whatever [onPressed] says.
+  /// A value that is not finite (NaN from 0 of 0, or infinity) says
+  /// nothing of how far, so it draws the busy pill, as the page's
+  /// progress bar draws one of unknown length.
+  final double? progress;
+
+  /// A state to read, not an action to take: the tonal box in secondary
+  /// ink, whatever [kind] and [onPressed] say, and no button to a screen
+  /// reader.
+  final bool status;
+
+  /// What the label leaves out, such as why the action failed: a
+  /// tooltip on hover or long press, and read after the name.
+  final String? detail;
+
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    // Busy keeps the live colours: working, not unavailable.
-    final live = onPressed != null || busy;
+    final share = switch (progress) {
+      final value? when value.isFinite => value.clamp(0.0, 1.0),
+      _ => null,
+    };
+    final working = busy || (progress != null && share == null);
+    // Busy and progress keep the live colours: working, not unavailable.
+    final live = onPressed != null || working || share != null;
 
     // Every per-kind answer in one place. A kind that settled three of
     // them here and the rest in ternaries further down is how `inline`
@@ -324,7 +520,10 @@ class WaxButton extends StatelessWidget {
     // `disabled` is the ground a disabled button takes: the filled kinds
     // fall back to the disabled surface, and a pill radius on a box with
     // no padding is a lozenge as wide as the word, which is not what a
-    // link's press looks like.
+    // link's press looks like. `fill` and `onFill` draw the share of a
+    // progress pill that is done. Every pill kind has a border, clear
+    // where none shows, because a border is laid out inside the padding
+    // and one kind with it would stand taller than its neighbours.
     final (
       Color background,
       Color disabled,
@@ -332,14 +531,18 @@ class WaxButton extends StatelessWidget {
       Color? border,
       BorderRadius radius,
       EdgeInsetsGeometry padding,
-    ) = switch (kind) {
+      Color fill,
+      Color onFill,
+    ) = switch (status ? WaxButtonKind.tonal : kind) {
       WaxButtonKind.filled => (
         colors.accent,
         colors.surface2,
         colors.onAccent,
-        null,
+        Colors.transparent,
         WaxRadius.pill,
         _pillPadding,
+        colors.accent,
+        colors.onAccent,
       ),
       WaxButtonKind.tonal => (
         colors.surface2,
@@ -348,87 +551,175 @@ class WaxButton extends StatelessWidget {
         colors.hairline,
         WaxRadius.pill,
         _pillPadding,
+        colors.accent,
+        colors.onAccent,
       ),
       WaxButtonKind.text => (
         Colors.transparent,
         colors.surface2,
         colors.accent,
-        null,
+        Colors.transparent,
         WaxRadius.pill,
         _pillPadding,
+        colors.accent,
+        colors.onAccent,
       ),
       WaxButtonKind.destructive => (
         Colors.transparent,
         colors.surface2,
         colors.error,
-        null,
+        Colors.transparent,
         WaxRadius.pill,
         _pillPadding,
+        colors.error,
+        colors.onError,
       ),
-      // A disabled link keeps prose's ground under it.
+      // A disabled link keeps prose's ground under it, and no border, so
+      // its leading edge stays the prose's.
       WaxButtonKind.inline => (
         Colors.transparent,
         Colors.transparent,
         colors.accent,
         null,
         WaxRadius.chip,
-        EdgeInsets.zero,
+        const EdgeInsets.symmetric(vertical: WaxSpace.s8),
+        colors.accent,
+        colors.onAccent,
       ),
     };
 
-    final ink = live ? foreground : colors.textDisabled;
-    final text = Text(label, style: WaxType.label.copyWith(color: ink));
-    final child = Row(
-      mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        if (icon != null) ...<Widget>[
-          if (busy)
-            SizedBox.square(
-              dimension: 18,
-              child: Center(child: WaxSpinner(color: ink)),
-            )
-          else
-            WaxIcon(icon!, size: 18, color: ink),
-          const SizedBox(width: WaxSpace.s8),
+    Widget face(Color ink, {Color? ground}) {
+      final text = Text(
+        label,
+        // A wrapped label is as wide as its longest line, so the row
+        // can centre it.
+        textWidthBasis: TextWidthBasis.longestLine,
+        style: WaxType.label.copyWith(color: ink),
+      );
+      return Container(
+        constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
+        padding: padding,
+        decoration: BoxDecoration(
+          color: ground,
+          borderRadius: radius,
+          border: border == null ? null : Border.all(color: border),
+        ),
+        // Both factors: a loose but bounded host (a centred page, a row in
+        // a fixed-height bar) would otherwise stretch the pill to fill it.
+        child: Center(
+          widthFactor: expand ? null : 1,
+          heightFactor: 1,
+          child: Row(
+            mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              if (icon != null) ...<Widget>[
+                if (working)
+                  SizedBox.square(
+                    dimension: 18,
+                    child: Center(child: WaxSpinner(color: ink)),
+                  )
+                else
+                  WaxIcon(icon!, size: 18, color: ink),
+                const SizedBox(width: WaxSpace.s8),
+              ],
+              Flexible(
+                child: working && icon == null
+                    ? ReservedSize(
+                        reserve: text,
+                        child: WaxSpinner(color: ink),
+                      )
+                    : text,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // One labelled thing, not a button. Still a WaxTappable, so a pill
+    // that becomes a status under the keyboard keeps its focus.
+    if (status) {
+      return WaxTappable(
+        label: spokenLabel ?? label,
+        onPressed: null,
+        inert: true,
+        hint: detail,
+        tooltip: detail,
+        tooltipOnLongPress: true,
+        semanticsId: semanticsId,
+        borderRadius: radius,
+        child: face(colors.textSecondary, ground: background),
+      );
+    }
+
+    var ground = live ? background : disabled;
+    var ink = live ? foreground : colors.textDisabled;
+    Widget body = face(ink);
+    if (share != null) {
+      // A filled button's ground is already the fill, so its track
+      // steps back to the container.
+      if (kind == WaxButtonKind.filled) {
+        ground = colors.accentContainer;
+        ink = colors.onAccentContainer;
+      }
+      // The label is drawn twice, each in the ink of the ground under it.
+      // Passthrough hands both faces the pill's own constraints, so the
+      // two lay out as one.
+      body = Stack(
+        fit: StackFit.passthrough,
+        children: <Widget>[
+          face(ink),
+          ClipRect(
+            clipper: _LeadingShare(share, Directionality.of(context)),
+            child: face(onFill, ground: fill),
+          ),
         ],
-        if (busy && icon == null)
-          ReservedSize(
-            reserve: text,
-            child: WaxSpinner(color: ink),
-          )
-        else
-          text,
-      ],
-    );
+      );
+    }
 
     // The semantics, focus, ring and busy state are WaxTappable's, as on
     // every other control; the ink here only draws the press.
     return WaxTappable(
       label: spokenLabel ?? label,
       onPressed: onPressed,
-      busy: busy,
+      busy: working || share != null,
+      value: share == null ? null : context.waxL10n.spellPercent(share),
+      hint: detail,
+      tooltip: detail,
+      tooltipOnLongPress: true,
       semanticsId: semanticsId,
       borderRadius: radius,
       child: Material(
-        color: live ? background : disabled,
+        color: ground,
         borderRadius: radius,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: radius,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
-            padding: padding,
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              border: border == null ? null : Border.all(color: border),
-            ),
-            child: Center(widthFactor: expand ? null : 1, child: child),
-          ),
-        ),
+        child: InkWell(onTap: onPressed, borderRadius: radius, child: body),
       ),
     );
   }
+}
+
+/// The leading [share] of a box, in reading order.
+class _LeadingShare extends CustomClipper<Rect> {
+  const _LeadingShare(this.share, this.direction);
+
+  final double share;
+  final TextDirection direction;
+
+  @override
+  Rect getClip(Size size) {
+    final width = size.width * share;
+    return Rect.fromLTWH(
+      direction == TextDirection.ltr ? 0 : size.width - width,
+      0,
+      width,
+      size.height,
+    );
+  }
+
+  @override
+  bool shouldReclip(_LeadingShare old) =>
+      old.share != share || old.direction != direction;
 }
 
 /// A labelled pill that can be on or off.
@@ -546,15 +837,17 @@ class WaxIconButton extends StatelessWidget {
     this.semanticsId,
     this.badge,
     this.busy = false,
+    this.status = false,
     super.key,
-  });
+  }) : assert(!(busy && status), 'busy and status are one state at a time');
 
   final WaxGlyph glyph;
 
-  /// The accessible name, and the tooltip. Stateful controls say what
+  /// The accessible name, and the hover label. Stateful controls say what
   /// they will do: "Play" when paused, "Pause" when playing.
   final String label;
 
+  /// Null disables it, drawn in the disabled tint whatever [active] says.
   final VoidCallback? onPressed;
   final bool active;
   final double size;
@@ -569,11 +862,19 @@ class WaxIconButton extends StatelessWidget {
   /// a [WaxSpinner] where its glyph was.
   final bool busy;
 
+  /// A state to read, not an action to take, such as a finished
+  /// download: no press whatever [onPressed] says, no button to a screen
+  /// reader, and drawn lit, in [color] or accent while [active] and in
+  /// secondary ink while not.
+  final bool status;
+
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final enabled = onPressed != null && !busy;
-    final tint = onPressed == null && !busy
+    final enabled = onPressed != null && !busy && !status;
+    final tint = status
+        ? (active ? color ?? colors.accent : colors.textSecondary)
+        : onPressed == null && !busy
         ? colors.textDisabled
         : color ?? (active ? colors.accent : colors.textSecondary);
 
@@ -607,24 +908,24 @@ class WaxIconButton extends StatelessWidget {
       );
     }
 
+    final pad = InkResponse(
+      onTap: enabled ? onPressed : null,
+      radius: WaxSpace.touchTarget / 2,
+      child: SizedBox(
+        width: WaxSpace.touchTarget,
+        height: WaxSpace.touchTarget,
+        child: Center(child: icon),
+      ),
+    );
+
     return WaxTappable(
       label: label,
-      onPressed: onPressed,
+      onPressed: status ? null : onPressed,
       busy: busy,
+      inert: status,
       semanticsId: semanticsId,
       borderRadius: WaxRadius.pill,
-      child: WaxTooltip(
-        message: label,
-        child: InkResponse(
-          onTap: enabled ? onPressed : null,
-          radius: WaxSpace.touchTarget / 2,
-          child: SizedBox(
-            width: WaxSpace.touchTarget,
-            height: WaxSpace.touchTarget,
-            child: Center(child: icon),
-          ),
-        ),
-      ),
+      child: WaxTooltip(message: label, child: pad),
     );
   }
 }

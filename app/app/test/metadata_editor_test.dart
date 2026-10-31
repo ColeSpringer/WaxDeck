@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2500,6 +2501,41 @@ void main() {
     final call = repo.setItemLocksCalls.single;
     expect(call.fields, ['chapters']);
     expect(call.locked, isFalse);
+  });
+
+  testWidgets('the chapters lock is grey while its save is in flight', (
+    tester,
+  ) async {
+    final repo = _bookRepo();
+    repo.lockedFieldsByPid['bk-1'] = {'chapters'};
+    final gate = Completer<void>();
+    repo.setItemLocksGate = gate;
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    final lock = find.bySemanticsIdentifier(SemanticsIds.fieldLock('chapters'));
+    await tester.ensureVisible(lock);
+    await tester.pumpAndSettle();
+    final colors = WaxColors.of(tester.element(lock));
+    Color? tint() => tester
+        .widget<WaxIcon>(
+          find.descendant(of: lock, matching: find.byType(WaxIcon)),
+        )
+        .color;
+    expect(tint(), colors.accent, reason: 'locked, and pressable');
+
+    await tester.tap(lock);
+    await tester.pump();
+    expect(tint(), colors.textDisabled, reason: 'unavailable mid-save');
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(repo.setItemLocksCalls.single.locked, isFalse);
   });
 
   testWidgets('an empty preview applies as the blind fetch', (tester) async {

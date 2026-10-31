@@ -9,6 +9,7 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
+import 'row_finders.dart';
 import 'secondary_click.dart';
 
 const _seedPid = 'tr-01JZX5N8QW3F4V9T2B7KDSEED01';
@@ -48,13 +49,7 @@ void main() {
     expect(find.text('Kindred Groove'), findsOneWidget);
 
     // Rows play like library rows.
-    // warnIfMissed: a row's identifier sits on its content region rather
-    // than on the whole row (MediaListRow says why), so the tap lands on
-    // the row's own handler and not on the node the finder matched.
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.scopedItem('similar', 0)),
-      warnIfMissed: false,
-    );
+    await tester.tap(rowWithIdentifier(SemanticsIds.scopedItem('similar', 0)));
     await tester.pumpAndSettle();
     expect(engine.loadedUrl, contains(_similarPid));
     expect(engine.playing, isTrue);

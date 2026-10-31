@@ -1079,7 +1079,7 @@ void main() {
       );
       await tester.tap(move);
       await tester.pump();
-      await tester.tap(move, warnIfMissed: false);
+      await tester.tap(move);
       await tester.pump();
       expect(repo.previewOrganizeCalls, hasLength(1));
 

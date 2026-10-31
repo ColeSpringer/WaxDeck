@@ -20,6 +20,14 @@ const _station = NowPlayingData(
   playing: true,
 );
 
+/// The drag handle: the artwork and title region, which takes the
+/// gesture. The copy of the title that moves ignores the pointer, so the
+/// title's own centre is not where a gesture lands.
+Finder _handle() => find.ancestor(
+  of: find.byType(WaxMarqueeText).first,
+  matching: find.byType(GestureDetector),
+);
+
 Future<void> _pump(WidgetTester tester, Widget child) async {
   // The window the desktop port asks the compositor for.
   tester.view.physicalSize = const Size(kMiniPlayerWidth, kMiniPlayerHeight);
@@ -80,12 +88,12 @@ void main() {
     var dragged = 0;
     await _pump(tester, MiniPlayer(now: _music, onDrag: () => dragged++));
 
-    // The title slot rather than the text in it: at this width the
-    // name scrolls itself, and the copy that moves ignores the pointer
-    // on purpose - a handle that slid out from under the cursor would
-    // be a poor one. The slot does not move.
+    // The handle rather than the text in it: at this width the name
+    // scrolls itself, and the copy that moves ignores the pointer on
+    // purpose - a handle that slid out from under the cursor would be a
+    // poor one. The handle does not move.
     await tester.timedDrag(
-      find.byType(WaxMarqueeText).first,
+      _handle().first,
       const Offset(40, 0),
       const Duration(milliseconds: 100),
     );
@@ -125,7 +133,7 @@ void main() {
     var restored = 0;
     await _pump(tester, MiniPlayer(now: _music, onRestore: () => restored++));
 
-    final handle = find.byType(WaxMarqueeText).first;
+    final handle = _handle().first;
     await tester.tap(handle);
     await tester.pump(kDoubleTapMinTime);
     await tester.tap(handle);

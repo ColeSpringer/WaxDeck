@@ -257,7 +257,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.adminAction('scan')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 
@@ -376,7 +375,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.genreNode('Doom Metal')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 
@@ -392,10 +390,7 @@ void main() {
     // call, because every save rewinds the normalization sweeper.
     expect(repo.genreTree.first.aliases, isEmpty);
 
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.genreSave),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.genreSave));
     await tester.pumpAndSettle();
 
     final doom = repo.genreTree.firstWhere((g) => g.name == 'Doom Metal');
@@ -420,18 +415,11 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.genreNode('Metal')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.genreDelete),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.genreDelete));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.genreSave),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.genreSave));
     await tester.pumpAndSettle();
 
     expect(repo.genreTree.map((g) => g.name), <String>['Doom Metal']);
@@ -448,20 +436,14 @@ void main() {
     final container = _container(repo);
     await _pump(tester, container, const GenreTreeScreen());
 
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.genreRevert),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.genreRevert));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.confirmField),
       'REVERT',
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.confirmAccept),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
     await tester.pumpAndSettle();
 
     expect(repo.genreTree, isEmpty);
@@ -483,7 +465,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.genreNode('Hip Hop')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -494,10 +475,7 @@ void main() {
 
     expect(find.textContaining('already called Rap'), findsOneWidget);
 
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.genreSave),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.genreSave));
     await tester.pumpAndSettle();
 
     // Both genres survive under their own names.
@@ -514,13 +492,9 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.genreNormalizeDryRun),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.genreNormalize),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.genreNormalize));
     await tester.pumpAndSettle();
 
     expect(repo.genreNormalizations, <bool>[true, false]);

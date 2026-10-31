@@ -290,10 +290,7 @@ void main() {
     final container = _container(repo);
     await _pump(tester, container);
 
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.adminWizardSkip),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.adminWizardSkip));
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsIdentifier(SemanticsIds.adminWizard), findsNothing);

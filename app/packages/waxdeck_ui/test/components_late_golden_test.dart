@@ -1,8 +1,8 @@
 /// Goldens for the components that landed after the design system's own
 /// phase: the player's transport and seek clusters, settings rows, the
-/// console table, the entity header, the palette and its shortcut sheet,
-/// the station dial, the mini player, and the controls the later phases
-/// added (the volume slider, segmented, pills).
+/// console table, the entity header and its action bar, the palette and
+/// its shortcut sheet, the station dial, the mini player, and the
+/// controls the later phases added (the volume slider, segmented, pills).
 ///
 /// Both passes run here, like every other golden suite. This file was
 /// CI-only for a while because the readable baselines are rendered on
@@ -234,6 +234,36 @@ void main() {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
+                          // A sentence the head and a row hold without
+                          // printing it, right after each title.
+                          const SectionHeader(
+                            overline: 'Playback',
+                            title: 'Listening',
+                            info: 'Applies on this device only',
+                          ),
+                          WaxSettingRow(
+                            title: 'Gapless playback',
+                            info:
+                                'Joins the tracks an album was mastered '
+                                'to run together',
+                            control: WaxSwitch(
+                              value: true,
+                              label: 'Gapless playback',
+                              onChanged: (_) {},
+                            ),
+                          ),
+                          WaxSettingRow(
+                            title: 'Even out loudness',
+                            help: 'Between tracks from different albums',
+                            info:
+                                'Uses the gain tags your files carry; a '
+                                'file without them plays as it is',
+                            control: WaxSwitch(
+                              value: false,
+                              label: 'Even out loudness',
+                              onChanged: (_) {},
+                            ),
+                          ),
                           WaxSettingRow(
                             title: 'Prepare the next track',
                             help:
@@ -256,6 +286,15 @@ void main() {
                               options: const <int>[10, 15, 30],
                               labelFor: (value) => '$value seconds',
                               label: 'Skip back by',
+                              onChanged: (_) {},
+                            ),
+                          ),
+                          // A label that says it all: no help line.
+                          WaxSettingRow(
+                            title: 'Show lyrics',
+                            control: WaxSwitch(
+                              value: true,
+                              label: 'Show lyrics',
                               onChanged: (_) {},
                             ),
                           ),
@@ -329,26 +368,31 @@ void main() {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              const Expanded(
-                                child: StatTile(
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: WaxStatGrid(
+                              tiles: <StatTile>[
+                                const StatTile(
                                   label: 'Items',
                                   value: '104,812',
                                   glyph: WaxIcons.albums,
                                 ),
-                              ),
-                              const SizedBox(width: WaxSpace.s12),
-                              Expanded(
-                                child: StatTile(
+                                StatTile(
                                   label: 'Health',
                                   value: '82',
                                   caption: '311 items want attention',
                                   tone: variant.colors.error,
                                   onTap: () {},
                                 ),
-                              ),
-                            ],
+                                const StatTile(
+                                  label: 'Pending',
+                                  value: '12',
+                                  caption:
+                                      'Elementos pendientes de revision por el '
+                                      'equipo de catalogo',
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: WaxSpace.s16),
                           WaxTable<_Job>(
@@ -394,6 +438,36 @@ void main() {
                   ),
                 ),
               ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a row of stat figures keeps each value over its own caption',
+      fileName: 'stat_figures',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                // As the stats screen lays them out.
+                const SizedBox(
+                  width: 420,
+                  child: Wrap(
+                    spacing: WaxSpace.s32,
+                    runSpacing: WaxSpace.s12,
+                    children: <Widget>[
+                      StatFigure(value: '2h 6m', caption: 'listened'),
+                      StatFigure(value: '10', caption: 'sessions'),
+                      StatFigure(value: '1h 4m', caption: 'time saved'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -924,6 +998,347 @@ void main() {
                         ),
                       ),
                   ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'every action in a row is one pill, whatever its state',
+      fileName: 'action_bar',
+      pumpBeforeTest: _pumpAnimated,
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            for (final scale in <double>[1.0, 2.0])
+              GoldenTestScenario.withTextScaleFactor(
+                name: '${variant.name} at $scale',
+                textScaler: TextScaler.linear(scale),
+                child: _themed(
+                  variant,
+                  // Narrow at 2.0, so one label wraps and grows its own
+                  // pill while the rest keep one height.
+                  SizedBox(
+                    width: scale > 1 ? 280 : 520,
+                    child: WaxActionBar(
+                      actions: <WaxAction>[
+                        WaxAction(
+                          label: 'Play',
+                          semanticsId: 'play',
+                          glyph: WaxIcons.play,
+                          emphasis: WaxActionEmphasis.primary,
+                          onPressed: () {},
+                        ),
+                        WaxAction(
+                          label: 'Download',
+                          semanticsId: 'ready',
+                          glyph: WaxIcons.downloads,
+                          onPressed: () {},
+                        ),
+                        WaxAction(
+                          label: 'Download',
+                          semanticsId: 'busy',
+                          glyph: WaxIcons.downloads,
+                          state: const WaxActionState.busy(),
+                          onPressed: () {},
+                        ),
+                        const WaxAction(
+                          label: 'Downloading',
+                          semanticsId: 'progress',
+                          glyph: WaxIcons.downloads,
+                          state: WaxActionState.progress(0.42),
+                        ),
+                        const WaxAction(
+                          label: 'Downloaded',
+                          semanticsId: 'done',
+                          glyph: WaxIcons.downloads,
+                          state: WaxActionState.done(),
+                        ),
+                        const WaxAction(
+                          label: 'Queued for download',
+                          semanticsId: 'status',
+                          glyph: WaxIcons.downloads,
+                          state: WaxActionState.status(),
+                        ),
+                        WaxAction(
+                          label: 'Retry download',
+                          semanticsId: 'failed',
+                          glyph: WaxIcons.downloads,
+                          state: const WaxActionState.failed(),
+                          detail: 'Not enough space on this device',
+                          onPressed: () {},
+                        ),
+                      ],
+                      trailing: <Widget>[
+                        StarButton(starred: true, onChanged: (_) {}),
+                      ],
+                      overflow: WaxMenuButton<int>(
+                        items: const <WaxMenuItem<int>>[
+                          WaxMenuItem<int>(value: 1, label: 'Share'),
+                        ],
+                        onSelected: (_) {},
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a custom row is one control, its ink on its own ground',
+      fileName: 'ink_tappable',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 320,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      for (final (title, detail, ground)
+                          in <(String, String, Color?)>[
+                            ('Kitchen', 'Speaker on this network', null),
+                            (
+                              'Backups',
+                              'Last run 2 hours ago',
+                              variant.colors.surface1,
+                            ),
+                          ])
+                        WaxInkTappable(
+                          label: '$title, $detail',
+                          onPressed: () {},
+                          color: ground ?? Colors.transparent,
+                          borderRadius: ground == null ? null : WaxRadius.card,
+                          child: Padding(
+                            padding: const EdgeInsets.all(WaxSpace.s12),
+                            child: Row(
+                              children: <Widget>[
+                                WaxIcon(
+                                  WaxIcons.cast,
+                                  size: 20,
+                                  color: variant.colors.textSecondary,
+                                ),
+                                const SizedBox(width: WaxSpace.s12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      Text(
+                                        title,
+                                        style: WaxType.body.copyWith(
+                                          color: variant.colors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        detail,
+                                        style: WaxType.caption.copyWith(
+                                          color: variant.colors.textTertiary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a hairline rules off rows across, and panes down',
+      fileName: 'hairline',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 320,
+                  // As tall as the rows, which the rule down runs beside.
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              for (final (i, row) in const <String>[
+                                'Kitchen',
+                                'Study',
+                                'Garden',
+                              ].indexed) ...<Widget>[
+                                // The line alone between rows, then a rule
+                                // that keeps a band of air around it.
+                                if (i == 1) const WaxHairline(),
+                                if (i == 2)
+                                  const WaxHairline(extent: WaxSpace.s16),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: WaxSpace.s8,
+                                  ),
+                                  child: Text(
+                                    row,
+                                    style: WaxType.body.copyWith(
+                                      color: variant.colors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const WaxHairline.vertical(extent: WaxSpace.s24),
+                        Expanded(
+                          child: Text(
+                            'Preview',
+                            style: WaxType.body.copyWith(
+                              color: variant.colors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a disclosure holds its section shut until it is opened',
+      fileName: 'disclosure',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                const SizedBox(
+                  width: 320,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      WaxDisclosure(
+                        title: 'Edition',
+                        initiallyExpanded: true,
+                        children: <Widget>[
+                          MonoDetailRow(
+                            label: 'Publisher',
+                            value: 'Harbour Press',
+                          ),
+                          MonoDetailRow(label: 'Narrator', value: 'Ora Lune'),
+                        ],
+                      ),
+                      WaxDisclosure(
+                        title: 'Transcript',
+                        children: <Widget>[Text('Never drawn while shut')],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a progress bar is a 4 px track filled by its fraction',
+      fileName: 'progress_bar',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 280,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      for (final value in const <double>[
+                        0,
+                        0.42,
+                        1,
+                      ]) ...<Widget>[
+                        WaxProgressBar(value: value),
+                        const SizedBox(height: WaxSpace.s16),
+                      ],
+                      // A quota at its cap, in the verdict's own colour.
+                      WaxProgressBar(value: 1, tone: variant.colors.error),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'an info tip opens its text in a popover under the glyph',
+      fileName: 'info_tip',
+      // After the harness has sized the scene, which would close it.
+      whilePerforming: (tester) async {
+        for (var i = 0; i < _lightAndDark.length; i++) {
+          await tester.tap(find.byType(WaxInfoTip).at(i));
+        }
+        await tester.pumpAndSettle();
+        return null;
+      },
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 320,
+                  height: 140,
+                  child: Overlay(
+                    initialEntries: <OverlayEntry>[
+                      OverlayEntry(
+                        builder: (_) => const Align(
+                          alignment: Alignment.topLeft,
+                          child: WaxInfoTip(
+                            message:
+                                'Counts only the plays you listened '
+                                'through to the end',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

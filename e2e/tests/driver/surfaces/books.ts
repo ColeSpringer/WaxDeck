@@ -37,6 +37,10 @@ export class Books extends Surface {
     const card = this.card(pid);
     await hub.waitFor({ timeout: T.nav });
     await expect(async () => {
+      // A press that landed with the book merely slow to open leaves the
+      // card gone, and a try that went looking for it would never see the
+      // book.
+      if (await this.resume().isVisible()) return;
       if (!(await card.isVisible())) {
         const box = await hub.boundingBox();
         expect(box, 'the hub reports a box to wheel over').toBeTruthy();
@@ -45,7 +49,7 @@ export class Books extends Surface {
         await expect(card).toBeVisible({ timeout: 1_000 });
       }
       await wheelIntoReach(page, card, { appear: 1_000 });
-      await clickToward(card, { shows: this.resume() });
+      await clickToward(card, { shows: this.resume() }, { aim: 'caption' });
     }).toPass({ timeout: T.nav });
   }
 

@@ -49,6 +49,7 @@ class _CatalogAppState extends State<CatalogApp> {
       title: 'WaxDeck design system',
       debugShowCheckedModeBanner: false,
       theme: theme,
+      actions: waxAppActions(context),
       // The catalogue is the taste reference, so it installs the design
       // system's own table rather than riding the English fallback.
       localizationsDelegates: waxLocalizationsDelegates,

@@ -91,10 +91,7 @@ void main() {
     await tester.ensureVisible(
       find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.librarySubmit));
     await tester.pumpAndSettle();
 
     expect(repo.libraries.map((l) => l.name), contains('audiobooks'));
@@ -130,10 +127,7 @@ void main() {
     await tester.ensureVisible(
       find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.librarySubmit));
     await tester.pumpAndSettle();
 
     expect(
@@ -152,10 +146,7 @@ void main() {
     await tester.ensureVisible(
       find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.librarySubmit));
     await tester.pumpAndSettle();
 
     expect(repo.libraries, isEmpty);
@@ -185,10 +176,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.libraryPath),
       '/srv/media/shelf',
     );
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.librarySubmit));
     await tester.pumpAndSettle();
 
     expect(
@@ -225,7 +213,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryReadOnly('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(repo.setLibraryReadOnlyCalls, [
@@ -242,7 +229,6 @@ void main() {
     // confirm dialog now says so before anything starts.
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(repo.rescans, 0, reason: 'nothing starts before the confirm');
@@ -345,7 +331,6 @@ void main() {
     Future<void> choose(String label) async {
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-1')),
-        warnIfMissed: false,
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text(label).last);
@@ -447,7 +432,6 @@ void main() {
     await _pump(tester, _host(container));
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Books').last);
@@ -480,7 +464,6 @@ void main() {
     await _pump(tester, _host(container));
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Books').last);
@@ -577,7 +560,6 @@ void main() {
     await _pump(tester, _host(container));
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryReadOnly('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pump();
     await tester.pumpWidget(
@@ -620,7 +602,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryProfile('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('flat').last);
@@ -654,7 +635,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -686,10 +666,7 @@ void main() {
     await tester.ensureVisible(
       find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.librarySubmit));
     await tester.pumpAndSettle();
 
     expect(
@@ -714,7 +691,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -762,7 +738,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-2')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -774,7 +749,7 @@ void main() {
     final confirm = find.bySemanticsIdentifier(
       SemanticsIds.libraryRemoveConfirm,
     );
-    await tester.tap(confirm, warnIfMissed: false);
+    await tester.tap(confirm);
     await tester.pumpAndSettle();
     expect(repo.removeLibraryCalls, isEmpty, reason: 'nothing before the name');
     await tester.enterText(
@@ -815,7 +790,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(
@@ -826,7 +800,6 @@ void main() {
     );
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryRemove('lb-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(find.text('Remove "music"?'), findsNothing);
@@ -911,10 +884,7 @@ void main() {
     await tester.ensureVisible(
       find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.librarySubmit));
     await tester.pumpAndSettle();
 
     expect(
@@ -940,18 +910,12 @@ void main() {
     await tester.ensureVisible(
       find.bySemanticsIdentifier(SemanticsIds.libraryAbsent),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.libraryAbsent),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.libraryAbsent));
     await tester.pumpAndSettle();
     await tester.ensureVisible(
       find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.librarySubmit));
     await tester.pumpAndSettle();
     expect(repo.createLibraryCalls, [
       (name: 'later', path: '/mnt/later', allowAbsent: true),
@@ -985,7 +949,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-2')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -1042,7 +1005,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-2')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -1121,7 +1083,7 @@ void main() {
       lessThanOrEqualTo(48),
       reason: 'the button keeps its own size on a card',
     );
-    await tester.tap(trigger, warnIfMissed: false);
+    await tester.tap(trigger);
     await tester.pumpAndSettle();
     expect(
       find.bySemanticsIdentifier(SemanticsIds.libraryRemove('lb-2')),

@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart' show RenderParagraph, RenderProxyBox;
 import 'package:material_ui/material_ui.dart';
 
 import '../icons/wax_icon.dart';
@@ -11,7 +12,9 @@ import 'controls.dart';
 import 'indicators.dart';
 import 'inputs.dart';
 import 'prose.dart';
+import 'reserved_size.dart';
 import 'sheet.dart';
+import 'tooltip.dart';
 
 /// How much a table column matters when there is not room for all of
 /// them.
@@ -326,18 +329,12 @@ class _TableRow<T> extends StatelessWidget {
     if (onTap == null) {
       body = Semantics(identifier: semanticsId, container: true, child: cells);
     } else {
-      // WaxTappable adds no gesture by design, so the ink is ours or
-      // the row announces as a button and answers no pointer.
-      body = WaxTappable(
+      body = WaxInkTappable(
         label: name,
         semanticsId: semanticsId,
-        borderRadius: BorderRadius.zero,
         surface: striped ? colors.surface1 : colors.canvas,
         onPressed: () => onTap!(row),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(onTap: () => onTap!(row), child: cells),
-        ),
+        child: cells,
       );
     }
     return Container(
@@ -443,21 +440,13 @@ class _RowCard<T> extends StatelessWidget {
     if (onTap == null) {
       body = Semantics(identifier: semanticsId, container: true, child: fields);
     } else {
-      body = WaxTappable(
+      body = WaxInkTappable(
         label: name,
         semanticsId: semanticsId,
         borderRadius: WaxRadius.card,
         surface: colors.canvas,
         onPressed: () => onTap!(row),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: WaxRadius.card,
-          child: InkWell(
-            onTap: () => onTap!(row),
-            borderRadius: WaxRadius.card,
-            child: fields,
-          ),
-        ),
+        child: fields,
       );
     }
     return Container(
@@ -533,9 +522,11 @@ extension _RowCardDetails<T> on _RowCard<T> {
 
 /// A dashboard number: what it is, what it says, and where it goes.
 ///
-/// The console's status row is made of these, and so is the stats screen
-/// that had its own copy before this one existed.
-class StatTile extends StatelessWidget {
+/// The console's status row is made of these. Every line is a fixed slot,
+/// one line each, and the label row is as tall as its glyph, so a tile is
+/// as tall as any other at a given text scale whatever it holds; a
+/// [WaxStatGrid] holds the caption slot open across a whole row of them.
+class StatTile extends StatefulWidget {
   const StatTile({
     required this.label,
     required this.value,
@@ -544,13 +535,19 @@ class StatTile extends StatelessWidget {
     this.tone,
     this.onTap,
     this.semanticsId,
+    this.reserveCaption = false,
     super.key,
   });
 
   final String label;
+
+  /// Cut to one line, like [caption], and recovered the same way.
   final String value;
 
   /// A line under the number: what it means, or what to do about it.
+  /// Cut to one line; the whole of it is in the tile's spoken label, and
+  /// in a tooltip where it is cut, which keyboard focus shows on a tile
+  /// that goes somewhere.
   final String? caption;
 
   final WaxGlyph? glyph;
@@ -566,9 +563,60 @@ class StatTile extends StatelessWidget {
 
   final String? semanticsId;
 
+  /// Keep the caption line open when there is no caption, so the tile
+  /// matches its neighbours that have one. A [WaxStatGrid] holds it open
+  /// for every tile when any has a caption; alone, the tile leaves it off.
+  final bool reserveCaption;
+
+  static const double _glyphSize = 14;
+
+  @override
+  State<StatTile> createState() => _StatTileState();
+}
+
+class _StatTileState extends State<StatTile> {
+  /// Which of a tappable tile's lines its room cuts. The tile carries their
+  /// whole text as its own tooltip, so keyboard focus on it shows them as
+  /// a pointer resting on them would.
+  bool _valueCut = false;
+  bool _captionCut = false;
+
+  void _valueCutIs(bool cut) {
+    if (cut != _valueCut) setState(() => _valueCut = cut);
+  }
+
+  void _captionCutIs(bool cut) {
+    if (cut != _captionCut) setState(() => _captionCut = cut);
+  }
+
+  @override
+  void didUpdateWidget(StatTile old) {
+    super.didUpdateWidget(old);
+    // Gone with its line; a caption that comes back is measured afresh.
+    if (widget.caption == null) _captionCut = false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final StatTile(
+      :label,
+      :value,
+      :caption,
+      :glyph,
+      :tone,
+      :onTap,
+      :semanticsId,
+      :reserveCaption,
+    ) = widget;
+    final tappable = onTap != null;
     final colors = WaxColors.of(context);
+    final captionStyle = WaxType.caption.copyWith(color: colors.textTertiary);
+    final reserve =
+        reserveCaption ||
+        (context
+                .dependOnInheritedWidgetOfExactType<_StatGridScope>()
+                ?.reserveCaption ??
+            false);
     final body = Container(
       padding: const EdgeInsets.all(WaxSpace.s16),
       decoration: BoxDecoration(
@@ -580,59 +628,282 @@ class StatTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              if (glyph != null) ...<Widget>[
-                WaxIcon(glyph!, size: 14, color: colors.textSecondary),
-                const SizedBox(width: WaxSpace.s8),
-              ],
-              Expanded(
-                child: Text(
-                  label,
-                  style: WaxType.overline.copyWith(color: colors.textSecondary),
-                  overflow: TextOverflow.ellipsis,
+          // As tall as the glyph, drawn or not: the glyph does not scale
+          // with text and a small text scale would otherwise set the
+          // label row lower than it.
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: StatTile._glyphSize),
+            child: Row(
+              children: <Widget>[
+                if (glyph != null) ...<Widget>[
+                  WaxIcon(
+                    glyph,
+                    size: StatTile._glyphSize,
+                    color: colors.textSecondary,
+                  ),
+                  const SizedBox(width: WaxSpace.s8),
+                ],
+                Expanded(
+                  child: Text(
+                    label,
+                    style: WaxType.overline.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: WaxSpace.s8),
-          Text(
+          _OneLine(
             value,
             style: WaxType.titleEntity.copyWith(
               color: tone ?? colors.textPrimary,
             ),
+            onCut: tappable ? _valueCutIs : null,
           ),
-          if (caption != null)
+          if (caption != null || reserve)
             Padding(
               padding: const EdgeInsets.only(top: WaxSpace.s4),
-              child: Text(
-                caption!,
-                style: WaxType.caption.copyWith(color: colors.textTertiary),
+              child: ReservedSize(
+                alignment: AlignmentDirectional.topStart,
+                reserve: Text(' ', style: captionStyle, maxLines: 1),
+                child: caption == null
+                    ? const SizedBox.shrink()
+                    : _OneLine(
+                        caption,
+                        style: captionStyle,
+                        onCut: tappable ? _captionCutIs : null,
+                      ),
               ),
             ),
         ],
       ),
     );
+    final spoken = caption == null
+        ? context.waxL10n.consoleStat(label, value)
+        : context.waxL10n.consoleStatWithCaption(label, value, caption);
     // The whole tile reads as one thing either way: as a button when it
     // goes somewhere, and as a labelled value when it does not.
     if (onTap == null) {
       return Semantics(
         identifier: semanticsId,
         container: true,
-        label: context.waxL10n.consoleStat(label, value),
+        label: spoken,
         excludeSemantics: true,
         child: body,
       );
     }
-    return WaxTappable(
-      label: context.waxL10n.consoleStat(label, value),
+    final cut = <String>[
+      if (_valueCut) value,
+      if (_captionCut && caption != null) caption,
+    ];
+    return WaxInkTappable(
+      label: spoken,
       semanticsId: semanticsId,
       borderRadius: WaxRadius.card,
       onPressed: onTap,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: WaxRadius.card,
-        child: InkWell(onTap: onTap, borderRadius: WaxRadius.card, child: body),
+      tooltip: cut.isEmpty ? null : cut.join('\n'),
+      // The cut text has no other way onto a touch screen.
+      tooltipOnLongPress: true,
+      child: body,
+    );
+  }
+}
+
+/// A tile's line cut to one line, with the whole of it in a tooltip once
+/// the room has proved too narrow to show it.
+///
+/// The cut is read off the laid-out paragraph rather than measured from
+/// the incoming width in a [LayoutBuilder], which cannot answer a dry
+/// layout and so breaks any parent that asks for one.
+class _OneLine extends StatefulWidget {
+  const _OneLine(this.text, {required this.style, this.onCut});
+
+  final String text;
+  final TextStyle style;
+
+  /// Told when the room starts or stops cutting the line, by a host that
+  /// carries the whole of it itself; with one, the line draws no tooltip.
+  final ValueChanged<bool>? onCut;
+
+  @override
+  State<_OneLine> createState() => _OneLineState();
+}
+
+class _OneLineState extends State<_OneLine> {
+  final GlobalKey _lineKey = GlobalKey();
+  bool _cut = false;
+
+  void _setCut(bool cut) {
+    if (!mounted || cut == _cut) return;
+    setState(() => _cut = cut);
+    widget.onCut?.call(cut);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.onCut != null) _report();
+  }
+
+  @override
+  void didUpdateWidget(_OneLine old) {
+    super.didUpdateWidget(old);
+    if (widget.onCut != null && old.onCut == null) _report();
+  }
+
+  /// Tells a host new to this line where its room stands, once it has been
+  /// measured, so the host never keeps a cut from text it no longer shows.
+  void _report() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onCut?.call(_cut);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final line = _CutProbe(
+      key: _lineKey,
+      onChanged: _setCut,
+      child: Text(
+        widget.text,
+        style: widget.style,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+    // The key keeps the probe, and the paragraph under it, through the
+    // tooltip arriving.
+    return _cut && widget.onCut == null
+        ? WaxTooltip(
+            message: widget.text,
+            excludeFromSemantics: true,
+            child: line,
+          )
+        : line;
+  }
+}
+
+class _CutProbe extends SingleChildRenderObjectWidget {
+  const _CutProbe({required this.onChanged, required super.child, super.key});
+
+  final ValueChanged<bool> onChanged;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderCutProbe(onChanged);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderCutProbe renderObject) {
+    renderObject.onChanged = onChanged;
+  }
+}
+
+class _RenderCutProbe extends RenderProxyBox {
+  _RenderCutProbe(this.onChanged);
+
+  ValueChanged<bool> onChanged;
+  bool _cut = false;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final cut = _paragraph(child)?.didExceedMaxLines ?? false;
+    if (cut == _cut) return;
+    _cut = cut;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onChanged(cut));
+  }
+
+  RenderParagraph? _paragraph(RenderObject? node) {
+    if (node is RenderParagraph) return node;
+    RenderParagraph? found;
+    node?.visitChildren((child) => found ??= _paragraph(child));
+    return found;
+  }
+}
+
+/// What a [WaxStatGrid] tells the tiles under it.
+class _StatGridScope extends InheritedWidget {
+  const _StatGridScope({required this.reserveCaption, required super.child});
+
+  final bool reserveCaption;
+
+  @override
+  bool updateShouldNotify(_StatGridScope old) =>
+      reserveCaption != old.reserveCaption;
+}
+
+/// A row of [StatTile]s that owns their width and spacing, and holds the
+/// caption line open on all of them when any one has a caption.
+class WaxStatGrid extends StatelessWidget {
+  const WaxStatGrid({
+    required this.tiles,
+    this.tileWidth = WaxStatGrid.defaultTileWidth,
+    super.key,
+  });
+
+  /// The width a tile gets unless a grid asks for another.
+  static const double defaultTileWidth = 220;
+
+  final List<StatTile> tiles;
+  final double tileWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final reserve = tiles.any((tile) => tile.caption != null);
+    return _StatGridScope(
+      reserveCaption: reserve,
+      child: Wrap(
+        spacing: WaxSpace.s12,
+        runSpacing: WaxSpace.s12,
+        children: <Widget>[
+          for (final tile in tiles) SizedBox(width: tileWidth, child: tile),
+        ],
+      ),
+    );
+  }
+}
+
+/// One headline number with its caption underneath: the bare figure a
+/// row of them is built from, where [StatTile] is a bordered card with a
+/// glyph and somewhere to go.
+class StatFigure extends StatelessWidget {
+  const StatFigure({required this.value, required this.caption, super.key});
+
+  final String value;
+
+  /// The line under the value, as on a [StatTile].
+  final String caption;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    // Merged, so the tile announces "2h 6m listened" as one thing. Left
+    // unmerged, three tiles side by side merge by geometry instead -
+    // every value on one line and every caption on the next, which reads
+    // as "2h 6m 10 1m listened sessions time saved" and is three
+    // numbers nobody can attach to anything.
+    return MergeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          // Tabular figures, which keep a row of them from shifting
+          // sideways as they tick over.
+          Text(
+            value,
+            style: WaxType.titleEntity.copyWith(
+              color: colors.textPrimary,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+          Text(
+            caption,
+            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          ),
+        ],
       ),
     );
   }

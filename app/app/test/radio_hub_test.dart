@@ -102,7 +102,7 @@ ProviderContainer _container(
 /// menu is reached by the card's gesture, as it is on every other card
 /// in the app.
 Future<void> _openStationMenu(WidgetTester tester, String pid) async {
-  await tester.longPress(_byId(SemanticsIds.radio(pid)), warnIfMissed: false);
+  await tester.longPress(_byId(SemanticsIds.radio(pid)));
   await tester.pumpAndSettle();
 }
 

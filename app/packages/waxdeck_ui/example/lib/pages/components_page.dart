@@ -87,6 +87,34 @@ class _ComponentsPageState extends State<ComponentsPage> {
               onPressed: () {},
             ),
             const WaxButton(label: 'Scan running', onPressed: null),
+            const WaxButton(
+              label: 'Downloading',
+              kind: WaxButtonKind.tonal,
+              icon: WaxIcons.downloads,
+              progress: 0.42,
+              onPressed: null,
+            ),
+            const WaxButton(
+              label: 'Queued for download',
+              icon: WaxIcons.downloads,
+              status: true,
+              onPressed: null,
+            ),
+            SizedBox(
+              width: 200,
+              child: WaxButton(
+                label: 'Download every episode of this show',
+                kind: WaxButtonKind.tonal,
+                icon: WaxIcons.downloads,
+                onPressed: () {},
+              ),
+            ),
+            const WaxIconButton(
+              glyph: WaxIcons.success,
+              label: 'Downloaded',
+              active: true,
+              onPressed: null,
+            ),
             StarButton(
               starred: _starred,
               onChanged: (value) => setState(() => _starred = value),
@@ -99,6 +127,75 @@ class _ComponentsPageState extends State<ComponentsPage> {
               onPressed: () {},
             ),
           ],
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
+        // An entity's row: one primary, the download in each of its
+        // states, the star cluster, and the overflow last.
+        const SectionHeader(overline: 'Controls', title: 'Action bar'),
+        WaxActionBar(
+          actions: <WaxAction>[
+            WaxAction(
+              label: 'Play',
+              semanticsId: 'play',
+              glyph: WaxIcons.play,
+              emphasis: WaxActionEmphasis.primary,
+              onPressed: () {},
+            ),
+            WaxAction(
+              label: 'Download',
+              semanticsId: 'ready',
+              glyph: WaxIcons.downloads,
+              onPressed: () {},
+            ),
+            WaxAction(
+              label: 'Download',
+              semanticsId: 'busy',
+              glyph: WaxIcons.downloads,
+              state: const WaxActionState.busy(),
+              onPressed: () {},
+            ),
+            const WaxAction(
+              label: 'Downloading',
+              semanticsId: 'progress',
+              glyph: WaxIcons.downloads,
+              state: WaxActionState.progress(0.42),
+            ),
+            const WaxAction(
+              label: 'Downloaded',
+              semanticsId: 'done',
+              glyph: WaxIcons.downloads,
+              state: WaxActionState.done(),
+            ),
+            const WaxAction(
+              label: 'Queued for download',
+              semanticsId: 'status',
+              glyph: WaxIcons.downloads,
+              state: WaxActionState.status(),
+              detail: 'Waits for Wi-Fi',
+            ),
+            WaxAction(
+              label: 'Retry download',
+              semanticsId: 'failed',
+              glyph: WaxIcons.downloads,
+              state: const WaxActionState.failed(),
+              detail: 'Not enough space on this device',
+              onPressed: () {},
+            ),
+          ],
+          trailing: <Widget>[
+            StarButton(
+              starred: _starred,
+              onChanged: (value) => setState(() => _starred = value),
+            ),
+          ],
+          overflow: WaxMenuButton<String>(
+            items: const <WaxMenuItem<String>>[
+              WaxMenuItem<String>(value: 'share', label: 'Share'),
+              WaxMenuItem<String>(value: 'edit', label: 'Edit details'),
+            ],
+            onSelected: (_) {},
+          ),
         ),
         const SizedBox(height: WaxSpace.s24),
 
@@ -117,6 +214,16 @@ class _ComponentsPageState extends State<ComponentsPage> {
               (WaxIcons.queue, 'Queue'),
             ])
               WaxIconButton(glyph: glyph, label: label, onPressed: () {}),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        // The explanation a label does not carry: hover or focus shows it,
+        // a tap opens it, and Escape or a tap elsewhere closes it again.
+        const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text('Play count'),
+            WaxInfoTip(message: 'Counts only the plays you listened through'),
           ],
         ),
         const SizedBox(height: WaxSpace.s24),
@@ -147,6 +254,51 @@ class _ComponentsPageState extends State<ComponentsPage> {
           ],
           selected: _filter,
           onSelect: (name) => setState(() => _filter = name),
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
+        const SectionHeader(overline: 'Controls', title: 'Settings rows'),
+        // A settings section as the app draws one: its own header, holding
+        // the sentence it does not print behind the glyph after its title,
+        // then rows of one decision each.
+        ReadingColumn(
+          child: Column(
+            children: <Widget>[
+              const SectionHeader(
+                title: 'Playback',
+                info: 'Applies on this device only',
+              ),
+              // A label that says it all: no help line.
+              WaxSettingRow(
+                title: 'Show lyrics',
+                control: WaxSwitch(
+                  value: true,
+                  label: 'Show lyrics',
+                  onChanged: (_) {},
+                ),
+              ),
+              WaxSettingRow(
+                title: 'Prepare the next track',
+                help:
+                    'Only on wifi, so mobile data is spent on what you asked for',
+                glyph: WaxIcons.downloads,
+                control: WaxSwitch(
+                  value: true,
+                  label: 'Prepare the next track on wifi only',
+                  onChanged: (_) {},
+                ),
+              ),
+              WaxSettingRow(
+                title: 'Gapless playback',
+                info: 'Joins the tracks an album was mastered to run together',
+                control: WaxSwitch(
+                  value: false,
+                  label: 'Gapless playback',
+                  onChanged: (_) {},
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: WaxSpace.s24),
 
@@ -386,6 +538,56 @@ class _ComponentsPageState extends State<ComponentsPage> {
             ],
           ),
         ),
+        const SizedBox(height: WaxSpace.s12),
+        // A custom row is one control, its ink and its name on one press.
+        // Hairlines rule them off; a disclosure holds its section shut
+        // until it is opened.
+        for (final (i, (title, detail)) in const <(String, String)>[
+          ('Kitchen', 'Speaker on this network'),
+          ('Study', 'Last seen yesterday'),
+        ].indexed) ...<Widget>[
+          if (i > 0) const WaxHairline(),
+          WaxInkTappable(
+            label: '$title, $detail',
+            onPressed: () {},
+            child: Padding(
+              padding: const EdgeInsets.all(WaxSpace.s12),
+              child: Row(
+                children: <Widget>[
+                  WaxIcon(WaxIcons.cast, size: 20, color: colors.textSecondary),
+                  const SizedBox(width: WaxSpace.s12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          title,
+                          style: WaxType.body.copyWith(
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          detail,
+                          style: WaxType.caption.copyWith(
+                            color: colors.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const WaxHairline(extent: WaxSpace.s16),
+        const WaxDisclosure(
+          title: 'Edition',
+          children: <Widget>[
+            MonoDetailRow(label: 'Publisher', value: 'Harbour Press'),
+            MonoDetailRow(label: 'Narrator', value: 'Ora Lune'),
+          ],
+        ),
         const SizedBox(height: WaxSpace.s24),
 
         const SectionHeader(overline: 'Content', title: 'Indicators and chips'),
@@ -405,15 +607,71 @@ class _ComponentsPageState extends State<ComponentsPage> {
             const CodecChip('OPUS 128'),
           ],
         ),
+        const SizedBox(height: WaxSpace.s12),
+        // Empty, part-way and full, then one of unknown length.
+        const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            WaxProgressBar(value: 0),
+            SizedBox(height: WaxSpace.s12),
+            WaxProgressBar(value: 0.42, semanticsLabel: 'Scanning'),
+            SizedBox(height: WaxSpace.s12),
+            WaxProgressBar(value: 1),
+            SizedBox(height: WaxSpace.s12),
+            WaxProgressBar(semanticsLabel: 'Working'),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        // A quota at its cap, drawn in the verdict's colour.
+        WaxProgressBar(value: 1, tone: colors.error, semanticsLabel: 'Storage'),
         const SizedBox(height: WaxSpace.s24),
 
-        const SectionHeader(
-          overline: 'Content',
-          title: 'How listening divides',
+        const SectionHeader(overline: 'Content', title: 'Stats'),
+        // The stats screen's headline figures, in its own spacing.
+        const Wrap(
+          spacing: WaxSpace.s32,
+          runSpacing: WaxSpace.s12,
+          children: <Widget>[
+            StatFigure(value: '2h 6m', caption: 'listened'),
+            StatFigure(value: '10', caption: 'sessions'),
+            StatFigure(value: '1h 4m', caption: 'time saved'),
+          ],
         ),
-        // All four domains at once, and one share small enough to fall
-        // to the painter's floor: a sliver thinner than the bar's own
-        // rounded ends would draw as a smudge rather than as a share.
+        const SizedBox(height: WaxSpace.s16),
+        // The console's tiles, one height in a row: one bare, one with a
+        // caption, one whose caption is cut and one whose value is, each
+        // whole in a tooltip and in what the tile says aloud.
+        WaxStatGrid(
+          tiles: <StatTile>[
+            const StatTile(
+              label: 'Items',
+              value: '104,812',
+              glyph: WaxIcons.albums,
+            ),
+            StatTile(
+              label: 'Health',
+              value: '82',
+              caption: '311 items want attention',
+              tone: colors.error,
+              onTap: () {},
+            ),
+            const StatTile(
+              label: 'Pending',
+              value: '12',
+              caption:
+                  'Elementos pendientes de revision por el equipo de catalogo',
+            ),
+            const StatTile(
+              label: 'Streaming',
+              value: 'Waiting for its first scan',
+            ),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s16),
+        // How listening divides: all four domains at once.
+        // One share is small enough to fall to the painter's floor: a
+        // sliver thinner than the bar's own rounded ends would draw as a
+        // smudge rather than as a share.
         const SizedBox(
           width: 320,
           child: MediaSplitBar(
@@ -511,30 +769,28 @@ class _ComponentsPageState extends State<ComponentsPage> {
         const SizedBox(height: WaxSpace.s24),
 
         const SectionHeader(overline: 'Content', title: 'Artwork shapes'),
-        Row(
+        Wrap(
+          spacing: WaxSpace.s16,
+          runSpacing: WaxSpace.s16,
           children: <Widget>[
             ArtworkImage(size: 96, artwork: art.of('Salt Harbour')),
-            const SizedBox(width: WaxSpace.s16),
             ArtworkImage(
               size: 96,
               artwork: art.of('A History of Tides'),
               shape: ArtworkShape.portrait,
               domain: WaxDomain.audiobooks,
             ),
-            const SizedBox(width: WaxSpace.s16),
             ArtworkImage(
               size: 96,
               artwork: art.of('Coastal FM'),
               shape: ArtworkShape.circle,
               domain: WaxDomain.radio,
             ),
-            const SizedBox(width: WaxSpace.s16),
             const ArtworkImage(
               size: 96,
               monogram: 'Nightjar Ensemble',
               domain: WaxDomain.podcasts,
             ),
-            const SizedBox(width: WaxSpace.s16),
             ArtworkImage(
               size: 96,
               artwork: art.of('Marginalia'),
@@ -586,30 +842,43 @@ class _ComponentsPageState extends State<ComponentsPage> {
         const SizedBox(height: WaxSpace.s24),
 
         const SectionHeader(overline: 'States', title: 'Empty, error, loading'),
-        SizedBox(
-          height: 220,
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: EmptyState(
-                  glyph: WaxIcons.podcasts,
-                  title: 'No podcasts yet',
-                  message: 'Follow a show to see new episodes here.',
-                  actionLabel: 'Find podcasts',
-                  onAction: () {},
-                ),
+        // Each at the height its words take, side by side where there is
+        // room: a fixed box cut them off at large text and on a phone.
+        Wrap(
+          spacing: WaxSpace.s16,
+          runSpacing: WaxSpace.s16,
+          children: <Widget>[
+            SizedBox(
+              width: 320,
+              child: EmptyState(
+                glyph: WaxIcons.podcasts,
+                title: 'No podcasts yet',
+                message: 'Follow a show to see new episodes here.',
+                actionLabel: 'Find podcasts',
+                onAction: () {},
               ),
-              Expanded(
-                child: ErrorState(
-                  message:
-                      "Can't reach the server. Check the address and try "
-                      'again.',
-                  detail: 'ERR_CONNECTION_REFUSED · 10.0.0.4:4420',
-                  onRetry: () {},
-                ),
+            ),
+            // The message is optional: the title and the way out say it.
+            SizedBox(
+              width: 320,
+              child: EmptyState(
+                glyph: WaxIcons.playlists,
+                title: 'No playlists yet',
+                actionLabel: 'New playlist',
+                onAction: () {},
               ),
-            ],
-          ),
+            ),
+            SizedBox(
+              width: 320,
+              child: ErrorState(
+                message:
+                    "Can't reach the server. Check the address and try "
+                    'again.',
+                detail: 'ERR_CONNECTION_REFUSED - 10.0.0.4:4420',
+                onRetry: () {},
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: WaxSpace.s12),
         const SkeletonShapes(shape: SkeletonShape.shelf, count: 4),
@@ -618,71 +887,77 @@ class _ComponentsPageState extends State<ComponentsPage> {
         const SizedBox(height: WaxSpace.s24),
 
         const SectionHeader(overline: 'Shell', title: 'Navigation chrome'),
-        // One piece of chrome per size class, all four side by side: the
-        // point of the frame is that a narrow desktop window behaves like
-        // a phone, and that is only judgeable next to the others.
-        SizedBox(
-          height: 380,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              for (final sizeClass in WaxSizeClass.values) ...<Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        sizeClass.name,
-                        style: WaxType.overline.copyWith(
-                          color: colors.textTertiary,
-                        ),
+        // One piece of chrome per size class, side by side where the page
+        // is wide enough: the point of the frame is that a narrow desktop
+        // window behaves like a phone, and that is only judgeable next to
+        // the others. Each keeps a width its chrome fits and grows with
+        // the text, so a phone stacks them rather than crushing four
+        // sidebars into it.
+        Wrap(
+          spacing: WaxSpace.s16,
+          runSpacing: WaxSpace.s16,
+          children: <Widget>[
+            for (final sizeClass in WaxSizeClass.values)
+              SizedBox(
+                width: 320,
+                height: MediaQuery.textScalerOf(context).scale(380),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      sizeClass.name,
+                      style: WaxType.overline.copyWith(
+                        color: colors.textTertiary,
                       ),
-                      const SizedBox(height: WaxSpace.s8),
-                      Expanded(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: WaxRadius.card,
-                            border: Border.all(color: colors.hairline),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: WaxRadius.card,
-                            child: WaxShellFrame(
-                              sizeClass: sizeClass,
-                              destinations: _catalogDestinations,
-                              secondary: _catalogSecondary,
-                              selected: _destination,
-                              collapsed: _sidebarCollapsed,
-                              onToggleCollapsed: () => setState(
-                                () => _sidebarCollapsed = !_sidebarCollapsed,
-                              ),
-                              onSelect: (name) =>
-                                  setState(() => _destination = name),
-                              account: _catalogAccount,
-                              // An action is not a destination, so it
-                              // does not move the highlight; the app
-                              // signs out here.
-                              onAccountAction: (_) {},
-                              sidebarHeader: const WaxWordmark(size: 18),
-                              content: Center(
-                                child: Text(
-                                  _destination,
-                                  style: WaxType.body.copyWith(
-                                    color: colors.textSecondary,
-                                  ),
+                    ),
+                    const SizedBox(height: WaxSpace.s8),
+                    Expanded(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: WaxRadius.card,
+                          border: Border.all(color: colors.hairline),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: WaxRadius.card,
+                          child: WaxShellFrame(
+                            sizeClass: sizeClass,
+                            destinations: _catalogDestinations,
+                            secondary: _catalogSecondary,
+                            selected: _destination,
+                            collapsed: _sidebarCollapsed,
+                            onToggleCollapsed: () => setState(
+                              () => _sidebarCollapsed = !_sidebarCollapsed,
+                            ),
+                            onSelect: (name) =>
+                                setState(() => _destination = name),
+                            account: _catalogAccount,
+                            // An action is not a destination, so it
+                            // does not move the highlight; the app
+                            // signs out here.
+                            onAccountAction: (_) {},
+                            // A logo does not wrap: at large text it
+                            // scales down to the sidebar instead.
+                            sidebarHeader: const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: AlignmentDirectional.centerStart,
+                              child: WaxWordmark(size: 18),
+                            ),
+                            content: Center(
+                              child: Text(
+                                _destination,
+                                style: WaxType.body.copyWith(
+                                  color: colors.textSecondary,
                                 ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                if (sizeClass != WaxSizeClass.values.last)
-                  const SizedBox(width: WaxSpace.s16),
-              ],
-            ],
-          ),
+              ),
+          ],
         ),
         const SizedBox(height: WaxSpace.s24),
 

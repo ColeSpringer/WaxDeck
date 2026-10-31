@@ -73,6 +73,11 @@ disagree.
   (in `example/`) hold the rendering. Both baseline two ways: CI goldens
   with text as blocks, identical on every host, and readable Linux
   goldens where the type is really the type.
+- `semantics_merge_test.dart` audits every tap for a node of its own,
+  since on web a click lands on the node and not the handler under it.
+  It fails on any public component in `lib/src/components/` it has not
+  classified: give a new one a scenario in that file, or add it to the
+  test's non-interactive list if it handles no tap.
 
 Regenerate goldens with `flutter test --update-goldens` in this package
 and in `example/`.

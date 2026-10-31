@@ -421,6 +421,22 @@ class _FailsFreeWrites extends QueryInterceptor {
   }
 }
 
+/// For a test whose scenario is a second mirror open beside the one its
+/// group holds. Each is its own in-memory database, so drift's warning
+/// about two databases sharing an executor does not apply here.
+///
+/// Only for that: a construction while the flag is set resets drift's
+/// count of open databases, so the closes that follow leave it one short
+/// and the check misses one overlap in every later test. The flag itself
+/// is put back when the test ends.
+void allowSecondMirror() {
+  final before = driftRuntimeOptions.dontWarnAboutMultipleDatabases;
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+  addTearDown(
+    () => driftRuntimeOptions.dontWarnAboutMultipleDatabases = before,
+  );
+}
+
 void main() {
   late MirrorDatabase db;
   late ScriptedRepository repo;
@@ -1397,6 +1413,7 @@ void main() {
   );
 
   test('ordinary upserts read the mirror once a page, and land', () async {
+    allowSecondMirror();
     final counter = _Counter();
     final counted = MirrorDatabase(
       DatabaseConnection(NativeDatabase.memory().interceptWith(counter)),
@@ -2284,6 +2301,7 @@ void main() {
     });
 
     test('ask nothing when every pid it holds is listed', () async {
+      allowSecondMirror();
       await remirror(
         [up('tr-AAA', 'Alpha'), up('tr-BBB', 'Bravo')],
         [up('tr-AAA', 'Alpha'), up('tr-BBB', 'Bravo')],
@@ -3097,6 +3115,7 @@ void main() {
       late SyncEngine eng;
 
       setUp(() {
+        allowSecondMirror();
         fails = _FailsFreeWrites();
         flaky = MirrorDatabase(
           DatabaseConnection(NativeDatabase.memory().interceptWith(fails)),
@@ -3422,6 +3441,7 @@ void main() {
     });
 
     test('sent after the mirror closed raises nothing', () async {
+      allowSecondMirror();
       // Teardown can close the mirror under a flush a write scheduled;
       // an error escaping that unawaited flush has no handler.
       final mirror = MirrorDatabase(
@@ -3704,5 +3724,23 @@ void main() {
     await engine.flushOutbox();
     expect(repo.replayed, ['position:tr-A:1000:true']);
     expect(repo.reportedSessions, {'s-1'});
+  });
+
+  test('mirrors open at once still warn after the tests that flag it off', () {
+    // allowSecondMirror leaves drift's count short; this fails if the
+    // check has gone blind altogether.
+    final warnings = <String>[];
+    final printed = driftRuntimeOptions.debugPrint;
+    driftRuntimeOptions.debugPrint = warnings.add;
+    addTearDown(() => driftRuntimeOptions.debugPrint = printed);
+    final extra = [
+      for (var i = 0; i < 3; i++)
+        MirrorDatabase(DatabaseConnection(NativeDatabase.memory())),
+    ];
+    for (final mirror in extra) {
+      addTearDown(mirror.close);
+    }
+
+    expect(warnings, isNotEmpty);
   });
 }

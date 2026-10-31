@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
 import 'package:material_ui/material_ui.dart';
 
 import '../tokens/motion.dart';
 import '../tokens/spacing.dart';
+import 'anchor.dart';
 
 /// A hover label that always waits its own delay.
 ///
@@ -37,12 +39,18 @@ class WaxTooltip extends StatefulWidget {
     required this.child,
     this.touchTrigger = true,
     this.excludeFromSemantics = false,
+    this.showOnFocus = false,
+    this.suppressed = WaxTooltipSuppression.none,
     super.key,
   });
 
   /// What the label reads, and - unless [excludeFromSemantics] - what a
   /// screen reader hears as the target's description.
-  final String message;
+  ///
+  /// Null is a label with nothing to say: nothing opens, no pointer or
+  /// long press is taken from a holder, and the child keeps its place in
+  /// the tree, so a label that comes and goes never rebuilds what it wraps.
+  final String? message;
 
   /// Whether a long press opens the label, which is how a touch device
   /// asks for one.
@@ -56,10 +64,33 @@ class WaxTooltip extends StatefulWidget {
   /// already carries the same words.
   final bool excludeFromSemantics;
 
+  /// Whether keyboard focus landing on [child], or inside it, opens the
+  /// label as a pointer resting on it would, and focus leaving closes it.
+  /// Off by default: it is for a target that is only a hint, where a
+  /// keyboard user has no other way to ask.
+  final bool showOnFocus;
+
+  /// Which of the label's ways of opening are held back.
+  final WaxTooltipSuppression suppressed;
+
   final Widget child;
 
   @override
   State<WaxTooltip> createState() => _WaxTooltipState();
+}
+
+/// What a [WaxTooltip] holds back.
+enum WaxTooltipSuppression {
+  /// Nothing: hover, a long press and, with `showOnFocus`, focus.
+  none,
+
+  /// Only the label focus would open, for a focus that has already had
+  /// its answer; hover and a long press still open one.
+  focus,
+
+  /// Every label: none opens, and one that is open closes. For a target
+  /// that is showing the same words some other way.
+  all,
 }
 
 class _WaxTooltipState extends State<WaxTooltip> {
@@ -70,6 +101,14 @@ class _WaxTooltipState extends State<WaxTooltip> {
 
   /// The touch path's own life span; a hover has no limit but leaving.
   Timer? _showing;
+
+  /// Whether focus is on the target now, for the frame-late measure.
+  bool _focused = false;
+
+  /// The focus listener's own node, so a focus the target already held
+  /// when this label arrived around it can be read back: nothing reports
+  /// a focus that did not change.
+  final FocusNode _focusWatch = FocusNode(debugLabel: 'wax-tooltip-focus');
 
   Offset _target = Offset.zero;
   double _verticalOffset = WaxSpace.s24;
@@ -109,7 +148,55 @@ class _WaxTooltipState extends State<WaxTooltip> {
     }
   }
 
+  /// Whether no label may show at all.
+  bool get _silenced =>
+      widget.message == null || widget.suppressed == WaxTooltipSuppression.all;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.showOnFocus) _catchUpWithFocus();
+  }
+
+  @override
+  void didUpdateWidget(WaxTooltip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final wasSilenced =
+        oldWidget.message == null ||
+        oldWidget.suppressed == WaxTooltipSuppression.all;
+    if (_silenced && !wasSilenced) {
+      // The portal cannot be hidden while the tree is building.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _silenced) _dismiss();
+      });
+    }
+    if (widget.showOnFocus && !oldWidget.showOnFocus) _catchUpWithFocus();
+    // Words arriving for a focus the keyboard already holds, such as a
+    // failure's reason on the button just pressed, open as they would have
+    // had the focus arrived with them.
+    if (widget.showOnFocus &&
+        oldWidget.showOnFocus &&
+        oldWidget.message == null &&
+        widget.message != null &&
+        _focused) {
+      _focusChanged(true);
+    }
+  }
+
+  /// A label that arrives around a target the keyboard already holds, such
+  /// as a failure's reason on the button that was just pressed, opens as
+  /// one that saw the focus arrive would. Read once its listener is in the
+  /// tree.
+  void _catchUpWithFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _focused || !_focusWatch.hasFocus) return;
+      _focused = true;
+      _focusChanged(true);
+    });
+  }
+
   void _scheduleShow() {
+    if (_silenced) return;
     _waiting?.cancel();
     _listen();
     _waiting = Timer(_waitDuration, _show);
@@ -118,32 +205,49 @@ class _WaxTooltipState extends State<WaxTooltip> {
   void _show({Duration? forDuration}) {
     _waiting?.cancel();
     _waiting = null;
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    // Measured against the overlay the label will be laid out in, not
-    // against the window. The two are only the same when the overlay
-    // fills it, and the app's are not: a screen inside the shell sits
-    // in a branch navigator whose overlay begins after the nav rail, so
-    // a window-relative point put every desktop tooltip a rail's width
-    // to the right of its control - and decided the above-or-below flip
-    // against the wrong rectangle.
-    final overlay = Overlay.of(
-      context,
-      rootOverlay: false,
-    ).context.findRenderObject();
-    if (overlay is! RenderBox) return;
+    if (_silenced) return;
+    final anchor = measureAnchor(context);
+    if (anchor == null) return;
     // Measured at the moment of showing rather than tracked: a label
     // that outlives its target's position is dismissed by the scroll
     // that moved it.
-    _target = box.localToGlobal(
-      box.size.center(Offset.zero),
-      ancestor: overlay,
-    );
-    _verticalOffset = box.size.height / 2 + WaxSpace.s8;
+    _target = anchor.target;
+    _verticalOffset = anchor.halfHeight + WaxSpace.s8;
     _listen();
     _portal.show();
     _showing?.cancel();
     _showing = forDuration == null ? null : Timer(forDuration, _dismiss);
+  }
+
+  /// Only a keyboard's focus asks: a tap also focuses, and that is not
+  /// a request for a label. Measured a frame on, since focus scrolls its
+  /// target into view and the label belongs where that lands.
+  void _focusChanged(bool focused) {
+    if (!focused) {
+      _dismiss();
+      return;
+    }
+    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _focused &&
+          widget.suppressed != WaxTooltipSuppression.focus) {
+        _show();
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  KeyEventResult _focusKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.escape ||
+        !_portal.isShowing) {
+      return KeyEventResult.ignored;
+    }
+    _dismiss();
+    return KeyEventResult.handled;
   }
 
   void _dismiss() {
@@ -160,15 +264,18 @@ class _WaxTooltipState extends State<WaxTooltip> {
     _waiting?.cancel();
     _showing?.cancel();
     _unlisten();
+    _focusWatch.dispose();
     super.dispose();
   }
 
   Widget _label(BuildContext context) {
+    // Suppressed in this very frame; the portal itself closes a frame on.
+    if (_silenced) return const SizedBox.shrink();
     final theme = TooltipTheme.of(context);
     final motion = WaxMotion.of(context);
     return IgnorePointer(
       child: CustomSingleChildLayout(
-        delegate: _WaxTooltipLayout(
+        delegate: AnchorLayout(
           target: _target,
           verticalOffset: _verticalOffset,
           preferBelow: theme.preferBelow ?? true,
@@ -190,7 +297,7 @@ class _WaxTooltipState extends State<WaxTooltip> {
             // Wide enough for a sentence, narrow enough that it reads as
             // a label rather than as a paragraph floating over the page.
             constraints: const BoxConstraints(maxWidth: 320),
-            child: Text(widget.message, style: theme.textStyle),
+            child: Text(widget.message!, style: theme.textStyle),
           ),
         ),
       ),
@@ -199,16 +306,29 @@ class _WaxTooltipState extends State<WaxTooltip> {
 
   @override
   Widget build(BuildContext context) {
+    final speaks = widget.message != null;
     final target = _ExclusiveMouseRegion(
-      onEnter: (_) => _scheduleShow(),
-      onExit: (_) => _dismiss(),
+      onEnter: speaks ? (_) => _scheduleShow() : null,
+      onExit: speaks ? (_) => _dismiss() : null,
       child: GestureDetector(
         behavior: HitTestBehavior.deferToChild,
         excludeFromSemantics: true,
-        onLongPress: widget.touchTrigger
+        onLongPress: speaks && widget.touchTrigger
             ? () => _show(forDuration: _showDuration)
             : null,
-        child: widget.child,
+        child: widget.showOnFocus
+            ? Focus(
+                focusNode: _focusWatch,
+                canRequestFocus: false,
+                skipTraversal: true,
+                onFocusChange: (focused) {
+                  _focused = focused;
+                  _focusChanged(focused);
+                },
+                onKeyEvent: _focusKey,
+                child: widget.child,
+              )
+            : widget.child,
       ),
     );
     return OverlayPortal(
@@ -252,7 +372,11 @@ class _RenderExclusiveMouseRegion extends RenderMouseRegion {
     final opening = _outermost;
     _outermost = false;
     var hit = false;
-    if (size.contains(position)) {
+    if (size.contains(position) && onEnter == null && onExit == null) {
+      // A label with nothing to say: its child answers, and the pointer is
+      // left to a region around it.
+      hit = hitTestChildren(result, position: position);
+    } else if (size.contains(position)) {
       // Children first, so a region deeper in this nest has had its say
       // before this one decides. Adding the entry is the decision:
       // whether the pointer *enters* here is what the result holds, not
@@ -270,38 +394,4 @@ class _RenderExclusiveMouseRegion extends RenderMouseRegion {
     }
     return hit;
   }
-}
-
-/// Below the target where the window has room for it, above it where it
-/// does not, and never off an edge. The same rule Material's tooltip
-/// follows, through the same helper.
-class _WaxTooltipLayout extends SingleChildLayoutDelegate {
-  const _WaxTooltipLayout({
-    required this.target,
-    required this.verticalOffset,
-    required this.preferBelow,
-  });
-
-  final Offset target;
-  final double verticalOffset;
-  final bool preferBelow;
-
-  @override
-  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
-      constraints.loosen();
-
-  @override
-  Offset getPositionForChild(Size size, Size childSize) => positionDependentBox(
-    size: size,
-    childSize: childSize,
-    target: target,
-    verticalOffset: verticalOffset,
-    preferBelow: preferBelow,
-  );
-
-  @override
-  bool shouldRelayout(_WaxTooltipLayout old) =>
-      target != old.target ||
-      verticalOffset != old.verticalOffset ||
-      preferBelow != old.preferBelow;
 }

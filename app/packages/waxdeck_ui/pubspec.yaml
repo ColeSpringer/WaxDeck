@@ -68,8 +68,8 @@ flutter:
     # they live in assets/fonts/ and WaxFonts loads each from WaxDeck's
     # own origin the first time text on screen needs its script.
     # Phosphor (MIT), subset to the glyphs WaxIcons names: regular is the
-    # inactive weight, fill the active one. 27 KB for both, against the
-    # 950 KB the upstream pair would cost.
+    # inactive weight, fill the active one. Small, against the 950 KB
+    # the upstream pair would cost.
     - family: PhosphorRegular
       fonts:
         - asset: fonts/PhosphorRegular-Subset.ttf

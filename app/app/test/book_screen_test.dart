@@ -15,6 +15,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'row_finders.dart';
 
 const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 
@@ -53,6 +54,15 @@ Future<void> _tap(WidgetTester tester, String id) async {
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+/// Taps the chapter row at [index], scrolling to it first.
+Future<void> _tapChapter(WidgetTester tester, int index) async {
+  final row = rowWithIdentifier(SemanticsIds.chapter(index)).first;
+  await tester.ensureVisible(row);
+  await tester.pumpAndSettle();
+  await tester.tap(row);
   await tester.pumpAndSettle();
 }
 
@@ -216,7 +226,7 @@ void main() {
     await tester.pumpWidget(_host(_repo(), engine));
     await tester.pumpAndSettle();
 
-    await _tap(tester, SemanticsIds.chapter(1));
+    await _tapChapter(tester, 1);
 
     expect(engine.position, const Duration(minutes: 10));
     expect(engine.playing, isTrue);
@@ -237,7 +247,7 @@ void main() {
 
     expect(selectedOf(SemanticsIds.chapter(1)), isFalse);
 
-    await _tap(tester, SemanticsIds.chapter(1));
+    await _tapChapter(tester, 1);
 
     expect(selectedOf(SemanticsIds.chapter(1)), isTrue);
     expect(selectedOf(SemanticsIds.chapter(0)), isFalse);

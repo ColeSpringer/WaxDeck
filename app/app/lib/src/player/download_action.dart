@@ -143,6 +143,7 @@ class _DownloadActionState extends ConsumerState<DownloadAction> {
         (false, false) => widget.label,
       },
       active: complete,
+      status: complete,
       semanticsId: widget.semanticsId,
       onPressed: complete || _inFlight ? null : _download,
     );

@@ -44,12 +44,28 @@ void main() {
       expect(glyphsIn('PhosphorFill'), named);
     });
 
+    test(
+      'name a library glyph distinct from the audiobook and refresh glyphs',
+      () {
+        // Phosphor `books`. A scan or sync row needs a catalog glyph that does
+        // not read as the refresh action.
+        expect(WaxIcons.all['library'], WaxIcons.library);
+        expect(WaxIcons.library.regular.codePoint, 0xE758);
+        expect(WaxIcons.library.fill.codePoint, 0xE758);
+        expect(
+          WaxIcons.library.codePoint,
+          isNot(WaxIcons.audiobooks.codePoint),
+        );
+        expect(WaxIcons.library.codePoint, isNot(WaxIcons.refresh.codePoint));
+      },
+    );
+
     test('are not hidden from the release build by an annotation', () {
       // `@staticIconProvider` tells the icon tree-shaker to ignore the
       // constants declared in the annotated class, so a glyph then ships
       // only where the shaker finds its constant materialized at a use
       // site it walks - which a reference from another package's widget
-      // code is not. With it on, 32 of these names shipped as blank boxes
+      // code is not. With it on, most of these names shipped as blank boxes
       // in release builds while rendering in every debug run, golden, and
       // widget test, which is why this is a source check rather than a
       // rendering one: nothing a widget test can pump would see it.
@@ -63,8 +79,8 @@ void main() {
         isFalse,
         reason:
             'WaxIcons must stay unannotated: the subsets are already '
-            'curated to exactly these 60 glyphs, and the annotation trades '
-            '16 KB for release-only blanks.',
+            'curated to exactly the named glyphs, and the annotation trades '
+            'a small saving for release-only blanks.',
       );
     });
 

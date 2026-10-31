@@ -81,7 +81,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.shareRevoke('sh-1')),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 

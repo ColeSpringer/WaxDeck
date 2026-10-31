@@ -1,3 +1,5 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -52,6 +54,13 @@ Future<void> _pump(
     ),
   );
 }
+
+/// A tooltip with words, under [of]: a tappable tile holds one with
+/// nothing to say whether or not its room cuts anything.
+Finder _tip(Finder of) => find.descendant(
+  of: of,
+  matching: find.byWidgetPredicate((w) => w is WaxTooltip && w.message != null),
+);
 
 void main() {
   testWidgets('draws a header and every row where there is room', (
@@ -206,10 +215,7 @@ void main() {
       width: 420,
     );
 
-    await tester.tap(
-      find.bySemanticsIdentifier('library-detail-lb-1'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('library-detail-lb-1'));
     await tester.pumpAndSettle();
 
     // Every column with a text form, not only the detail one: somebody
@@ -240,7 +246,7 @@ void main() {
 
     final handle = find.bySemanticsIdentifier('library-row-lb-2');
     expect(handle, findsOneWidget);
-    await tester.tap(handle, warnIfMissed: false);
+    await tester.tap(handle);
     await tester.pump();
     expect(opened?.id, 'lb-2');
   });
@@ -428,12 +434,577 @@ void main() {
       ),
     );
 
-    // A tile with nowhere to go names its value and does not announce as
-    // a button: there is nothing to press.
+    // A tile with nowhere to go names its value and its caption and does
+    // not announce as a button: there is nothing to press.
     expect(
       tester.getSemantics(find.bySemanticsIdentifier('tile-review')),
+      matchesSemantics(label: 'Pending review, 12, albums waiting'),
+    );
+  });
+
+  testWidgets('a stat tile without a caption reads its label and value', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      const Row(
+        children: <Widget>[
+          Expanded(
+            child: StatTile(
+              label: 'Pending review',
+              value: '12',
+              semanticsId: 'tile-plain',
+            ),
+          ),
+        ],
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.bySemanticsIdentifier('tile-plain')),
       matchesSemantics(label: 'Pending review, 12'),
     );
+  });
+
+  testWidgets('a stat grid keeps every tile one height and reads captions', (
+    tester,
+  ) async {
+    const wrapping =
+        'A caption long enough that it would wrap onto a second line at '
+        'this width if it were allowed to';
+    await _pump(
+      tester,
+      WaxStatGrid(
+        tiles: <StatTile>[
+          const StatTile(
+            label: 'Captioned',
+            value: '1',
+            caption: 'albums waiting',
+            semanticsId: 'tile-a',
+          ),
+          const StatTile(label: 'Bare', value: '2', semanticsId: 'tile-b'),
+          const StatTile(
+            label: 'Wrapping',
+            value: '3',
+            caption: wrapping,
+            semanticsId: 'tile-c',
+          ),
+        ],
+      ),
+    );
+
+    final heights = <double>[
+      for (final tile in tester.widgetList<StatTile>(find.byType(StatTile)))
+        tester.getSize(find.byWidget(tile)).height,
+    ];
+    expect(heights[1], heights[0]);
+    expect(heights[2], heights[0]);
+    expect(
+      tester.getSize(find.byType(StatTile).first).width,
+      WaxStatGrid.defaultTileWidth,
+    );
+    expect(
+      tester.getSemantics(find.bySemanticsIdentifier('tile-a')),
+      matchesSemantics(label: 'Captioned, 1, albums waiting'),
+    );
+    expect(
+      tester.getSemantics(find.bySemanticsIdentifier('tile-b')),
+      matchesSemantics(label: 'Bare, 2'),
+    );
+    expect(
+      tester.getSemantics(find.bySemanticsIdentifier('tile-c')),
+      matchesSemantics(label: 'Wrapping, 3, $wrapping'),
+    );
+  });
+
+  testWidgets('a grid that never captions pays no empty line', (tester) async {
+    await _pump(
+      tester,
+      const WaxStatGrid(
+        tiles: <StatTile>[
+          StatTile(label: 'One', value: '1'),
+          StatTile(label: 'Two', value: '2'),
+        ],
+      ),
+    );
+    final bare = tester.getSize(find.byType(StatTile).first).height;
+
+    await _pump(
+      tester,
+      const WaxStatGrid(
+        tiles: <StatTile>[
+          StatTile(label: 'One', value: '1', caption: 'x'),
+          StatTile(label: 'Two', value: '2'),
+        ],
+      ),
+    );
+    expect(
+      tester.getSize(find.byType(StatTile).first).height,
+      greaterThan(bare),
+    );
+  });
+
+  testWidgets('a long value stays on one line', (tester) async {
+    await _pump(
+      tester,
+      const WaxStatGrid(
+        tiles: <StatTile>[
+          StatTile(label: 'Short', value: '1'),
+          StatTile(
+            label: 'Long',
+            value: 'A value far too long to fit in a stat tile width',
+          ),
+        ],
+      ),
+    );
+    expect(
+      tester.getSize(find.byType(StatTile).first).height,
+      tester.getSize(find.byType(StatTile).last).height,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a stat figure reads as one thing', (tester) async {
+    await _pump(
+      tester,
+      const StatFigure(key: Key('fig'), value: '2h 6m', caption: 'listened'),
+    );
+    expect(find.byKey(const Key('fig')), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(const Key('fig'))),
+      matchesSemantics(label: '2h 6m\nlistened'),
+    );
+  });
+
+  testWidgets('a stat figure sets its value in tabular figures', (
+    tester,
+  ) async {
+    await _pump(tester, const StatFigure(value: '10', caption: 'sessions'));
+    expect(
+      tester.widget<Text>(find.text('10')).style?.fontFeatures,
+      contains(const FontFeature.tabularFigures()),
+    );
+  });
+
+  testWidgets('a tappable stat tile reads its caption and is a button', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      Row(
+        children: <Widget>[
+          Expanded(
+            child: StatTile(
+              label: 'Pending review',
+              value: '12',
+              caption: 'albums waiting',
+              semanticsId: 'tile-go',
+              onTap: () {},
+            ),
+          ),
+        ],
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.bySemanticsIdentifier('tile-go')),
+      matchesSemantics(
+        label: 'Pending review, 12, albums waiting',
+        isButton: true,
+        isEnabled: true,
+        isFocusable: true,
+        hasEnabledState: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+  });
+
+  for (final tappable in <bool>[false, true]) {
+    final form = tappable ? 'tappable' : 'inert';
+    testWidgets(
+      '${tappable ? 'a' : 'an'} $form tile tips only a caption it cuts',
+      (tester) async {
+        const long =
+            'Elementos pendientes de revision por el equipo de catalogo';
+        await _pump(
+          tester,
+          WaxStatGrid(
+            tiles: <StatTile>[
+              StatTile(
+                label: 'Fits',
+                value: '1',
+                caption: 'albums waiting',
+                onTap: tappable ? () {} : null,
+              ),
+              StatTile(
+                label: 'Cut',
+                value: '2',
+                caption: long,
+                onTap: tappable ? () {} : null,
+              ),
+            ],
+          ),
+        );
+
+        // The cut is read off the first frame's layout.
+        await tester.pump();
+
+        final fits = find.byWidgetPredicate(
+          (w) => w is StatTile && w.label == 'Fits',
+        );
+        final cut = find.byWidgetPredicate(
+          (w) => w is StatTile && w.label == 'Cut',
+        );
+        expect(_tip(fits), findsNothing);
+        final tip = _tip(cut);
+        expect(tip, findsOneWidget);
+        expect(tester.widget<WaxTooltip>(tip).message, long);
+      },
+    );
+  }
+
+  group('a stat tile\'s caption tip follows the room it is given', () {
+    const short = 'albums waiting';
+    const long = 'Elementos pendientes de revision por el equipo de catalogo';
+
+    // The same tree pumped again, so the tile keeps its state: what is
+    // under test is the transition, not the first layout.
+    Future<void> pumpTile(
+      WidgetTester tester, {
+      required double width,
+      String caption = short,
+      double scale = 1,
+      bool tappable = false,
+    }) async {
+      await _pump(
+        tester,
+        Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: width,
+                child: StatTile(
+                  label: 'L',
+                  value: '1',
+                  caption: caption,
+                  onTap: tappable ? () {} : null,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    final tip = _tip(find.byType(StatTile));
+    // The tile's padding and border around its caption.
+    const padding = 2 * WaxSpace.s16 + 2;
+
+    for (final tappable in <bool>[false, true]) {
+      final form = tappable ? 'tappable' : 'inert';
+      testWidgets(
+        '${tappable ? 'a' : 'an'} $form tile gains the tip as it narrows '
+        'and loses it as it widens',
+        (tester) async {
+          await pumpTile(tester, width: 400, tappable: tappable);
+          expect(tip, findsNothing);
+
+          for (var round = 0; round < 3; round++) {
+            await pumpTile(tester, width: 100, tappable: tappable);
+            expect(tip, findsOneWidget, reason: 'narrow, round $round');
+            expect(tester.widget<WaxTooltip>(tip).message, short);
+            expect(tester.binding.hasScheduledFrame, isFalse);
+
+            await pumpTile(tester, width: 400, tappable: tappable);
+            expect(tip, findsNothing, reason: 'wide, round $round');
+            expect(tester.binding.hasScheduledFrame, isFalse);
+          }
+        },
+      );
+    }
+
+    testWidgets('a caption that changes to one that cuts gains the tip, and '
+        'back to one that fits loses it', (tester) async {
+      await pumpTile(tester, width: 220);
+      expect(tip, findsNothing);
+
+      await pumpTile(tester, width: 220, caption: long);
+      expect(tip, findsOneWidget);
+      expect(tester.widget<WaxTooltip>(tip).message, long);
+
+      await pumpTile(tester, width: 220);
+      expect(tip, findsNothing);
+    });
+
+    testWidgets('a larger text scale cuts a caption that fit, and the '
+        'smaller one lets it go', (tester) async {
+      await pumpTile(tester, width: 1000);
+      // Wide enough for the caption at this scale, with a little to spare.
+      final width = tester.getSize(find.text(short)).width + padding + 4;
+
+      await pumpTile(tester, width: width);
+      expect(tip, findsNothing);
+
+      await pumpTile(tester, width: width, scale: 1.3);
+      expect(tip, findsOneWidget);
+
+      await pumpTile(tester, width: width);
+      expect(tip, findsNothing);
+    });
+
+    testWidgets('a caption that exactly fits is not tipped, and one pixel '
+        'less is', (tester) async {
+      await pumpTile(tester, width: 1000);
+      final natural = tester.getSize(find.text(short)).width;
+      final tile = natural + padding;
+
+      await pumpTile(tester, width: tile);
+      expect(tip, findsNothing);
+
+      await pumpTile(tester, width: tile - 1);
+      expect(tip, findsOneWidget);
+    });
+  });
+
+  group('a stat tile\'s value tip', () {
+    Future<void> pumpTile(WidgetTester tester, String value) async {
+      await _pump(
+        tester,
+        Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(1.3)),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: WaxStatGrid.defaultTileWidth,
+                child: StatTile(
+                  label: 'Streaming',
+                  value: value,
+                  semanticsId: 'tile',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      // The cut is read off the first frame's layout.
+      await tester.pump();
+    }
+
+    final tip = _tip(find.byType(StatTile));
+
+    testWidgets('a value cut at 1.3x is tipped, and the tile still reads it '
+        'whole', (tester) async {
+      await pumpTile(tester, 'Not configured');
+      expect(tip, findsOneWidget);
+      expect(tester.widget<WaxTooltip>(tip).message, 'Not configured');
+      expect(
+        tester.getSemantics(find.bySemanticsIdentifier('tile')),
+        matchesSemantics(label: 'Streaming, Not configured'),
+      );
+    });
+
+    testWidgets('a value that fits at 1.3x is not tipped', (tester) async {
+      await pumpTile(tester, '812');
+      expect(tip, findsNothing);
+      expect(
+        tester.getSemantics(find.bySemanticsIdentifier('tile')),
+        matchesSemantics(label: 'Streaming, 812'),
+      );
+    });
+  });
+
+  group('a stat tile cut short from the keyboard', () {
+    const value = 'Waiting for the first library scan to finish';
+    const caption =
+        'Elementos pendientes de revision por el equipo de catalogo';
+
+    Future<void> pumpTile(WidgetTester tester, {required bool tappable}) async {
+      await _pump(
+        tester,
+        Align(
+          alignment: Alignment.topLeft,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              SizedBox(
+                width: WaxStatGrid.defaultTileWidth,
+                child: StatTile(
+                  label: 'Streaming',
+                  value: value,
+                  caption: caption,
+                  onTap: tappable ? () {} : null,
+                ),
+              ),
+              WaxButton(label: 'After', onPressed: () {}),
+            ],
+          ),
+        ),
+      );
+      // The cut is read off the first frame's layout.
+      await tester.pump();
+    }
+
+    bool focusOnTile() =>
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<StatTile>() !=
+        null;
+
+    testWidgets('a tappable tile shows what its room cut on keyboard focus', (
+      tester,
+    ) async {
+      await pumpTile(tester, tappable: true);
+      expect(find.textContaining(value), findsOneWidget, reason: 'the tile');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      for (var i = 0; i < 3; i++) {
+        await tester.pump();
+      }
+      expect(focusOnTile(), isTrue);
+      final shown = find.textContaining(value);
+      expect(shown, findsNWidgets(2), reason: 'the tile and its tip');
+      expect(find.textContaining(caption), findsNWidgets(2));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(find.textContaining(value), findsOneWidget);
+    });
+
+    testWidgets('a tappable tile shows what its room cut on a long press', (
+      tester,
+    ) async {
+      await pumpTile(tester, tappable: true);
+      await tester.longPress(find.byType(StatTile));
+      await tester.pump();
+      expect(find.textContaining(value), findsNWidgets(2));
+    });
+
+    testWidgets('a caption that goes and comes back short leaves no tip '
+        'behind', (tester) async {
+      final current = ValueNotifier<String?>(caption);
+      addTearDown(current.dispose);
+      await _pump(
+        tester,
+        Align(
+          alignment: Alignment.topLeft,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              SizedBox(
+                width: WaxStatGrid.defaultTileWidth,
+                child: ValueListenableBuilder<String?>(
+                  valueListenable: current,
+                  builder: (context, now, _) => StatTile(
+                    label: 'Pending',
+                    value: '12',
+                    caption: now,
+                    onTap: () {},
+                  ),
+                ),
+              ),
+              WaxButton(label: 'After', onPressed: () {}),
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+      current.value = null;
+      await tester.pump();
+      await tester.pump();
+      current.value = 'ok';
+      await tester.pump();
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      for (var i = 0; i < 3; i++) {
+        await tester.pump();
+      }
+      expect(focusOnTile(), isTrue);
+      expect(find.text('ok'), findsOneWidget, reason: 'it fits: no tip');
+    });
+
+    testWidgets('an untappable tile is no tab stop, and keeps hover', (
+      tester,
+    ) async {
+      await pumpTile(tester, tappable: false);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(focusOnTile(), isFalse);
+      expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<WaxButton>()
+            ?.label,
+        'After',
+      );
+      expect(find.textContaining(caption), findsOneWidget);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.text(caption)));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(find.textContaining(caption), findsNWidgets(2));
+    });
+  });
+
+  testWidgets('a mixed grid keeps every tile one height at any text scale', (
+    tester,
+  ) async {
+    for (final scale in <double>[0.85, 1.0, 1.3, 2.0]) {
+      await _pump(
+        tester,
+        Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: const WaxStatGrid(
+              tiles: <StatTile>[
+                StatTile(label: 'Glyph', value: '1', glyph: WaxIcons.albums),
+                StatTile(label: 'Plain', value: '2'),
+                StatTile(
+                  label: 'Both',
+                  value: '3',
+                  caption: 'albums waiting',
+                  glyph: WaxIcons.albums,
+                ),
+                StatTile(label: 'Captioned', value: '4', caption: 'x'),
+              ],
+            ),
+          ),
+        ),
+      );
+      final heights = <double>{
+        for (final tile in tester.widgetList<StatTile>(find.byType(StatTile)))
+          tester.getSize(find.byWidget(tile)).height,
+      };
+      expect(heights, hasLength(1), reason: 'text scale $scale');
+    }
+  });
+
+  testWidgets('a tile that asks to reserve its caption keeps doing so in a '
+      'grid that never captions', (tester) async {
+    await _pump(
+      tester,
+      const WaxStatGrid(
+        tiles: <StatTile>[
+          StatTile(label: 'Asks', value: '1', reserveCaption: true),
+          StatTile(label: 'Plain', value: '2'),
+        ],
+      ),
+    );
+    final asks = tester.getSize(find.byType(StatTile).first).height;
+    final plain = tester.getSize(find.byType(StatTile).last).height;
+    expect(asks, greaterThan(plain));
   });
 
   testWidgets('typed confirmation stays disabled until the word matches', (
@@ -465,10 +1036,7 @@ void main() {
 
     // Pressing confirm before typing does nothing: the dialog is still
     // up and no answer has come back.
-    await tester.tap(
-      find.bySemanticsIdentifier('confirm-go'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('confirm-go'));
     await tester.pumpAndSettle();
     expect(answer, isNull);
     expect(find.text('Empty the trash?'), findsOneWidget);
@@ -478,10 +1046,7 @@ void main() {
       'EMPTY',
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier('confirm-go'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('confirm-go'));
     await tester.pumpAndSettle();
     expect(answer, isTrue);
   });
@@ -516,17 +1081,11 @@ void main() {
       'empty',
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier('confirm-go'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('confirm-go'));
     await tester.pumpAndSettle();
     expect(answer, isNull);
 
-    await tester.tap(
-      find.bySemanticsIdentifier('confirm-cancel'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('confirm-cancel'));
     await tester.pumpAndSettle();
     expect(answer, isFalse);
   });

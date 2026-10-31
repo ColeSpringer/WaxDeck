@@ -225,6 +225,12 @@ abstract class WaxLocalizations {
   /// **'{label}, {value}'**
   String consoleStat(String label, String value);
 
+  /// A dashboard tile with a caption read as one node: what is being counted, the count, then the line under it.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}, {value}, {caption}'**
+  String consoleStatWithCaption(String label, String value, String caption);
+
   /// Spoken with a control whose work is still running, which is why it takes no press until the work finishes.
   ///
   /// In en, this message translates to:

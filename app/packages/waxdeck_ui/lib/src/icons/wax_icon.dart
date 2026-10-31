@@ -86,14 +86,14 @@ class WaxIcon extends StatelessWidget {
 /// release build's icon tree-shaker to ignore the constants declared in
 /// the annotated class, so a glyph survives only where the shaker finds
 /// its constant materialized at a use site - which a reference from
-/// another package's widget code is not. With the annotation on, 32 of
-/// these 57 names shipped as blank boxes in release builds while
-/// rendering correctly in every debug run, golden, and widget test.
-/// Without it the shipped subsets are exactly the vendored ones (27 KB
-/// for both weights), which is what `fetch-icons.sh` curated them down to
-/// in the first place; the annotation's saving is 16 KB and its price is
-/// silent, release-only blanks. MaterialIcons still shakes 1.6 MB to
-/// 21 KB, which is where that optimization earns its keep.
+/// another package's widget code is not. With the annotation on, most of
+/// these names shipped as blank boxes in release builds while rendering
+/// correctly in every debug run, golden, and widget test. Without it the
+/// shipped subsets are exactly the vendored ones, which is what
+/// `fetch-icons.sh` curated them down to in the first place; the
+/// annotation's saving is small and its price is silent, release-only
+/// blanks. MaterialIcons is still shaken to a sliver of its size, which is
+/// where that optimization earns its keep.
 abstract final class WaxIcons {
   static const String fontPackage = _fontPackage;
   static const String regularFamily = _regularFamily;
@@ -213,6 +213,12 @@ abstract final class WaxIcons {
   static const audiobooks = WaxGlyph(
     IconData(0xE0E6, fontFamily: _regularFamily, fontPackage: _fontPackage),
     IconData(0xE0E6, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `books`. A catalog's contents, not an action.
+  static const library = WaxGlyph(
+    IconData(0xE758, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE758, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
   /// Phosphor `broadcast`.
@@ -614,6 +620,7 @@ abstract final class WaxIcons {
     'music': music,
     'podcasts': podcasts,
     'audiobooks': audiobooks,
+    'library': library,
     'radio': radio,
     'search': search,
     'fingerprint': fingerprint,

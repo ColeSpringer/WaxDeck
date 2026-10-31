@@ -66,6 +66,49 @@ void main() {
     });
   });
 
+  group('WaxSettingRow', () {
+    testWidgets('a setting row with no help draws no help line', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const WaxSettingRow(
+            title: 'Crossfade',
+            control: SizedBox.square(dimension: 24),
+          ),
+        ),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(WaxSettingRow),
+          matching: find.byType(Text),
+        ),
+        findsOne,
+      );
+      expect(find.text('Crossfade'), findsOne);
+    });
+
+    testWidgets('a setting row with help still draws it under the title', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const WaxSettingRow(
+            title: 'Crossfade',
+            help: 'Overlaps the end of one track with the next',
+            control: SizedBox.square(dimension: 24),
+          ),
+        ),
+      );
+
+      expect(
+        find.text('Overlaps the end of one track with the next'),
+        findsOne,
+      );
+    });
+  });
+
   group('WaxSwitch', () {
     testWidgets('reports the setting as its name and the state as toggled', (
       tester,
@@ -279,10 +322,7 @@ void main() {
       expect(data.hasAction(SemanticsAction.focus), isFalse);
       expect(data.flagsCollection.isEnabled, Tristate.isFalse);
 
-      await tester.tap(
-        find.bySemanticsIdentifier('setting-skip-back'),
-        warnIfMissed: false,
-      );
+      await tester.tap(find.bySemanticsIdentifier('setting-skip-back'));
       await tester.pumpAndSettle();
       expect(find.text('30 seconds'), findsNothing);
       handle.dispose();

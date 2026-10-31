@@ -340,6 +340,218 @@ void main() {
       expect(found("WaxProse.block(child: Text('Empty')),"), hasLength(1));
     });
   });
+
+  // The raw-widget rules, pinned directly: each must see its widget and
+  // must not see the Wax component that replaces it.
+  group('the raw widget rules', () {
+    int count(String rule, String code) =>
+        _rules.firstWhere((r) => r.name == rule).find(code).length;
+
+    test('buttons', () {
+      expect(count('material-button', 'TextButton(onPressed: f)'), 1);
+      expect(count('material-button', 'FilledButton.icon(icon: i)'), 1);
+      expect(count('material-button', 'OutlinedButton.tonal()'), 1);
+      expect(count('material-button', 'WaxButton(label: a)'), 0);
+      // Any named constructor, but a static helper is no site of its own.
+      expect(count('material-button', 'ElevatedButton.adaptive(child: c)'), 1);
+      expect(count('material-button', 'WaxButton.adaptive(label: a)'), 0);
+      expect(
+        count('material-button', 'FilledButton.styleFrom(elevation: 0)'),
+        0,
+      );
+    });
+
+    test('progress indicators', () {
+      expect(count('material-progress', 'CircularProgressIndicator()'), 1);
+      expect(
+        count('material-progress', 'LinearProgressIndicator(value: 0)'),
+        1,
+      );
+      expect(count('material-progress', 'WaxSpinner()'), 0);
+      expect(count('material-progress', 'WaxProgressBar(value: 0)'), 0);
+      expect(
+        count('material-progress', 'CircularProgressIndicator.adaptive()'),
+        1,
+      );
+      expect(count('material-progress', 'WaxProgressBar.adaptive()'), 0);
+    });
+
+    test('text fields', () {
+      expect(count('material-text-field', 'TextField(controller: c)'), 1);
+      expect(count('material-text-field', 'TextFormField(controller: c)'), 1);
+      expect(count('material-text-field', 'WaxTextField(controller: c)'), 0);
+    });
+
+    test('ink', () {
+      expect(count('raw-ink', 'InkWell(onTap: f)'), 1);
+      expect(count('raw-ink', 'InkResponse(onTap: f)'), 1);
+      expect(count('raw-ink', 'WaxTappable(onTap: f)'), 0);
+      expect(count('raw-ink', 'WaxInkTappable(onPressed: f)'), 0);
+    });
+
+    // A fix is what a sweep follows, so one naming a component the design
+    // system lacks sends it to delete the primitive with nothing to swap.
+    test('every component a fix names is one the design system declares', () {
+      final declaration = RegExp(
+        r'^(?:(?:abstract|base|final|sealed|interface) )*class (Wax\w+)',
+        multiLine: true,
+      );
+      final declared = <String>{
+        for (final file in _sources(const <String>[_designSystem]))
+          for (final match in declaration.allMatches(file.readAsStringSync()))
+            match.group(1)!,
+      };
+      expect(declared, contains('WaxTappable'), reason: 'the scan reads');
+      for (final rule in _rules) {
+        for (final named in RegExp(r'\bWax[A-Z]\w*').allMatches(rule.fix)) {
+          expect(declared, contains(named[0]), reason: rule.name);
+        }
+      }
+    });
+
+    test('list tiles include the expansion tile', () {
+      expect(count('material-list-tile', 'ExpansionTile(title: t)'), 1);
+      expect(count('material-list-tile', 'WaxSettingRow(title: t)'), 0);
+      expect(count('material-list-tile', 'WaxDisclosure(title: t)'), 0);
+      for (final code in [
+        'SwitchListTile.adaptive(value: v)',
+        'CheckboxListTile.adaptive(value: v)',
+        'RadioListTile<int>.adaptive(value: 1)',
+        'ListTile.dense(title: t)',
+      ]) {
+        expect(count('material-list-tile', code), 1, reason: code);
+      }
+      expect(count('material-list-tile', 'WaxOptionRow.adaptive(title: t)'), 0);
+      expect(count('material-list-tile', 'ListTile.divideTiles(tiles: t)'), 0);
+    });
+
+    test('miscellany', () {
+      for (final code in [
+        'Card(child: c)',
+        'Divider()',
+        'Slider(value: 0)',
+        'Tooltip(message: m)',
+        'DropdownButton<int>(items: i)',
+        'DropdownButtonFormField<int>(items: i)',
+        'DropdownMenu<int>(dropdownMenuEntries: e)',
+        'DropdownMenuItem<int>(value: 1)',
+        'DropdownMenuEntry<int>(value: 1)',
+        'VerticalDivider()',
+        'Card.filled(child: c)',
+        'Card.outlined(child: c)',
+        'Slider.adaptive(value: 0)',
+        'DropdownMenuItem<int>.of(value: 1)',
+      ]) {
+        expect(count('material-misc', code), 1, reason: code);
+      }
+      expect(count('material-misc', 'ExpansionTile(title: t)'), 0);
+      for (final code in [
+        'WaxSlider(value: 0)',
+        'WaxTooltip(message: m)',
+        'WaxMenuButton<int>(items: i)',
+        'StatCard(child: c)',
+        'WaxHairline()',
+        'WaxHairline.vertical()',
+        'WaxBanner(message: m)',
+        'StatCard.filled(child: c)',
+        'WaxSlider.adaptive(value: 0)',
+        'Divider.createBorderSide(context)',
+        'Tooltip.dismissAllToolTips()',
+      ]) {
+        expect(count('material-misc', code), 0, reason: code);
+      }
+    });
+
+    test('the divider fix carries the band into the hairline', () {
+      final fix = _rules.firstWhere((r) => r.name == 'material-misc').fix;
+      expect(fix, contains('WaxHairline(extent: WaxSpace.s16)'));
+      expect(fix, contains('Divider() '));
+      expect(fix, contains('WaxHairline()'));
+      expect(fix, contains('WaxHairline.vertical'));
+      expect(fix, contains("VerticalDivider's width"));
+    });
+
+    test('spacing', () {
+      expect(count('raw-spacing', 'Wrap(spacing: 8, children: c)'), 1);
+      expect(count('raw-spacing', 'Wrap(runSpacing: 6)'), 1);
+      expect(count('raw-spacing', 'Wrap(spacing: WaxSpace.s8)'), 0);
+      expect(count('raw-spacing', 'Wrap(spacing: 0)'), 0);
+      for (final code in [
+        'GridView(mainAxisSpacing: 8)',
+        'Delegate(crossAxisSpacing: 12)',
+        'Wrap(spacing: 0.5)',
+        'Wrap(runSpacing: -4)',
+        'Delegate(mainAxisSpacing: -0.25)',
+      ]) {
+        expect(count('raw-spacing', code), 1, reason: code);
+      }
+      for (final code in [
+        'Delegate(mainAxisSpacing: WaxShellMetrics.gridGap)',
+        'Delegate(crossAxisSpacing: WaxSpace.s8)',
+        'Wrap(spacing: -WaxSpace.s4)',
+        'Wrap(spacing: 0.0)',
+        'Delegate(mainAxisSpacing: 0)',
+      ]) {
+        expect(count('raw-spacing', code), 0, reason: code);
+      }
+    });
+
+    test('prose slots', () {
+      expect(count('prose-slot-args', "WaxField(help: 'a')"), 1);
+      expect(count('prose-slot-args', "InputDecoration(helperText: 'a')"), 1);
+      expect(count('prose-slot-args', "Header(overline: 'a')"), 1);
+      expect(
+        count('prose-slot-args', "EmptyState(title: 't', message: 'a')"),
+        1,
+      );
+      expect(
+        count(
+          'prose-slot-args',
+          "EmptyState(\n  title: 't',\n  message: m,\n)",
+        ),
+        1,
+      );
+      expect(count('prose-slot-args', "EmptyState(title: 't')"), 0);
+      expect(
+        count(
+          'prose-slot-args',
+          "EmptyState(title: 't', action: Foo(message: m))",
+        ),
+        0,
+      );
+      expect(count('prose-slot-args', "WaxField(helpLabel: 'a')"), 0);
+      expect(count('prose-slot-args', 'x = on ? help : other;'), 0);
+      expect(count('prose-slot-args', 'case help:'), 0);
+      expect(count('prose-slot-args', "Text('For help: call us')"), 0);
+      expect(count('prose-slot-args', 'W(a: 1,\n  help: help)'), 1);
+    });
+
+    test('the design system is not held to them', () {
+      const lib = '../packages/waxdeck_ui/lib/src/components/x.dart';
+      for (final name in [
+        'material-button',
+        'material-progress',
+        'material-text-field',
+        'raw-ink',
+        'material-misc',
+        'raw-spacing',
+        'prose-slot-args',
+        'material-list-tile',
+      ]) {
+        final rule = _rules.firstWhere((r) => r.name == name);
+        expect(rule.appliesTo(lib), isFalse, reason: name);
+        expect(rule.appliesTo('lib/src/a.dart'), isTrue, reason: name);
+        // The catalogue is the design system's taste reference, and held.
+        expect(
+          rule.appliesTo(
+            '../packages/waxdeck_ui/example/lib/pages/components_page.dart',
+          ),
+          isTrue,
+          reason: name,
+        );
+      }
+    });
+  });
 }
 
 /// The generated sources, in which every rule is meaningless because
@@ -872,17 +1084,26 @@ class _CopyRule extends _Rule {
   }
 }
 
+/// A raw widget of [names] (an alternation) being built: with its type
+/// arguments, and through any named constructor (`Card.filled(`,
+/// `RadioListTile<T>.adaptive(`). The classes' static helpers are left
+/// out: a button's `styleFrom` sits inside a site the button already
+/// counts, and the others build no widget.
+RegExp _built(String names) => RegExp(
+  '\\b(?:$names)(?:<[^>]*>)?'
+  '(?:\\.(?!(?:styleFrom|createBorderSide|divideTiles|dismissAllToolTips)'
+  '\\b)\\w+)?\\(',
+);
+
 final _rules = <_Rule>[
   _Rule(
     name: 'material-list-tile',
-    // The generic form too: `RadioListTile<T>(` is the same
-    // primitive wearing a type argument.
-    pattern: RegExp(
-      r'\b(?:Switch|Checkbox|Radio|Expansion)?ListTile(?:<[^>]*>)?\(',
-    ),
+    // `ExpansionTile` is a list tile by another name.
+    pattern: _built('(?:Switch|Checkbox|Radio)?ListTile|ExpansionTile'),
     fix:
         'use WaxSettingRow (a control on the right) or WaxOptionRow '
-        '(a tappable row), which carry the house metrics and semantics',
+        '(a tappable row), which carry the house metrics and semantics; '
+        'an ExpansionTile is a WaxDisclosure',
   ),
   _Rule(
     name: 'material-icon',
@@ -907,8 +1128,91 @@ final _rules = <_Rule>[
     pattern: RegExp(r'\bBorderRadius\.circular\(\s*\d'),
     fix: 'use WaxRadius, which owns the corner scale',
   ),
+  _Rule(
+    name: 'material-button',
+    pattern: _built('(?:Filled|Text|Outlined|Elevated)Button'),
+    fix: 'use WaxButton, which draws the pill and takes progress: for a wait',
+  ),
+  _Rule(
+    name: 'material-progress',
+    pattern: _built('(?:Circular|Linear)ProgressIndicator'),
+    fix:
+        'use WaxSpinner or ProgressRing (indeterminate or a share), '
+        'WaxProgressBar for a bar, or WaxButton(progress:) inside a pill',
+  ),
+  _Rule(
+    name: 'material-text-field',
+    pattern: RegExp(r'\bText(?:Form)?Field\('),
+    fix: 'use WaxTextField, which carries the house field metrics',
+  ),
+  _Rule(
+    name: 'raw-ink',
+    pattern: RegExp(r'\b(?:InkWell|InkResponse)\('),
+    fix:
+        'use WaxInkTappable, which owns the ink and the press with focus '
+        'and semantics on one callback (WaxTappable alone adds no gesture)',
+  ),
+  _Rule(
+    name: 'material-misc',
+    pattern: _built(
+      'Card|Divider|Slider|Tooltip|DropdownButton|DropdownButtonFormField'
+      '|DropdownMenu|DropdownMenuItem|DropdownMenuEntry|VerticalDivider',
+    ),
+    fix:
+        'use the Wax counterpart: WaxHairline for a divider, the band the '
+        'divider took as its extent (WaxHairline(extent: WaxSpace.s16) for '
+        "a 16 px band; a bare Divider() takes the theme's 1 px, which is "
+        "WaxHairline()), WaxHairline.vertical with the VerticalDivider's "
+        'width as its extent, WaxBanner for a standing message on a card '
+        '(a plain surface is surface1, hairline and WaxRadius.card), '
+        'WaxSlider, WaxTooltip, and WaxMenuButton or WaxSegmented for the '
+        'dropdown family',
+  ),
+  _Rule(
+    name: 'raw-spacing',
+    // Any literal but zero, a fraction or a negative included.
+    pattern: RegExp(
+      r'\b(?:spacing|runSpacing|mainAxisSpacing|crossAxisSpacing)\s*:\s*'
+      r'-?(?:0*[1-9]\d*(?:\.\d+)?|0*\.\d*[1-9])',
+    ),
+    fix: 'use the WaxSpace ladder',
+  ),
+  _ProseSlotRule(),
   _CopyRule(),
 ];
+
+/// The prose-slot rule: the arguments that hang a sentence under a
+/// label, and an empty state's body line.
+///
+/// A `(` or `,` before the name is what makes it an argument, so a
+/// ternary's `help`, a `case help:` and a string's "help:" stay out.
+///
+/// `EmptyState(` takes its arguments by walking the brackets, because a
+/// call runs across lines and a nested widget may carry its own
+/// `message:`.
+class _ProseSlotRule extends _Rule {
+  _ProseSlotRule()
+    : super(
+        name: 'prose-slot-args',
+        pattern: RegExp(r'(?<=[(,]\s*)(?:help|helperText|overline)\s*:(?!:)'),
+        fix:
+            'explanatory text only for a consequence the label or title '
+            'hides, otherwise none',
+      );
+
+  static final _emptyState = RegExp(r'\bEmptyState\(');
+  static final _message = RegExp(r'(?<![\w.])message\s*:');
+
+  @override
+  Iterable<_Hit> find(String code) sync* {
+    final hits = [...super.find(code)];
+    for (final match in _emptyState.allMatches(code)) {
+      final args = _InsetsRule.arguments(code, match.end);
+      if (args != null && _message.hasMatch(args)) hits.add(_Hit(match.start));
+    }
+    yield* hits..sort((a, b) => a.at.compareTo(b.at));
+  }
+}
 
 class _Finding {
   const _Finding(this.rule, this.line, this.snippet, this.hit);

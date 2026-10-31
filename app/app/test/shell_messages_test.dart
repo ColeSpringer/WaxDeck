@@ -386,7 +386,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Undo'));
       await tester.pump();
-      await tester.tap(find.text('Undo'), warnIfMissed: false);
+      await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
 
       expect(undone, 1);

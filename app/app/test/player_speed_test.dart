@@ -141,7 +141,6 @@ void main() {
     // then failed to persist would be the worst of both.
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.playerSpeedFaster),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(engine.speed, closeTo(3.5, 0.001));

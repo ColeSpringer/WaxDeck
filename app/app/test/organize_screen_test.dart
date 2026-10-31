@@ -523,7 +523,6 @@ void main() {
     expect(find.textContaining('edit it instead'), findsOneWidget);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileSave),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(repo.putOrganizeProfileCalls, isEmpty);

@@ -39,15 +39,11 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.settingSignupEnabled),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(repo.adminSettings.signupEnabled, isTrue);
 
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.settingReadOnly),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.settingReadOnly));
     await tester.pumpAndSettle();
     expect(repo.adminSettings.readOnly, isTrue);
     // The first toggle survived the second save.
@@ -55,7 +51,6 @@ void main() {
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.settingSonicAnalysis),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     expect(repo.adminSettings.sonicAnalysis, isFalse);
@@ -76,10 +71,7 @@ void main() {
       '256',
     );
     await tester.ensureVisible(find.bySemanticsIdentifier('transcoding-save'));
-    await tester.tap(
-      find.bySemanticsIdentifier('transcoding-save'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('transcoding-save'));
     await tester.pumpAndSettle();
 
     expect(repo.transcodingLimits.maxConcurrent, 4);
@@ -151,7 +143,6 @@ void main() {
     );
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.transcodingActivityRefresh),
-      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 
@@ -175,10 +166,7 @@ void main() {
     await tester.ensureVisible(
       find.bySemanticsIdentifier('trash-retention-save'),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-retention-save'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
     await tester.pumpAndSettle();
 
     // Named, not just refused: one save writes two windows.
@@ -191,10 +179,7 @@ void main() {
       find.bySemanticsIdentifier('trash-retention-days'),
       '007',
     );
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-retention-save'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
     await tester.pumpAndSettle();
     expect(repo.adminSettings.trashRetentionDays, 7);
     // Reflected back as what was stored, not as what was typed.
@@ -218,10 +203,7 @@ void main() {
     await tester.ensureVisible(
       find.bySemanticsIdentifier('trash-retention-save'),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-retention-save'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
     await tester.pumpAndSettle();
 
     expect(
@@ -244,10 +226,7 @@ void main() {
     await tester.ensureVisible(
       find.bySemanticsIdentifier('trash-retention-save'),
     );
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-retention-save'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
     await tester.pumpAndSettle();
     expect(repo.adminSettings.taskRetentionDays, 14);
     // Zero is a choice here, not a default, so it has to store.
@@ -255,10 +234,7 @@ void main() {
       find.bySemanticsIdentifier('task-retention-days'),
       '0',
     );
-    await tester.tap(
-      find.bySemanticsIdentifier('trash-retention-save'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
     await tester.pumpAndSettle();
     expect(repo.adminSettings.taskRetentionDays, 0);
   });

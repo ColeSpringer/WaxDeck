@@ -22,6 +22,7 @@
   "consoleConfirmHint": "Escribe {word} para confirmar",
   "consoleDetailsFor": "Detalles de {name}",
   "consoleStat": "{label}, {value}",
+  "consoleStatWithCaption": "{label}, {value}, {caption}",
   "controlsBusy": "En curso",
   "controlsMute": "Silenciar",
   "controlsSeekLabel": "Posición",

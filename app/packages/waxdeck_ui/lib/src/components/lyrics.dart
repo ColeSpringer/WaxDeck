@@ -319,12 +319,15 @@ class _LyricsViewState extends State<LyricsView> {
         child: row,
       );
     }
+    // One callback for the node and the ink, so the web's click on the
+    // node and a pointer's tap on the ink are the same press.
+    void seekHere() => seek(line.at);
     return WaxTappable(
       semanticsId: widget.lineSemanticsId?.call(index),
       label: line.text,
       selected: singing,
-      onPressed: () => seek(line.at),
-      child: InkWell(onTap: () => seek(line.at), child: row),
+      onPressed: seekHere,
+      child: InkWell(onTap: seekHere, child: row),
     );
   }
 

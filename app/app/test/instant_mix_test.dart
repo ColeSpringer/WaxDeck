@@ -13,6 +13,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
+import 'row_finders.dart';
 
 const _seedPid = 'tr-01JZX5N8QW3F4V9T2B7KDSEED01';
 const _mixPid1 = 'tr-01JZX5N8QW3F4V9T2B7KDMIX001';
@@ -198,14 +199,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsNothing);
 
-    // warnIfMissed: a row's identifier sits on its content region
-    // rather than on the whole row (MediaListRow says why), so the tap
-    // lands on the row's own handler and not on the node the finder
-    // matched.
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.scopedItem('mix', 1)),
-      warnIfMissed: false,
-    );
+    await tester.tap(rowWithIdentifier(SemanticsIds.scopedItem('mix', 1)));
     await tester.pumpAndSettle();
 
     // Playback starts from the tapped row, the route does not change,

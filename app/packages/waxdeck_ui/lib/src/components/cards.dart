@@ -21,6 +21,8 @@ import 'artwork.dart';
 import 'controls.dart';
 import 'edge_fade.dart';
 import 'indicators.dart';
+import 'info_slot.dart';
+import 'info_tip.dart';
 import 'keyed_rows.dart';
 import 'secondary_tap.dart';
 import 'sheet.dart';
@@ -38,10 +40,19 @@ class SectionHeader extends StatelessWidget {
     this.spokenActionLabel,
     this.onAction,
     this.semanticsId,
+    this.info,
+    this.infoSemanticsId,
     super.key,
   });
 
   final String title;
+
+  /// A sentence the header holds without printing it, behind a
+  /// [WaxInfoTip] right after the title, on the title's line.
+  final String? info;
+
+  /// The info tip's handle; [semanticsId] is the action's.
+  final String? infoSemanticsId;
 
   /// The kicker above the title. Rendered in caps by this component, so
   /// the string itself stays sentence case and screen readers hear
@@ -83,9 +94,13 @@ class SectionHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-                Text(
-                  title,
-                  style: WaxType.headline.copyWith(color: colors.textPrimary),
+                titleWithInfo(
+                  Text(
+                    title,
+                    style: WaxType.headline.copyWith(color: colors.textPrimary),
+                  ),
+                  info,
+                  semanticsId: infoSemanticsId,
                 ),
               ],
             ),
@@ -154,6 +169,7 @@ class MediaCard extends StatefulWidget {
     this.onTap,
     this.onPlay,
     this.playLabel,
+    this.playSemanticsId,
     this.onMore,
     this.moreSemanticsId,
     this.action,
@@ -170,6 +186,10 @@ class MediaCard extends StatefulWidget {
   /// The play affordance's name, where the verb is not "Play" plus the
   /// title. Null takes the design system's wording.
   final String? playLabel;
+
+  /// The play affordance's own identifier. It is a node of its own beside
+  /// the card's, so it does not inherit the card's.
+  final String? playSemanticsId;
 
   final VoidCallback? onMore;
 
@@ -230,21 +250,121 @@ class MediaCard extends StatefulWidget {
   State<MediaCard> createState() => _MediaCardState();
 }
 
-class _MediaCardState extends State<MediaCard> {
+class _MediaCardState extends State<MediaCard>
+    with SingleTickerProviderStateMixin {
+  /// A mouse over the card or anything drawn beside it. One region around
+  /// the lot, so moving between the card, the disc and the chips is never
+  /// a leave, and a plain one rather than the focus detector's hover,
+  /// which a touch on a touchscreen laptop switches off.
   bool _hovered = false;
 
-  /// Whether the pointer is over the corner chips, which sit beside the
-  /// card rather than inside it. Tracked apart from [_hovered] so the
-  /// two cannot fight: leaving the card for a chip and leaving a chip
-  /// for the card both happen in one pointer update, and either order
-  /// leaves the pair reading "still over this card".
-  bool _chipHovered = false;
-  bool _focused = false;
+  /// Focus on the card itself, on its corner chips, and on its play disc,
+  /// each read from a node owned here rather than kept in a flag a
+  /// callback sets: a part that unmounts while it holds the focus never
+  /// reports losing it. Focus on a part counts with the card's own, or
+  /// Tab onto a chip would un-reveal the card and take the chip away.
+  final FocusNode _cardFocus = FocusNode(debugLabel: 'media-card');
+  final FocusNode _chipsFocus = FocusNode(debugLabel: 'media-card-chips');
+  late final _CardPartNode _playFocus = _CardPartNode(
+    this,
+    debugLabel: 'media-card-play',
+  );
 
-  /// One corner control on its own disc.
+  /// The overflow's own, as the parts that hide are told apart by their
+  /// nodes: the action chip beside it is always drawn.
+  late final _CardPartNode _moreFocus = _CardPartNode(
+    this,
+    debugLabel: 'media-card-more',
+  );
+
+  /// Whether the disc and the overflow were drawn at the last build, for
+  /// [WaxDirectionalFocusAction].
+  bool _partsShown = false;
+
+  /// The scrim and the disc are one affordance, so one fade drives both.
+  /// Made with the first play there is to show, so a card with none
+  /// carries no controller.
+  AnimationController? _fade;
+
+  /// The reveal [_fade] was last sent towards.
+  bool? _faded;
+
+  /// The fade for this build: none without a play, and a play that comes
+  /// back starts where the card is, not from where it was left.
+  AnimationController? _fadeFor(bool revealed) {
+    if (widget.onPlay == null) {
+      _faded = null;
+      return null;
+    }
+    final fade = _fade ??= AnimationController(
+      vsync: this,
+      duration: WaxMotion.of(context).quick,
+    );
+    if (_faded != revealed) {
+      if (_faded == null) {
+        fade.value = revealed ? 1 : 0;
+      } else if (revealed) {
+        fade.forward();
+      } else {
+        fade.reverse();
+      }
+      _faded = revealed;
+    }
+    return fade;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    for (final node in <FocusNode>[_cardFocus, _chipsFocus, _playFocus]) {
+      node.addListener(_reread);
+    }
+    FocusManager.instance.addHighlightModeListener(_highlightChanged);
+  }
+
+  void _reread() {
+    if (mounted) setState(() {});
+  }
+
+  void _highlightChanged(FocusHighlightMode _) {
+    if (_cardFocus.hasFocus) _reread();
+  }
+
+  @override
+  void didUpdateWidget(MediaCard old) {
+    super.didUpdateWidget(old);
+    // A part taken away while focused takes the focus with it silently,
+    // so the nodes are read again once it has gone. A station's tile
+    // drops its play while the station plays.
+    if ((old.onPlay != null && widget.onPlay == null) ||
+        (old.onMore != null && widget.onMore == null) ||
+        (old.action != null && widget.action == null)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reread());
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _fade?.duration = WaxMotion.of(context).quick;
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeHighlightModeListener(_highlightChanged);
+    _fade?.dispose();
+    _cardFocus.dispose();
+    _chipsFocus.dispose();
+    _playFocus.dispose();
+    _moreFocus.dispose();
+    super.dispose();
+  }
+
+  /// One corner control on its own disc, with the ink its press draws on
+  /// top of the disc rather than under it, and wherever the card stands.
   Widget _chip(WaxColors colors, Widget child) => DecoratedBox(
     decoration: BoxDecoration(color: colors.surface1, shape: BoxShape.circle),
-    child: child,
+    child: Material(type: MaterialType.transparency, child: child),
   );
 
   @override
@@ -257,10 +377,18 @@ class _MediaCardState extends State<MediaCard> {
     final captionsFade =
         (widget.captions ?? WaxLayout.of(context).captions) ==
         WaxCaptionMode.onHover;
+    // Keyboard focus, as a focus ring shows it: a touch focus is no
+    // reveal.
+    final focused =
+        _cardFocus.hasFocus &&
+        FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     // Focus counts as well as hover, or a card reached by keyboard is a
     // cover with no name on it and no way to ask for one.
-    final captionsVisible =
-        !captionsFade || _hovered || _chipHovered || _focused;
+    final revealed =
+        _hovered || focused || _chipsFocus.hasFocus || _playFocus.hasFocus;
+    _partsShown = revealed;
+    final captionsVisible = !captionsFade || revealed;
+    final fade = _fadeFor(revealed);
 
     final art = Stack(
       children: <Widget>[
@@ -272,9 +400,16 @@ class _MediaCardState extends State<MediaCard> {
           domain: data.domain,
           progress: data.progress,
           dimmed: data.unavailableOffline,
-          onPlay: widget.onPlay,
-          playLabel: widget.playLabel ?? l10n.cardsPlayItem(data.title),
         ),
+        // Under the badges, which stay legible over it; only the disc is
+        // lifted out beside the card.
+        if (fade != null)
+          Positioned.fill(
+            child: HoverPlayScrim(
+              opacity: fade,
+              radius: ArtworkImage.cornerRadius(data.shape, width),
+            ),
+          ),
         if (widget.playing)
           Positioned(
             left: WaxSpace.s8,
@@ -348,22 +483,17 @@ class _MediaCardState extends State<MediaCard> {
     // sibling, exactly where a station tile used to hand-roll its own -
     // except that here it is one row, aligned to the same corner as the
     // overflow, so the two cannot end up eight pixels apart.
-    final revealed = _hovered || _chipHovered || _focused;
     final chips = widget.onMore == null && widget.action == null
         ? null
         : Positioned(
+            key: const ValueKey<String>('chips'),
             right: WaxSpace.s8,
             top: WaxSpace.s8,
-            // Its own region, because these are a sibling of the card
-            // rather than a child of it: a Stack hit-tests topmost
-            // first and stops, so a pointer resting on a chip leaves
-            // the card's own region - and the card would un-hover,
-            // which un-draws the very chip under the pointer, which
-            // re-hovers the card. That oscillation strobed the overflow
-            // and sent its clicks to the card underneath.
-            child: MouseRegion(
-              onEnter: (_) => setState(() => _chipHovered = true),
-              onExit: (_) => setState(() => _chipHovered = false),
+            child: Focus(
+              focusNode: _chipsFocus,
+              canRequestFocus: false,
+              skipTraversal: true,
+              includeSemantics: false,
               // One disc apiece and no gap between them, so a card
               // carrying both draws a capsule rather than two circles.
               // The overflow leads, so the always-drawn action keeps
@@ -373,33 +503,54 @@ class _MediaCardState extends State<MediaCard> {
                 children: <Widget>[
                   // Revealed like the play affordance: a pointer gets a
                   // visible way into the menu instead of having to
-                  // guess at a right click. Built on reveal rather than
-                  // faded, because a faded chip still occupies its
+                  // guess at a right click. Offstage while hidden rather
+                  // than faded, because a faded chip still occupies its
                   // whole 44px box - and on a phone, where nothing ever
                   // hovers, that box pushed the action a third of the
-                  // way across the card with dead space beside it.
-                  // Touch keeps the long press.
-                  if (widget.onMore != null && revealed)
-                    _chip(
-                      colors,
-                      WaxIconButton(
-                        glyph: WaxIcons.more,
-                        label: l10n.cardsMoreForItem(data.title),
-                        size: 16,
-                        semanticsId: widget.moreSemanticsId,
-                        onPressed: widget.onMore,
+                  // way across the card with dead space beside it. Still
+                  // a tab stop there, so Shift+Tab reaches it as Tab
+                  // does, and its focus reveals it. Touch keeps the long
+                  // press.
+                  if (widget.onMore != null)
+                    FocusTraversalOrder(
+                      key: const ValueKey<String>('more'),
+                      order: const NumericFocusOrder(2),
+                      child: Focus(
+                        focusNode: _moreFocus,
+                        canRequestFocus: false,
+                        skipTraversal: true,
+                        includeSemantics: false,
+                        child: Visibility(
+                          visible: revealed,
+                          maintainState: true,
+                          maintainFocusability: true,
+                          child: _chip(
+                            colors,
+                            WaxIconButton(
+                              glyph: WaxIcons.more,
+                              label: l10n.cardsMoreForItem(data.title),
+                              size: 16,
+                              semanticsId: widget.moreSemanticsId,
+                              onPressed: widget.onMore,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   if (widget.action case final action?)
-                    _chip(
-                      colors,
-                      WaxIconButton(
-                        glyph: action.glyph,
-                        label: action.label,
-                        size: 16,
-                        active: action.active,
-                        semanticsId: action.semanticsId,
-                        onPressed: action.onPressed,
+                    FocusTraversalOrder(
+                      key: const ValueKey<String>('action'),
+                      order: const NumericFocusOrder(3),
+                      child: _chip(
+                        colors,
+                        WaxIconButton(
+                          glyph: action.glyph,
+                          label: action.label,
+                          size: 16,
+                          active: action.active,
+                          semanticsId: action.semanticsId,
+                          onPressed: action.onPressed,
+                        ),
                       ),
                     ),
                 ],
@@ -426,9 +577,10 @@ class _MediaCardState extends State<MediaCard> {
       onTap: widget.onTap,
       onLongPress: widget.onMore,
       child: FocusableActionDetector(
+        // Owned here, so it keeps its focus through the rebuild a change
+        // of what the card carries causes (see the region below).
+        focusNode: _cardFocus,
         mouseCursor: SystemMouseCursors.click,
-        onShowHoverHighlight: (value) => setState(() => _hovered = value),
-        onShowFocusHighlight: (value) => setState(() => _focused = value),
         actions: <Type, Action<Intent>>{
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) {
@@ -438,7 +590,7 @@ class _MediaCardState extends State<MediaCard> {
           ),
         },
         child: WaxFocusRing(
-          focused: _focused,
+          focused: focused,
           borderRadius: WaxRadius.card,
           surface: colors.canvas,
           // Only where there is a menu to raise: a card with no `onMore`
@@ -522,6 +674,42 @@ class _MediaCardState extends State<MediaCard> {
         ),
       ),
     );
+    // The play disc, beside the card for the chips' reason and one more:
+    // on web a click over a node that excludes its subtree is that node's
+    // tap, so a disc inside the card opened the card. Mounted with the
+    // card and shown on reveal, so a touch on the cover still opens it.
+    final onPlay = widget.onPlay;
+    final play = onPlay == null || fade == null
+        ? null
+        : Positioned(
+            key: const ValueKey<String>('play'),
+            left: 0,
+            top: 0,
+            width: width,
+            height: width,
+            child: Center(
+              child: FocusTraversalOrder(
+                order: const NumericFocusOrder(1),
+                child: Focus(
+                  focusNode: _playFocus,
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  // The play node stands beside the card's, with no empty
+                  // node of the wrapper's between them.
+                  includeSemantics: false,
+                  child: HoverPlayDisc(
+                    visible: revealed,
+                    opacity: fade,
+                    onPlay: onPlay,
+                    label: widget.playLabel ?? l10n.cardsPlayItem(data.title),
+                    semanticsId: widget.playSemanticsId,
+                    onSecondaryTap: widget.onMore,
+                  ),
+                ),
+              ),
+            ),
+          );
+
     final tooltip = data.tooltip;
     // Hover-only on purpose: a long press is the card's overflow
     // gesture, and a tooltip that claimed it would shadow the menu. The
@@ -530,18 +718,97 @@ class _MediaCardState extends State<MediaCard> {
     //
     // Around the card and not the chips: the tooltip names the item, and
     // the corner controls carry names of their own.
-    final named = tooltip == null
-        ? card
-        : WaxTooltip(
-            message: tooltip,
-            touchTrigger: false,
-            excludeFromSemantics: true,
-            child: card,
-          );
-    if (chips == null) return named;
-    // Sized by the card, which is the unpositioned child: the chips
-    // ride over its top corner without changing what a grid reserves.
-    return Stack(children: <Widget>[named, chips]);
+    final named = FocusTraversalOrder(
+      order: const NumericFocusOrder(0),
+      child: tooltip == null
+          ? card
+          : WaxTooltip(
+              message: tooltip,
+              touchTrigger: false,
+              excludeFromSemantics: true,
+              child: card,
+            ),
+    );
+    final region = MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      // Decided by what the card carries, never by the reveal: a root that
+      // flipped between the card and a Stack would rebuild the card, focus
+      // node and all, on every hover.
+      child: play == null && chips == null
+          ? named
+          : Stack(
+              // Sized by the card, the unpositioned child: the disc and the
+              // chips ride over its artwork without changing what a grid
+              // reserves. The chips stay on top of the disc.
+              children: <Widget>[named, ?play, ?chips],
+            ),
+    );
+    // Held to the card's own box. A tight cell would otherwise stretch
+    // the card to the whole cell, and the region and the semantics node
+    // with it, so the empty band under a short card would reveal and
+    // announce what a press there cannot reach. Placed at the cell's
+    // start and shrink-wrapped under loose constraints.
+    return Align(
+      alignment: AlignmentDirectional.topStart,
+      widthFactor: 1,
+      heightFactor: 1,
+      // One stop after another in the card's own order, both ways: a
+      // hidden overflow has no place on screen to be read off.
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: region,
+      ),
+    );
+  }
+}
+
+/// The node around a card's part that hides, which knows its card.
+class _CardPartNode extends FocusNode {
+  _CardPartNode(this._card, {super.debugLabel});
+
+  final _MediaCardState _card;
+
+  /// The card's own node, when [node] is inside one of its parts that was
+  /// hidden when focus reached it.
+  static FocusNode? cardOfHidden(FocusNode? node) {
+    for (var at = node; at != null; at = at.parent) {
+      if (at is _CardPartNode) {
+        return at._card._partsShown ? null : at._card._cardFocus;
+      }
+    }
+    return null;
+  }
+}
+
+/// Arrow-key focus moves that never stop on a card's hidden parts.
+///
+/// A [MediaCard]'s play disc and overflow stay focusable while hidden, so
+/// that Shift+Tab mirrors Tab, and Flutter's arrow-key search ranks every
+/// focusable node by the distance between centres, where a hidden disc
+/// is nearer than its card. A move that lands on the disc or the overflow
+/// of a card that is not revealed goes on to the card itself; every other
+/// move is Flutter's own. Installed at an app's root through
+/// [waxAppActions].
+class WaxDirectionalFocusAction extends DirectionalFocusAction {
+  @override
+  void invoke(DirectionalFocusIntent intent) {
+    super.invoke(intent);
+    final manager = FocusManager.instance..applyFocusChangesIfNeeded();
+    final card = _CardPartNode.cardOfHidden(manager.primaryFocus);
+    if (card == null) return;
+    // Scrolled into view as the move would have scrolled the card, not
+    // the disc it found: the card reaches past the disc by its captions.
+    FocusTraversalPolicy.defaultTraversalRequestFocusCallback(
+      card,
+      alignmentPolicy: switch (intent.direction) {
+        TraversalDirection.up || TraversalDirection.left =>
+          ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        TraversalDirection.down || TraversalDirection.right =>
+          ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      },
+    );
+    manager.applyFocusChangesIfNeeded();
   }
 }
 
@@ -1176,6 +1443,7 @@ class ShelfRow extends StatefulWidget {
     this.onMoreItem,
     this.itemHasActions,
     this.moreSemanticsIdAt,
+    this.playSemanticsIdAt,
     this.backSemanticsId,
     this.forwardSemanticsId,
     this.cardWidth,
@@ -1208,6 +1476,10 @@ class ShelfRow extends StatefulWidget {
   /// own handles are positional too: a card keyed by its item carries its
   /// chip when it moves, and the chip's label would not change with it.
   final String Function(int index)? moreSemanticsIdAt;
+
+  /// Each card's play affordance identifier, by position, for the same
+  /// reason.
+  final String Function(int index)? playSemanticsIdAt;
 
   /// Chevron handles, as plain strings: the package takes no registry
   /// dependency.
@@ -1409,6 +1681,9 @@ class _ShelfRowState extends State<ShelfRow> {
                                   ? null
                                   : () => onMore(item),
                               moreSemanticsId: widget.moreSemanticsIdAt?.call(
+                                index,
+                              ),
+                              playSemanticsId: widget.playSemanticsIdAt?.call(
                                 index,
                               ),
                             );

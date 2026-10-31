@@ -96,6 +96,11 @@ class WaxLocalizationsEn extends WaxLocalizations {
   }
 
   @override
+  String consoleStatWithCaption(String label, String value, String caption) {
+    return '$label, $value, $caption';
+  }
+
+  @override
   String get controlsBusy => 'Working';
 
   @override

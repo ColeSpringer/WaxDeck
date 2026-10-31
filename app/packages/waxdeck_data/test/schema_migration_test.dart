@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -503,43 +504,57 @@ void main() {
     // trustworthy: whatever they built, plus the migration, has to be
     // indistinguishable from what the current code creates from
     // nothing. A dropped column in either one shows up here.
-    final upgraded = _upgradedFromV1();
-    final fromV2 = _upgradedFromV2();
-    final fromV3 = _upgradedFromV3();
-    final fromV5 = _upgradedFromV5();
-    final fromV6 = _upgradedFromV6();
-    final fromV7 = _upgradedFromV7();
-    final fromV8 = _upgradedFromV8();
     final fresh = inMemoryMirrorDatabase();
-    addTearDown(upgraded.close);
-    addTearDown(fromV2.close);
-    addTearDown(fromV3.close);
-    addTearDown(fromV5.close);
-    addTearDown(fromV6.close);
-    addTearDown(fromV7.close);
-    addTearDown(fromV8.close);
-    addTearDown(fresh.close);
+    final Map<String, List<String>> target;
+    try {
+      // Touch it so the create runs.
+      await fresh.select(fresh.mirrorItems).get();
+      target = await _columns(fresh);
+    } finally {
+      await fresh.close();
+    }
 
-    // Touch each database so the create and the upgrade both run.
-    await upgraded.select(upgraded.mirrorItems).get();
-    await fromV2.select(fromV2.mirrorItems).get();
-    await fromV3.select(fromV3.mirrorItems).get();
-    await fromV5.select(fromV5.mirrorItems).get();
-    await fromV6.select(fromV6.mirrorItems).get();
-    await fromV7.select(fromV7.mirrorItems).get();
-    await fromV8.select(fromV8.mirrorItems).get();
-    await fresh.select(fresh.mirrorItems).get();
-
-    final target = await _columns(fresh);
-    expect(await _columns(upgraded), target);
     // Every supported starting point converges on the same schema, so
-    // an install that skipped a version is not a shape of its own.
-    expect(await _columns(fromV2), target);
-    expect(await _columns(fromV3), target);
-    expect(await _columns(fromV5), target);
-    expect(await _columns(fromV6), target);
-    expect(await _columns(fromV7), target);
-    expect(await _columns(fromV8), target);
+    // an install that skipped a version is not a shape of its own. One
+    // at a time: the comparison needs no two open together.
+    for (final (label, open) in [
+      ('v1', _upgradedFromV1),
+      ('v2', _upgradedFromV2),
+      ('v3', _upgradedFromV3),
+      ('v5', _upgradedFromV5),
+      ('v6', _upgradedFromV6),
+      ('v7', _upgradedFromV7),
+      ('v8', _upgradedFromV8),
+    ]) {
+      final upgraded = open();
+      try {
+        // Touch it so the upgrade runs.
+        await upgraded.select(upgraded.mirrorItems).get();
+        expect(
+          await _columns(upgraded),
+          target,
+          reason: 'an install upgraded from $label',
+        );
+      } finally {
+        await upgraded.close();
+      }
+    }
+  });
+
+  test('two mirrors open at once still warn after the schema comparison', () {
+    // A test that flags drift's multiple-database check off skews its
+    // count for the rest of the file, which blinds the check without a
+    // sound; this fails if any test above does that.
+    final warnings = <String>[];
+    final printed = driftRuntimeOptions.debugPrint;
+    driftRuntimeOptions.debugPrint = warnings.add;
+    addTearDown(() => driftRuntimeOptions.debugPrint = printed);
+    final first = inMemoryMirrorDatabase();
+    final second = inMemoryMirrorDatabase();
+    addTearDown(first.close);
+    addTearDown(second.close);
+
+    expect(warnings, hasLength(1));
   });
 
   test(
@@ -836,13 +851,17 @@ void main() {
   });
 
   test('an upgraded database holds per-device settings', () async {
-    for (final db in [_upgradedFromV1(), _upgradedFromV2()]) {
-      addTearDown(db.close);
-      final store = DriftClientSettingsStore(db);
+    for (final open in [_upgradedFromV1, _upgradedFromV2]) {
+      final db = open();
+      try {
+        final store = DriftClientSettingsStore(db);
 
-      expect(await store.read(ClientSettingKeys.sidebarCollapsed), isNull);
-      await store.write(ClientSettingKeys.sidebarCollapsed, 'true');
-      expect(await store.read(ClientSettingKeys.sidebarCollapsed), 'true');
+        expect(await store.read(ClientSettingKeys.sidebarCollapsed), isNull);
+        await store.write(ClientSettingKeys.sidebarCollapsed, 'true');
+        expect(await store.read(ClientSettingKeys.sidebarCollapsed), 'true');
+      } finally {
+        await db.close();
+      }
     }
   });
 

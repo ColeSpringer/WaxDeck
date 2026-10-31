@@ -8,19 +8,23 @@ import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
+import 'info_slot.dart';
+import 'info_tip.dart';
 import 'prose.dart';
 
-/// A settings row: what the setting is, one line saying what it does, and
-/// the control that changes it.
+/// A settings row: what the setting is, and the control that changes it.
 ///
-/// Help is required, not optional: every leaf setting carries a sentence
-/// so nobody guesses what four words and a switch mean. The row is not
-/// itself tappable, or a switch would have two ways to be flipped and a
-/// screen reader two nodes claiming the same job.
+/// Help is for a consequence the label hides (data lost, a third party
+/// contacted, a scope, why a control is disabled), not for restating the
+/// label. Without it the title and the control share one row. The row is
+/// not itself tappable, or a switch would have two ways to be flipped and
+/// a screen reader two nodes claiming the same job.
 class WaxSettingRow extends StatelessWidget {
   const WaxSettingRow({
     required this.title,
-    required this.help,
+    this.help,
+    this.info,
+    this.infoSemanticsId,
     required this.control,
     this.glyph,
     super.key,
@@ -29,8 +33,15 @@ class WaxSettingRow extends StatelessWidget {
   final String title;
 
   /// The one line of inline help. Sentence case, no full stop, says what
-  /// changing it does rather than restating the title.
-  final String help;
+  /// changing it does rather than restating the title. Null draws no line.
+  final String? help;
+
+  /// A sentence the row holds without printing it, behind a [WaxInfoTip]
+  /// right after the title, on the title's line.
+  final String? info;
+
+  /// The info tip's handle.
+  final String? infoSemanticsId;
 
   /// The switch, picker, or button that changes it.
   final Widget control;
@@ -41,34 +52,55 @@ class WaxSettingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final layout = WaxLayout.of(context);
-    return Padding(
+    // With no help line the title and the control share one row, centred
+    // on each other rather than hung from the top of a taller one.
+    final single = help == null;
+    final words = Text(
+      title,
+      style: WaxType.body.copyWith(color: colors.textPrimary),
+    );
+    Widget row(Widget? mark) => Padding(
       padding: EdgeInsets.symmetric(
         horizontal: WaxSpace.s4,
         vertical: layout.density.vertical(WaxSpace.s12),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: single
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
         children: <Widget>[
           if (glyph != null) ...<Widget>[
             Padding(
-              padding: const EdgeInsets.only(top: WaxSpace.s4),
+              padding: EdgeInsets.only(top: single ? 0 : WaxSpace.s4),
               child: WaxIcon(glyph!, size: 20, color: colors.textSecondary),
             ),
             const SizedBox(width: WaxSpace.s12),
           ],
           Expanded(
+            // Its own height, or a slot taller than the row would hang the
+            // title from the top while the control centres.
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  title,
-                  style: WaxType.body.copyWith(color: colors.textPrimary),
-                ),
-                const SizedBox(height: WaxSpace.s4),
-                WaxProse(
-                  help,
-                  style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
-                ),
+                switch (mark) {
+                  final mark? => Row(
+                    children: <Widget>[
+                      Flexible(child: words),
+                      mark,
+                    ],
+                  ),
+                  null => words,
+                },
+                if (help != null) ...<Widget>[
+                  const SizedBox(height: WaxSpace.s4),
+                  WaxProse(
+                    help!,
+                    style: WaxType.bodySmall.copyWith(
+                      color: colors.textTertiary,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -77,12 +109,17 @@ class WaxSettingRow extends StatelessWidget {
           // row, so a control does not drift downward as the help line
           // wraps at large text scales.
           Padding(
-            padding: const EdgeInsets.only(top: WaxSpace.s4),
+            padding: EdgeInsets.only(top: single ? 0 : WaxSpace.s4),
             child: control,
           ),
         ],
       ),
     );
+    // The tip is drawn over the row's own padding, so the title's line, and
+    // the glyph, help line and control set against it, keep their places.
+    // Built with no info too, so an info that comes or goes rebuilds the
+    // title's line and not the control.
+    return InfoOverRoom(info: info, semanticsId: infoSemanticsId, builder: row);
   }
 }
 
@@ -489,56 +526,45 @@ class WaxChoice<T> extends StatelessWidget {
     return Builder(
       // Its own context, so the menu opens against this control rather
       // than against whatever laid the section out.
-      builder: (context) => WaxTappable(
-        label: context.waxL10n.settingsChoiceValue(label, labelFor(value)),
-        semanticsId: semanticsId,
-        borderRadius: WaxRadius.thumb,
-        onPressed: enabled ? () => _open(context) : null,
-        // The pointer handler is the child's, per WaxTappable's contract:
-        // it contributes the semantics, the focus flag, and the ring, and
-        // adds no gesture, so a control that leaves this out is focusable
-        // and keyboard-operable while ignoring taps.
-        child: Material(
-          color: colors.surface2,
+      builder: (context) {
+        return WaxInkTappable(
+          label: context.waxL10n.settingsChoiceValue(label, labelFor(value)),
+          semanticsId: semanticsId,
           borderRadius: WaxRadius.thumb,
-          child: InkWell(
-            onTap: enabled ? () => _open(context) : null,
-            borderRadius: WaxRadius.thumb,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: WaxSpace.s12,
-                vertical: WaxSpace.s8,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  // Flexible so a narrow column ellipsizes the value
-                  // rather than overflowing. The chevron keeps its width
-                  // because it is what says this is a control.
-                  Flexible(
-                    child: Text(
-                      labelFor(value),
-                      style: WaxType.body.copyWith(
-                        color: enabled
-                            ? colors.textPrimary
-                            : colors.textDisabled,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
+          color: colors.surface2,
+          onPressed: enabled ? () => _open(context) : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: WaxSpace.s12,
+              vertical: WaxSpace.s8,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                // Flexible so a narrow column ellipsizes the value
+                // rather than overflowing. The chevron keeps its width
+                // because it is what says this is a control.
+                Flexible(
+                  child: Text(
+                    labelFor(value),
+                    style: WaxType.body.copyWith(
+                      color: enabled ? colors.textPrimary : colors.textDisabled,
                     ),
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
                   ),
-                  const SizedBox(width: WaxSpace.s4),
-                  WaxIcon(
-                    WaxIcons.collapse,
-                    size: 16,
-                    color: colors.textSecondary,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: WaxSpace.s4),
+                WaxIcon(
+                  WaxIcons.collapse,
+                  size: 16,
+                  color: colors.textSecondary,
+                ),
+              ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

@@ -82,6 +82,19 @@ export async function submitThrough(
 /// different verb: a primary tap on a card plays it.
 export interface Press {
   readonly button?: 'left' | 'right';
+  /// Where on the trigger to press: its centre, or for a media card its
+  /// caption band. A revealed card puts its play disc over the cover's
+  /// centre, and on a card with a short caption block the card's own
+  /// centre falls inside that disc, so a press aimed there plays the item
+  /// instead of opening it.
+  readonly aim?: 'centre' | 'caption';
+}
+
+// The point a press lands on: undefined is the trigger's centre.
+async function pressPoint(trigger: Locator, aim: Press['aim']) {
+  if (aim !== 'caption') return undefined;
+  const box = await trigger.boundingBox();
+  return box === null ? undefined : { x: box.width / 2, y: box.height - 6 };
 }
 
 // The retried-click attempt everything below shares: unless the goal is
@@ -96,15 +109,17 @@ export async function clickToward(
   goal: { shows: Locator } | { gone: Locator },
   press: Press = {},
 ) {
-  const { button = 'left' } = press;
+  const { button = 'left', aim } = press;
   if ('shows' in goal) {
     if (!(await goal.shows.isVisible())) {
-      await trigger.click({ timeout: 2_000, force: true, button }).catch(() => {});
+      const position = await pressPoint(trigger, aim);
+      await trigger.click({ timeout: 2_000, force: true, button, position }).catch(() => {});
     }
     await goal.shows.waitFor({ timeout: T.step });
   } else {
     if (await goal.gone.first().isVisible()) {
-      await trigger.click({ timeout: 2_000, force: true, button }).catch(() => {});
+      const position = await pressPoint(trigger, aim);
+      await trigger.click({ timeout: 2_000, force: true, button, position }).catch(() => {});
     }
     await expect(goal.gone).toHaveCount(0, { timeout: T.step });
   }
@@ -123,13 +138,14 @@ export async function clickUntil(
   landed: () => boolean,
   press: Press = {},
 ) {
-  const { button = 'left' } = press;
+  const { button = 'left', aim } = press;
   await expect(async () => {
     if (!landed()) {
       // A forced press lands where the rect was read, so never mid-move:
       // a re-press would reach whatever slid under it.
       await rectAtRest(trigger);
-      await trigger.click({ timeout: 2_000, force: true, button }).catch(() => {});
+      const position = await pressPoint(trigger, aim);
+      await trigger.click({ timeout: 2_000, force: true, button, position }).catch(() => {});
     }
     await expect
       .poll(landed, { timeout: T.step, message: 'the click should land' })
@@ -160,9 +176,13 @@ export async function clickUntilRequested(
 // Click a canvas control and wait for what it opens, as one retried unit:
 // flutter web can swallow a click while its handlers are still attaching.
 // A click loop, so never inside another `toPass`.
-export async function clickThrough(trigger: Locator, appears: Locator) {
+export async function clickThrough(
+  trigger: Locator,
+  appears: Locator,
+  press: Press = {},
+) {
   await expect(async () => {
-    await clickToward(trigger, { shows: appears });
+    await clickToward(trigger, { shows: appears }, press);
   }).toPass({ timeout: T.nav });
 }
 

@@ -25,6 +25,7 @@ import 'direction_glyph.dart';
 import 'disclosure_glyph.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'row_finders.dart';
 
 const _album = QueueSource(
   kind: QueueSourceKind.album,
@@ -115,6 +116,9 @@ List<String> _rowTitles(WidgetTester tester) => tester
     .widgetList<MediaListRow>(find.byType(MediaListRow))
     .map((row) => row.data.title)
     .toList();
+
+Finder _entryRow(String queueId) =>
+    rowWithIdentifier(SemanticsIds.queueEntry(queueId));
 
 void main() {
   group('the queue screen', () {
@@ -472,17 +476,8 @@ void main() {
     }
 
     /// A press and hold on one up-next row, which is the way in.
-    ///
-    /// `warnIfMissed` off throughout this group: the row's identifier
-    /// sits on its content region, a wrapper the hit test walks past
-    /// rather than into, so the warning is about the finder rather than
-    /// about the gesture. What proves each press landed is the count the
-    /// selection bar draws.
     Future<void> longPress(WidgetTester tester, String queueId) async {
-      await tester.longPress(
-        find.bySemanticsIdentifier(SemanticsIds.queueEntry(queueId)),
-        warnIfMissed: false,
-      );
+      await tester.longPress(_entryRow(queueId));
       await tester.pumpAndSettle();
     }
 
@@ -517,11 +512,7 @@ void main() {
       );
 
       // While selecting, a tap picks rather than jumps.
-      await tester.tap(
-        find.bySemanticsIdentifier(
-          SemanticsIds.queueEntry(idsAt(container, [3]).single),
-        ),
-      );
+      await tester.tap(_entryRow(idsAt(container, [3]).single));
       await tester.pumpAndSettle();
       expect(find.text('2 selected'), findsOneWidget);
       expect(container.read(queueControllerProvider).currentIndex, 0);
@@ -726,13 +717,7 @@ void main() {
 
       Future<void> shiftTap(String queueId) async {
         await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
-        await tester.tap(
-          find.bySemanticsIdentifier(SemanticsIds.queueEntry(queueId)),
-          // The row's identifier sits on its content region, which is a
-          // wrapper the hit test walks past rather than into. What proves
-          // the tap landed is the count below.
-          warnIfMissed: false,
-        );
+        await tester.tap(_entryRow(queueId));
         await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
         await tester.pumpAndSettle();
       }
@@ -854,12 +839,7 @@ void main() {
       expect(find.textContaining('selected'), findsNothing);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
-      await tester.tap(
-        find.bySemanticsIdentifier(
-          SemanticsIds.queueEntry(idsAt(container, [4]).single),
-        ),
-        warnIfMissed: false,
-      );
+      await tester.tap(_entryRow(idsAt(container, [4]).single));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
       await tester.pumpAndSettle();
 
@@ -879,9 +859,7 @@ void main() {
 
       await longPress(tester, idsAt(container, [1]).single);
       await tester.drag(
-        find.bySemanticsIdentifier(
-          SemanticsIds.queueEntry(idsAt(container, [2]).single),
-        ),
+        _entryRow(idsAt(container, [2]).single),
         const Offset(500, 0),
       );
       await tester.pumpAndSettle();
@@ -989,12 +967,7 @@ void main() {
       ], source: _album);
       await tester.pumpAndSettle();
 
-      await tester.longPress(
-        find.bySemanticsIdentifier(
-          SemanticsIds.queueEntry(idsAt(container, [1]).single),
-        ),
-        warnIfMissed: false,
-      );
+      await tester.longPress(_entryRow(idsAt(container, [1]).single));
       await tester.pumpAndSettle();
       expect(find.text('1 selected'), findsOneWidget);
       expect(container.read(queueSelectionProvider), hasLength(1));

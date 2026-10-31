@@ -98,7 +98,7 @@ Finder _id(String id) => find.bySemanticsIdentifier(id);
 
 Future<void> _tap(WidgetTester tester, String id) async {
   await tester.ensureVisible(_id(id));
-  await tester.tap(_id(id), warnIfMissed: false);
+  await tester.tap(_id(id));
   await tester.pumpAndSettle();
 }
 

@@ -13,11 +13,12 @@ import 'prose.dart';
 /// An empty state: an invitation with exactly one next action.
 ///
 /// "No podcasts yet. Follow a show to see new episodes here." plus a
-/// button. Never a shrug, never a dead end.
+/// button. Never a shrug, never a dead end. The message is optional: drop
+/// it when the title or the button already says it.
 class EmptyState extends StatelessWidget {
   const EmptyState({
     required this.title,
-    required this.message,
+    this.message,
     this.glyph,
     this.actionLabel,
     this.onAction,
@@ -27,7 +28,7 @@ class EmptyState extends StatelessWidget {
   });
 
   final String title;
-  final String message;
+  final String? message;
   final WaxGlyph? glyph;
   final String? actionLabel;
   final VoidCallback? onAction;
@@ -52,7 +53,9 @@ class EmptyState extends StatelessWidget {
       explicitChildNodes: true,
       // A container that stops merging its descendants keeps no text of
       // its own, so the label has to be carried across with the boundary.
-      label: context.waxL10n.statesSpoken(title, message),
+      label: message == null
+          ? title
+          : context.waxL10n.statesSpoken(title, message!),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
@@ -84,14 +87,16 @@ class EmptyState extends StatelessWidget {
                           color: colors.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: WaxSpace.s8),
-                      Text(
-                        message,
-                        textAlign: TextAlign.center,
-                        style: WaxType.body.copyWith(
-                          color: colors.textSecondary,
+                      if (message != null) ...<Widget>[
+                        const SizedBox(height: WaxSpace.s8),
+                        Text(
+                          message!,
+                          textAlign: TextAlign.center,
+                          style: WaxType.body.copyWith(
+                            color: colors.textSecondary,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

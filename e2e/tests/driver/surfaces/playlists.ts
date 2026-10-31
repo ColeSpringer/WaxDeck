@@ -1,10 +1,17 @@
 // Playlists: the list, and one playlist's own screen.
 
-import { Locator } from '@playwright/test';
+import { Locator, expect } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough, dragOnto, typeInto } from '../gestures';
+import {
+  chooseFromMenu,
+  clickThrough,
+  clickToward,
+  dragOnto,
+  typeInto,
+  wheelIntoReach,
+} from '../gestures';
 
 export class Playlists extends Surface {
   add(): Locator {
@@ -30,9 +37,21 @@ export class Playlists extends Surface {
   }
 
   /// Open a playlist and wait for whatever it should be showing - an
-  /// empty state, a rule summary, the row that adds to it.
+  /// empty state, a rule summary, the row that adds to it. A card cut off
+  /// at the window's edge puts the caption aim on its play disc, and a
+  /// row landing late above the grid can push it there between tries, so
+  /// each try brings it clear first, as `Books.open` does.
   async openShowing(pid: string, showing: Locator): Promise<void> {
-    await clickThrough(this.row(pid), showing);
+    const page = this.ctx.page;
+    const row = this.row(pid);
+    await row.waitFor({ timeout: T.nav });
+    await expect(async () => {
+      // A press that landed with the screen merely slow leaves the card
+      // gone, and a try that waited on it would never see the screen.
+      if (await showing.isVisible()) return;
+      await wheelIntoReach(page, row, { appear: T.step });
+      await clickToward(row, { shows: showing }, { aim: 'caption' });
+    }).toPass({ timeout: T.nav });
   }
 
   nameField(): Locator {
