@@ -72,6 +72,33 @@ func GenerateLooseMP3Book(dir string) ([]string, error) {
 	return out, nil
 }
 
+// GenerateFolderBook writes the book-folder upload's own two-part MP3
+// audiobook under dir: "Tamsin Reed/The Folded Letters" holding
+// "01 - First Letter.mp3" and "02 - Second Letter.mp3", tagged as
+// GenerateLooseMP3Book's parts are. Its audio is its own, so the two book
+// uploads never carry a copy of each other's parts. It returns the parts'
+// paths in reading order.
+func GenerateFolderBook(dir string) ([]string, error) {
+	bookDir := filepath.Join(dir, "Tamsin Reed", "The Folded Letters")
+	var out []string
+	for i, title := range []string{"First Letter", "Second Letter"} {
+		paths, err := Generate(bookDir, Spec{
+			Name:     fmt.Sprintf("%02d - %s", i+1, title),
+			Codec:    CodecMP3,
+			Duration: time.Duration(3+i) * time.Second,
+			Tags: map[string]string{
+				"TITLE": title, "ARTIST": "Tamsin Reed", "ALBUM": "The Folded Letters",
+				"ALBUMARTIST": "Tamsin Reed", "TRACKNUMBER": fmt.Sprint(i + 1), "GENRE": "Speech",
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("fixtures: folder book part %d: %w", i+1, err)
+		}
+		out = append(out, paths...)
+	}
+	return out, nil
+}
+
 // GenerateMisfiledBook writes a two-part MP3 audiobook a library holding
 // music catalogs as an album - "Ora Vance/The Misfiled Lectures" with
 // "01 - First Lecture.mp3" and "02 - Second Lecture.mp3", tagged with

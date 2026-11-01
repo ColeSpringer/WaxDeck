@@ -434,6 +434,17 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('percent'), findsOneWidget);
+
+      // The choice outlives the face: the next open of the player draws
+      // the book again.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpPlayerInto(tester, harness);
+      expect(
+        tester.getSemantics(
+          find.bySemanticsIdentifier(SemanticsIds.playerTimeline('book')),
+        ),
+        isSemantics(isSelected: true),
+      );
       await harness.endPlayback(tester);
     });
 

@@ -949,8 +949,9 @@ class MetadataFieldRow extends StatelessWidget {
   final MetadataDraft draft;
 
   /// Whether this field differs from what is stored. Marked on the
-  /// field rather than only counted on the save bar, so a long form
-  /// says which line is about to be written.
+  /// field's source chip rather than only counted on the save bar, so a
+  /// long form says which line is about to be written; a field with no
+  /// stored value and no row has no chip to carry it.
   final bool dirty;
 
   /// Whether a save is in flight. The staging controls disable for its
@@ -964,15 +965,17 @@ class MetadataFieldRow extends StatelessWidget {
   /// owns the sheet because the canonical tree is its read.
   final VoidCallback? onAddGenre;
 
-  /// Who set this field, named the way the header's tally names it:
-  /// the provider where one supplied the value, the source token
-  /// otherwise, and either read through the producer vocabulary rather
-  /// than shown as the wire word. The chip used to print `enrichment`
-  /// and `musicbrainz` at the reader.
-  String _provenanceText(AppLocalizations l10n) {
+  /// Who set this field, read through the producer vocabulary rather
+  /// than shown as the wire word, or null for a field with no value.
+  String? _provenanceText(AppLocalizations l10n) {
     final p = state.provenanceFor(field.name);
-    if (p == null) return l10n.metadataSourceUnknown;
-    return provenanceProducerName(l10n, p.provider ?? p.source);
+    return fieldSourceName(
+      l10n,
+      source: p?.source,
+      provider: p?.provider,
+      hasValue: (state.metadata.fields[field.name] ?? '').isNotEmpty,
+      fromFeed: state.metadata.mediaType == MediaType.podcast,
+    );
   }
 
   @override
@@ -983,11 +986,12 @@ class MetadataFieldRow extends StatelessWidget {
     // Once: the lock's two names and every control arm below must all
     // say the same field.
     final fieldLabel = metadataFieldLabel(l10n, field.name);
+    final source = _provenanceText(l10n);
     final marks = Padding(
       padding: const EdgeInsets.only(bottom: WaxSpace.s8),
       child: Row(
         children: <Widget>[
-          CodecChip(_provenanceText(l10n), emphasis: dirty),
+          if (source != null) CodecChip(source, emphasis: dirty),
           WaxIconButton(
             glyph: locked ? WaxIcons.lock : WaxIcons.lockOpen,
             label: locked

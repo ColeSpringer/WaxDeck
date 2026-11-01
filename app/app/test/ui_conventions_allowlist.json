@@ -402,8 +402,11 @@
     "material-progress": 2,
     "raw-spacing": 4
   },
+  "lib/src/tools/job_rows.dart": {
+    "material-progress": 1
+  },
   "lib/src/tools/tasks_screen.dart": {
-    "material-progress": 2,
+    "material-progress": 1,
     "prose-slot-args": 1,
     "raw-ink": 2
   },
@@ -411,7 +414,6 @@
     "prose-slot-args": 2
   },
   "lib/src/uploads/uploads_screen.dart": {
-    "material-progress": 2,
     "prose-slot-args": 1
   }
 }

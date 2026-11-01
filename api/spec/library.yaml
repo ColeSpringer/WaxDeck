@@ -437,6 +437,62 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /library/items/resolve:
+    post:
+      operationId: resolveItems
+      summary: Resolve a list of item PIDs to summaries
+      description: >
+        Batch read of the summary rows behind a list of item PIDs
+        (`tr-`, `ep-`, `bk-`): what a client holding only handles, a
+        play queue for one, reads to learn what each is now without a
+        request per item. A POST because the PID list rides the body;
+        nothing changes server-side.
+
+
+        Each answer is the summary part of what `GET /items/{pid}`
+        answers for that PID, and answers come in request order, a
+        repeated PID once per occurrence. An item whose kind changed
+        answers under the prefix its kind has now, with the same ULID,
+        so match an answer to its request by the ULID after the prefix,
+        never by position.
+
+
+        PIDs that cannot be answered for are omitted rather than
+        erroring. Of the omissions, `departed` names the ones gone for
+        everyone: no item answers to the PID any more (a kind change
+        folded it into another) or ever did, or its item lost its files
+        for good (purged from the trash, deleted permanently, or its
+        library removed), which this lookup leaves out although
+        `GET /items/{pid}` still reads it. An item in the trash, which a
+        restore brings back, is answered as that read answers it. One
+        merely out of the caller's sight (a library grant, a content
+        setting) stays an unnamed omission, because it can come back. A
+        client holding a list may drop exactly the departed PIDs.
+
+
+        At most 100 PIDs per request (`invalid-request` past that); a
+        longer list is read in pieces.
+      tags: [library]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemResolveQuery"
+      responses:
+        "200":
+          description: Summaries for the PIDs that resolved, in request order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResolution"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /albums/{pid}:
     get:
       operationId: getAlbum
@@ -1187,6 +1243,47 @@ components:
             pattern: "^(al|ar|rg|pl|pc|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
           maxItems: 64
           example: [al-01JZX5N8QW3F4V9T2B7KD3M9R6]
+
+    ItemResolveQuery:
+      type: object
+      description: The item PIDs to resolve.
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          description: >
+            Type-prefixed item PIDs, in the order the answers should
+            come back in.
+          items:
+            type: string
+            pattern: "^(tr|ep|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 100
+          example: [tr-01JZX5N8QW3F4V9T2B7KD3M9R6]
+
+    ItemResolution:
+      type: object
+      description: >
+        Summaries for the requested PIDs, in request order, minus the
+        ones that could not be resolved.
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+        departed:
+          type: array
+          description: >
+            The requested PIDs gone for everyone: no item answers to it
+            any more (a kind change folded it into another) or ever did,
+            or its item lost its files for good (purged from the trash,
+            deleted permanently, or its library removed). As requested,
+            in request order, a repeated PID once, and absent rather than
+            empty when no miss was one of these.
+          items:
+            type: string
+            pattern: "^(tr|ep|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 100
 
     EntityCard:
       type: object

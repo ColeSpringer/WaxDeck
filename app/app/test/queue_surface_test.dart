@@ -12,6 +12,7 @@ import 'package:waxdeck/src/queue/queue_screen.dart';
 import 'package:waxdeck/src/queue/queue_state.dart' as queue_state;
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/queue/queue_view.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -21,9 +22,11 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'debug_prints.dart';
 import 'direction_glyph.dart';
 import 'disclosure_glyph.dart';
 import 'fakes.dart';
+import 'player_host.dart';
 import 'routed_host.dart';
 import 'row_finders.dart';
 
@@ -32,6 +35,12 @@ const _album = QueueSource(
   label: 'Gullwing',
   pid: 'al-1',
 );
+
+/// The tracks these tests queue, so playback finds what it is handed.
+final _tracks = <ItemSummary>[
+  for (var n = 1; n <= 9; n++)
+    testItem('tr-$n', title: 'Track tr-$n', artist: 'Nightjar'),
+];
 
 PlaybackSessionHistoryEntry _session(
   String id, {
@@ -65,7 +74,9 @@ Future<ProviderContainer> _pump(
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
     overrides: [
-      repositoryProvider.overrideWithValue(repository ?? FakeRepository()),
+      repositoryProvider.overrideWithValue(
+        repository ?? FakeRepository(items: _tracks),
+      ),
       audioEngineProvider.overrideWithValue(FakeEngine()),
       if (settings != null)
         clientSettingsStoreProvider.overrideWithValue(settings),
@@ -141,6 +152,7 @@ void main() {
       // the current one pinned at the top.
       expect(find.text('PREVIOUSLY (1)'), findsOneWidget);
       expect(_rowTitles(tester), hasLength(2));
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the seam is drawn once, ahead of the listener', (
@@ -177,6 +189,44 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('the current row takes back what a station displaced', (
+      tester,
+    ) async {
+      const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
+      final episode = testItem(pid, mediaType: MediaType.podcast);
+      final repository = FakeRepository(items: <ItemSummary>[episode])
+        ..playPositions[pid] = 60000;
+      final container = await _pump(tester, repository: repository);
+      final engine = container.read(audioEngineProvider) as FakeEngine;
+      container.read(nowPlayingProvider.notifier).play(<ItemSummary>[
+        episode,
+      ], source: _album);
+      await tester.pumpAndSettle();
+      final radio = container.read(radioPlaybackProvider.notifier);
+      await radio.play(
+        RadioStation(
+          pid: 'ra-1',
+          name: 'Coastal FM',
+          streamUrl: 'https://radio.example/stream',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await radio.stop();
+      await tester.pumpAndSettle();
+      expect(engine.playing, isFalse);
+
+      final current = container.read(queueControllerProvider).currentEntry!;
+      await tester.tap(_entryRow(current.queueId));
+      await tester.pumpAndSettle();
+
+      expect(engine.playing, isTrue);
+      expect(engine.loadedUrl, contains(pid));
+      expect(engine.position, const Duration(seconds: 60));
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('the played head opens and closes', (tester) async {
       final container = await _pump(tester);
       container
@@ -188,6 +238,7 @@ void main() {
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.queueHistory));
       await tester.pumpAndSettle();
       expect(_rowTitles(tester), hasLength(3));
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the played head points right closed and down open', (
@@ -204,6 +255,7 @@ void main() {
       await tester.tap(head);
       await tester.pumpAndSettle();
       expectDisclosure(tester, head, open: true);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a row drops out when its remove is pressed', (tester) async {
@@ -221,6 +273,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(queueControllerProvider).pids, ['tr-1', 'tr-2']);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a swipe drops a row too', (tester) async {
@@ -236,6 +289,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(queueControllerProvider).pids, ['tr-1', 'tr-3']);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a drag reorders what is up next, not the played head', (
@@ -270,6 +324,7 @@ void main() {
         'tr-4',
         'tr-3',
       ]);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a drag down moves an entry past the one below it', (
@@ -303,6 +358,7 @@ void main() {
         'tr-3',
         'tr-2',
       ]);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a rolling window says it is one', (tester) async {
@@ -323,10 +379,11 @@ void main() {
         find.textContaining('A window over a larger scope'),
         findsOneWidget,
       );
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('an earlier session can be put back from here', (tester) async {
-      final repository = FakeRepository()
+      final repository = FakeRepository(items: _tracks)
         ..sessionHistory = <PlaybackSessionHistoryEntry>[
           _session('ps-1', pids: ['tr-9', 'tr-8'], index: 1),
         ];
@@ -342,8 +399,7 @@ void main() {
       final queue = container.read(queueControllerProvider);
       expect(queue.pids, ['tr-9', 'tr-8']);
       expect(queue.currentPid, 'tr-8');
-      container.read(queueControllerProvider.notifier).clear();
-      await tester.pumpAndSettle();
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('putting a session back offers the live queue back', (
@@ -353,7 +409,7 @@ void main() {
       // `undoReplace` stayed when the "Replaced what was playing" toast
       // went: restoring from here replaces something that is playing, so
       // a mis-tap in a list of old sessions has to be recoverable.
-      final repository = FakeRepository()
+      final repository = FakeRepository(items: _tracks)
         ..sessionHistory = <PlaybackSessionHistoryEntry>[
           _session('ps-1', pids: ['tr-9', 'tr-8'], index: 1),
         ];
@@ -363,8 +419,8 @@ void main() {
           .playNow(['tr-1', 'tr-2'], source: _album, startIndex: 1);
       await tester.pumpAndSettle();
 
-      // Every message, not only the newest: this fake holds none of the
-      // restored items, so their start fails and says so after the offer.
+      // Every message, not only the newest, so nothing said after the
+      // offer can hide it.
       final raised = <ShellMessage>[];
       container.listen(shellMessengerProvider, (_, next) {
         if (next != null) raised.add(next);
@@ -385,8 +441,7 @@ void main() {
       final queue = container.read(queueControllerProvider);
       expect(queue.pids, ['tr-1', 'tr-2']);
       expect(queue.currentPid, 'tr-2');
-      container.read(queueControllerProvider.notifier).clear();
-      await tester.pumpAndSettle();
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a restore\'s undo takes back that restore or nothing', (
@@ -395,7 +450,7 @@ void main() {
       // The offer waits for its answer, and the queue can be replaced
       // again meanwhile: taking back that newer replacement would bring
       // the restored session back rather than what it displaced.
-      final repository = FakeRepository()
+      final repository = FakeRepository(items: _tracks)
         ..sessionHistory = <PlaybackSessionHistoryEntry>[
           _session('ps-1', pids: ['tr-9', 'tr-8'], index: 1),
         ];
@@ -418,8 +473,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(container.read(queueControllerProvider).pids, ['tr-5', 'tr-6']);
-      queue.clear();
-      await tester.pumpAndSettle();
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a server with no history offers nothing', (tester) async {
@@ -439,7 +493,7 @@ void main() {
       addTearDown(tester.view.reset);
       final container = ProviderContainer(
         overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository()),
+          repositoryProvider.overrideWithValue(FakeRepository(items: _tracks)),
           audioEngineProvider.overrideWithValue(FakeEngine()),
         ],
       );
@@ -525,6 +579,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('1 selected'), findsOneWidget);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the kebab opens the row menu while long press selects', (
@@ -676,6 +731,7 @@ void main() {
       // Removing clears the selection: what was picked is gone.
       expect(container.read(queueControllerProvider).pids, ['tr-1', 'tr-2']);
       expect(find.textContaining('selected'), findsNothing);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the bar\'s moves point where they send the rows', (
@@ -700,6 +756,7 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.queueSelectionBottom),
         up: false,
       );
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('shift+click extends a range from the last row touched', (
@@ -740,6 +797,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(container.read(queueControllerProvider).pids, ['tr-1']);
+      await endEditedPlayback(tester, container);
     });
 
     // Where a dragged block lands, at the edges of the coordinate space
@@ -815,6 +873,7 @@ void main() {
         'tr-2',
         'tr-3',
       ]);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('un-ticking the last row leaves no anchor behind', (
@@ -846,6 +905,7 @@ void main() {
       // Just the row clicked - not a range running back to a row that
       // was un-ticked out of the previous selection.
       expect(find.text('1 selected'), findsOneWidget);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a swipe is inert while a set is picked', (tester) async {
@@ -871,6 +931,7 @@ void main() {
         'tr-2',
         'tr-3',
       ]);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the clear button and Escape both end the selection', (
@@ -890,6 +951,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('selected'), findsNothing);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('Escape ends the selection, and only while there is one', (
@@ -903,7 +965,7 @@ void main() {
       addTearDown(tester.view.reset);
       final container = ProviderContainer(
         overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository()),
+          repositoryProvider.overrideWithValue(FakeRepository(items: _tracks)),
           audioEngineProvider.overrideWithValue(FakeEngine()),
         ],
       );
@@ -938,6 +1000,7 @@ void main() {
       expect(find.textContaining('selected'), findsNothing);
       // Still on the queue: Escape ended a mode rather than the screen.
       expect(find.byType(QueueScreen), findsOneWidget);
+      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the same selection drives the panel', (tester) async {
@@ -949,7 +1012,7 @@ void main() {
       addTearDown(tester.view.reset);
       final container = ProviderContainer(
         overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository()),
+          repositoryProvider.overrideWithValue(FakeRepository(items: _tracks)),
           audioEngineProvider.overrideWithValue(FakeEngine()),
         ],
       );
@@ -971,6 +1034,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('1 selected'), findsOneWidget);
       expect(container.read(queueSelectionProvider), hasLength(1));
+      await endEditedPlayback(tester, container);
     });
   });
 
@@ -978,7 +1042,7 @@ void main() {
     test(
       'a launch with nothing on disk offers the account\'s last session',
       () async {
-        final repository = FakeRepository()
+        final repository = FakeRepository(items: _tracks)
           ..sessionHistory = <PlaybackSessionHistoryEntry>[
             _session('ps-1', pids: ['tr-1', 'tr-2'], index: 1),
           ];
@@ -1023,7 +1087,7 @@ void main() {
       'turning a server offer down records it rather than clearing a disk',
       () async {
         final settings = MemoryClientSettingsStore();
-        final repository = FakeRepository()
+        final repository = FakeRepository(items: _tracks)
           ..sessionHistory = <PlaybackSessionHistoryEntry>[_session('ps-7')];
         final container = ProviderContainer(
           overrides: [
@@ -1049,7 +1113,7 @@ void main() {
       // launch, and the one after that at the one after: the history is
       // newest first, so a decline is about everything up to it.
       final settings = MemoryClientSettingsStore();
-      final repository = FakeRepository()
+      final repository = FakeRepository(items: _tracks)
         ..sessionHistory = <PlaybackSessionHistoryEntry>[
           _session('ps-new', stoppedAt: DateTime.utc(2026, 7, 28, 12)),
           _session('ps-old', stoppedAt: DateTime.utc(2026, 7, 28, 9)),
@@ -1083,21 +1147,23 @@ void main() {
     });
 
     test('a launch offline offers nothing rather than failing', () async {
-      final repository = FakeRepository()
-        ..sessionHistoryError = const WaxDeckApiException(
-          code: 'internal',
-          message: 'offline',
+      await captureDebugPrints(() async {
+        final repository = FakeRepository()
+          ..sessionHistoryError = const WaxDeckApiException(
+            code: 'internal',
+            message: 'offline',
+          );
+        final container = ProviderContainer(
+          overrides: [repositoryProvider.overrideWithValue(repository)],
         );
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repository)],
-      );
-      addTearDown(container.dispose);
+        addTearDown(container.dispose);
 
-      expect(await container.read(queueRestoreProvider.future), isNull);
+        expect(await container.read(queueRestoreProvider.future), isNull);
+      });
     });
 
     test('an ended session with an empty queue is not an offer', () async {
-      final repository = FakeRepository()
+      final repository = FakeRepository(items: _tracks)
         ..sessionHistory = <PlaybackSessionHistoryEntry>[
           _session('ps-1', pids: const []),
           _session('ps-2', pids: const ['tr-5']),
@@ -1113,18 +1179,22 @@ void main() {
     });
 
     test('a book in a restored session keeps its own shape', () async {
-      final repository = FakeRepository()
-        ..sessionHistory = <PlaybackSessionHistoryEntry>[
-          _session('ps-1', pids: const ['bk-1']),
-        ];
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repository)],
-      );
-      addTearDown(container.dispose);
+      final printed = await captureDebugPrints(() async {
+        final repository = FakeRepository()
+          ..sessionHistory = <PlaybackSessionHistoryEntry>[
+            _session('ps-1', pids: const ['bk-1']),
+          ];
+        final container = ProviderContainer(
+          overrides: [repositoryProvider.overrideWithValue(repository)],
+        );
+        addTearDown(container.dispose);
 
-      final offer = await container.read(queueRestoreProvider.future);
+        final offer = await container.read(queueRestoreProvider.future);
 
-      expect(offer!.currentItem?.mediaType, MediaType.audiobook);
+        expect(offer!.currentItem?.mediaType, MediaType.audiobook);
+      });
+      // From the entry itself: the server no longer has the item.
+      expect(printed, [startsWith('offered item bk-1 unavailable')]);
     });
   });
 }

@@ -1,14 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
-import '../library/item_menu.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
@@ -20,6 +18,7 @@ import '../shell/server_health.dart';
 import '../shell/shell_messages.dart';
 import 'credits.dart';
 import 'episode_actions.dart';
+import 'episode_row.dart';
 import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
 import 'show_actions.dart';
@@ -364,7 +363,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
       ),
       sliver: SliverList.builder(
         itemCount: visible.length + (footer ? 1 : 0),
-        findChildIndexCallback: indexByKey(visible, _episodeKey),
+        findChildIndexCallback: indexByKey(visible, episodeRowKey),
         itemBuilder: (context, index) {
           if (index >= visible.length) {
             return Padding(
@@ -383,9 +382,11 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
             );
           }
           final episode = visible[index];
-          return _EpisodeRow(
-            key: _episodeKey(episode),
+          return EpisodeRow(
+            key: episodeRowKey(episode),
             showPid: widget.pid,
+            leadingText: context.l10n.formatMonthDay(episode.publishedAt),
+            viaGo: true,
             episode: episode,
             progress: progress[episode.pid],
             selecting: _selecting,
@@ -762,126 +763,6 @@ class _CollapsibleNotesState extends ConsumerState<CollapsibleNotes> {
             onPressed: () => setState(() => _open = !_open),
           ),
       ],
-    );
-  }
-}
-
-/// A row's key, so the row moves with its episode (see [indexByKey]).
-Key _episodeKey(EpisodeSummary episode) =>
-    ValueKey(SemanticsIds.episode(episode.pid));
-
-/// One episode in a show's list.
-class _EpisodeRow extends ConsumerWidget {
-  const _EpisodeRow({
-    super.key,
-    required this.showPid,
-    required this.episode,
-    required this.progress,
-    required this.selecting,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  final String showPid;
-  final EpisodeSummary episode;
-  final PlayProgress progress;
-  final bool selecting;
-  final bool selected;
-  final ValueChanged<bool> onSelect;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final actions = EpisodeActions(ref: ref, showPid: showPid);
-    final l10n = context.l10n;
-    final remaining = episode.durationMs - progress.positionMs;
-    final trailing = progress.inProgress && remaining > 0
-        ? l10n.podcastTimeLeft(l10n.formatListenTime(remaining))
-        : l10n.formatListenTime(episode.durationMs);
-
-    final facts = <String>[
-      if (episode.season != null && episode.episodeNumber != null)
-        l10n.podcastSeasonEpisode(episode.season!, episode.episodeNumber!)
-      else if (episode.episodeNumber != null)
-        l10n.podcastEpisodeNumber(episode.episodeNumber!),
-      if (episode.explicit) l10n.podcastExplicit,
-      if (episode.fetchState == 'failed')
-        l10n.podcastDownloadFailed
-      else if (episode.fetchState != null && !episode.downloaded)
-        l10n.podcastQueuedForDownload
-      // Said on the row rather than left to the tap: an episode this
-      // server holds no bytes for still plays, relayed from the feed's
-      // own host, unless the listing says there is no audio to relay. It
-      // does not say why (no enclosure, a playlist, a YouTube watch
-      // page), so the words hold for every cause.
-      else if (!episode.downloaded && !episode.hasEnclosure)
-        l10n.podcastNoAudioToStream,
-    ];
-
-    return MediaListRow(
-      data: MediaTileData(
-        title: episode.title,
-        subtitle: facts.isEmpty ? null : facts.join(' · '),
-        domain: WaxDomain.podcasts,
-        progress: progress.fractionOf(episode.durationMs),
-        trailingText: trailing,
-        downloaded: episode.downloaded,
-        unplayed: !progress.played && progress.positionMs == 0,
-        semanticsId: SemanticsIds.episode(episode.pid),
-      ),
-      leadingText: l10n.formatMonthDay(episode.publishedAt),
-      onSelect: selecting ? onSelect : null,
-      selectSemanticsId: SemanticsIds.episodeSelect(episode.pid),
-      selected: selected,
-      actions: <Widget>[
-        if (!episode.downloaded &&
-            (episode.fetchState == null || episode.fetchState == 'failed'))
-          WaxIconButton(
-            glyph: WaxIcons.downloads,
-            label: l10n.podcastFetchEpisode(episode.title),
-            size: 18,
-            semanticsId: SemanticsIds.episodeFetch(episode.pid),
-            onPressed: () => unawaited(actions.fetch(context, episode.pid)),
-          ),
-        if (episode.downloaded)
-          WaxIconButton(
-            glyph: WaxIcons.offline,
-            label: l10n.podcastRemoveEpisode(episode.title),
-            size: 18,
-            semanticsId: SemanticsIds.episodeRemove(episode.pid),
-            onPressed: () =>
-                unawaited(actions.removeDownload(context, episode.pid)),
-          ),
-        WaxIconButton(
-          glyph: WaxIcons.info,
-          label: l10n.podcastEpisodeDetails(episode.title),
-          size: 18,
-          semanticsId: SemanticsIds.episodeInfo(episode.pid),
-          // Gone to, not pushed: the episode is declared beneath this
-          // show, so this location is the one it says it is and leaving
-          // it lands back here whether the visitor tapped in or opened
-          // the link cold.
-          onPressed: () =>
-              context.go(WaxRoute.showEpisode(showPid, episode.pid)),
-        ),
-      ],
-      // A long press selects, in a selection too, so the menu the kebab
-      // and a right click open never takes it.
-      onLongPress: () => onSelect(selecting ? !selected : true),
-      onMore: () => unawaited(
-        showItemMenuSheet(
-          context,
-          ref,
-          pid: episode.pid,
-          title: episode.title,
-          mediaType: MediaType.podcast,
-        ),
-      ),
-      moreSemanticsId: SemanticsIds.episodeMore(episode.pid),
-      onTap: () => selecting
-          ? onSelect(!selected)
-          : unawaited(
-              actions.play(context, episode, positionMs: progress.positionMs),
-            ),
     );
   }
 }

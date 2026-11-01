@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:built_collection/built_collection.dart';
@@ -192,6 +194,14 @@ abstract interface class WaxDeckRepository {
   /// so a short answer is normal and the caller must not index into it
   /// by request position.
   Future<EntityResolution> resolveEntities(List<String> pids);
+
+  /// `POST /library/items/resolve`: the summaries behind a list of item
+  /// pids, in request order, and the pids no item answers to any more.
+  ///
+  /// At most [itemLookupCap] pids a call. Pids out of the caller's sight
+  /// are dropped without being named departed, so a short answer is
+  /// normal; an item whose kind changed answers under its new prefix.
+  Future<ItemResolution> resolveItems(List<String> pids);
 
   /// `GET /albums/{pid}`: one album entity's identity - barcode, label,
   /// catalog number, media, country - which no track row carries.
@@ -1977,6 +1987,10 @@ abstract interface class WaxDeckRepository {
   /// `GET /jobs`: currently known background jobs (administrators).
   Future<List<Job>> listJobs();
 
+  /// `POST /jobs/clear-finished`: hides the caller's ended catalog jobs
+  /// from their list (administrators); answers how many it held.
+  Future<int> clearFinishedJobs();
+
   /// `GET /jobs/{pid}`: one catalog job's state and progress.
   Future<Job> getJob(String pid);
 
@@ -2025,7 +2039,18 @@ class WaxDeckClient implements WaxDeckRepository {
   ///
   /// [dio] is a test hook: the package's own tests inject a Dio carrying a
   /// recording adapter to pin request headers without a network.
-  factory WaxDeckClient({String baseUrl = '', Dio? dio}) {
+  ///
+  /// [chunkStall] is how long an upload chunk's attempt may go without
+  /// progress before it is given up as a timeout ([putUploadData]); a test
+  /// hook too. [wholeRequestCut] says the transport cuts a whole request at
+  /// its connect plus receive budget, as a browser's does, which the build
+  /// decides; given only by tests that stand in for a browser.
+  factory WaxDeckClient({
+    String baseUrl = '',
+    Dio? dio,
+    Duration chunkStall = defaultChunkStall,
+    bool? wholeRequestCut,
+  }) {
     // Strip trailing slashes so a baseUrl like "http://host:4420/" doesn't
     // produce "//api/v1", a non-canonical path the server 301-redirects,
     // which can drop the body on POST /auth/login.
@@ -2048,7 +2073,12 @@ class WaxDeckClient implements WaxDeckRepository {
     // slow send.
     transport.options.connectTimeout = const Duration(seconds: 10);
     transport.options.receiveTimeout = const Duration(seconds: 30);
-    return WaxDeckClient._(trimmed, gen.WaxdeckApiGen(dio: transport));
+    return WaxDeckClient._(
+      trimmed,
+      gen.WaxdeckApiGen(dio: transport),
+      chunkStall,
+      wholeRequestCut ?? _isWebBuild,
+    );
   }
 
   /// Marks a call whose server side does its whole job before the
@@ -2056,7 +2086,16 @@ class WaxDeckClient implements WaxDeckRepository {
   /// operation dead. Set through the generated methods' `extra` map.
   static const String _longOperation = 'waxdeck-long-operation';
 
-  WaxDeckClient._(this._baseUrl, this._gen) {
+  /// Marks an upload chunk's send on a transport that would cut the whole
+  /// request ([_wholeRequestCut]); set through `extra` like the above.
+  static const String _chunkSend = 'waxdeck-chunk-send';
+
+  WaxDeckClient._(
+    this._baseUrl,
+    this._gen,
+    this._chunkStall,
+    this._wholeRequestCut,
+  ) {
     _gen.dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
@@ -2067,6 +2106,15 @@ class WaxDeckClient implements WaxDeckRepository {
           // call rather than loosening every request's budget.
           if (options.extra[_longOperation] == true) {
             options.receiveTimeout = const Duration(minutes: 30);
+          }
+          // A chunk's send where the transport would cut the whole
+          // request at connect plus receive: a chunk on a slow uplink
+          // could never finish inside that, so the send's own progress
+          // deadline ([putUploadData]) is the only one it has.
+          if (options.extra[_chunkSend] == true) {
+            options
+              ..connectTimeout = Duration.zero
+              ..receiveTimeout = Duration.zero;
           }
           _applyAuth(options.headers, options.method);
           handler.next(options);
@@ -2114,6 +2162,26 @@ class WaxDeckClient implements WaxDeckRepository {
 
   final String _baseUrl;
   final gen.WaxdeckApiGen _gen;
+
+  /// How long an upload chunk's attempt may go without progress: before
+  /// any of its body goes, between pieces of it, and after the last for
+  /// the answer. Thirty seconds, the receive budget's own length. A native
+  /// send has no other deadline while its body goes (the send timeout
+  /// would cut a slow but moving chunk), and in a browser the transport's
+  /// own would cut the whole request at forty seconds, so a stuck send
+  /// ends here and a slow one that keeps moving is never cut.
+  static const defaultChunkStall = Duration(seconds: 30);
+
+  /// The pieces an upload chunk's body is handed to the transport in: a
+  /// native transport reports progress as it takes each.
+  static const _chunkPiece = 64 * 1024;
+
+  final Duration _chunkStall;
+
+  /// Whether the transport cuts a whole request at its connect plus receive
+  /// budget, as a browser's does: a chunk's send then goes without that
+  /// budget and keeps only its progress deadline.
+  final bool _wholeRequestCut;
   String? _authToken;
   String? _csrfToken;
 
@@ -2441,6 +2509,24 @@ class WaxDeckClient implements WaxDeckRepository {
           departed: list.departed?.toList() ?? const <String>[],
         );
       });
+
+  @override
+  Future<ItemResolution> resolveItems(List<String> pids) => _guard(() async {
+    if (pids.isEmpty) return const ItemResolution(items: []);
+    final response = await _gen.getLibraryApi().resolveItems(
+      itemResolveQuery: gen.ItemResolveQuery(
+        (b) => b..pids = ListBuilder<String>(pids),
+      ),
+    );
+    final list = _require(response.data);
+    return ItemResolution(
+      items: [
+        for (final item in list.items)
+          itemSummaryFromGen(item, baseUrl: _baseUrl),
+      ],
+      departed: list.departed?.toList() ?? const <String>[],
+    );
+  });
 
   @override
   Future<AlbumDetail> getAlbum(String pid) => _guard(() async {
@@ -4282,14 +4368,59 @@ class WaxDeckClient implements WaxDeckRepository {
     String uploadId, {
     required int offset,
     required Uint8List bytes,
-  }) => _guard(() async {
-    final response = await _gen.getUploadsApi().putUploadData(
-      uploadId: uploadId,
-      offset: offset,
-      body: MultipartFile.fromBytes(bytes),
-    );
-    return uploadSessionFromGen(_require(response.data));
-  });
+  }) async {
+    // The attempt is given up once it has made no progress for
+    // [_chunkStall] (none of the body sent yet, a send stuck, or no answer
+    // after the last of it): a slow chunk that keeps moving is never cut,
+    // and a stuck one ends in the retry its caller makes of any timeout.
+    // Progress is what the transport reports: the pieces a native one
+    // takes, the upload events a browser fires.
+    final cancel = CancelToken();
+    Timer? stall;
+    var stalled = false;
+    void arm() {
+      stall?.cancel();
+      stall = Timer(_chunkStall, () {
+        stalled = true;
+        cancel.cancel('the chunk stopped moving');
+      });
+    }
+
+    Stream<List<int>> pieces() async* {
+      for (var at = 0; at < bytes.length; at += _chunkPiece) {
+        yield Uint8List.sublistView(
+          bytes,
+          at,
+          math.min(at + _chunkPiece, bytes.length),
+        );
+      }
+    }
+
+    arm();
+    try {
+      return await _guard(() async {
+        final response = await _gen.getUploadsApi().putUploadData(
+          uploadId: uploadId,
+          offset: offset,
+          body: MultipartFile.fromStream(pieces, bytes.length),
+          // The length is what makes a native transport report progress.
+          headers: {Headers.contentLengthHeader: '${bytes.length}'},
+          extra: _wholeRequestCut ? const {_chunkSend: true} : null,
+          cancelToken: cancel,
+          onSendProgress: (_, _) => arm(),
+        );
+        return uploadSessionFromGen(_require(response.data));
+      });
+    } on WaxDeckApiException {
+      if (!stalled) rethrow;
+      throw const WaxDeckApiException(
+        code: 'transport-timeout',
+        message: 'the chunk stopped moving',
+      );
+    } finally {
+      stall?.cancel();
+    }
+  }
 
   @override
   Future<UploadSession> completeUpload(String uploadId) => _guard(() async {
@@ -5852,6 +5983,12 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<List<Job>> listJobs() => _guard(() async {
     final response = await _gen.getAdminApi().listJobs();
     return _require(response.data).jobs.map(jobFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<int> clearFinishedJobs() => _guard(() async {
+    final response = await _gen.getAdminApi().clearFinishedJobs();
+    return _require(response.data).cleared;
   });
 
   @override

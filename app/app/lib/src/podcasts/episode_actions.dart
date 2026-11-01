@@ -8,6 +8,7 @@ import '../player/play_progress.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../shell/shell_messages.dart';
+import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
 
 /// The verbs an episode has, wherever it is shown.
@@ -133,6 +134,7 @@ class EpisodeActions {
       } else {
         await ref.read(repositoryProvider).removeEpisodeDownload(pid);
       }
+      _refreshShelves();
       ref.invalidate(episodeDetailProvider(pid));
       if (context.mounted) {
         _report(l10n.podcastRemovedFromServer);
@@ -175,6 +177,16 @@ class EpisodeActions {
     } else {
       await ref.read(repositoryProvider).fetchEpisode(pid);
     }
+    _refreshShelves();
     ref.invalidate(episodeDetailProvider(pid));
+  }
+
+  /// Re-reads the hub's shelves when there is no listing to keep in
+  /// step, so their rows flip with the fetch or removal.
+  void _refreshShelves() {
+    if (showPid != null) return;
+    ref
+      ..invalidate(latestEpisodesProvider)
+      ..invalidate(upNextEpisodesProvider);
   }
 }

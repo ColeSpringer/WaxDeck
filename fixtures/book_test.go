@@ -1,7 +1,9 @@
 package fixtures_test
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -148,5 +150,54 @@ func TestLooseMP3BookIsABookOnlyInAnAudiobookRoot(t *testing.T) {
 		if len(items) != tc.want {
 			t.Errorf("media %q: %d %s items, want %d", tc.media, len(items), tc.kind, tc.want)
 		}
+	}
+}
+
+// The book-folder upload's book has the loose book's shape and audio of
+// its own: an audiobook root holding both catalogs two books, and no part
+// of one is a copy of a part of the other.
+func TestFolderBookIsABookOfItsOwn(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	loose, err := fixtures.GenerateLooseMP3Book(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	folder, err := fixtures.GenerateFolderBook(root)
+	if err != nil || len(folder) != 2 {
+		t.Fatalf("parts = %v (%v), want two", folder, err)
+	}
+	for _, f := range folder {
+		mine, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range loose {
+			theirs, err := os.ReadFile(l)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bytes.Equal(mine, theirs) {
+				t.Fatalf("%s is a copy of %s", f, l)
+			}
+		}
+	}
+	lib, err := waxbin.Open(ctx, waxbin.Options{
+		DBPath: filepath.Join(t.TempDir(), "catalog.db"),
+		Roots:  []config.Root{{Path: root, Mode: model.ModeInPlace, Media: model.MediaAudiobook}},
+	})
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	t.Cleanup(func() { _ = lib.Close() })
+	if _, err := lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	books, err := lib.Query(ctx, query.New(query.EntityItems).Where("kind", query.OpIs, "book").Build(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(books) != 2 {
+		t.Fatalf("%d books, want the loose book and the folder book", len(books))
 	}
 }

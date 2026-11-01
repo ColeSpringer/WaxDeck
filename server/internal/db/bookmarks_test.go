@@ -7,18 +7,6 @@ import (
 	"testing"
 )
 
-// openBookmarkTest is a store with the two accounts the marks belong to.
-func openBookmarkTest(t *testing.T) *DB {
-	t.Helper()
-	d := openTest(t)
-	for _, id := range []string{"us-1", "us-2"} {
-		if err := d.CreateUser(context.Background(), mkUser(id, "user-"+id, nil), false); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return d
-}
-
 // noCheck passes every new mark.
 func noCheck() error { return nil }
 
@@ -27,7 +15,7 @@ func mark(id, user, book string, position int64) Bookmark {
 }
 
 func TestCreateBookmarkReplaysItsOwnID(t *testing.T) {
-	d := openBookmarkTest(t)
+	d := openTwoUsersTest(t)
 	ctx := context.Background()
 	first := mark("01JZX5N8QW3F4V9T2B7KD3M9R6", "us-1", "bk1", 1500)
 	stored, created, err := d.CreateBookmark(ctx, first, noCheck)
@@ -47,7 +35,7 @@ func TestCreateBookmarkReplaysItsOwnID(t *testing.T) {
 }
 
 func TestCreateBookmarkRefusesAnIDThatIsNotTheCallers(t *testing.T) {
-	d := openBookmarkTest(t)
+	d := openTwoUsersTest(t)
 	ctx := context.Background()
 	if _, _, err := d.CreateBookmark(ctx, mark("01JZX5N8QW3F4V9T2B7KD3M9R6", "us-1", "bk1", 1), noCheck); err != nil {
 		t.Fatal(err)
@@ -63,7 +51,7 @@ func TestCreateBookmarkRefusesAnIDThatIsNotTheCallers(t *testing.T) {
 }
 
 func TestCreateBookmarkCapsABook(t *testing.T) {
-	d := openBookmarkTest(t)
+	d := openTwoUsersTest(t)
 	ctx := context.Background()
 	id := func(i int) string { return fmt.Sprintf("01JZX5N8QW3F4V9T2B7KD3%04d", i) }
 	for i := range bookmarkCap {
@@ -84,7 +72,7 @@ func TestCreateBookmarkCapsABook(t *testing.T) {
 }
 
 func TestDeleteBookmarkReportsWhetherItRemovedOne(t *testing.T) {
-	d := openBookmarkTest(t)
+	d := openTwoUsersTest(t)
 	ctx := context.Background()
 	if _, _, err := d.CreateBookmark(ctx, mark("01JZX5N8QW3F4V9T2B7KD3M9R6", "us-1", "bk1", 1), noCheck); err != nil {
 		t.Fatal(err)
@@ -103,7 +91,7 @@ func TestDeleteBookmarkReportsWhetherItRemovedOne(t *testing.T) {
 // A create replayed after the mark was removed (its first answer lost,
 // the removal made on another device) must not bring it back.
 func TestARemovedBookmarkIsNotCreatedAgain(t *testing.T) {
-	d := openBookmarkTest(t)
+	d := openTwoUsersTest(t)
 	ctx := context.Background()
 	m := mark("01JZX5N8QW3F4V9T2B7KD3M9R6", "us-1", "bk1", 1)
 	if _, _, err := d.CreateBookmark(ctx, m, noCheck); err != nil {
@@ -123,7 +111,7 @@ func TestARemovedBookmarkIsNotCreatedAgain(t *testing.T) {
 // A tombstone past the horizon goes, and a replay of its mark is a new
 // mark again; one inside the horizon still refuses.
 func TestTombstonesPastTheHorizonArePruned(t *testing.T) {
-	d := openBookmarkTest(t)
+	d := openTwoUsersTest(t)
 	ctx := context.Background()
 	old := mark("01JZX5N8QW3F4V9T2B7KD3M9R6", "us-1", "bk1", 1)
 	recent := mark("01JZX5N8QW3F4V9T2B7KD3M9R7", "us-1", "bk1", 2)
@@ -154,7 +142,7 @@ func TestTombstonesPastTheHorizonArePruned(t *testing.T) {
 // A replay racing a removal of the same mark answers one or the other,
 // never that the book is full.
 func TestAReplayRacingARemovalIsNeverFull(t *testing.T) {
-	d := openBookmarkTest(t)
+	d := openTwoUsersTest(t)
 	ctx := context.Background()
 	for i := range 100 {
 		m := mark(fmt.Sprintf("01JZX5N8QW3F4V9T2B7KD3%04d", i), "us-1", "bk1", 1)
@@ -185,7 +173,7 @@ func TestAReplayRacingARemovalIsNeverFull(t *testing.T) {
 // Only a mark that would be new is put to the caller's check: a replay
 // answers what is stored whatever it carries.
 func TestCreateBookmarkChecksOnlyANewMark(t *testing.T) {
-	d := openBookmarkTest(t)
+	d := openTwoUsersTest(t)
 	ctx := context.Background()
 	m := mark("01JZX5N8QW3F4V9T2B7KD3M9R6", "us-1", "bk1", 1)
 	refuse := func() error { return errors.New("refused") }

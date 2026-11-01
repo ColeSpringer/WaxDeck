@@ -4992,11 +4992,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataAddTag => 'Add tag';
 
   @override
-  String metadataArtworkSource(String source) {
-    return 'Artwork · $source';
-  }
-
-  @override
   String metadataBulkEdited(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -5242,11 +5237,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataForceTitle => 'Force';
 
   @override
-  String metadataFromSource(int count, String source) {
-    return '$count from $source';
-  }
-
-  @override
   String metadataGenreAddCustom(String query) {
     return 'Add \"$query\"';
   }
@@ -5329,9 +5319,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataNoCreditRoles => 'No credit roles for this kind';
-
-  @override
-  String get metadataNoSources => 'No recorded sources';
 
   @override
   String get metadataNothingToFetch => 'Nothing to fetch';
@@ -5549,9 +5536,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataSourceTag => 'tags';
 
   @override
-  String get metadataSourceUnknown => 'Source unknown';
-
-  @override
   String get metadataSourceUser => 'you';
 
   @override
@@ -5678,9 +5662,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get musicAlbumEditorForbiddenTitle =>
       'Only administrators can edit a release';
-
-  @override
-  String get musicAlbumEditorFromTags => 'From tags';
 
   @override
   String get musicAlbumEditorNamesOverline =>
@@ -7060,6 +7041,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerShareLink => 'Share link';
+
+  @override
+  String get playerShowChapter => 'Show the chapter';
+
+  @override
+  String get playerShowWholeBook => 'Show the whole book';
 
   @override
   String get playerSimilarTracks => 'Similar tracks';
@@ -9467,6 +9454,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queuePlayingFromMix => 'Playing from a mix';
+
+  @override
+  String get queuePlayingGone =>
+      'What was playing is no longer in the library.';
 
   @override
   String queuePreviously(int count) {
@@ -12002,6 +11993,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellSignOut => 'Sign out';
 
   @override
+  String shellWindowTitleItem(String title, String artist) {
+    return '$title · $artist';
+  }
+
+  @override
+  String shellWindowTitleLive(String station, String song) {
+    return '$station · $song';
+  }
+
+  @override
   String speedMultiplier(String speed) {
     return '${speed}x';
   }
@@ -12411,10 +12412,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolsClearFinished => 'Clear finished';
 
   @override
-  String get toolsClearFinishedAll => 'Clear everyone\'s finished tasks';
+  String get toolsClearFinishedAll => 'Clear everyone\'s finished';
 
   @override
-  String get toolsClearFinishedMine => 'Clear my finished tasks';
+  String get toolsClearFinishedMine => 'Clear my finished';
 
   @override
   String toolsCountAdded(int count) {
@@ -12613,6 +12614,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String toolsJobTargeted(String job, String target) {
     return '$job: $target';
+  }
+
+  @override
+  String toolsJobsCleared(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Cleared $count library jobs',
+      one: 'Cleared 1 library job',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12976,6 +12988,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadsFileUnreadable => 'The file could not be read';
 
   @override
+  String get uploadsFinishing => 'Finishing';
+
+  @override
   String get uploadsFormat => 'Download format';
 
   @override
@@ -12983,6 +12998,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsFromUrl => 'Add from URL';
+
+  @override
+  String get uploadsFromUrlBook => 'Add an audiobook from URL';
+
+  @override
+  String get uploadsFromUrlMusic => 'Add music from URL';
 
   @override
   String get uploadsFromUrlSubtitle => 'A video, a playlist, or a channel';
@@ -12999,6 +13020,30 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get uploadsGroupingAutoHelp =>
       'Group into albums by their tags and folders';
+
+  @override
+  String get uploadsGroupingBookAutoHelp => 'One book per folder or title';
+
+  @override
+  String get uploadsGroupingBookEach => 'Separate books';
+
+  @override
+  String get uploadsGroupingBookEachHelp => 'Every file is a book of its own';
+
+  @override
+  String uploadsGroupingBookOne(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'One book in $count parts',
+      one: 'One book',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get uploadsGroupingBookOneHelp =>
+      'Parts of one book, in folder and track order';
 
   @override
   String get uploadsGroupingTitle => 'How should these files be grouped?';
@@ -13035,6 +13080,10 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get uploadsInterrupted =>
+      'Interrupted. Discard it, then upload the file again.';
 
   @override
   String get uploadsLibrary => 'Library';
@@ -13104,6 +13153,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadsReceiving => 'Receiving';
 
   @override
+  String get uploadsReconnecting => 'Connection lost, trying again';
+
+  @override
   String get uploadsRetry => 'Retry upload';
 
   @override
@@ -13160,7 +13212,23 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String uploadsWhatManyBook(int count) {
+    return 'Upload $count files as an audiobook';
+  }
+
+  @override
+  String uploadsWhatManyMusic(int count) {
+    return 'Upload $count files as music';
+  }
+
+  @override
   String get uploadsWhatOne => 'What are you uploading?';
+
+  @override
+  String get uploadsWhatOneBook => 'Upload as an audiobook';
+
+  @override
+  String get uploadsWhatOneMusic => 'Upload as music';
 
   @override
   String get uploadsWhatThisIs => 'What this is';

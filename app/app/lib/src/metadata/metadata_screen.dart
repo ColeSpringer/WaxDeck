@@ -644,75 +644,32 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
   }
 }
 
-/// The item as it stands: what it is called, and where its values came
-/// from. The provenance summary is one line rather than a chip per
-/// field, which the fields themselves already carry.
+/// The item as it stands: what it is called, and where its lyrics and
+/// origin came from. Each field's own chip says where its value did.
 class _Header extends ConsumerWidget {
   const _Header({required this.pid, required this.state});
 
   final String pid;
   final MetadataEditorState state;
 
-  /// "5 from tags, 2 from you, 1 from MusicBrainz", commonest first.
+  /// Where the item's lyrics came from, worded the way the mark under a
+  /// cover is, or null when the item holds none.
   ///
-  /// Scalar rows only. The provenance list also carries an `art` and a
-  /// `lyrics` row whenever the item holds one, and counting those in
-  /// would shift this line on every item with a cover - which is nearly
-  /// all of them - and stop "no recorded sources" meaning what it says.
-  /// The artifacts get their own lines below instead, where naming the
-  /// two of them is more use than adding one to a tally.
-  static String provenanceSummary(
-    AppLocalizations l10n,
-    ItemMetadata metadata,
-  ) {
-    final counts = <String, int>{};
-    for (final entry in metadata.provenance) {
-      if (entry.isArtifact || entry.isKind) continue;
-      final source = entry.provider ?? entry.source;
-      counts[source] = (counts[source] ?? 0) + 1;
-    }
-    if (counts.isEmpty) return l10n.metadataNoSources;
-    final ordered = counts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return ordered
-        .map(
-          (e) => l10n.metadataFromSource(
-            e.value,
-            provenanceProducerName(l10n, e.key),
-          ),
-        )
-        .join(', ');
-  }
-
-  /// Where the item's cover and lyrics came from, one line each, worded
-  /// the way the mark under a cover is.
-  ///
-  /// The row is not enough on its own. An `art` or `lyrics` row also
-  /// appears for a field locked with nothing behind it - the way to
-  /// stop a scan filling one - and the source on that row is whatever
-  /// the writer that took the lock happened to stamp, which is not
-  /// where anything came from. So each line is drawn only when the item
-  /// actually holds the artifact the row is about.
-  static List<String> artifactSources(
-    AppLocalizations l10n,
-    ItemMetadata metadata,
-  ) {
-    final out = <String>[];
+  /// The row is not enough on its own. A `lyrics` row also appears for a
+  /// field locked with nothing behind it - the way to stop a scan
+  /// filling one - and the source on that row is whatever the writer
+  /// that took the lock happened to stamp, which is not where anything
+  /// came from. So the line is drawn only when the item holds lyrics.
+  /// Artwork is not here: each slot tile under the Artwork section
+  /// carries its own source.
+  static String? lyricsSource(AppLocalizations l10n, ItemMetadata metadata) {
+    if (metadata.lyrics == null) return null;
     for (final row in metadata.provenance) {
-      if (!row.isArtifact) continue;
-      final holdsIt = row.field == 'art'
-          ? metadata.hasOwnArtwork
-          : metadata.lyrics != null;
-      if (!holdsIt) continue;
+      if (row.field != 'lyrics') continue;
       final label = provenanceSourceLabel(l10n, row);
-      if (label == null) continue;
-      out.add(
-        row.field == 'art'
-            ? l10n.metadataArtworkSource(label)
-            : l10n.metadataLyricsSource(label),
-      );
+      if (label != null) return l10n.metadataLyricsSource(label);
     }
-    return out;
+    return null;
   }
 
   /// "Origin: a podcast feed - https://feeds.example.com/show/ep-12",
@@ -813,6 +770,7 @@ class _Header extends ConsumerWidget {
     final title = metadata.fields['title'] ?? l10n.metadataUntitled;
     final artist = metadata.fields['artist'];
     final origin = originLine(l10n, metadata);
+    final lyrics = lyricsSource(l10n, metadata);
     final mayEditOrigin = metadata.mayCurate ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -831,13 +789,9 @@ class _Header extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(
-                provenanceSummary(l10n, metadata),
-                style: WaxType.caption.copyWith(color: colors.textTertiary),
-              ),
-              for (final line in artifactSources(l10n, metadata))
+              if (lyrics != null)
                 Text(
-                  line,
+                  lyrics,
                   style: WaxType.caption.copyWith(color: colors.textTertiary),
                 ),
               if (metadata.provenance.any((p) => p.isKind && p.locked))

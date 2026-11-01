@@ -830,8 +830,8 @@ void main() {
       // The control opens a menu rather than sweeping.
       await tapId(tester, SemanticsIds.tasksClearFinished);
       expect(repo.clearFinishedToolTaskCalls, 0);
-      expect(find.text('Clear my finished tasks'), findsOneWidget);
-      expect(find.text('Clear everyone\'s finished tasks'), findsOneWidget);
+      expect(find.text('Clear my finished'), findsOneWidget);
+      expect(find.text('Clear everyone\'s finished'), findsOneWidget);
 
       await tapId(tester, SemanticsIds.tasksClearFinishedMine);
 
@@ -848,6 +848,7 @@ void main() {
       await tapId(tester, SemanticsIds.tasksClearFinishedAll);
 
       expect(repo.clearFinishedToolTaskCalls, 0, reason: 'nothing before yes');
+      expect(repo.clearFinishedJobCalls, 0, reason: 'nor for the jobs');
       expect(
         find.text('Clear every member\'s finished tasks?'),
         findsOneWidget,
@@ -858,6 +859,7 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(repo.clearFinishedToolTaskCalls, 0);
+      expect(repo.clearFinishedJobCalls, 0);
       expect(_row('tt-a'), findsOneWidget);
 
       await tapId(tester, SemanticsIds.tasksClearFinished);
@@ -910,6 +912,294 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
       findsNothing,
     );
+  });
+
+  group('clearing the library jobs with the tasks', () {
+    FakeRepository adminRepo() =>
+        FakeRepository(
+            sessionState: const SessionState(authenticated: true, user: _admin),
+          )
+          ..jobs = [
+            Job(
+              pid: 'jb-scan',
+              kind: 'scan',
+              state: 'done',
+              startedAt: DateTime.utc(2026, 9, 29, 10),
+              finishedAt: DateTime.utc(2026, 9, 29, 10, 5),
+            ),
+          ];
+
+    Future<void> tapId(WidgetTester tester, String id) async {
+      await tester.tap(find.bySemanticsIdentifier(id));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a finished job alone offers the sweep, and either choice '
+        'clears it', (tester) async {
+      for (final id in [
+        SemanticsIds.tasksClearFinishedMine,
+        SemanticsIds.tasksClearFinishedAll,
+      ]) {
+        final repo = adminRepo();
+        await tester.pumpWidget(_host(repo));
+        await tester.pumpAndSettle();
+        expect(_job('jb-scan'), findsOneWidget);
+
+        await tapId(tester, SemanticsIds.tasksClearFinished);
+        expect(repo.clearFinishedJobCalls, 0, reason: 'a menu, not a sweep');
+        if (id == SemanticsIds.tasksClearFinishedAll) {
+          await tapId(tester, id);
+          await tapId(tester, SemanticsIds.tasksClearFinishedConfirm);
+        } else {
+          await tapId(tester, id);
+        }
+
+        expect(repo.clearFinishedJobCalls, 1, reason: id);
+        expect(_job('jb-scan'), findsNothing, reason: id);
+        expect(
+          shellMessageText(raisedMessage(tester)),
+          contains('Cleared 1 library job'),
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    });
+
+    testWidgets('the sweep counts only the jobs the list shows', (
+      tester,
+    ) async {
+      // A finished run of one item is off the list, so it is neither
+      // swept nor counted: the server clears by the caller's own list.
+      final repo = adminRepo()
+        ..jobs.add(
+          Job(
+            pid: 'jb-one',
+            kind: 'enrich',
+            state: 'done',
+            target: const JobTarget(type: 'item', pid: 'tr-1'),
+            startedAt: DateTime.utc(2026, 9, 29, 11),
+            finishedAt: DateTime.utc(2026, 9, 29, 11, 1),
+          ),
+        );
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      await tapId(tester, SemanticsIds.tasksClearFinished);
+      await tapId(tester, SemanticsIds.tasksClearFinishedMine);
+
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        contains('Cleared 1 library job'),
+      );
+      // Cleared from the list, not from the server: each still answers.
+      expect((await repo.getJob('jb-scan')).state, 'done');
+      expect((await repo.getJob('jb-one')).state, 'done');
+    });
+
+    testWidgets('a sweep of both lists says what each cleared', (tester) async {
+      final repo = adminRepo();
+      repo.toolTasksById['tt-a'] = ToolTask(
+        id: 'tt-a',
+        type: 'book-merge',
+        state: 'done',
+        createdAt: DateTime.utc(2026, 7, 1),
+        finishedAt: DateTime.utc(2026, 7, 1, 1),
+      );
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      await tapId(tester, SemanticsIds.tasksClearFinished);
+      await tapId(tester, SemanticsIds.tasksClearFinishedMine);
+
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'Cleared 1 task\nCleared 1 library job',
+      );
+      expect(_row('tt-a'), findsNothing);
+      expect(_job('jb-scan'), findsNothing);
+    });
+
+    testWidgets('the toast reads in Spanish', (tester) async {
+      final repo = adminRepo();
+      repo.toolTasksById['tt-a'] = ToolTask(
+        id: 'tt-a',
+        type: 'book-merge',
+        state: 'done',
+        createdAt: DateTime.utc(2026, 7, 1),
+        finishedAt: DateTime.utc(2026, 7, 1, 1),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            repositoryProvider.overrideWithValue(repo),
+            credentialStoreProvider.overrideWithValue(
+              InMemoryCredentialStore(),
+            ),
+          ],
+          child: routedHost(const TasksScreen(), locale: const Locale('es')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tapId(tester, SemanticsIds.tasksClearFinished);
+      await tapId(tester, SemanticsIds.tasksClearFinishedMine);
+
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'Se ha borrado 1 tarea\n'
+        'Se ha borrado 1 trabajo de la biblioteca',
+      );
+    });
+
+    testWidgets('a running job alone offers no sweep', (tester) async {
+      final repo = adminRepo()
+        ..jobs = [
+          Job(
+            pid: 'jb-run',
+            kind: 'scan',
+            state: 'running',
+            progress: 0.4,
+            startedAt: DateTime.utc(2026, 9, 29, 10),
+          ),
+        ];
+      await tester.pumpWidget(_host(repo));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump();
+      }
+
+      expect(_job('jb-run'), findsOneWidget);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a member never calls it', (tester) async {
+      final repo =
+          FakeRepository(
+              sessionState: const SessionState(
+                authenticated: true,
+                user: WaxDeckUser(id: 'us-2', username: 'sam'),
+              ),
+            )
+            ..jobs = adminRepo().jobs
+            ..toolTasksById['tt-a'] = ToolTask(
+              id: 'tt-a',
+              type: 'book-merge',
+              state: 'done',
+              createdAt: DateTime.utc(2026, 7, 1),
+              finishedAt: DateTime.utc(2026, 7, 1, 1),
+            );
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      expect(_job('jb-scan'), findsNothing);
+      await tapId(tester, SemanticsIds.tasksClearFinished);
+
+      expect(repo.clearFinishedToolTaskCalls, 1);
+      expect(repo.clearFinishedJobCalls, 0);
+    });
+
+    testWidgets('a refused job clear is told beside what did clear', (
+      tester,
+    ) async {
+      final repo = adminRepo()
+        ..clearFinishedJobsError = const WaxDeckApiException(
+          code: 'catalog-maintenance',
+          message: 'busy',
+          statusCode: 503,
+        );
+      repo.toolTasksById['tt-a'] = ToolTask(
+        id: 'tt-a',
+        type: 'book-merge',
+        state: 'done',
+        createdAt: DateTime.utc(2026, 7, 1),
+        finishedAt: DateTime.utc(2026, 7, 1, 1),
+      );
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      await tapId(tester, SemanticsIds.tasksClearFinished);
+      await tapId(tester, SemanticsIds.tasksClearFinishedMine);
+
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'Cleared 1 task\n'
+        'The library is busy with maintenance. Try again shortly.',
+      );
+      expect(_row('tt-a'), findsNothing);
+      expect(_job('jb-scan'), findsOneWidget, reason: 'nothing was hidden');
+    });
+
+    testWidgets('a sweep that kept some says so after the jobs line', (
+      tester,
+    ) async {
+      final repo = adminRepo()..clearFinishedKept = 2;
+      repo.toolTasksById['tt-a'] = ToolTask(
+        id: 'tt-a',
+        type: 'book-merge',
+        state: 'done',
+        createdAt: DateTime.utc(2026, 7, 1),
+        finishedAt: DateTime.utc(2026, 7, 1, 1),
+      );
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      await tapId(tester, SemanticsIds.tasksClearFinished);
+      await tapId(tester, SemanticsIds.tasksClearFinishedMine);
+
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'Cleared 1 task\nCleared 1 library job\n'
+        '2 tasks kept: their files could not be moved; see each row',
+      );
+    });
+  });
+
+  group('kind glyphs', () {
+    testWidgets("a finished scan row's glyph is not the refresh action", (
+      tester,
+    ) async {
+      final repo = FakeRepository(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      )..jobs = [Job(pid: 'jb-scan', kind: 'scan', state: 'done')];
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      final glyph = tester
+          .widget<WaxIcon>(
+            find
+                .descendant(of: _job('jb-scan'), matching: find.byType(WaxIcon))
+                .first,
+          )
+          .glyph;
+      expect(glyph, WaxIcons.library);
+      expect(glyph, isNot(WaxIcons.refresh));
+    });
+
+    testWidgets("a playlist sync row's glyph is not the refresh action", (
+      tester,
+    ) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-sync'] = ToolTask(
+        id: 'tt-sync',
+        type: 'playlist-sync',
+        state: 'done',
+        createdAt: DateTime.utc(2026, 10, 1),
+        finishedAt: DateTime.utc(2026, 10, 1, 1),
+      );
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      final glyph = tester
+          .widget<WaxIcon>(
+            find
+                .descendant(of: _row('tt-sync'), matching: find.byType(WaxIcon))
+                .first,
+          )
+          .glyph;
+      expect(glyph, WaxIcons.library);
+      expect(glyph, isNot(WaxIcons.refresh));
+    });
   });
 
   testWidgets('an empty task list shows the empty state', (tester) async {
@@ -1048,7 +1338,11 @@ void main() {
       findsOneWidget,
       reason: 'nobody cancels a job; the server stopped under it',
     );
-    expect(_job('jb-3'), findsNothing, reason: 'a finished import is noise');
+    expect(
+      _job('jb-3'),
+      findsOneWidget,
+      reason: 'the server decides which finished jobs list',
+    );
     expect(
       find.descendant(
         of: _job('jb-5'),

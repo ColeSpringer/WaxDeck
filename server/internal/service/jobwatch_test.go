@@ -13,6 +13,7 @@ import (
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/analyze"
+	"github.com/colespringer/waxbin/inbox"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/organize"
 	"github.com/colespringer/waxbin/scan"
@@ -559,5 +560,249 @@ func TestJobStatusForFollowsTheJobsAudience(t *testing.T) {
 	}
 	if _, err := svc.JobStatusFor(ctx, listener, "jb-01JZX5N8QW3F4V9T2B7KDEXAMPL"); KindOf(err) != KindNotFound {
 		t.Errorf("an unknown job = %v, want not-found", err)
+	}
+}
+
+// Clearing hides the ended jobs from the caller's list and never one still
+// running; a second clear has nothing left to count.
+func TestClearingFinishedJobsKeepsARunningJob(t *testing.T) {
+	t.Parallel()
+	a := gatedLyricist("a")
+	defer a.open()
+	ctx, svc, uc, _ := openLyricsFixture(t, a)
+	for range 3 {
+		if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer waitForJob(t, ctx, svc, pid)
+	defer a.open()
+	<-a.asked
+
+	cleared, err := svc.ClearFinishedJobs(ctx, uc)
+	if err != nil || cleared < 3 {
+		t.Fatalf("cleared = (%d, %v), want at least the three scans", cleared, err)
+	}
+	jobs, err := svc.Jobs(ctx, uc, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 1 || jobs[0].PID != apiPID(PrefixJob, pid) || jobs[0].State != "running" {
+		t.Fatalf("jobs after the clear = %+v, want only the running pass", jobs)
+	}
+	if again, err := svc.ClearFinishedJobs(ctx, uc); err != nil || again != 0 {
+		t.Errorf("a second clear = (%d, %v), want 0", again, err)
+	}
+}
+
+// A cleared job never takes a page slot: the scan below is newer than the
+// pass by id, yet with a limit of one the page is the pass, which ended
+// after the clear.
+func TestAClearedJobTakesNoPageSlot(t *testing.T) {
+	t.Parallel()
+	a := gatedLyricist("a")
+	defer a.open()
+	ctx, svc, uc, _ := openLyricsFixture(t, a)
+	pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer waitForJob(t, ctx, svc, pid)
+	defer a.open()
+	<-a.asked
+	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if cleared, err := svc.ClearFinishedJobs(ctx, uc); err != nil || cleared < 1 {
+		t.Fatalf("cleared = (%d, %v), want at least the scan", cleared, err)
+	}
+	a.open()
+	waitForJob(t, ctx, svc, pid)
+
+	jobs, err := svc.Jobs(ctx, uc, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 1 || jobs[0].PID != apiPID(PrefixJob, pid) {
+		t.Fatalf("jobs with a limit of one = %+v, want the pass that ended after the clear", jobs)
+	}
+}
+
+// A page is filled from as far back as it takes: the pass below ended after
+// the clear, behind more cleared scans than one read of the catalog holds
+// for a limit of one, and it is still the page.
+func TestAJobEndedAfterTheClearListsBehindAWindowOfClearedOnes(t *testing.T) {
+	t.Parallel()
+	a := gatedLyricist("a")
+	defer a.open()
+	ctx, svc, uc, _ := openLyricsFixture(t, a)
+	pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer waitForJob(t, ctx, svc, pid)
+	defer a.open()
+	<-a.asked
+	for range jobsOverfetch + 1 {
+		if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if cleared, err := svc.ClearFinishedJobs(ctx, uc); err != nil || cleared < jobsOverfetch+1 {
+		t.Fatalf("cleared = (%d, %v), want at least the %d scans", cleared, err, jobsOverfetch+1)
+	}
+	a.open()
+	waitForJob(t, ctx, svc, pid)
+
+	jobs, err := svc.Jobs(ctx, uc, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 1 || jobs[0].PID != apiPID(PrefixJob, pid) {
+		t.Fatalf("jobs with a limit of one = %+v, want the pass that ended after the clear", jobs)
+	}
+}
+
+// A forty-file upload runs an import per file. Finished, those are neither
+// listed, however far back the page has to read past them, nor counted by
+// the clear, which counts what the list holds.
+func TestAnUploadsFinishedImportsAreNeitherListedNorCounted(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := openEnrichFixture(t, func(*Config) {})
+	whole, err := svc.lib.Scan(ctx, waxbin.ScanRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	libs, err := svc.lib.Libraries(ctx)
+	if err != nil || len(libs) == 0 {
+		t.Fatalf("libraries = (%v, %v)", libs, err)
+	}
+	// An import job per file; the files themselves are no part of this.
+	plan := &inbox.Plan{Library: libs[0], Source: t.TempDir()}
+	for range 40 {
+		if _, err := svc.lib.ApplyImport(ctx, plan); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := svc.lib.Jobs(ctx, jobsFetchCap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imports := slices.IndexFunc(raw, func(j *model.Job) bool { return j.Kind == "import" }); imports < 0 {
+		t.Fatalf("the catalog holds no import job: %+v", raw)
+	}
+
+	page, err := svc.Jobs(ctx, uc, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(page, func(j Job) bool { return j.PID == apiPID(PrefixJob, whole.JobPID) }) {
+		t.Errorf("a page of two = %+v, want the scan behind the imports", page)
+	}
+	listed, err := svc.Jobs(ctx, uc, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var finished int
+	for _, j := range listed {
+		if j.Kind == "import" {
+			t.Errorf("a finished import is listed: %+v", j)
+		}
+		if j.State != string(model.JobRunning) {
+			finished++
+		}
+	}
+	cleared, err := svc.ClearFinishedJobs(ctx, uc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared != finished {
+		t.Fatalf("cleared %d, want the %d finished jobs the list held", cleared, finished)
+	}
+}
+
+// What the list leaves out of a finished job, and never of a running one.
+func TestListedJobs(t *testing.T) {
+	t.Parallel()
+	const cleared = 50
+	ended := func(kind string, at int64) *model.Job {
+		return &model.Job{Kind: kind, State: model.JobDone, StartedAt: at - 1, FinishedAt: at}
+	}
+	targeted := func(j *model.Job) *model.Job {
+		j.TargetType = "item"
+		return j
+	}
+	running := func(j *model.Job) *model.Job {
+		j.State = model.JobRunning
+		j.FinishedAt = 0
+		return j
+	}
+	for _, tc := range []struct {
+		name string
+		job  *model.Job
+		want bool
+	}{
+		{"a scan", ended("scan", 60), true},
+		{"a cleared scan", ended("scan", 40), false},
+		{"an import", ended("import", 60), false},
+		{"a delete", ended("delete", 60), false},
+		{"a restore", ended("restore", 60), false},
+		{"a purge", ended("purge-trash", 60), false},
+		{"an import running", running(ended("import", 60)), true},
+		{"a delete running", running(ended("delete", 40)), true},
+		{"a targeted enrichment", targeted(ended("enrich", 60)), false},
+		{"a kind change", targeted(ended("set-kind", 60)), true},
+	} {
+		if got := listedJob(tc.job, cleared); got != tc.want {
+			t.Errorf("%s: listed = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A job's end is the first time it recorded.
+func TestJobEndedAtFallsBackThroughTheRecordedTimes(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		job  model.Job
+		want int64
+	}{
+		{"finished", model.Job{StartedAt: 1, HeartbeatAt: 2, FinishedAt: 3}, 3},
+		{"crashed before finishing", model.Job{StartedAt: 1, HeartbeatAt: 2}, 2},
+		{"never beat", model.Job{StartedAt: 1}, 1},
+	} {
+		if got := jobEndedAt(&tc.job); got != tc.want {
+			t.Errorf("%s: end = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The watermark is the newest end time among the jobs counted, not the
+// clock, so a job that ends after the call is not hidden by it.
+func TestClearingFinishedJobsStampsTheNewestEnd(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := openEnrichFixture(t, func(*Config) {})
+	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := svc.lib.Jobs(ctx, jobsFetchCap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var newest int64
+	for _, j := range raw {
+		if j.State != model.JobRunning && j.TargetType == "" {
+			newest = max(newest, jobEndedAt(j))
+		}
+	}
+	if _, err := svc.ClearFinishedJobs(ctx, uc); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := svc.db.JobsClearedAt(ctx, uc.ID); err != nil || got != newest {
+		t.Fatalf("watermark = (%d, %v), want the newest end %d", got, err, newest)
 	}
 }

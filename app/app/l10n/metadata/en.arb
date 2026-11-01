@@ -13,16 +13,6 @@
   "@metadataAddTag": {
     "description": "Button that stores the typed custom tag."
   },
-  "metadataArtworkSource": "Artwork · {source}",
-  "@metadataArtworkSource": {
-    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').",
-    "placeholders": {
-      "source": {
-        "type": "String",
-        "example": "From the file"
-      }
-    }
-  },
   "metadataBulkEdited": "{count, plural, =1{Edited 1 track} other{Edited {count} tracks}}",
   "@metadataBulkEdited": {
     "description": "Message part after a bulk save: how many catalog rows took the edit.",
@@ -330,20 +320,6 @@
   "@metadataForceTitle": {
     "description": "Switch that lets a save overwrite fields somebody locked. Its name is quoted in the refusal that suggests it, so the two must agree."
   },
-  "metadataFromSource": "{count} from {source}",
-  "@metadataFromSource": {
-    "description": "One entry in the provenance line: how many fields came from one source. {source} is a provider or source name from the server.",
-    "placeholders": {
-      "count": {
-        "type": "int",
-        "example": "5"
-      },
-      "source": {
-        "type": "String",
-        "example": "MusicBrainz"
-      }
-    }
-  },
   "metadataGenreAddCustom": "Add \"{query}\"",
   "@metadataGenreAddCustom": {
     "description": "Genre picker row that stages exactly what was typed, for a genre the canonical tree does not carry. {query} is the typed text.",
@@ -372,7 +348,7 @@
   },
   "metadataKindPinned": "Kind: {kind}, pinned",
   "@metadataKindPinned": {
-    "description": "Line under the editor's provenance summary when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).",
+    "description": "Line in the editor's header when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).",
     "placeholders": {
       "kind": {
         "type": "String",
@@ -459,10 +435,6 @@
   "metadataNoCreditRoles": "No credit roles for this kind",
   "@metadataNoCreditRoles": {
     "description": "Drawn in place of the credit editor for a kind of item that declares no roles."
-  },
-  "metadataNoSources": "No recorded sources",
-  "@metadataNoSources": {
-    "description": "Stands in for the provenance line when nothing recorded where the item's values came from."
   },
   "metadataNothingToFetch": "Nothing to fetch",
   "@metadataNothingToFetch": {
@@ -741,35 +713,31 @@
   },
   "metadataSourceEnrichment": "a provider",
   "@metadataSourceEnrichment": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceFeed": "the feed",
   "@metadataSourceFeed": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceNormalize": "the clean-up pass",
   "@metadataSourceNormalize": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from the clean-up pass\"): a value a clean-up pass such as the genre normalizer rewrote in the catalog. A short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a value a clean-up pass such as the genre normalizer rewrote in the catalog. A short noun, not a sentence."
   },
   "metadataSourceOrganize": "the organizer",
   "@metadataSourceOrganize": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceSidecar": "companion files",
   "@metadataSourceSidecar": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceTag": "tags",
   "@metadataSourceTag": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
-  },
-  "metadataSourceUnknown": "Source unknown",
-  "@metadataSourceUnknown": {
-    "description": "Chip beside a field whose value has no recorded source."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceUser": "you",
   "@metadataSourceUser": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataTagKey": "Key",
   "@metadataTagKey": {

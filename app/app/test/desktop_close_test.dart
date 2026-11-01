@@ -12,6 +12,8 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -301,6 +303,37 @@ void main() {
     await pumpEventQueue();
   });
 
+  test('a queue radio parked offers no stepping, and its play starts '
+      'nothing', () async {
+    final h = _Harness();
+    await h.start();
+    h.container.read(queueControllerProvider.notifier).addToEnd(['tr-next']);
+    await pumpEventQueue();
+    expect(h.tray.faces.last.canStep, isTrue);
+
+    final radio = h.container.read(radioPlaybackProvider.notifier);
+    await radio.play(
+      RadioStation(
+        pid: 'ra-1',
+        name: 'Coastal FM',
+        streamUrl: 'https://radio.example/stream',
+        createdAt: DateTime.utc(2026, 7, 1),
+      ),
+    );
+    await pumpEventQueue();
+    await radio.stop();
+    await pumpEventQueue();
+
+    expect(h.tray.faces.last.title, isNull);
+    expect(h.tray.faces.last.canStep, isFalse);
+
+    final loads = h.engine.loadedUrls.length;
+    h.tray.actions!.onPlayPause();
+    await pumpEventQueue();
+    expect(h.engine.loadedUrls, hasLength(loads));
+    expect(h.engine.playing, isFalse);
+  });
+
   test('an entry still resolving is named as loading', () async {
     final h = _Harness();
     await h.start();
@@ -313,6 +346,8 @@ void main() {
     await pumpEventQueue();
 
     expect(h.tray.faces.last.title, 'Loading…');
+    // It resolves once let go, as a real entry does.
+    h.repo.libraryItems.add(testItem('tr-unnamed'));
     gate.complete();
     await pumpEventQueue();
   });

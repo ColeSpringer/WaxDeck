@@ -42,8 +42,9 @@ func wantTwoParts(t *testing.T, h *harness, label string) {
 }
 
 // Two MP3 parts uploaded as one audiobook import whole: as one batch
-// decided by a person, as one batch that declined identification, and
-// as two sessions sent in the wrong order.
+// decided by a person, as one batch that declined identification, as
+// one folder the server groups itself, and as two sessions sent in the
+// wrong order. Files uploaded as separate books stay separate.
 func TestMultiPartAudiobookBatchImportsWhole(t *testing.T) {
 	t.Parallel()
 
@@ -66,6 +67,13 @@ func TestMultiPartAudiobookBatchImportsWhole(t *testing.T) {
 		}
 		h.rescanAndWait(t)
 		wantTwoParts(t, h, "decided")
+		// WaxBin logs that it found no primary or alternate file to stamp
+		// for part two (a part is neither); the book, stamped at part
+		// one, keeps its origin.
+		pid := h.itemTitled(t, h.token, "The Loose Chapters").Pid
+		if acq := h.itemMeta(t, pid).Acquisition; acq == nil || acq.SourceType != "manual" {
+			t.Fatalf("book acquisition = %+v, want its manual origin", acq)
+		}
 	})
 
 	t.Run("declined identification", func(t *testing.T) {
@@ -82,6 +90,52 @@ func TestMultiPartAudiobookBatchImportsWhole(t *testing.T) {
 			t.Fatalf("declined unit = %s, want imported as-is at finalize", e.Status)
 		}
 		wantTwoParts(t, h, "declined")
+	})
+
+	t.Run("auto from a folder", func(t *testing.T) {
+		t.Parallel()
+		h, bob := joinHarness(t)
+		parts := looseBook(t)
+		batch := createBatch(t, h, bob, "auto", "audiobook")
+		for _, p := range parts {
+			uploadBatchMember(t, h, bob, p, "audiobook", batch.Id, "The Loose Chapters")
+		}
+		entryIDs := finalizeBatch(t, h, bob, batch.Id).ReviewEntryIds
+		if len(entryIDs) != 1 {
+			t.Fatalf("auto from one folder opened %d entries, want one book", len(entryIDs))
+		}
+		drainMatches(t, h)
+		decideAs(t, h, bob, entryIDs[0], map[string]any{"action": "as-is"})
+		h.rescanAndWait(t)
+		wantTwoParts(t, h, "auto from a folder")
+	})
+
+	t.Run("separate books", func(t *testing.T) {
+		t.Parallel()
+		h, bob := joinHarness(t)
+		first := looseBook(t)[0]
+		lectures, err := fixtures.GenerateMisfiledBook(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		batch := createBatch(t, h, bob, "tracks", "audiobook")
+		for _, p := range []string{first, lectures[0]} {
+			uploadBatchMember(t, h, bob, p, "audiobook", batch.Id, "")
+		}
+		entryIDs := finalizeBatch(t, h, bob, batch.Id).ReviewEntryIds
+		if len(entryIDs) != 2 {
+			t.Fatalf("tracks opened %d entries, want one per file", len(entryIDs))
+		}
+		drainMatches(t, h)
+		for _, id := range entryIDs {
+			decideAs(t, h, bob, id, map[string]any{"action": "as-is"})
+		}
+		h.rescanAndWait(t)
+		for _, title := range []string{"The Loose Chapters", "The Misfiled Lectures"} {
+			if pid, names := bookOfParts(t, h, title); len(names) != 1 {
+				t.Fatalf("book %q (%s) parts = %q, want one book of its own", title, pid, names)
+			}
+		}
 	})
 
 	t.Run("out of order", func(t *testing.T) {

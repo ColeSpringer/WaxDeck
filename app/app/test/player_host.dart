@@ -75,6 +75,18 @@ class PlayerHarness {
   }
 }
 
+/// [PlayerHarness.endPlayback] for a test that edited the queue under
+/// playback: Connect holds an edit until it settles, and that timer has
+/// to run out before the test may end.
+Future<void> endEditedPlayback(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  container.read(queueControllerProvider.notifier).clear();
+  await tester.pump(const Duration(seconds: 1));
+  await tester.pumpAndSettle();
+}
+
 /// Starts [item] playing and mounts the player over it, the state a
 /// listener reaches by expanding the dock: the queue gets the item,
 /// playback follows it, and the screen shows what came of that.

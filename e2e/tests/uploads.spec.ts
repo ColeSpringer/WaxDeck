@@ -18,16 +18,9 @@ const LANTERNS = ['lantern-one.mp3', 'lantern-two.mp3'];
 test('two picked files group as one album and import through review', async ({ app }) => {
   test.setTimeout(J.journey);
 
-  // The batches this account already has. An upload row is kept for a
-  // week and the account outlives the run, so a stack this test has used
-  // before carries a staged pair per earlier run - and "exactly two of
-  // these files are staged" would then be counting all of them. What is
-  // this run's is the batch that was not here a moment ago and holds
-  // these files: the folder journey opens a batch of its own beside this
-  // one, so "the newest batch" is somebody else's half the time.
-  const uploads = async () =>
-    (await app.api.get('/uploads', { query: { limit: 100 } })).uploads ?? [];
-  const before = new Set((await uploads()).map((r) => r.batchId));
+  // The batches this account already has: what is this run's is the one
+  // that was not here a moment ago and holds these files.
+  const before = await app.uploads.batchIds();
 
   await app.nav.enter('home');
 
@@ -38,23 +31,7 @@ test('two picked files group as one album and import through review', async ({ a
 
   // Both members stage under one batch and the finalize opens exactly
   // one review entry across them.
-  let entryId = '';
-  await expect(async () => {
-    const fresh = (await uploads()).filter(
-      (r) =>
-        r.batchId !== undefined &&
-        !before.has(r.batchId) &&
-        LANTERNS.includes(r.fileName),
-    );
-    const batchId = fresh[0]?.batchId;
-    expect(batchId, 'the picked pair should stage under a batch of its own').toBeTruthy();
-    const members = fresh.filter((r) => r.batchId === batchId && r.state === 'staged');
-    expect(members).toHaveLength(2);
-    expect(members.map((r) => r.fileName).sort()).toEqual([...LANTERNS].sort());
-    expect(members[0].reviewEntryId, 'finalize linked the entry').toBeTruthy();
-    expect(members[1].reviewEntryId).toBe(members[0].reviewEntryId);
-    entryId = members[0].reviewEntryId!;
-  }).toPass({ timeout: T.fetch });
+  const entryId = await app.uploads.stagedEntry(LANTERNS, before);
 
   // The uploads screen shows the quota header and the batch group.
   await app.nav.enter('uploads');
@@ -85,11 +62,8 @@ test('two picked files group as one album and import through review', async ({ a
     }),
   );
 
-  // A rescan is a catalog mutation, so a sibling worker may be holding
-  // the lease. Presence, never absence: the catalog is shared and a
-  // reused stack carries every earlier run's uploads.
-  const rescan = await app.api.raw.post('/library/rescan');
-  expect([202, 409]).toContain(rescan.status());
+  // Presence, never absence: the catalog is shared and a reused stack
+  // carries every earlier run's uploads.
   await expect
     .poll(
       async () => {
@@ -102,6 +76,104 @@ test('two picked files group as one album and import through review', async ({ a
       { timeout: T.fetch, message: 'the uploaded album should reach the library' },
     )
     .toEqual(['Paper Lanterns', 'River Static']);
+});
+
+test('a running upload never offers Retry through a list refresh', async ({ app }) => {
+  test.setTimeout(J.long);
+  const page = app.page;
+  await app.nav.enter('uploads');
+
+  // The session this run creates, from the create's own answer, and the
+  // first list read that holds it: a page holding a session whose source
+  // this client retains is what used to draw the failed face.
+  let uploadId = '';
+  let createdAs!: (id: string) => void;
+  const created = new Promise<string>((resolve) => (createdAs = resolve));
+  let listedAfterCreate!: () => void;
+  const listed = new Promise<void>((resolve) => (listedAfterCreate = resolve));
+  page.on('response', async (response) => {
+    const url = new URL(response.url());
+    const method = response.request().method();
+    try {
+      if (method === 'POST' && url.pathname.endsWith('/uploads') && response.ok()) {
+        uploadId = ((await response.json()) as { id: string }).id;
+        createdAs(uploadId);
+      } else if (method === 'GET' && url.pathname.endsWith('/uploads') && response.ok()) {
+        const [id, body] = await Promise.all([
+          created,
+          response.json() as Promise<{ uploads?: { id: string }[] }>,
+        ]);
+        if (body.uploads?.some((u) => u.id === id)) listedAfterCreate();
+      }
+    } catch {
+      // A body the page has already let go of is not this read.
+    }
+  });
+
+  // The injected stall: the second chunk waits until the list has been
+  // read again holding the session (the server's event for the create
+  // refreshes it), and then until this test lets it go. Every chunk
+  // after the first is held: a chunk held past the client's timeout is
+  // sent again, and that one must not slip through either.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let holding!: () => void;
+  const held = new Promise<void>((resolve) => (holding = resolve));
+  let puts = 0;
+  await page.route('**/uploads/*/data*', async (route) => {
+    if (route.request().method() === 'PUT' && ++puts >= 2) {
+      if (puts === 2) {
+        await listed;
+        holding();
+      }
+      await released;
+    }
+    try {
+      await route.fallback();
+    } catch {
+      // The client gave up on this chunk while it was held.
+    }
+  });
+
+  try {
+    // Over one chunk, so there is a second to hold.
+    await app.uploads.pickOnScreen([uploadSrc('long-take.wav')]);
+    await app.uploads.confirmMedia();
+    await held;
+
+    await app.uploads.revealPhase(uploadId);
+    // A few frames for the refreshed list to draw: Retry is what it drew
+    // before.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          let left = 5;
+          const tick = () => (--left === 0 ? resolve() : requestAnimationFrame(tick));
+          requestAnimationFrame(tick);
+        }),
+    );
+    await app.uploads.revealPhase(uploadId);
+    expect(await app.uploads.retryCountInView(uploadId), 'a running upload offers Retry').toBe(0);
+
+    release();
+    await expect
+      .poll(
+        async () =>
+          (await app.api.get('/uploads/{uploadId}', { path: { uploadId } })).state,
+        { timeout: T.fetch, message: 'the held upload should finish and stage' },
+      )
+      .toBe('staged');
+    await app.uploads.revealPhase(uploadId);
+    expect(await app.uploads.retryCountInView(uploadId), 'a staged upload offers Retry').toBe(0);
+  } finally {
+    // Staged bytes count against the account's allowance until
+    // discarded, and a failed run must not leave a session behind:
+    // deleted before a held chunk goes, so nothing can seal it after.
+    if (uploadId !== '') {
+      await app.api.raw.delete('/uploads/{uploadId}', { path: { uploadId } });
+    }
+    release();
+  }
 });
 
 test('the dialog that asks what a file is offers music and audiobook only', async ({
@@ -206,9 +278,7 @@ test('a picked folder uploads its audio and leaves the rest', async ({ app }) =>
   // for the destination - and the rows are read back by file name for
   // the same reason, since the two batches open side by side.
   const HARBOUR = ['harbour-one.mp3', 'harbour-two.mp3'];
-  const uploads = async () =>
-    (await app.api.get('/uploads', { query: { limit: 100 } })).uploads ?? [];
-  const before = new Set((await uploads()).map((r) => r.batchId));
+  const before = await app.uploads.batchIds();
 
   await app.nav.enter('home');
   await app.uploads.pickFolder(uploadSrc('Harbour Lights'));
@@ -232,24 +302,10 @@ test('a picked folder uploads its audio and leaves the rest', async ({ app }) =>
     timeout: T.assert,
   });
 
-  await expect(async () => {
-    const fresh = (await uploads()).filter(
-      (r) =>
-        r.batchId !== undefined &&
-        !before.has(r.batchId) &&
-        HARBOUR.includes(r.fileName),
-    );
-    const batchId = fresh[0]?.batchId;
-    expect(batchId, 'the picked folder should stage under a batch of its own').toBeTruthy();
-    const members = fresh.filter((r) => r.batchId === batchId && r.state === 'staged');
-    // Two, not four: the folder holds a text file and an Audible
-    // container the dialog could not filter out, so the picker's own
-    // filtering is what left them behind.
-    expect(members).toHaveLength(2);
-    expect(members.map((r) => r.fileName).sort()).toEqual([...HARBOUR].sort());
-    expect(members[0].reviewEntryId, 'finalize linked the entry').toBeTruthy();
-    expect(members[1].reviewEntryId).toBe(members[0].reviewEntryId);
-  }).toPass({ timeout: T.fetch });
+  // Two, not four: the folder holds a text file and an Audible container
+  // the dialog could not filter out, so the picker's own filtering is
+  // what left them behind.
+  await app.uploads.stagedEntry(HARBOUR, before);
 });
 
 test('a dropped file uploads through the drag-and-drop area', async ({ app }) => {
@@ -547,3 +603,61 @@ test('an MP3 uploaded as an audiobook stays a book through a forced rescan', asy
   }
 });
 
+test('a picked book folder uploads as one book in parts', async ({ app }) => {
+  test.setTimeout(J.journey);
+  // The book is this test's own: the single-part journey uploads the
+  // loose book's first part, which would be a copy of this folder's.
+  const TITLE = 'The Folded Letters';
+  const PARTS = ['01 - First Letter.mp3', '02 - Second Letter.mp3'];
+  const before = await app.uploads.batchIds();
+  const books = async () =>
+    (await app.api.get('/library/items', { query: { mediaType: 'audiobook', limit: 500 } })).items.filter(
+      (i) => i.title === TITLE,
+    );
+  const earlier = new Set((await books()).map((i) => i.pid));
+  let pid = '';
+
+  try {
+    // The Books hub knows what the folder is, so the dialog does not ask;
+    // the default grouping is one book in parts and is confirmed as is.
+    await app.nav.enter('books');
+    await app.uploads.pickFolder(uploadSrc(path.join('Tamsin Reed', TITLE)), SemanticsIds.booksAdd);
+    await expect(app.uploads.mediaConfirm()).toBeVisible({ timeout: T.nav });
+    await expect(app.uploads.control(SemanticsIds.uploadMediaType)).toHaveCount(0);
+    await app.uploads.confirmMedia();
+
+    const entryId = await app.uploads.stagedEntry(PARTS, before);
+
+    await expect
+      .poll(
+        async () => {
+          const entry = await app.api.tryGet('/review/queue/{entryId}', { path: { entryId } });
+          if (entry === undefined) return 'missing';
+          return entry.identifying ? 'identifying' : entry.status;
+        },
+        { timeout: T.fetch, message: 'the book entry should settle to pending' },
+      )
+      .toBe('pending');
+    await retryCatalogBusy(() =>
+      app.api.post('/review/queue/{entryId}/decide', { path: { entryId }, data: { action: 'as-is' } }),
+    );
+
+    await expect
+      .poll(
+        async () => {
+          pid = (await books()).find((i) => !earlier.has(i.pid))?.pid ?? '';
+          if (pid === '') return 0;
+          return (await app.api.get('/books/{pid}', { path: { pid } })).parts.length;
+        },
+        { timeout: T.fetch, message: 'the folder should become one book of two parts' },
+      )
+      .toBe(2);
+  } finally {
+    // The book goes again, as in the single-part journey above.
+    if (pid.startsWith('bk-')) {
+      await retryCatalogBusy(() =>
+        app.api.post('/library/items/delete', { data: { pids: [pid], mode: 'permanent', dryRun: false } }),
+      );
+    }
+  }
+});

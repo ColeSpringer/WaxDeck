@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { App, T } from './driver';
+import { App, J, T } from './driver';
 
 // The radio slice and the Connect surfaces over the real stack: a station
 // added over the API is drawn from the server's own logo proxy, tuned in
@@ -10,6 +10,8 @@ import { App, T } from './driver';
 // use; the stack enables private radio hosts for it, which is also what
 // lets the stream proxy relay a loopback URL.
 const LOGO_HOST = 'http://127.0.0.1:4421';
+/// The fixture show, played under a station to see what its stop leaves.
+const FEED_URL = `${LOGO_HOST}/feed.xml`;
 
 /// The station library is server-global, so these names are claims on
 /// shared rows and each test owns its own - the two that want a station
@@ -169,6 +171,7 @@ test('an edit typed into the dialog reaches the server', async ({ app }) => {
 });
 
 test('the hub pins a station and tunes it in', async ({ app }) => {
+  test.setTimeout(J.long);
   const station = await app.seed.radioStation(DIAL_STATION.name, DIAL_STATION.stream);
   // Seeded before the hub is entered, all of them: a station added to
   // the library while the grid is already drawn has no tile there, and
@@ -203,6 +206,8 @@ test('the hub pins a station and tunes it in', async ({ app }) => {
     new RegExp(`Live, ${DIAL_STATION.name}`),
     { timeout: T.nav },
   );
+  // The tab names the station while it is on.
+  await expect(app.page).toHaveTitle(new RegExp(DIAL_STATION.name));
   // Stop rather than pause: a paused live stream resumes at the live edge
   // anyway, and the transport does not pretend otherwise. (Or "Tap to
   // resume" where the browser refused the programmatic start, which is
@@ -217,6 +222,32 @@ test('the hub pins a station and tunes it in', async ({ app }) => {
   // and there is nothing left for the bar to be about.
   await app.radio.stop();
   await expect(app.radio.deckBar()).toHaveCount(0, { timeout: T.nav });
+  await expect(app.page).toHaveTitle('WaxDeck');
+
+  // A station tuned over an episode displaces it, and its stop does not
+  // put the episode back as if it were playing: the bar goes, and the
+  // queue it left is offered back for a press to resume.
+  const showPid = await app.seed.subscribePodcast(FEED_URL);
+  const [episode] = await app.seed.episodes(showPid);
+  await app.nav.enter('podcasts');
+  await app.podcasts.openShow(showPid);
+  await app.podcasts.playEpisode(episode.pid);
+  // In-app, not a cold load: a reboot would drop the queue the station
+  // has to displace.
+  await app.nav.to('radio');
+  await app.radio.tuneIn(app.radio.pinnedRow(station));
+  await app.radio.stop();
+  await expect(app.radio.deckBar()).toHaveCount(0, { timeout: T.nav });
+  // Offered as a place to pick up from, said once, ahead of its title.
+  await expect(app.player.offer()).toHaveAttribute(
+    'aria-label',
+    new RegExp(`Pick up where you left off, ${episode.title}`),
+    { timeout: T.nav },
+  );
+  await expect(app.player.offerResume()).toBeVisible();
+  // The rest of this test is about the dial, not the queue.
+  await app.player.dismissOffer();
+  await app.radio.station(station).waitFor({ timeout: T.nav });
 
   // The pin reached the account rather than this browser: which of the
   // household's stations are yours is a fact about you, so it is in the

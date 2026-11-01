@@ -444,6 +444,7 @@ func (l *Library) fetchAcquireItem(ctx context.Context, provider source.Provider
 	doc.Fingerprint = fp
 	doc.DurationMS = cmp.Or(length.Milliseconds(), int64(fpSecs)*1000)
 
+	now := time.Now()
 	row := wdb.Upload{
 		ID:            uploadID,
 		UserID:        t.UserID,
@@ -456,9 +457,10 @@ func (l *Library) fetchAcquireItem(ctx context.Context, provider source.Provider
 		StagingPath:   final,
 		// Carried even though this path opens its own entries: an unset
 		// field writes 0, so the row would read "declined" later.
-		Identify:    !p.IdentifyDeclined,
-		CreatedAtNS: time.Now().UnixNano(),
-		ExpiresAtNS: time.Now().Add(l.uploadRetention).UnixNano(),
+		Identify:     !p.IdentifyDeclined,
+		CreatedAtNS:  now.UnixNano(),
+		ReceivedAtNS: now.UnixNano(),
+		ExpiresAtNS:  now.Add(l.uploadRetention).UnixNano(),
 	}
 	if err := l.db.InsertUpload(ctx, row); err != nil {
 		_ = os.RemoveAll(dir)

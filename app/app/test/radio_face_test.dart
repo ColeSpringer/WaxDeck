@@ -173,6 +173,29 @@ void main() {
     expect(find.byKey(const Key('player-idle')), findsNothing);
   });
 
+  testWidgets('a stopped station leaves the player within a frame', (
+    tester,
+  ) async {
+    // A frame before Riverpod's refresh timers, so the leave lands inside
+    // the provider scope's build rather than from the timer.
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    expect(find.byType(PlayerScaffold), findsOneWidget);
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PlayerScaffold), findsNothing);
+    expect(find.byKey(const Key('player-idle')), findsNothing);
+  });
+
   testWidgets('a station whose stream drops says so and lets go of the dial', (
     tester,
   ) async {

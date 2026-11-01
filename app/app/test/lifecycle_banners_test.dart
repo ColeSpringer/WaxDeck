@@ -9,6 +9,7 @@ import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'routed_host.dart';
@@ -113,30 +114,34 @@ void main() {
   testWidgets('a probe that fails off-contract says nothing, and survives', (
     tester,
   ) async {
-    // The probe runs unawaited, so anything escaping it reaches the zone
-    // with no handler. The client maps only transport failures into the
-    // structured API error, and a response the generated deserializer
-    // cannot build throws something else - which is exactly the shape
-    // the one event this watches for can produce.
-    final repo = FakeRepository()
-      ..serverHealthError = const FormatException('not the health you knew');
-    final container = await _pump(tester, repo: repo);
+    final printed = await captureDebugPrints(() async {
+      // The probe runs unawaited, so anything escaping it reaches the zone
+      // with no handler. The client maps only transport failures into the
+      // structured API error, and a response the generated deserializer
+      // cannot build throws something else - which is exactly the shape
+      // the one event this watches for can produce.
+      final repo = FakeRepository()
+        ..serverHealthError = const FormatException('not the health you knew');
+      final container = await _pump(tester, repo: repo);
 
-    container.read(liveLinkProvider.notifier).report(connected: true);
-    await tester.pumpAndSettle();
+      container.read(liveLinkProvider.notifier).report(connected: true);
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-    expect(find.byType(WaxBanner), findsNothing);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(WaxBanner), findsNothing);
 
-    // And the baseline was never taken, so the next probe that answers
-    // is the one that establishes it rather than a false alarm.
-    repo.serverHealthError = null;
-    repo.serverVersion = '1.1.0';
-    container.read(liveLinkProvider.notifier).report(connected: false);
-    await tester.pumpAndSettle();
-    container.read(liveLinkProvider.notifier).report(connected: true);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('updated'), findsNothing);
+      // And the baseline was never taken, so the next probe that answers
+      // is the one that establishes it rather than a false alarm.
+      repo.serverHealthError = null;
+      repo.serverVersion = '1.1.0';
+      container.read(liveLinkProvider.notifier).report(connected: false);
+      await tester.pumpAndSettle();
+      container.read(liveLinkProvider.notifier).report(connected: true);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('updated'), findsNothing);
+    });
+    // Said on the console instead, where a field report finds it.
+    expect(printed, [startsWith('server build probe failed: FormatException')]);
   });
 
   testWidgets('a reconnect onto the same build says nothing', (tester) async {

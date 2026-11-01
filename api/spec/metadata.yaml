@@ -1655,7 +1655,11 @@ components:
             type: string
         provenance:
           type: array
-          description: Per-field provenance for curated fields.
+          description: >
+            Per-field provenance for curated fields. A scalar field that
+            holds a value and has no row has never been curated: its value
+            is the one the item arrived with, read from its file or, for an
+            episode, from its feed.
           items:
             $ref: "#/components/schemas/FieldProvenance"
         credits:
@@ -2805,7 +2809,10 @@ components:
       properties:
         curated:
           type: array
-          description: Curated fields with provenance.
+          description: >
+            Curated fields with provenance. A scalar field that holds a
+            value and has no row has never been curated; its value is the
+            scan's own.
           items:
             $ref: "#/components/schemas/EntityCuratedField"
 

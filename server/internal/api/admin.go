@@ -597,6 +597,21 @@ func (s *Server) ListJobs(ctx context.Context, req ListJobsRequestObject) (ListJ
 	return ListJobs200JSONResponse(out), nil
 }
 
+func (s *Server) ClearFinishedJobs(ctx context.Context, _ ClearFinishedJobsRequestObject) (ClearFinishedJobsResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return ClearFinishedJobs403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	n, err := s.svc.ClearFinishedJobs(ctx, uc)
+	if err != nil {
+		return nil, err
+	}
+	return ClearFinishedJobs200JSONResponse(JobsCleared{Cleared: n}), nil
+}
+
 // --- library read-only -------------------------------------------------------------
 
 func (s *Server) SetLibraryReadOnly(ctx context.Context, req SetLibraryReadOnlyRequestObject) (SetLibraryReadOnlyResponseObject, error) {

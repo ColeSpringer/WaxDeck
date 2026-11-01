@@ -780,6 +780,28 @@ class EntityResolution {
   final List<String> departed;
 }
 
+/// The most pids one item lookup takes, the contract's `maxItems`: a
+/// longer list is looked up in pieces of it.
+const itemLookupCap = 100;
+
+/// The answer to an item lookup by pid.
+class ItemResolution {
+  const ItemResolution({required this.items, this.departed = const []});
+
+  /// Summaries in request order, minus every pid the server could not
+  /// answer for this caller. An item whose kind changed answers under its
+  /// new prefix, so match one to its request by ULID.
+  final List<ItemSummary> items;
+
+  /// The requested pids gone for everyone: no item answers to it any more
+  /// (a kind change folded it into another) or ever did, or its item lost
+  /// its files for good (purged from the trash, deleted permanently, its
+  /// library removed). One in the trash is answered, and a miss merely out
+  /// of this caller's sight is not here, because either can come back:
+  /// this is the set a held list drops.
+  final List<String> departed;
+}
+
 /// One album entity's identity: the release facts the catalog keeps on
 /// the entity rather than on any of its tracks.
 ///
@@ -3434,6 +3456,7 @@ class UploadSession {
     required this.fileName,
     required this.sizeBytes,
     required this.receivedBytes,
+    required this.idle,
     required this.mediaType,
     this.libraryPid,
     this.batchId,
@@ -3449,6 +3472,12 @@ class UploadSession {
   final String fileName;
   final int sizeBytes;
   final int receivedBytes;
+
+  /// How long the server had gone without taking a byte for the session
+  /// when it answered, by its own clock: none while a chunk's bytes are
+  /// arriving or the upload is being completed. A span the server measured,
+  /// so no clock of this device's is compared with one of the server's.
+  final Duration idle;
   final MediaType mediaType;
   final String? libraryPid;
 
@@ -3611,16 +3640,9 @@ class FieldProvenance {
   final bool locked;
   final DateTime? updatedAt;
 
-  /// Whether this row describes an artifact (a cover, a lyrics sheet)
-  /// rather than a scalar field. An artifact row carries no value,
-  /// because the value is bytes, and appears whenever the item holds
-  /// one - so a non-empty provenance list does not mean the item was
-  /// curated.
-  bool get isArtifact => field == 'art' || field == 'lyrics';
-
   /// Whether this row pins the item's kind (music or book): an upload
   /// imported under a media type its file would not get on its own takes
-  /// it, so like an artifact row it says nothing about who edited what.
+  /// it, so it says nothing about who edited what.
   bool get isKind => field == 'kind';
 }
 

@@ -2,7 +2,9 @@ package api
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"time"
 )
 
 // opmlImportMaxBytes caps an OPML import's request body, which the
@@ -17,6 +19,15 @@ const opmlImportMaxBytes = 4 << 20
 // pair each (about 12.6 MB).
 const jsonBodyMaxBytes = 24 << 20
 
+// chunkReadIdleLimit is how long an upload chunk's body may go without a
+// byte before its read fails. The read holds its session's append turn,
+// and a peer gone without a close would keep it until TCP gives up, past
+// every resend the client makes.
+const chunkReadIdleLimit = 15 * time.Second
+
+// chunkRoute is the upload chunk endpoint.
+const chunkRoute = "PUT /api/v1/uploads/{uploadId}/data"
+
 // rawBodies are the operations whose body is not JSON (an upload's bytes,
 // an archive, an export, an image), each of which bounds its own.
 var rawBodies = func() *http.ServeMux {
@@ -26,7 +37,7 @@ var rawBodies = func() *http.ServeMux {
 		"POST /api/v1/admin/migrations/exports",
 		"PUT /api/v1/items/{pid}/artwork",
 		"PUT /api/v1/entities/{entityType}/{entityPid}/artwork",
-		"PUT /api/v1/uploads/{uploadId}/data",
+		chunkRoute,
 	} {
 		mux.Handle(pattern, http.NotFoundHandler())
 	}
@@ -37,6 +48,28 @@ var rawBodies = func() *http.ServeMux {
 func rawBody(r *http.Request) bool {
 	_, pattern := rawBodies.Handler(r)
 	return pattern != ""
+}
+
+// boundChunkRead makes an upload chunk's body read fail once it has waited
+// idle for its next byte. A body that keeps flowing, however slowly, is
+// never cut.
+func boundChunkRead(w http.ResponseWriter, r *http.Request, idle time.Duration) {
+	if _, pattern := rawBodies.Handler(r); pattern != chunkRoute || r.ContentLength == 0 {
+		return
+	}
+	r.Body = &idleBoundBody{ReadCloser: r.Body, rc: http.NewResponseController(w), idle: idle}
+}
+
+type idleBoundBody struct {
+	io.ReadCloser
+	rc   *http.ResponseController
+	idle time.Duration
+}
+
+func (b *idleBoundBody) Read(p []byte) (int, error) {
+	// A writer that takes no deadline reads unbounded, as before.
+	_ = b.rc.SetReadDeadline(time.Now().Add(b.idle))
+	return b.ReadCloser.Read(p)
 }
 
 // capRequestBody bounds the request bodies the binder would otherwise

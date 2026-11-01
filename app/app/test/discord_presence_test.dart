@@ -10,8 +10,11 @@ import 'package:waxdeck/src/desktop/discord_cover.dart';
 import 'package:waxdeck/src/desktop/discord_ipc_io.dart';
 import 'package:waxdeck/src/desktop/discord_presence.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/player/now_playing_slot.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -531,6 +534,49 @@ void main() {
         expect(discord.published, isEmpty);
       });
     });
+  });
+
+  test('a queue a station parked shows no status', () async {
+    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK1';
+    final port = _FakeDiscord();
+    final repo = FakeRepository(items: [testItem(pid)]);
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+        localeOverrideProvider.overrideWithValue(null),
+        discordPresencePortProvider.overrideWithValue(port),
+      ],
+    );
+    addTearDown(container.dispose);
+    final binding = container.listen(discordPresenceProvider, (_, _) {});
+    addTearDown(binding.close);
+    container.read(nowPlayingProvider.notifier).play([
+      testItem(pid),
+    ], source: const QueueSource(kind: QueueSourceKind.album, label: 'A'));
+    await pumpEventQueue();
+    final station = RadioStation(
+      pid: 'rs-1',
+      name: 'Coastal FM',
+      streamUrl: 'https://radio.example/stream',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    repo.radioStationsByPid['rs-1'] = station;
+    final radio = container.read(radioPlaybackProvider.notifier);
+    await radio.play(station);
+    await pumpEventQueue();
+    await radio.stop();
+    await pumpEventQueue();
+    expect(container.read(nowPlayingSlotProvider), isA<ParkedSlot>());
+
+    // Turned on now, presence shows what stands, which is nothing: not
+    // the station that stopped, not the track it parked.
+    container.read(discordPresenceEnabledProvider.notifier).set(true);
+    await pumpEventQueue();
+    expect(port.connected, hasLength(1));
+    expect(port.published, isEmpty);
+    container.read(queueControllerProvider.notifier).clear();
+    await pumpEventQueue();
   });
 
   test('the covers switch leaves presence connected', () async {

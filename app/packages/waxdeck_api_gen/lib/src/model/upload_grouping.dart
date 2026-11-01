@@ -9,7 +9,7 @@ import 'package:built_value/serializer.dart';
 
 part 'upload_grouping.g.dart';
 
-/// How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them, `tracks` one entry per file, and `auto` clusters them into album units by their tags and relative paths (disc subfolders fold into their parent). 
+/// How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them (one album for music, one book in parts for an audiobook, its parts in disc, track and path order), `tracks` opens one entry per file (each its own track or book), and `auto` clusters them into units by their tags and relative paths (disc subfolders fold into their parent). 
 class UploadGrouping extends EnumClass {
 
   @BuiltValueEnumConst(wireName: r'auto')

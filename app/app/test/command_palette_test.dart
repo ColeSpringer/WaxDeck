@@ -347,6 +347,49 @@ void main() {
     await _stop(tester, shell);
   });
 
+  testWidgets('a queue a station parked is not up for the keys or the '
+      'palette', (tester) async {
+    final shell = await _pumpShell(tester);
+    await _play(tester, shell);
+    const commands = <(String, String)>[
+      ('play or pause', 'cmd-play-pause'),
+      ('next track', 'cmd-next'),
+      ('previous track', 'cmd-previous'),
+    ];
+    Future<void> expectRows(Matcher matcher) async {
+      await _openPalette(tester);
+      for (final (query, row) in commands) {
+        await _type(tester, query);
+        expect(_row(row), matcher, reason: row);
+      }
+      await _press(tester, LogicalKeyboardKey.escape);
+    }
+
+    // Offered while the item is up, so their absence below is the park's.
+    await expectRows(findsOne);
+
+    final station = RadioStation(
+      pid: 'rs-1',
+      name: 'Coastal FM',
+      streamUrl: 'https://radio.example/stream',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    shell.repo.radioStationsByPid['rs-1'] = station;
+    final radio = shell.container.read(radioPlaybackProvider.notifier);
+    await radio.play(station);
+    await tester.pumpAndSettle();
+    await radio.stop();
+    await tester.pumpAndSettle();
+    final loads = shell.engine.loadedUrls.length;
+
+    await expectRows(findsNothing);
+    await _press(tester, LogicalKeyboardKey.space);
+    expect(shell.engine.loadedUrls, hasLength(loads));
+    expect(shell.engine.playing, isFalse);
+
+    await _stop(tester, shell);
+  });
+
   testWidgets('the palette names the key a command answers to', (tester) async {
     final shell = await _pumpShell(tester);
     await _play(tester, shell);

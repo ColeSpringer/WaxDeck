@@ -24,7 +24,7 @@ part 'item_metadata.g.dart';
 /// * [mediaType] 
 /// * [fields] - The item's scalar fields by name (the kind's vocabulary from the fields endpoint); empty values are omitted. 
 /// * [lockedFields] - Currently locked fields, including namespaced artifacts (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`) and `kind`, a pinned track-or-book classification (setItemLocks). 
-/// * [provenance] - Per-field provenance for curated fields.
+/// * [provenance] - Per-field provenance for curated fields. A scalar field that holds a value and has no row has never been curated: its value is the one the item arrived with, read from its file or, for an episode, from its feed. 
 /// * [credits] - Credits by role.
 /// * [lyrics] 
 /// * [chapters] - Chapter marks (books).
@@ -57,7 +57,7 @@ abstract class ItemMetadata implements Built<ItemMetadata, ItemMetadataBuilder> 
   @BuiltValueField(wireName: r'lockedFields')
   BuiltList<String> get lockedFields;
 
-  /// Per-field provenance for curated fields.
+  /// Per-field provenance for curated fields. A scalar field that holds a value and has no row has never been curated: its value is the one the item arrived with, read from its file or, for an episode, from its feed. 
   @BuiltValueField(wireName: r'provenance')
   BuiltList<FieldProvenance> get provenance;
 

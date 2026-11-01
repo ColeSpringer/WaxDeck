@@ -34,6 +34,11 @@ enum QueueRetreat {
   empty,
 }
 
+/// [pid] without its type prefix: the item's ULID, which a kind change
+/// keeps while the prefix follows the kind. Whatever matches items across
+/// a kind change keys them by this.
+String ulidOf(String pid) => pid.substring(pid.indexOf('-') + 1);
+
 /// The randomness shuffle draws on. Overridden with a seeded [Random] in
 /// tests, so a shuffled queue is an assertable order rather than a
 /// property test.
@@ -356,7 +361,6 @@ class QueueController extends Notifier<QueueState> {
   /// either prefix, and what to do about the one playing is the caller's.
   bool dropItems(Set<String> ulids) {
     if (ulids.isEmpty || state.isEmpty) return false;
-    String ulidOf(String pid) => pid.substring(pid.indexOf('-') + 1);
     removeSet({
       for (final e in state.entries)
         if (ulids.contains(ulidOf(e.pid))) e.queueId,

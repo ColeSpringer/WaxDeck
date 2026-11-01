@@ -41,8 +41,13 @@ export class Player extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.deckNext));
   }
 
-  /// The launch offer's Resume, standing in the deck bar's slot when a
-  /// launch found a queue to put back.
+  /// The offer standing in the deck bar's slot: a queue a launch found
+  /// to put back, or one a stopped station displaced.
+  offer(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.deckOffer));
+  }
+
+  /// The offer's Resume.
   offerResume(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.deckOfferResume));
   }
@@ -175,8 +180,13 @@ export class Player extends Surface {
 
   /// What the browser's media session names as playing; empty when it
   /// names nothing.
-  private nowPlaying(): Promise<string> {
+  nowPlaying(): Promise<string> {
     return this.ctx.page.evaluate(() => navigator.mediaSession?.metadata?.title ?? '');
+  }
+
+  /// The artist the media session names beside [nowPlaying].
+  nowPlayingArtist(): Promise<string> {
+    return this.ctx.page.evaluate(() => navigator.mediaSession?.metadata?.artist ?? '');
   }
 
   /// Start the clock again from the full player, and settle when the
@@ -201,6 +211,14 @@ export class Player extends Surface {
   /// the offer stands in place of until it is taken.
   async acceptOffer(): Promise<void> {
     await clickThrough(this.offerResume(), this.deckToggle());
+  }
+
+  /// Turn the offer down with its Not now, which lets the queue go.
+  async dismissOffer(): Promise<void> {
+    const dismiss = this.ctx.page.locator(sem(SemanticsIds.deckOfferDismiss));
+    await expect(async () => {
+      await clickToward(dismiss, { gone: this.offer() });
+    }).toPass({ timeout: T.nav });
   }
 
   /// The sleep sheet's end-of-chapter row, which only a book or an
@@ -351,6 +369,22 @@ export class Player extends Surface {
   /// always when this control is on screen.
   async spanWholeBook(): Promise<void> {
     await this.timeline('book').click({ force: true });
+  }
+
+  /// The deck bar's end timecode, which for a book with chapters is the
+  /// switch between spanning the chapter and the whole book. Named for
+  /// what a press does, then the length the bar spans in words.
+  deckSpan(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.deckSpan));
+  }
+
+  /// Switch the deck back to spanning the chapter, settled on the control
+  /// offering the whole book again.
+  async deckSpanChapter(): Promise<void> {
+    await clickThrough(
+      this.deckSpan(),
+      this.deckSpan().and(this.ctx.page.getByRole('button', { name: /^Show the whole book/ })),
+    );
   }
 
   /// Keep a place on purpose, which is a different thing from the resume

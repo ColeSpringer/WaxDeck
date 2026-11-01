@@ -27,18 +27,19 @@ import '../queue/queue_controller.dart';
 import '../queue/queue_item.dart';
 import '../queue/queue_state.dart';
 import '../queue/queue_view.dart';
-import '../radio/radio_controller.dart';
 import '../settings/client_prefs.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/signed_in_cover.dart';
+import 'chapters.dart';
 import 'deck_bar_host.dart';
 import 'download_action.dart';
 import 'item_star_rating_row.dart';
 import 'lyrics.dart';
 import 'now_playing_controller.dart';
+import 'now_playing_slot.dart';
 import 'output_volume.dart';
 import 'playback_session.dart';
 import 'player_artwork_set.dart';
@@ -94,15 +95,16 @@ class PlayerScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // A stopped station empties the state under a mounted route, so the
-    // face falls to "nothing playing" with no deck bar to minimize to.
-    // On the state, not the button: seven paths reach the same stop.
+    // A stopped station leaves nothing playing under a mounted route, so
+    // the player has nothing to show and leaves. On the state, not the
+    // button: seven paths reach the same stop.
     final route = ModalRoute.of(context);
-    ref.listen(radioPlaybackProvider, (previous, next) {
-      if (previous?.station == null || next.station != null) return;
+    ref.listen(nowPlayingSlotProvider, (previous, next) {
+      if (previous is! StationSlot) return;
       // `interrupt` empties it too when an item takes the engine, but
-      // installs its entry first: a face swap, not a stop.
-      if (ref.read(nowPlayingProvider).entry != null) return;
+      // installs its entry first: a face swap, not a stop. An entry the
+      // station displaced is parked, which is not an item playing.
+      if (next is StationSlot || next is ItemSlot) return;
       // Or the pop takes a dialog open over the player instead.
       if (!(route?.isCurrent ?? true)) return;
       leavePlayer(context);
@@ -117,13 +119,11 @@ class PlayerScreen extends ConsumerWidget {
     // station has taken the engine, a failed start draws a retry, and a
     // resolving entry draws a spinner - all three still name an item,
     // and none of them is a surface to be offered an editor from.
-    final nowPlaying = ref.watch(nowPlayingProvider);
-    final editing =
-        ref.watch(radioPlaybackProvider).station == null &&
-            nowPlaying.error == null &&
-            nowPlaying.session != null
-        ? nowPlaying.item?.pid
-        : null;
+    final editing = switch (ref.watch(nowPlayingSlotProvider)) {
+      ItemSlot(:final now) when now.error == null && now.session != null =>
+        now.item?.pid,
+      _ => null,
+    };
     final mayCurate =
         editing != null &&
         (ref.watch(mayCurateItemProvider(editing)).value ?? false);
@@ -187,12 +187,14 @@ class PlayerScreen extends ConsumerWidget {
   }
 
   Widget _body(BuildContext context, WidgetRef ref) {
-    // Radio first, and for the same reason the deck bar reads it first:
-    // a station has taken the engine, so whatever the queue still names
-    // is not what is coming out of the speakers.
-    final radio = ref.watch(radioPlaybackProvider);
-    final onAir = radio.station != null;
-    final nowPlaying = onAir ? null : ref.watch(nowPlayingProvider);
+    // The deck bar's order: a station has taken the engine, so whatever
+    // the queue still names is not what is coming out of the speakers.
+    final slot = ref.watch(nowPlayingSlotProvider);
+    final onAir = slot is StationSlot;
+    final nowPlaying = switch (slot) {
+      ItemSlot(:final now) => now,
+      _ => null,
+    };
     final item = nowPlaying?.item;
     final domain = onAir
         ? WaxDomain.radio
@@ -203,9 +205,9 @@ class PlayerScreen extends ConsumerWidget {
     // still resolving, or one whose start failed before it could be
     // named, is not nothing: saying so would hide the failure and the
     // button that retries it.
-    if (nowPlaying == null) {
-      face = RadioFace(playback: radio);
-    } else if (nowPlaying.entry == null) {
+    if (slot is StationSlot) {
+      face = RadioFace(playback: slot.playback);
+    } else if (nowPlaying == null) {
       face = _PlayerShell(
         domain: domain,
         child: EmptyState(
@@ -269,7 +271,7 @@ class PlayerScreen extends ConsumerWidget {
       // with pids this layer has never seen - so a null item here is
       // usually "not yet" rather than "no cover", and the accent holds
       // instead of crossfading through the domain hue and back.
-      resolving: !onAir && nowPlaying?.entry != null && item == null,
+      resolving: nowPlaying != null && item == null,
       domain: domain,
       child: face,
     );

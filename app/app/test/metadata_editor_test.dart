@@ -293,14 +293,22 @@ void main() {
     }
   });
 
-  testWidgets('the summary counts fields, and names artifacts apart', (
+  testWidgets('the header names lyrics only; artwork lives on the slots', (
     tester,
   ) async {
-    // Upstream overlays an art row on every item holding a cover, so
-    // counting the provenance list would shift this line on nearly every
-    // item and stop "no recorded sources" meaning anything.
+    // Upstream overlays an art row on every item holding a cover; the
+    // slot tiles already say where each picture came from.
     final repo = _repo()
       ..ownArtworkPids.add('tr-1')
+      ..artRoles.add(
+        const ArtRoleInfo(
+          role: 'front',
+          format: 'jpeg',
+          width: 600,
+          height: 600,
+          source: 'tag',
+        ),
+      )
       ..lyricsByPid['tr-1'] = const LyricsState(
         synced: false,
         source: 'sidecar',
@@ -312,23 +320,109 @@ void main() {
       ];
     await _pump(tester, _host(_container(repo)));
 
-    expect(find.text('1 from you'), findsOneWidget);
-    expect(find.text('Artwork · From the file'), findsOneWidget);
+    expect(find.textContaining('Artwork · '), findsNothing);
+    expect(find.text('Art from the file'), findsOneWidget);
     // A cover's sidecar is a folder image; lyrics arrive as an .lrc, and
     // one wording cannot honestly describe both files.
     expect(find.text('Lyrics · From an .lrc file'), findsOneWidget);
+    // The header tallies nothing.
+    expect(find.textContaining(RegExp(r'^\d+ from ')), findsNothing);
+    expect(find.text('No recorded sources'), findsNothing);
+  });
+
+  testWidgets('a field read from the file says so', (tester) async {
+    // No provenance row is the scan's own value: title, artist, album and
+    // year are all filled and untouched.
+    await _pump(tester, _host(_container(_repo())));
+
+    expect(find.text('Source unknown'), findsNothing);
+    expect(find.text('tags'), findsNWidgets(4));
+  });
+
+  testWidgets('an edited field read from the file marks its chip', (
+    tester,
+  ) async {
+    await _pump(tester, _host(_container(_repo())));
+    final tags = find.widgetWithText(CodecChip, 'tags');
+    expect(
+      tester.widgetList<CodecChip>(tags).where((c) => c.emphasis),
+      isEmpty,
+    );
+
+    await tester.enterText(_field('title'), 'New Title');
+    await tester.pump();
+
+    expect(
+      tester.widgetList<CodecChip>(tags).where((c) => c.emphasis),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('an empty field says nothing', (tester) async {
+    final repo = _repo()..metadataFields = _vocabulary(['title', 'genre']);
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('tags'), findsOneWidget);
+    expect(find.text('Source unknown'), findsNothing);
+  });
+
+  testWidgets('typing into an empty field shows no chip until it is saved', (
+    tester,
+  ) async {
+    final repo = _repo()..metadataFields = _vocabulary(['title', 'album']);
+    repo.itemFieldsByPid['tr-1']!.remove('album');
+    await _pump(tester, _host(_container(repo)));
+    expect(find.text('tags'), findsOneWidget);
+
+    await tester.enterText(_field('album'), 'Prancing Pony Blues');
+    await tester.pump();
+
+    // The save button's count is the pending cue, not a chip.
+    expect(find.text('Save 1 change'), findsOneWidget);
+    expect(find.text('tags'), findsOneWidget);
+  });
+
+  testWidgets("an episode's untouched field names the feed", (tester) async {
+    final repo = FakeRepository(
+      items: [testItem('ep-1', mediaType: MediaType.podcast)],
+    );
+    repo.metadataFields = const MetadataFields(
+      kinds: [
+        KindFields(
+          kind: MediaType.podcast,
+          fields: [EditableField(name: 'title', writeBack: false)],
+        ),
+      ],
+      entityTypes: [],
+    );
+    repo.itemFieldsByPid['ep-1'] = {'title': 'An Episode'};
+    final container = _container(repo);
+    addTearDown(container.dispose);
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: container,
+        child: localizedHost(const MetadataScreen(pid: 'ep-1')),
+      ),
+    );
+
+    expect(find.text('the feed'), findsOneWidget);
+    expect(find.text('tags'), findsNothing);
   });
 
   testWidgets('a value the clean-up pass rewrote is credited to it', (
     tester,
   ) async {
     final repo = _repo()
+      ..metadataFields = _vocabulary(['title', 'genre'])
       ..itemProvenance['tr-1'] = const <FieldProvenance>[
         FieldProvenance(field: 'genre', source: 'normalize', locked: false),
       ];
+    repo.itemFieldsByPid['tr-1']!['genre'] = 'Rock';
     await _pump(tester, _host(_container(repo)));
 
-    expect(find.text('1 from the clean-up pass'), findsOneWidget);
+    expect(find.text('the clean-up pass'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'\d+ from ')), findsNothing);
   });
 
   testWidgets('a pinned kind is a line of its own, not an edit', (
@@ -344,7 +438,6 @@ void main() {
       ];
     await _pump(tester, _host(_container(repo)));
 
-    expect(find.text('2 from tags'), findsOneWidget);
     expect(find.textContaining('from you'), findsNothing);
     expect(find.text('Kind: Music, pinned'), findsOneWidget);
   });
@@ -354,7 +447,7 @@ void main() {
   ) async {
     // The chip used to print the server's own tokens - `enrichment`,
     // `musicbrainz` - at the reader. The provider is the answer when
-    // one supplied the value, which is how the header tally keys it.
+    // one supplied the value.
     final repo = _repo()
       ..itemProvenance['tr-1'] = const <FieldProvenance>[
         FieldProvenance(
@@ -368,7 +461,8 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.text('MusicBrainz'), findsOneWidget);
-    expect(find.text('tags'), findsOneWidget);
+    // The artist row, and album and year, which no row covers.
+    expect(find.text('tags'), findsNWidgets(3));
     expect(find.text('enrichment'), findsNothing);
     expect(find.text('musicbrainz'), findsNothing);
   });
@@ -597,20 +691,6 @@ void main() {
 
     expect(find.textContaining('Artwork · '), findsNothing);
     expect(find.textContaining('Lyrics · '), findsNothing);
-  });
-
-  testWidgets('an item curated by nobody still says so with a cover', (
-    tester,
-  ) async {
-    final repo = _repo()
-      ..ownArtworkPids.add('tr-1')
-      ..itemProvenance['tr-1'] = const <FieldProvenance>[
-        FieldProvenance(field: 'art', source: 'tag', locked: false),
-      ];
-    await _pump(tester, _host(_container(repo)));
-
-    expect(find.text('No recorded sources'), findsOneWidget);
-    expect(find.text('Artwork · From the file'), findsOneWidget);
   });
 
   testWidgets('a front cover the item does not own reads as inherited', (

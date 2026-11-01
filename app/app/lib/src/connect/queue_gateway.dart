@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../player/autoplay_gate.dart';
 import '../player/now_playing_controller.dart';
+import '../player/now_playing_slot.dart';
 import '../player/playback_session.dart';
 import '../providers.dart';
 import '../queue/queue_controller.dart';
@@ -175,6 +176,12 @@ class LocalQueueGateway implements QueueGateway {
   @override
   ValueListenable<bool> get opening => _playback.opening;
 
+  bool get _onAir => _ref.read(nowPlayingSlotProvider) is StationSlot;
+
+  /// Only an item up has a queue to step through: a station never
+  /// queues, and nothing steps a parked queue but taking it back.
+  bool get _itemUp => _ref.read(nowPlayingSlotProvider) is ItemSlot;
+
   @override
   QueueSnapshot? snapshot() {
     final session = _playback.liveSession;
@@ -248,7 +255,7 @@ class LocalQueueGateway implements QueueGateway {
   Future<bool> play() async {
     // A station is playing, or paused with its stream still loaded.
     // Radio keeps no session of ours, and the engine is what holds it.
-    if (_ref.read(radioPlaybackProvider).station != null) {
+    if (_onAir) {
       await _ref.read(audioEngineProvider).play();
       return true;
     }
@@ -262,6 +269,7 @@ class LocalQueueGateway implements QueueGateway {
 
   @override
   Future<bool> next() async {
+    if (!_itemUp) return false;
     final began = _playback.startGeneration;
     final moved = await _playback.next();
     _throwOnFailedStart(began);
@@ -270,6 +278,7 @@ class LocalQueueGateway implements QueueGateway {
 
   @override
   Future<bool> previous() async {
+    if (!_itemUp) return false;
     final began = _playback.startGeneration;
     final moved = await _playback.previous();
     _throwOnFailedStart(began);
@@ -291,7 +300,7 @@ class LocalQueueGateway implements QueueGateway {
   /// so both verbs below share one answer to "what does radio mean here"
   /// rather than keeping two that can drift apart.
   Future<bool> _releaseStation() async {
-    if (_ref.read(radioPlaybackProvider).station == null) return false;
+    if (!_onAir) return false;
     await _ref.read(radioPlaybackProvider.notifier).stop();
     return true;
   }
@@ -306,7 +315,7 @@ class LocalQueueGateway implements QueueGateway {
 
   @override
   Future<void> pauseInPlace() async {
-    if (_ref.read(radioPlaybackProvider).station != null) {
+    if (_onAir) {
       await _ref.read(audioEngineProvider).pause();
       return;
     }

@@ -44,6 +44,22 @@ class _PendingLibraries extends FakeRepository {
       Completer<List<LibraryInfo>>().future;
 }
 
+/// A repository whose per-library counts wait on [gate].
+class _GatedCounts extends FakeRepository {
+  _GatedCounts()
+    : super(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      );
+
+  Completer<void>? gate;
+
+  @override
+  Future<List<LibraryInfo>> listLibraries({bool counts = false}) async {
+    if (counts) await gate?.future;
+    return super.listLibraries(counts: counts);
+  }
+}
+
 ProviderContainer _container(
   FakeRepository repo, {
   ClientSettingsStore? store,
@@ -90,7 +106,8 @@ Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
   await tester.pumpAndSettle();
 }
 
-LibraryInfo _library() => const LibraryInfo(pid: 'lb-1', name: 'Music');
+LibraryInfo _library({int? items}) =>
+    LibraryInfo(pid: 'lb-1', name: 'Music', itemCount: items);
 
 Job _scan(String state) => Job(pid: 'jb-1', kind: 'scan', state: state);
 
@@ -459,6 +476,109 @@ void main() {
     // Nothing left to warm up either, so the tour is simply over.
     expect(_step(FirstRunStep.scan), findsNothing);
     expect(find.bySemanticsIdentifier(SemanticsIds.adminWizard), findsNothing);
+  });
+
+  testWidgets('hiding the finished scan does not send the tour back', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..healthSummary = const HealthSummary(
+        score: 0,
+        totalItems: 0,
+        evaluatedItems: 0,
+        warmingUp: true,
+      );
+    final container = _container(repo);
+    await _pump(tester, container);
+
+    repo.libraries.add(_library());
+    repo.jobs = <Job>[_scan('done')];
+    container
+      ..invalidate(librariesProvider)
+      ..invalidate(adminJobsProvider);
+    await tester.pumpAndSettle();
+    expect(_step(FirstRunStep.warming), findsOneWidget);
+
+    // The administrator clears it from Tasks while the library is still
+    // warming up: the list no longer holds a scan.
+    await repo.clearFinishedJobs();
+    container.invalidate(adminJobsProvider);
+    await tester.pumpAndSettle();
+
+    expect(await repo.listJobs(), isEmpty);
+    expect(_step(FirstRunStep.warming), findsOneWidget);
+    expect(_step(FirstRunStep.scan), findsNothing);
+  });
+
+  testWidgets('a scan cleared before the tour saw it leaves a scanned '
+      'library past the scan step', (tester) async {
+    final repo = _repo()
+      ..healthSummary = const HealthSummary(
+        score: 0,
+        totalItems: 0,
+        evaluatedItems: 0,
+        warmingUp: true,
+      );
+    final container = _container(repo);
+    await _pump(tester, container);
+    expect(_step(FirstRunStep.addLibrary), findsOneWidget);
+
+    // A scan run outside the dashboard, then swept from Tasks: no job
+    // is listed and no stage past the library was ever written down.
+    repo.libraries.add(_library(items: 40));
+    repo.jobs = <Job>[_scan('done')];
+    await repo.clearFinishedJobs();
+    container
+      ..invalidate(librariesProvider)
+      ..invalidate(libraryCountsProvider)
+      ..invalidate(adminJobsProvider);
+    await tester.pumpAndSettle();
+
+    expect(_step(FirstRunStep.scan), findsNothing);
+    expect(_step(FirstRunStep.warming), findsOneWidget);
+  });
+
+  testWidgets('the scan step waits for the item counts rather than flashing '
+      'over a library that holds items', (tester) async {
+    final repo = _GatedCounts()
+      ..healthSummary = const HealthSummary(
+        score: 0,
+        totalItems: 0,
+        evaluatedItems: 0,
+        warmingUp: true,
+      );
+    final container = _container(repo);
+    await _pump(tester, container);
+    expect(_step(FirstRunStep.addLibrary), findsOneWidget);
+
+    repo.gate = Completer<void>();
+    repo.libraries.add(_library(items: 40));
+    container.invalidate(librariesProvider);
+    await tester.pumpAndSettle();
+
+    expect(_step(FirstRunStep.scan), findsNothing, reason: 'not decided yet');
+
+    repo.gate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(_step(FirstRunStep.scan), findsNothing);
+    expect(_step(FirstRunStep.warming), findsOneWidget);
+  });
+
+  testWidgets('an empty library with no scan job still offers the scan', (
+    tester,
+  ) async {
+    final repo = _repo();
+    final container = _container(repo);
+    await _pump(tester, container);
+
+    repo.libraries.add(_library(items: 0));
+    container
+      ..invalidate(librariesProvider)
+      ..invalidate(libraryCountsProvider);
+    await tester.pumpAndSettle();
+
+    expect(_step(FirstRunStep.scan), findsOneWidget);
   });
 
   testWidgets('a listener gets no wizard at all', (tester) async {

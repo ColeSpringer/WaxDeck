@@ -166,9 +166,12 @@ Serializers _$serializers =
           ..add(ItemMetadata.serializer)
           ..add(ItemPage.serializer)
           ..add(ItemPermissions.serializer)
+          ..add(ItemResolution.serializer)
+          ..add(ItemResolveQuery.serializer)
           ..add(Job.serializer)
           ..add(JobList.serializer)
           ..add(JobTarget.serializer)
+          ..add(JobsCleared.serializer)
           ..add(KindFields.serializer)
           ..add(LastfmConnectStart.serializer)
           ..add(Libraries.serializer)
@@ -729,6 +732,14 @@ Serializers _$serializers =
             () => ListBuilder<ItemSummary>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ItemSummary)]),
+            () => ListBuilder<ItemSummary>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Job)]),
             () => ListBuilder<Job>(),
           )
@@ -1101,6 +1112,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

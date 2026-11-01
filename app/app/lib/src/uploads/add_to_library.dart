@@ -50,16 +50,56 @@ MediaType uploadableMediaType(MediaType? type) =>
     ? type
     : MediaType.music;
 
-/// Opens the add sheet, defaulting the media type to [initial] (the
-/// section the caller is in), or to music where that section cannot add
-/// its own.
+bool _isM4b(String name) => name.toLowerCase().endsWith('.m4b');
+
+/// The media type a pick of files with these [names] most likely is:
+/// an audiobook when any is an `.m4b`, music otherwise. The person's
+/// choice, where they are asked, wins over it.
+MediaType detectUploadMediaType(Iterable<String> names) =>
+    names.any(_isM4b) ? MediaType.audiobook : MediaType.music;
+
+final _discFolder = RegExp(
+  r'^(disc|disk|cd|part)[\s_.-]*\d+$',
+  caseSensitive: false,
+);
+
+/// The grouping a pick of [files] opens on. An audiobook whose files sit
+/// in one folder (or in disc-named subfolders of one) is one book in
+/// parts; loose files, a folder of book folders and several `.m4b` (each
+/// normally a whole book) are left to the server, as is all music.
+UploadGrouping defaultUploadGrouping(
+  MediaType type,
+  List<PickedAudioFile> files,
+) {
+  if (type != MediaType.audiobook) return UploadGrouping.auto;
+  if (files.where((f) => _isM4b(f.name)).length > 1) return UploadGrouping.auto;
+  final dirs = {for (final f in files) f.relativeDir};
+  if (dirs.contains('')) return UploadGrouping.auto;
+  if (dirs.length == 1) return UploadGrouping.album;
+  // A disc subfolder belongs to its parent: one book where every
+  // directory resolves to the same one.
+  String bookDir(String dir) {
+    final cut = dir.lastIndexOf('/');
+    final leaf = dir.substring(cut + 1);
+    return cut > 0 && _discFolder.hasMatch(leaf) ? dir.substring(0, cut) : dir;
+  }
+
+  return dirs.map(bookDir).toSet().length == 1
+      ? UploadGrouping.album
+      : UploadGrouping.auto;
+}
+
+/// Opens the add sheet. [fixed] is the kind of the section the caller is
+/// in (music, audiobook): the dialogs then take it instead of asking.
+/// With none, a pick of files is asked what it is and preselected from
+/// its names, and a link is asked with music preselected.
 Future<void> showAddToLibrarySheet(
   BuildContext context,
   WidgetRef ref, {
-  MediaType? initial,
+  MediaType? fixed,
 }) async {
   final picker = ref.read(filePickerProvider);
-  final defaultType = uploadableMediaType(initial);
+  final defaultType = uploadableMediaType(fixed);
   final colors = WaxColors.of(context);
   final choice = await showWaxSheet<String>(
     context: context,
@@ -129,14 +169,19 @@ Future<void> showAddToLibrarySheet(
   if (choice == null || !context.mounted) return;
   switch (choice) {
     case 'url':
-      await acquireFromUrl(context, ref, initial: defaultType);
+      await acquireFromUrl(
+        context,
+        ref,
+        initial: defaultType,
+        kindFixed: fixed != null && uploadableMediaTypes.contains(fixed),
+      );
     case 'file':
       if (picker != null) {
-        await pickAndUpload(context, ref, picker, initial: defaultType);
+        await pickAndUpload(context, ref, picker, fixed: fixed);
       }
     case 'folder':
       if (picker != null) {
-        await pickFolderAndUpload(context, ref, picker, initial: defaultType);
+        await pickFolderAndUpload(context, ref, picker, fixed: fixed);
       }
     case 'sessions':
       // Pushed, so back returns to the screen the sheet was opened over:
@@ -148,11 +193,13 @@ Future<void> showAddToLibrarySheet(
 
 /// Queues a server-side download of a source URL; the result flows
 /// through uploads and the review queue. [initialUrl] prefills the
-/// dialog (a share-sheet handoff).
+/// dialog (a share-sheet handoff); [kindFixed] takes [initial] as the
+/// section's own kind and leaves the question out.
 Future<void> acquireFromUrl(
   BuildContext context,
   WidgetRef ref, {
   MediaType initial = MediaType.music,
+  bool kindFixed = false,
   String? initialUrl,
 }) async {
   final messenger = ref.read(shellMessengerProvider.notifier);
@@ -178,6 +225,7 @@ Future<void> acquireFromUrl(
         context: context,
         builder: (_) => AcquireDialog(
           initial: initial,
+          kindFixed: kindFixed,
           initialUrl: initialUrl,
           initialIdentify: identifyDefault,
           targets: targets,
@@ -219,7 +267,7 @@ Future<void> pickAndUpload(
   BuildContext context,
   WidgetRef ref,
   FilePickerPort picker, {
-  MediaType? initial,
+  MediaType? fixed,
 }) async {
   // Held across the picker, which can outlive the widget that opened it.
   final messenger = ref.read(shellMessengerProvider.notifier);
@@ -238,7 +286,7 @@ Future<void> pickAndUpload(
       if (!formats.refuses(f.name)) f,
   ];
   if (files.isNotEmpty && context.mounted) {
-    await uploadPickedFiles(context, ref, files, initial: initial);
+    await uploadPickedFiles(context, ref, files, fixed: fixed);
   }
   // After the flow, for the reason pickFolderAndUpload gives: a toast
   // raised under the media-type dialog is hidden and can expire there.
@@ -310,7 +358,7 @@ Future<void> pickFolderAndUpload(
   BuildContext context,
   WidgetRef ref,
   FilePickerPort picker, {
-  MediaType? initial,
+  MediaType? fixed,
 }) async {
   final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
@@ -338,7 +386,7 @@ Future<void> pickFolderAndUpload(
     return;
   }
   if (!context.mounted) return;
-  await uploadPickedFiles(context, ref, pick.files, initial: initial);
+  await uploadPickedFiles(context, ref, pick.files, fixed: fixed);
   // After the flow rather than before it: the media-type dialog is
   // modal, and a toast raised under a modal is hidden from the
   // semantics tree and can expire before the dialog closes. The
@@ -362,7 +410,7 @@ Future<void> uploadPickedFiles(
   BuildContext context,
   WidgetRef ref,
   List<PickedAudioFile> files, {
-  MediaType? initial,
+  MediaType? fixed,
 }) async {
   final messenger = ref.read(shellMessengerProvider.notifier);
   final router = GoRouter.of(context);
@@ -385,6 +433,10 @@ Future<void> uploadPickedFiles(
   }
   final (identifyDefault, targets, remembered) = await _dialogSeeds(ref);
   if (!context.mounted) return;
+  final fixedKind = fixed != null && uploadableMediaTypes.contains(fixed)
+      ? fixed
+      : null;
+  final kind = fixedKind ?? detectUploadMediaType(files.map((f) => f.name));
   final choice =
       await showDialog<
         ({
@@ -396,8 +448,12 @@ Future<void> uploadPickedFiles(
       >(
         context: context,
         builder: (_) => MediaTypeDialog(
-          initial: initial ?? MediaType.music,
+          initial: kind,
+          kindFixed: fixedKind != null,
           fileCount: sending,
+          audiobookGrouping: fixedKind == MediaType.music
+              ? null
+              : defaultUploadGrouping(MediaType.audiobook, files),
           initialIdentify: identifyDefault,
           targets: targets,
           rememberedTarget: remembered,
@@ -422,6 +478,7 @@ Future<void> uploadPickedFiles(
       return;
     }
   }
+  await untilUploadsListed(container.read(uploadsProvider.future));
   var uploaded = 0;
   for (final file in files) {
     if (file.size == 0) {
@@ -597,6 +654,7 @@ class AcquireDialog extends StatefulWidget {
   const AcquireDialog({
     super.key,
     this.initial = MediaType.music,
+    this.kindFixed = false,
     this.initialUrl,
     required this.initialIdentify,
     this.targets = const [],
@@ -604,6 +662,10 @@ class AcquireDialog extends StatefulWidget {
   });
 
   final MediaType initial;
+
+  /// Whether [initial] is the section's own kind: the selector is then
+  /// left out.
+  final bool kindFixed;
 
   /// Prefills the URL field (a share-sheet handoff).
   final String? initialUrl;
@@ -670,7 +732,13 @@ class _AcquireDialogState extends State<AcquireDialog> {
     final target = resolveUploadTarget(candidates, _target);
     return AlertDialog(
       backgroundColor: colors.surface2,
-      title: Text(l10n.uploadsFromUrl),
+      title: Text(
+        !widget.kindFixed
+            ? l10n.uploadsFromUrl
+            : _mediaType == MediaType.audiobook
+            ? l10n.uploadsFromUrlBook
+            : l10n.uploadsFromUrlMusic,
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -685,10 +753,11 @@ class _AcquireDialogState extends State<AcquireDialog> {
               errorText: _refused != null ? l10n.uploadsSourceUrlInvalid : null,
             ),
             const SizedBox(height: WaxSpace.s12),
-            MediaTypeSelector(
-              value: _mediaType,
-              onChanged: (value) => setState(() => _mediaType = value),
-            ),
+            if (!widget.kindFixed)
+              MediaTypeSelector(
+                value: _mediaType,
+                onChanged: (value) => setState(() => _mediaType = value),
+              ),
             UploadTargetSelector(
               candidates: candidates,
               value: target,
@@ -750,12 +819,15 @@ bool isWebLink(String text) {
 
 /// The media-type prompt, plus the grouping intent for several files:
 /// an album must not arrive as one entry per track, and a grab of
-/// singles must not merge into one album.
+/// singles must not merge into one album. A [kindFixed] dialog (opened
+/// from the music or audiobook section) says the kind instead of asking.
 class MediaTypeDialog extends StatefulWidget {
   const MediaTypeDialog({
     super.key,
     this.initial = MediaType.music,
+    this.kindFixed = false,
     this.fileCount = 1,
+    this.audiobookGrouping,
     required this.initialIdentify,
     this.targets = const [],
     this.rememberedTarget = '',
@@ -763,9 +835,19 @@ class MediaTypeDialog extends StatefulWidget {
 
   final MediaType initial;
 
+  /// Whether [initial] is the section's own kind: the selector is then
+  /// left out and the title names the kind.
+  final bool kindFixed;
+
   /// How many files are about to upload; above one, the grouping
   /// question appears.
   final int fileCount;
+
+  /// The grouping an audiobook of these files opens on (see
+  /// [defaultUploadGrouping]); music always opens on auto-detection.
+  /// Until the person picks one, a change of kind moves the grouping to
+  /// that kind's default.
+  final UploadGrouping? audiobookGrouping;
 
   /// What the identification switch opens on; see
   /// [AcquireDialog.initialIdentify].
@@ -784,10 +866,30 @@ class MediaTypeDialog extends StatefulWidget {
 class _MediaTypeDialogState extends State<MediaTypeDialog> {
   late var _mediaType = uploadableMediaType(widget.initial);
   late bool? _identify = widget.initialIdentify;
-  var _grouping = UploadGrouping.auto;
+  late var _grouping = _defaultGrouping(_mediaType);
+  var _groupingTouched = false;
 
   /// See [_AcquireDialogState._target].
   late String _target = widget.rememberedTarget;
+
+  UploadGrouping _defaultGrouping(MediaType kind) => kind == MediaType.audiobook
+      ? widget.audiobookGrouping ?? UploadGrouping.auto
+      : UploadGrouping.auto;
+
+  String _title(AppLocalizations l10n) {
+    final several = widget.fileCount > 1;
+    if (!widget.kindFixed) {
+      return several
+          ? l10n.uploadsWhatMany(widget.fileCount)
+          : l10n.uploadsWhatOne;
+    }
+    final book = _mediaType == MediaType.audiobook;
+    return several
+        ? (book
+              ? l10n.uploadsWhatManyBook(widget.fileCount)
+              : l10n.uploadsWhatManyMusic(widget.fileCount))
+        : (book ? l10n.uploadsWhatOneBook : l10n.uploadsWhatOneMusic);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -798,9 +900,7 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
     final target = resolveUploadTarget(candidates, _target);
     return AlertDialog(
       backgroundColor: colors.surface2,
-      title: Text(
-        several ? l10n.uploadsWhatMany(widget.fileCount) : l10n.uploadsWhatOne,
-      ),
+      title: Text(_title(l10n)),
       // Scrollable: with the grouping selector the content outgrows a
       // short viewport (a phone in landscape) and an AlertDialog does
       // not scroll on its own.
@@ -809,10 +909,14 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            MediaTypeSelector(
-              value: _mediaType,
-              onChanged: (value) => setState(() => _mediaType = value),
-            ),
+            if (!widget.kindFixed)
+              MediaTypeSelector(
+                value: _mediaType,
+                onChanged: (value) => setState(() {
+                  _mediaType = value;
+                  if (!_groupingTouched) _grouping = _defaultGrouping(value);
+                }),
+              ),
             UploadTargetSelector(
               candidates: candidates,
               value: target,
@@ -822,7 +926,12 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
               const SizedBox(height: WaxSpace.s16),
               UploadGroupingSelector(
                 value: _grouping,
-                onChanged: (value) => setState(() => _grouping = value),
+                mediaType: _mediaType,
+                fileCount: widget.fileCount,
+                onChanged: (value) => setState(() {
+                  _grouping = value;
+                  _groupingTouched = true;
+                }),
               ),
             ],
             const SizedBox(height: WaxSpace.s16),
@@ -856,36 +965,60 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
   }
 }
 
-/// The grouping-intent selector for a multi-file upload.
+/// The grouping-intent selector for a multi-file upload, worded for
+/// [mediaType]: albums for music, books in parts for an audiobook.
 class UploadGroupingSelector extends StatelessWidget {
   const UploadGroupingSelector({
     super.key,
     required this.value,
+    required this.mediaType,
+    required this.fileCount,
     required this.onChanged,
   });
 
   final UploadGrouping value;
+  final MediaType mediaType;
+
+  /// How many files the pick holds, for "One book in {count} parts".
+  final int fileCount;
   final ValueChanged<UploadGrouping> onChanged;
 
-  static List<(UploadGrouping, String, String)> _options(
-    AppLocalizations l10n,
-  ) => <(UploadGrouping, String, String)>[
-    (
-      UploadGrouping.auto,
-      l10n.uploadsGroupingAuto,
-      l10n.uploadsGroupingAutoHelp,
-    ),
-    (
-      UploadGrouping.album,
-      l10n.uploadsGroupingAlbum,
-      l10n.uploadsGroupingAlbumHelp,
-    ),
-    (
-      UploadGrouping.tracks,
-      l10n.uploadsGroupingTracks,
-      l10n.uploadsGroupingTracksHelp,
-    ),
-  ];
+  List<(UploadGrouping, String, String)> _options(AppLocalizations l10n) =>
+      mediaType == MediaType.audiobook
+      ? <(UploadGrouping, String, String)>[
+          (
+            UploadGrouping.auto,
+            l10n.uploadsGroupingAuto,
+            l10n.uploadsGroupingBookAutoHelp,
+          ),
+          (
+            UploadGrouping.album,
+            l10n.uploadsGroupingBookOne(fileCount),
+            l10n.uploadsGroupingBookOneHelp,
+          ),
+          (
+            UploadGrouping.tracks,
+            l10n.uploadsGroupingBookEach,
+            l10n.uploadsGroupingBookEachHelp,
+          ),
+        ]
+      : <(UploadGrouping, String, String)>[
+          (
+            UploadGrouping.auto,
+            l10n.uploadsGroupingAuto,
+            l10n.uploadsGroupingAutoHelp,
+          ),
+          (
+            UploadGrouping.album,
+            l10n.uploadsGroupingAlbum,
+            l10n.uploadsGroupingAlbumHelp,
+          ),
+          (
+            UploadGrouping.tracks,
+            l10n.uploadsGroupingTracks,
+            l10n.uploadsGroupingTracksHelp,
+          ),
+        ];
 
   @override
   Widget build(BuildContext context) {

@@ -4,15 +4,22 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
+import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/library/item_kind.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/player/now_playing_slot.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/queue/queue_item.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/sync/sync_binder.dart';
+import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -60,12 +67,21 @@ Future<PlayerHarness> _pump(
   required List<String> pids,
   required String to,
   FakeEngine? engine,
+  SyncEngine? sync,
 }) async {
+  final downloads = sync == null ? null : FakeDownloads();
+  if (downloads != null) addTearDown(downloads.dispose);
   final container = playbackContainer(
     repo: repo,
     engine: engine ?? FakeEngine(),
     extra: [
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      if (sync != null) ...[
+        mirrorDatabaseProvider.overrideWithValue(sync.db),
+        downloadManagerProvider.overrideWithValue(downloads!),
+        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
+        syncEngineProvider.overrideWithValue(sync),
+      ],
     ],
   );
   // Signed in, as the app is wherever a kind change is offered.
@@ -96,6 +112,26 @@ void main() {
   testWidgets('tracks that become one book open it', (tester) async {
     await _pump(tester, _repo(), pids: [_a, _b], to: 'audiobook');
     await _confirm(tester);
+
+    expect(
+      tester.widget<BookScreen>(find.byType(BookScreen)).pid,
+      'bk-${_a.substring(3)}',
+    );
+  });
+
+  testWidgets('a change whose job was cleared meanwhile still opens the book', (
+    tester,
+  ) async {
+    final repo = _repo();
+    await _pump(tester, repo, pids: [_a, _b], to: 'audiobook');
+    await tester.tap(find.text('Start'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.kindConfirm));
+    await tester.pump();
+    // Another device sweeps the finished jobs before the first poll.
+    await repo.clearFinishedJobs();
+    await tester.pump(kindChangePoll);
+    await tester.pumpAndSettle();
 
     expect(
       tester.widget<BookScreen>(find.byType(BookScreen)).pid,
@@ -319,6 +355,106 @@ void main() {
     await harness.endPlayback(tester);
   });
 
+  testWidgets('a queued track that became a book starts as one', (
+    tester,
+  ) async {
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final repo = _repo();
+    final harness = await _pump(
+      tester,
+      repo,
+      pids: [_a],
+      to: 'audiobook',
+      engine: engine,
+    );
+    harness.play([testItem(_c), testItem(_a)]);
+    await tester.pumpAndSettle();
+    // A queue row naming it, from the summary the queue was built from.
+    final row = harness.container.listen(queueItemProvider(_a), (_, _) {});
+    addTearDown(row.close);
+    await tester.pumpAndSettle();
+    expect(row.read().value?.mediaType, MediaType.music);
+    // The server answers the old pid with what the item is now.
+    repo.libraryItems.add(testItem(_a, mediaType: MediaType.audiobook));
+
+    await _confirm(tester);
+    expect(row.read().value?.mediaType, MediaType.audiobook);
+    await harness.playback.next();
+    await tester.pumpAndSettle();
+
+    final now = harness.container.read(nowPlayingProvider);
+    expect(now.entry?.pid, _a);
+    expect(now.session?.item.mediaType, MediaType.audiobook);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a change that ends after its dialog stopped watching still '
+      'starts what it converted as what it is now', (tester) async {
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final repo = _repo()
+      ..libraryItems.addAll([testItem(_c), testItem(_a)])
+      ..jobs = const [Job(pid: _job, kind: 'set-kind', state: 'running')];
+    final db = inMemoryMirrorDatabase();
+    addTearDown(db.close);
+    final sync = SyncEngine(
+      db: db,
+      repository: repo,
+      channelFactory: deadChannelFactory(),
+    );
+    addTearDown(sync.dispose);
+    final harness = await _pump(
+      tester,
+      repo,
+      pids: [_a],
+      to: 'audiobook',
+      engine: engine,
+      sync: sync,
+    );
+    // The signed-in shell holds the session's binder, which hears the
+    // catalog move.
+    final binder = harness.container.listen(syncBinderProvider, (_, _) {});
+    harness.play([testItem(_c), testItem(_a)]);
+    await tester.pumpAndSettle();
+    final row = harness.container.listen(queueItemProvider(_a), (_, _) {});
+    await tester.pumpAndSettle();
+    expect(row.read().value?.mediaType, MediaType.music);
+
+    // The dialog waits its whole time and leaves the change running.
+    await _confirm(tester, polls: kindChangePolls);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'Still changing. Follow it in Tasks.',
+    );
+
+    // It ends later, unwatched: the server answers the old pid with what
+    // the item is now, and the catalog moves.
+    repo.libraryItems
+      ..removeWhere((i) => i.pid == _a)
+      ..add(testItem(_a, mediaType: MediaType.audiobook));
+    await sync.pullCatalog();
+    await tester.pump(kCatalogRefreshWindow);
+    await tester.pumpAndSettle();
+
+    expect(row.read().value?.mediaType, MediaType.audiobook);
+    await harness.playback.next();
+    await tester.pumpAndSettle();
+    final now = harness.container.read(nowPlayingProvider);
+    expect(now.entry?.pid, _a);
+    expect(now.session?.item.mediaType, MediaType.audiobook);
+    row.close();
+    binder.close();
+    await harness.endPlayback(tester);
+    // The engine's reconnect is a timer: the session ends here.
+    await tester.pumpWidget(const SizedBox());
+    harness.container.dispose();
+    await tester.pump();
+  });
+
   testWidgets('a change that failed part way lets go of what it folded, '
       'then says why', (tester) async {
     final engine = FakeEngine(
@@ -400,6 +536,92 @@ void main() {
     expect(engine.playing, isTrue);
     expect(raisedMessage(tester), isNull);
     await harness.container.read(radioPlaybackProvider.notifier).stop();
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a folded entry a station parked goes, and nothing starts', (
+    tester,
+  ) async {
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final repo = _repo();
+    final harness = await _pump(
+      tester,
+      repo,
+      pids: [_a, _b],
+      to: 'audiobook',
+      engine: engine,
+    );
+    harness.play([testItem(_b), testItem(_c)]);
+    await tester.pumpAndSettle();
+    final station = RadioStation(
+      pid: 'rs-01JZX5N8QW3F4V9T2B7KDSTATN1',
+      name: 'Coastal FM',
+      streamUrl: 'https://stream.example/coastal',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    repo.radioStationsByPid[station.pid] = station;
+    final radio = harness.container.read(radioPlaybackProvider.notifier);
+    await radio.play(station);
+    await tester.pumpAndSettle();
+    await radio.stop();
+    await tester.pumpAndSettle();
+    expect(harness.container.read(nowPlayingSlotProvider), isA<ParkedSlot>());
+    final loads = engine.loadedUrls.length;
+
+    await _confirm(tester);
+
+    // Nothing was playing, so nothing stopped and nothing is said; what
+    // follows stands where the folded entry stood, still waiting.
+    final slot = harness.container.read(nowPlayingSlotProvider);
+    expect(slot, isA<ParkedSlot>());
+    expect((slot as ParkedSlot).parked.entry.pid, _c);
+    expect(engine.loadedUrls, hasLength(loads));
+    expect(engine.playing, isFalse);
+    expect(raisedMessage(tester), isNull);
+    final queue = harness.container.read(queueControllerProvider);
+    expect([for (final e in queue.entries) e.pid], [_c]);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a folded entry under a station is not offered back after it', (
+    tester,
+  ) async {
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final repo = _repo();
+    final harness = await _pump(
+      tester,
+      repo,
+      pids: [_a, _b],
+      to: 'audiobook',
+      engine: engine,
+    );
+    harness.play([testItem(_b), testItem(_c)]);
+    await tester.pumpAndSettle();
+    final station = RadioStation(
+      pid: 'rs-01JZX5N8QW3F4V9T2B7KDSTATN1',
+      name: 'Coastal FM',
+      streamUrl: 'https://stream.example/coastal',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    repo.radioStationsByPid[station.pid] = station;
+    final radio = harness.container.read(radioPlaybackProvider.notifier);
+    await radio.play(station);
+    await tester.pumpAndSettle();
+
+    await _confirm(tester);
+    await radio.stop();
+    await tester.pumpAndSettle();
+
+    final slot = harness.container.read(nowPlayingSlotProvider);
+    expect(slot, isA<ParkedSlot>());
+    expect((slot as ParkedSlot).parked.entry.pid, _c);
+    final queue = harness.container.read(queueControllerProvider);
+    expect([for (final e in queue.entries) e.pid], [_c]);
+    expect(engine.playing, isFalse);
     await harness.endPlayback(tester);
   });
 

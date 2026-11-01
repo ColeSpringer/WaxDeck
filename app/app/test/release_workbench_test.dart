@@ -7,6 +7,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -121,6 +122,10 @@ void main() {
     // It disagrees on the title and the year, so those fields open
     // empty under the sentinel: an untouched mixed field is never sent.
     expect(find.text('Mixed'), findsNWidgets(2));
+    // Artist and album are common values read from the files; the fields
+    // neither track holds draw no chip.
+    expect(find.text('tags'), findsNWidgets(2));
+    expect(find.byType(CodecChip), findsNWidgets(4));
 
     await tester.enterText(
       _byId(SemanticsIds.workbenchBulkField('artist')),
@@ -145,6 +150,45 @@ void main() {
     await tester.tap(_byId(SemanticsIds.workbenchSelectToggle));
     await tester.pumpAndSettle();
     expect(_byId(SemanticsIds.workbenchBulkPane), findsNothing);
+  });
+
+  testWidgets('a shared value credits whoever set it on every track, and '
+      'sources that differ credit no one', (tester) async {
+    final repo = _repo();
+    // Both tracks' artist was set by hand, and their album read from the
+    // files. Their album artist agrees, but one track's was set by hand.
+    repo.itemProvenance['tr-A'] = const [
+      FieldProvenance(field: 'artist', source: 'user', locked: true),
+      FieldProvenance(field: 'album_artist', source: 'user', locked: true),
+    ];
+    repo.itemProvenance['tr-B'] = const [
+      FieldProvenance(field: 'artist', source: 'user', locked: true),
+    ];
+    repo.itemFieldsByPid['tr-A']!['album_artist'] = 'The Casket Girls';
+    repo.itemFieldsByPid['tr-B']!['album_artist'] = 'The Casket Girls';
+    await _pump(tester, repo);
+
+    await tester.longPress(_trackRow('tr-A'));
+    await tester.pumpAndSettle();
+    await tester.tap(_trackRow('tr-B'));
+    await tester.pumpAndSettle();
+
+    /// The chip drawn level with [field]'s box, if any.
+    String? chipBeside(String field) {
+      final box = tester.getRect(_byId(SemanticsIds.workbenchBulkField(field)));
+      for (final chip in find.byType(CodecChip).evaluate()) {
+        final at = tester.getCenter(find.byWidget(chip.widget));
+        if (at.dy >= box.top && at.dy <= box.bottom) {
+          return (chip.widget as CodecChip).label;
+        }
+      }
+      return null;
+    }
+
+    expect(chipBeside('artist'), 'you');
+    expect(chipBeside('album'), 'tags');
+    expect(chipBeside('album_artist'), isNull);
+    expect(chipBeside('title'), 'Mixed');
   });
 
   // The rewrite goes through the entity rename, not a bulk edit over a

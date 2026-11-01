@@ -109,10 +109,19 @@ class FirstRunWizard extends Notifier<FirstRunStep?> {
     final scanning = jobs.any(
       (job) => job.kind == 'scan' && job.state == 'running',
     );
-    final scanned =
-        reached.index >= FirstRunStage.warming.index ||
-        jobs.any((job) => job.kind == 'scan');
-    if (!scanned) return _at(FirstRunStep.scan, FirstRunStage.scan);
+    if (reached.index < FirstRunStage.warming.index &&
+        !jobs.any((job) => job.kind == 'scan')) {
+      // A scan cleared from Tasks leaves no job to find, so items already
+      // in the catalog count as scanned too. The count is the costly
+      // read, asked only when nothing cheaper answers, and undecided
+      // while it is out so the step is not drawn over a library that
+      // turns out to hold items.
+      final counts = ref.watch(libraryCountsProvider);
+      if (counts.isLoading) return _last;
+      final held =
+          counts.value?.any((library) => (library.itemCount ?? 0) > 0) ?? false;
+      if (!held) return _at(FirstRunStep.scan, FirstRunStage.scan);
+    }
 
     // No answer reads as still warming, since `done` is written down and
     // assuming a finish would end the tour for good. That covers a

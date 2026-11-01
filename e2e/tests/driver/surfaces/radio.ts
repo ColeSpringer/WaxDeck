@@ -80,11 +80,12 @@ export class Radio extends Surface {
   ///
   /// clickInView: the pinned surface has only just appeared and is
   /// settling into place, so its control is a moving target for a single
-  /// forced click. The deck bar is what proves the tune took.
+  /// forced click. The deck bar naming a live stream is what proves the
+  /// tune took: a bar already up for an item proves nothing.
   async tuneIn(target: Locator): Promise<void> {
-    const bar = this.deckBar();
-    await clickInView(this.ctx.page, target, { settled: bar });
-    await bar.waitFor({ timeout: T.nav });
+    const live = this.ctx.page.locator(`${sem(SemanticsIds.deckBar)}[aria-label*="Live, "]`);
+    await clickInView(this.ctx.page, target, { settled: live });
+    await live.waitFor({ timeout: T.nav });
   }
 
   /// The deck bar a live stream drives.

@@ -39,6 +39,9 @@ MiniWindowPort createMiniWindowPort() =>
 
 TrayPort createTrayPort() => _isDesktop ? PluginTray() : const NoTray();
 
+WindowTitlePort createWindowTitlePort({required bool desktop}) =>
+    desktop ? PluginWindowTitle() : const NoWindowTitle();
+
 bool get _isDesktop => Platform.isLinux || Platform.isWindows;
 
 /// Whether this Linux session is Wayland.
@@ -52,6 +55,25 @@ bool get _isWayland =>
     Platform.isLinux &&
     (Platform.environment['XDG_SESSION_TYPE'] == 'wayland' ||
         (Platform.environment['WAYLAND_DISPLAY']?.isNotEmpty ?? false));
+
+/// The title bar over `window_manager`.
+class PluginWindowTitle implements WindowTitlePort {
+  /// The title written, or being written. A refused write forgets it, so
+  /// the next ask for the same title tries again.
+  String? _shown;
+
+  @override
+  void show(String title) {
+    if (title == _shown) return;
+    _shown = title;
+    unawaited(
+      windowManager.setTitle(title).catchError((Object failure) {
+        debugPrint('window title unavailable: $failure');
+        if (_shown == title) _shown = null;
+      }),
+    );
+  }
+}
 
 /// The mini window over `window_manager`.
 class PluginMiniWindow with WindowListener implements MiniWindowPort {

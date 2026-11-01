@@ -16,6 +16,7 @@ func uploadJSON(u service.UploadDTO) Upload {
 		FileName:      u.FileName,
 		SizeBytes:     u.SizeBytes,
 		ReceivedBytes: u.ReceivedBytes,
+		IdleMs:        u.Idle.Milliseconds(),
 		MediaType:     MediaType(u.MediaType),
 		State:         u.State,
 		CreatedAt:     u.CreatedAt,

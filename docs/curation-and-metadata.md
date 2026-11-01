@@ -127,17 +127,33 @@ the grouping step. Web and Android transfers read their file handles
 in windows, so picking a multi-hundred-megabyte album never loads it
 into memory.
 
+Uploading says what the files are before it asks anything else. Opened
+from the music or Books section, the dialog states the kind in its title
+("Upload 12 files as an audiobook") and does not ask it; opened from
+anywhere else (home, Past uploads, a drop) it asks Music or Audiobook,
+preselected as Audiobook when any file is an `.m4b` and Music otherwise.
+The choice is the person's to change.
+
 Uploading several files at once asks a grouping question so an album
-folder does not flood the review queue with per-file entries:
-**Auto-detect** (the default) clusters files into album units by
-their tags and relative folders - disc subfolders like `CD1` fold
-into one release - **One album** reviews everything as a single
-release, and **Separate tracks** opens one entry per file. The
-grouping rides an upload batch: members upload individually
-(per-file failures never sink the rest), and the batch finalizes
-into review entries when the transfer finishes - or within a day,
-with whatever arrived, if the client vanished. Files shared to the
-Android app group by auto-detection without asking.
+folder does not flood the review queue with per-file entries, worded
+for the kind. For music: **Auto-detect** (the default) clusters files
+into album units by their tags and relative folders - disc subfolders
+like `CD1` fold into one release - **One album** reviews everything as
+a single release, and **Separate tracks** opens one entry per file. For
+an audiobook: **One book in N parts** reviews everything as one book in
+folder and track order, **Auto-detect** makes one book per folder or
+title, and **Separate books** opens one entry per file. An audiobook
+opens on **One book** when its files sit in one folder (or in disc
+subfolders such as `CD1` and `Disc 2` of one folder) and are not
+several `.m4b` files, each of which is normally a whole book; loose
+files and a folder of book folders open on **Auto-detect**. Either
+holds until the person picks a grouping. The grouping rides an upload
+batch: members upload individually (per-file failures never sink the
+rest), and the batch finalizes into review entries when the transfer
+finishes - or within a day, with whatever arrived, if the client
+vanished. Files shared to the Android app group by auto-detection
+without asking, and a share that includes an `.m4b` uploads as an
+audiobook.
 
 Uploads accept the same extensions the scanner catalogs by default -
 mp3, mpga, flac, wav, wave, ogg, oga, opus, m4a, m4b, m4r, mp4, alac,

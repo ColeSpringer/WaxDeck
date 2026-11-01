@@ -3,6 +3,7 @@ import 'package:waxdeck/src/player/output_volume.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 
@@ -130,84 +131,88 @@ void main() {
   testWidgets('a level the platform refuses does not stay on the slider', (
     tester,
   ) async {
-    // The optimism is what keeps a drag smooth, and it has to survive its
-    // own failure: a write the platform turns down leaves the control
-    // drawing a loudness the output never took, which is the one thing
-    // this controller exists to prevent.
-    final repo = FakeRepository(items: [testItem('tr-A')]);
-    final engine = FakeEngine();
-    final container = playbackContainer(
-      repo: repo,
-      engine: engine,
-      extra: [localVolumeAvailableProvider.overrideWithValue(true)],
-    );
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem('tr-A'),
-      container: container,
-    );
+    await captureDebugPrints(() async {
+      // The optimism is what keeps a drag smooth, and it has to survive its
+      // own failure: a write the platform turns down leaves the control
+      // drawing a loudness the output never took, which is the one thing
+      // this controller exists to prevent.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final container = playbackContainer(
+        repo: repo,
+        engine: engine,
+        extra: [localVolumeAvailableProvider.overrideWithValue(true)],
+      );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: testItem('tr-A'),
+        container: container,
+      );
 
-    await container.read(outputVolumeProvider.notifier).set(0.4);
-    await tester.pumpAndSettle();
-    expect(container.read(outputVolumeProvider), closeTo(0.4, 0.001));
+      await container.read(outputVolumeProvider.notifier).set(0.4);
+      await tester.pumpAndSettle();
+      expect(container.read(outputVolumeProvider), closeTo(0.4, 0.001));
 
-    // Not raised: every call site is a slider or a glyph firing and
-    // forgetting, so a raised failure is an unhandled zone error per drag
-    // frame and nothing on screen. The level snapping back is the report.
-    engine.failNextSetVolume = true;
-    await container.read(outputVolumeProvider.notifier).set(0.9);
-    await tester.pumpAndSettle();
+      // Not raised: every call site is a slider or a glyph firing and
+      // forgetting, so a raised failure is an unhandled zone error per drag
+      // frame and nothing on screen. The level snapping back is the report.
+      engine.failNextSetVolume = true;
+      await container.read(outputVolumeProvider.notifier).set(0.9);
+      await tester.pumpAndSettle();
 
-    // Back to the engine's own gain, not the level nobody took.
-    expect(engine.volume, closeTo(0.4, 0.001));
-    expect(container.read(outputVolumeProvider), closeTo(0.4, 0.001));
+      // Back to the engine's own gain, not the level nobody took.
+      expect(engine.volume, closeTo(0.4, 0.001));
+      expect(container.read(outputVolumeProvider), closeTo(0.4, 0.001));
 
-    await harness.endPlayback(tester);
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('a refused unmute keeps the level it was putting back', (
     tester,
   ) async {
-    // Mute's whole promise is the level it is holding. Spent before the
-    // write, a refused unmute forgot it, and the retry - the obvious thing
-    // to do next - had nothing to go back to but full volume, in a pair of
-    // headphones, at whatever the engine's idea of 1.0 is.
-    final repo = FakeRepository(items: [testItem('tr-A')]);
-    final engine = FakeEngine();
-    final container = playbackContainer(
-      repo: repo,
-      engine: engine,
-      extra: [localVolumeAvailableProvider.overrideWithValue(true)],
-    );
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem('tr-A'),
-      container: container,
-    );
+    await captureDebugPrints(() async {
+      // Mute's whole promise is the level it is holding. Spent before the
+      // write, a refused unmute forgot it, and the retry - the obvious thing
+      // to do next - had nothing to go back to but full volume, in a pair of
+      // headphones, at whatever the engine's idea of 1.0 is.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final container = playbackContainer(
+        repo: repo,
+        engine: engine,
+        extra: [localVolumeAvailableProvider.overrideWithValue(true)],
+      );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: testItem('tr-A'),
+        container: container,
+      );
 
-    final volume = container.read(outputVolumeProvider.notifier);
-    await volume.set(0.6);
-    await volume.toggleMute();
-    expect(engine.volume, 0);
+      final volume = container.read(outputVolumeProvider.notifier);
+      await volume.set(0.6);
+      await volume.toggleMute();
+      expect(engine.volume, 0);
 
-    engine.failNextSetVolume = true;
-    await volume.toggleMute();
-    await tester.pumpAndSettle();
-    expect(engine.volume, 0, reason: 'the write was refused');
-    expect(container.read(outputVolumeProvider), 0);
+      engine.failNextSetVolume = true;
+      await volume.toggleMute();
+      await tester.pumpAndSettle();
+      expect(engine.volume, 0, reason: 'the write was refused');
+      expect(container.read(outputVolumeProvider), 0);
 
-    await volume.toggleMute();
-    expect(
-      engine.volume,
-      closeTo(0.6, 0.001),
-      reason: 'the remembered level survived the refusal',
-    );
+      await volume.toggleMute();
+      expect(
+        engine.volume,
+        closeTo(0.6, 0.001),
+        reason: 'the remembered level survived the refusal',
+      );
 
-    await harness.endPlayback(tester);
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('a phone gets none of it, where the buttons own the level', (

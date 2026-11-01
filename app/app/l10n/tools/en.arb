@@ -19,15 +19,15 @@
   },
   "toolsClearFinished": "Clear finished",
   "@toolsClearFinished": {
-    "description": "Label of the Tasks screen's control that clears the signed-in account's finished tasks at once; for an administrator it opens a menu of the two sweeps."
+    "description": "Label of the Tasks screen's control that clears the signed-in account's finished tasks at once; for an administrator it opens a menu of the two sweeps, and either one also hides the administrator's own finished library jobs."
   },
-  "toolsClearFinishedAll": "Clear everyone's finished tasks",
+  "toolsClearFinishedAll": "Clear everyone's finished",
   "@toolsClearFinishedAll": {
-    "description": "Menu row, for an administrator, that clears every account's finished tasks after a confirmation."
+    "description": "Menu row, for an administrator, that clears every account's finished tasks after a confirmation, and the administrator's own finished library jobs."
   },
-  "toolsClearFinishedMine": "Clear my finished tasks",
+  "toolsClearFinishedMine": "Clear my finished",
   "@toolsClearFinishedMine": {
-    "description": "Menu row, for an administrator, that clears only their own finished tasks."
+    "description": "Menu row, for an administrator, that clears only their own finished tasks, and their own finished library jobs."
   },
   "toolsCountAdded": "added {count}",
   "@toolsCountAdded": {
@@ -399,6 +399,16 @@
       "target": {
         "type": "String",
         "example": "Amber Waves"
+      }
+    }
+  },
+  "toolsJobsCleared": "{count, plural, =1{Cleared 1 library job} other{Cleared {count} library jobs}}",
+  "@toolsJobsCleared": {
+    "description": "Message after an administrator cleared their finished library jobs, saying how many went.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
       }
     }
   },

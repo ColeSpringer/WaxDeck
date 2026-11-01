@@ -3939,7 +3939,7 @@ abstract class AppLocalizations {
   /// **'From the feed'**
   String get artSourceFeed;
 
-  /// Provenance of an artifact read out of the audio file's own tags, on the rows that already name the artifact ("Artwork · {source}", "Lyrics · {source}"). Bare on purpose: the standalone artSourceTag would stutter behind the Artwork prefix and call a lyric a picture behind the Lyrics one.
+  /// Provenance of an artifact read out of the audio file's own tags, on the lyrics line ("Lyrics · {source}"). Bare on purpose: the standalone artSourceTag would call a lyric a picture behind the Lyrics prefix.
   ///
   /// In en, this message translates to:
   /// **'From the file'**
@@ -3975,7 +3975,7 @@ abstract class AppLocalizations {
   /// **'From a folder image'**
   String get artSourceSidecar;
 
-  /// Source mark under a cover read out of the audio file itself (its embedded tags). Says what the mark is about, not the mechanism: "from the file's tags" read as nonsense under a picture. The provenance rows, already prefixed with the artifact's name, draw the bare artSourceFromFile instead.
+  /// Source mark under a cover read out of the audio file itself (its embedded tags). Says what the mark is about, not the mechanism: "from the file's tags" read as nonsense under a picture. The lyrics line, already prefixed with the artifact's name, draws the bare artSourceFromFile instead.
   ///
   /// In en, this message translates to:
   /// **'Art from the file'**
@@ -8037,12 +8037,6 @@ abstract class AppLocalizations {
   /// **'Add tag'**
   String get metadataAddTag;
 
-  /// The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').
-  ///
-  /// In en, this message translates to:
-  /// **'Artwork · {source}'**
-  String metadataArtworkSource(String source);
-
   /// Message part after a bulk save: how many catalog rows took the edit.
   ///
   /// In en, this message translates to:
@@ -8463,12 +8457,6 @@ abstract class AppLocalizations {
   /// **'Force'**
   String get metadataForceTitle;
 
-  /// One entry in the provenance line: how many fields came from one source. {source} is a provider or source name from the server.
-  ///
-  /// In en, this message translates to:
-  /// **'{count} from {source}'**
-  String metadataFromSource(int count, String source);
-
   /// Genre picker row that stages exactly what was typed, for a genre the canonical tree does not carry. {query} is the typed text.
   ///
   /// In en, this message translates to:
@@ -8499,7 +8487,7 @@ abstract class AppLocalizations {
   /// **'Identification'**
   String get metadataIdentificationTitle;
 
-  /// Line under the editor's provenance summary when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).
+  /// Line in the editor's header when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).
   ///
   /// In en, this message translates to:
   /// **'Kind: {kind}, pinned'**
@@ -8582,12 +8570,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No credit roles for this kind'**
   String get metadataNoCreditRoles;
-
-  /// Stands in for the provenance line when nothing recorded where the item's values came from.
-  ///
-  /// In en, this message translates to:
-  /// **'No recorded sources'**
-  String get metadataNoSources;
 
   /// Message after fetching metadata found nothing to apply or skip.
   ///
@@ -8925,49 +8907,43 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Save 1 change} other{Save {count} changes}}'**
   String metadataSaveChanges(int count);
 
-  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  /// A producer name as it reads on the chip beside a field: a short noun, not a sentence.
   ///
   /// In en, this message translates to:
   /// **'a provider'**
   String get metadataSourceEnrichment;
 
-  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  /// A producer name as it reads on the chip beside a field: a short noun, not a sentence.
   ///
   /// In en, this message translates to:
   /// **'the feed'**
   String get metadataSourceFeed;
 
-  /// A producer name as it reads inside the provenance tally ("3 from the clean-up pass"): a value a clean-up pass such as the genre normalizer rewrote in the catalog. A short noun, not a sentence.
+  /// A producer name as it reads on the chip beside a field: a value a clean-up pass such as the genre normalizer rewrote in the catalog. A short noun, not a sentence.
   ///
   /// In en, this message translates to:
   /// **'the clean-up pass'**
   String get metadataSourceNormalize;
 
-  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  /// A producer name as it reads on the chip beside a field: a short noun, not a sentence.
   ///
   /// In en, this message translates to:
   /// **'the organizer'**
   String get metadataSourceOrganize;
 
-  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  /// A producer name as it reads on the chip beside a field: a short noun, not a sentence.
   ///
   /// In en, this message translates to:
   /// **'companion files'**
   String get metadataSourceSidecar;
 
-  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  /// A producer name as it reads on the chip beside a field: a short noun, not a sentence.
   ///
   /// In en, this message translates to:
   /// **'tags'**
   String get metadataSourceTag;
 
-  /// Chip beside a field whose value has no recorded source.
-  ///
-  /// In en, this message translates to:
-  /// **'Source unknown'**
-  String get metadataSourceUnknown;
-
-  /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
+  /// A producer name as it reads on the chip beside a field: a short noun, not a sentence.
   ///
   /// In en, this message translates to:
   /// **'you'**
@@ -9158,12 +9134,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Only administrators can edit a release'**
   String get musicAlbumEditorForbiddenTitle;
-
-  /// Chip beside an album-editor field whose value came from the files' own tags rather than from somebody typing it.
-  ///
-  /// In en, this message translates to:
-  /// **'From tags'**
-  String get musicAlbumEditorFromTags;
 
   /// Overline over the sort name and MusicBrainz ID fields.
   ///
@@ -10911,13 +10881,13 @@ abstract class AppLocalizations {
   /// **'Nothing is playing'**
   String get playerNothingPlaying;
 
-  /// Names a queue offered for resuming when its first item has not resolved, so the count is all there is to say.
+  /// A count of queued items, said by two offers on the deck. A queue offered for resuming shows it as its name when its first item has not resolved, so the count is all there is to say. An entry queued under a station, which never played, shows it as the line under its title, or alone when the entry has no name yet.
   ///
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 queued item} other{{count} queued items}}'**
   String playerOfferQueued(int count);
 
-  /// Under the offer to resume an earlier queue.
+  /// The first line of two offers on the deck: a queue from an earlier session offered back at launch, and an entry a station displaced from playback, offered back where it stopped. Said ahead of the title; shown under it when there is no artist to show.
   ///
   /// In en, this message translates to:
   /// **'Pick up where you left off'**
@@ -11012,6 +10982,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Share link'**
   String get playerShareLink;
+
+  /// Control on the deck bar, and its menu row, that has a book's seek bar span the chapter playing rather than the whole book.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the chapter'**
+  String get playerShowChapter;
+
+  /// Control on the deck bar, and its menu row, that has a book's seek bar span the whole book rather than the chapter playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the whole book'**
+  String get playerShowWholeBook;
 
   /// Menu item that lists tracks that sound like what is playing.
   ///
@@ -14547,6 +14529,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Playing from a mix'**
   String get queuePlayingFromMix;
+
+  /// Message when the item standing on the deck (paused, or where its start failed) turned out to be gone from the library, folded into a book or deleted elsewhere: it left the queue, and what follows it waits in its place.
+  ///
+  /// In en, this message translates to:
+  /// **'What was playing is no longer in the library.'**
+  String get queuePlayingGone;
 
   /// Heading over the tracks already played in this queue, with how many. Upper case as a typographic style; write it the way small headings are written in this language.
   ///
@@ -18537,6 +18525,18 @@ abstract class AppLocalizations {
   /// **'Sign out'**
   String get shellSignOut;
 
+  /// The browser tab or window title while a track, episode or book plays. {title} is the item, {artist} its artist, show or author.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} · {artist}'**
+  String shellWindowTitleItem(String title, String artist);
+
+  /// The browser tab or window title while a radio station plays a song it announced. {station} is the station, {song} the in-stream title.
+  ///
+  /// In en, this message translates to:
+  /// **'{station} · {song}'**
+  String shellWindowTitleLive(String station, String song);
+
   /// A playback rate as a picker option. The x is the multiplier convention; {speed} arrives already written for this language, so a locale that separates decimals differently is already handled.
   ///
   /// In en, this message translates to:
@@ -19156,22 +19156,22 @@ abstract class AppLocalizations {
   /// **'Clear every member\'s finished tasks?'**
   String get toolsClearAllTitle;
 
-  /// Label of the Tasks screen's control that clears the signed-in account's finished tasks at once; for an administrator it opens a menu of the two sweeps.
+  /// Label of the Tasks screen's control that clears the signed-in account's finished tasks at once; for an administrator it opens a menu of the two sweeps, and either one also hides the administrator's own finished library jobs.
   ///
   /// In en, this message translates to:
   /// **'Clear finished'**
   String get toolsClearFinished;
 
-  /// Menu row, for an administrator, that clears every account's finished tasks after a confirmation.
+  /// Menu row, for an administrator, that clears every account's finished tasks after a confirmation, and the administrator's own finished library jobs.
   ///
   /// In en, this message translates to:
-  /// **'Clear everyone\'s finished tasks'**
+  /// **'Clear everyone\'s finished'**
   String get toolsClearFinishedAll;
 
-  /// Menu row, for an administrator, that clears only their own finished tasks.
+  /// Menu row, for an administrator, that clears only their own finished tasks, and their own finished library jobs.
   ///
   /// In en, this message translates to:
-  /// **'Clear my finished tasks'**
+  /// **'Clear my finished'**
   String get toolsClearFinishedMine;
 
   /// Counter in a finished scan's result: files that brought new items. Lower case: it sits in a comma-separated run of counters.
@@ -19449,6 +19449,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{job}: {target}'**
   String toolsJobTargeted(String job, String target);
+
+  /// Message after an administrator cleared their finished library jobs, saying how many went.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Cleared 1 library job} other{Cleared {count} library jobs}}'**
+  String toolsJobsCleared(int count);
 
   /// Heading over the catalog's own jobs (scans, enrichment, analysis) on the tasks screen, shown to administrators.
   ///
@@ -19966,6 +19972,12 @@ abstract class AppLocalizations {
   /// **'The file could not be read'**
   String get uploadsFileUnreadable;
 
+  /// Under an upload row once every byte has arrived and the server is sealing the session.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing'**
+  String get uploadsFinishing;
+
   /// Accessible name of the picker choosing what a URL download is converted to.
   ///
   /// In en, this message translates to:
@@ -19983,6 +19995,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add from URL'**
   String get uploadsFromUrl;
+
+  /// Title of the add-from-URL dialog opened from the audiobook section, which already knows the kind.
+  ///
+  /// In en, this message translates to:
+  /// **'Add an audiobook from URL'**
+  String get uploadsFromUrlBook;
+
+  /// Title of the add-from-URL dialog opened from the music section, which already knows the kind.
+  ///
+  /// In en, this message translates to:
+  /// **'Add music from URL'**
+  String get uploadsFromUrlMusic;
 
   /// Second line of the add-from-URL row, naming what a source URL may point at.
   ///
@@ -20013,6 +20037,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Group into albums by their tags and folders'**
   String get uploadsGroupingAutoHelp;
+
+  /// Help under the auto-detect grouping choice when the files are an audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'One book per folder or title'**
+  String get uploadsGroupingBookAutoHelp;
+
+  /// Grouping choice for an audiobook: every file is a book of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Separate books'**
+  String get uploadsGroupingBookEach;
+
+  /// Help under the separate-books grouping choice.
+  ///
+  /// In en, this message translates to:
+  /// **'Every file is a book of its own'**
+  String get uploadsGroupingBookEachHelp;
+
+  /// Grouping choice for an audiobook: every file is a part of one book.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{One book} other{One book in {count} parts}}'**
+  String uploadsGroupingBookOne(int count);
+
+  /// Help under the one-book grouping choice.
+  ///
+  /// In en, this message translates to:
+  /// **'Parts of one book, in folder and track order'**
+  String get uploadsGroupingBookOneHelp;
 
   /// Heading over the grouping choice for a multi-file upload.
   ///
@@ -20061,6 +20115,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Uploaded 1 file. It\'s being identified and will appear once it clears review} other{Uploaded {count} files. They\'re being identified and will appear once they clear review}}'**
   String uploadsIdentifying(int count);
+
+  /// Under an upload row the server is still receiving but nothing on this device is sending: the tab closed, or the upload started elsewhere.
+  ///
+  /// In en, this message translates to:
+  /// **'Interrupted. Discard it, then upload the file again.'**
+  String get uploadsInterrupted;
 
   /// Accessible name of the picker choosing which library an upload or download is filed under. Shown only where the server offers more than one for the chosen medium.
   ///
@@ -20176,6 +20236,12 @@ abstract class AppLocalizations {
   /// **'Receiving'**
   String get uploadsReceiving;
 
+  /// Under an upload row while a chunk that failed on the wire waits to be sent again.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection lost, trying again'**
+  String get uploadsReconnecting;
+
   /// Accessible name of the control that sends a failed upload again.
   ///
   /// In en, this message translates to:
@@ -20248,11 +20314,35 @@ abstract class AppLocalizations {
   /// **'What are these {count} files?'**
   String uploadsWhatMany(int count);
 
+  /// Title of the upload dialog opened from the audiobook section, which already knows the files are an audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload {count} files as an audiobook'**
+  String uploadsWhatManyBook(int count);
+
+  /// Title of the upload dialog opened from the music section, which already knows the files are music.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload {count} files as music'**
+  String uploadsWhatManyMusic(int count);
+
   /// Title of the dialog asking what one file is.
   ///
   /// In en, this message translates to:
   /// **'What are you uploading?'**
   String get uploadsWhatOne;
+
+  /// Title of the upload dialog for one file opened from the audiobook section.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload as an audiobook'**
+  String get uploadsWhatOneBook;
+
+  /// Title of the upload dialog for one file opened from the music section.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload as music'**
+  String get uploadsWhatOneMusic;
 
   /// Accessible name of the picker choosing which medium is being added.
   ///

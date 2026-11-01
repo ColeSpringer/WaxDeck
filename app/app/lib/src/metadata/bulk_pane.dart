@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_source_label.dart';
 import '../l10n/l10n.dart';
 import '../music/album_detail.dart';
 import '../music/music_controllers.dart';
@@ -325,12 +326,14 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
     final l10n = context.l10n;
     final common = _common(seed.items, field);
     final mixed = common == null;
+    final chip = mixed
+        ? l10n.metadataBulkMixedChip
+        : sharedFieldSourceName(l10n, seed.items, field);
     final marks = Padding(
       padding: const EdgeInsets.only(bottom: WaxSpace.s8),
-      child: CodecChip(
-        mixed ? l10n.metadataBulkMixedChip : l10n.musicAlbumEditorFromTags,
-        emphasis: staged.containsKey(field),
-      ),
+      child: chip == null
+          ? null
+          : CodecChip(chip, emphasis: staged.containsKey(field)),
     );
     final control = switch (metadataFieldType(field)) {
       MetadataFieldType.text => WaxTextField(

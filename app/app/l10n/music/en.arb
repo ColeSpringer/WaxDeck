@@ -36,10 +36,6 @@
   "@musicAlbumEditorForbiddenTitle": {
     "description": "Empty state shown where the album editor would be, to an account that may not write it."
   },
-  "musicAlbumEditorFromTags": "From tags",
-  "@musicAlbumEditorFromTags": {
-    "description": "Chip beside an album-editor field whose value came from the files' own tags rather than from somebody typing it."
-  },
   "musicAlbumEditorNamesOverline": "How this release files and matches",
   "@musicAlbumEditorNamesOverline": {
     "description": "Overline over the sort name and MusicBrainz ID fields."

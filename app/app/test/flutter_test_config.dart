@@ -15,7 +15,21 @@ import 'package:flutter_test/flutter_test.dart';
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   setUp(_IdentifierWatch.start);
   tearDown(_IdentifierWatch.stop);
+  setUp(_quietConsole);
   await testMain();
+}
+
+/// Sends the app's console lines to [printOnFailure], shown beside a
+/// failure and silent on a pass, in a file with no widget test. A widget
+/// test checks [debugPrint] is the binding's own before any teardown
+/// runs, so one captures its own lines (`captureDebugPrints`).
+void _quietConsole() {
+  if (BindingBase.debugBindingType() != null) return;
+  final previous = debugPrint;
+  debugPrint = (String? message, {int? wrapWidth}) {
+    if (message != null) printOnFailure(message);
+  };
+  addTearDown(() => debugPrint = previous);
 }
 
 abstract final class _IdentifierWatch {

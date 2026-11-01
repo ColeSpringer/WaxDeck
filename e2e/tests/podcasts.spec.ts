@@ -27,7 +27,8 @@ import { SemanticsIds } from './semantics-ids';
 //   [1] the passthrough test's alone: it fetches it, unfetches it - that
 //       unfetch is its subject - and then plays it with no bytes there.
 //   [2] the journey's alone: unfetched as a precondition, fetched
-//       through the UI, played.
+//       through the UI (from the hub's Latest row, then removed and
+//       fetched again from the show's row), played.
 //   [3] the share test's alone (sharing-stats.spec.ts): unfetched as a
 //       precondition and never fetched, so its link plays before the
 //       server holds it.
@@ -113,15 +114,21 @@ test('subscribe, fetch, and play an episode with silence trimming', async (
   // catalog fact rather than an account's, so a run against a stack this
   // test has used before meets its own earlier download.
   await app.seed.unfetchEpisode(showPid, episode.pid);
-  await app.podcasts.openShow(showPid);
 
-  // Queue the server-side fetch from the UI; the background worker lands
-  // it and the row flips to downloaded.
-  await app.podcasts.episodeFetch(episode.pid).click();
+  // The hub's Latest row carries the same menu and fetch the show's rows
+  // do. The menu is read-only here; the fetch is queued from the hub,
+  // and the background worker lands it and the row flips to downloaded.
+  await app.podcasts.openEpisodeMenu(episode.pid);
+  await expect(app.podcasts.control(SemanticsIds.itemMenuShareItem)).toBeVisible();
+  await app.page.keyboard.press('Escape');
+  await expect(app.podcasts.control(SemanticsIds.itemMenuShareItem)).toBeHidden();
+  // The shelf re-reads the unfetch after the hub is already on screen,
+  // so the button may take a moment to appear.
+  await app.podcasts.episodeFetch(episode.pid).click({ timeout: T.nav });
   await expect
     .poll(
       async () =>
-        (await app.seed.episodes(showPid)).find((e) => e.pid === episode.pid)?.downloaded ??
+        (await app.seed.tryEpisodes(showPid)).find((e) => e.pid === episode.pid)?.downloaded ??
         false,
       { timeout: T.fetch, message: 'the fetch worker should land the episode' },
     )
@@ -143,10 +150,30 @@ test('subscribe, fetch, and play an episode with silence trimming', async (
   const map = await app.api.get('/items/{pid}/skip-map', { path: { pid: episode.pid } });
   expect((map.spans ?? []).length).toBeGreaterThan(0);
 
-  // The show screen rendered while the fetch was still queued;
-  // re-entering it reloads the list with the episode present.
-  await app.nav.enter('podcasts');
+  // The show's own row does the same, round trip included. The hub stays
+  // mounted under the show while the page transition runs and carries
+  // the same handles, so the clicks wait for its tile to be gone and
+  // then land on the show's row.
   await app.podcasts.openShow(showPid);
+  await expect(app.podcasts.show(showPid)).toBeHidden({ timeout: T.nav });
+  const held = async () =>
+    (await app.seed.tryEpisodes(showPid)).find((e) => e.pid === episode.pid)?.downloaded ??
+    true;
+  // Clicked again while the server still holds it: a removal is refused
+  // while a sibling is listening, and the row does not say so.
+  await expect(async () => {
+    if (await held()) await app.podcasts.episodeRemove(episode.pid).click({ timeout: T.step });
+    expect(await held(), 'the removal should unfetch the episode').toBe(false);
+  }).toPass({ timeout: T.fetch });
+  await app.podcasts.episodeFetch(episode.pid).click({ timeout: T.nav });
+  await expect
+    .poll(
+      async () =>
+        (await app.seed.tryEpisodes(showPid)).find((e) => e.pid === episode.pid)?.downloaded ??
+        false,
+      { timeout: T.fetch, message: 'the fetch worker should land the episode again' },
+    )
+    .toBeTruthy();
 
   // Play it. The trim chip reports time actually saved once the session
   // seeks over the lead silence, which is the observable proof the jump

@@ -30,8 +30,9 @@ import (
 // whose heartbeats never reach the feed.
 const jobFollowInterval = 2 * time.Second
 
-// The job list reads past the finished targeted jobs it leaves out, by
-// this factor and at most this many rows.
+// The job list reads past the jobs it leaves out: this many times a page
+// at first, widening by the same factor while a page is short, and never
+// more than this many rows.
 const (
 	jobsOverfetch = 4
 	jobsFetchCap  = 800

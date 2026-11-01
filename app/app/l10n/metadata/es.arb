@@ -5,7 +5,6 @@
   "metadataAddCredit": "Añadir el crédito",
   "metadataAddGenre": "Añadir un género",
   "metadataAddTag": "Añadir la etiqueta",
-  "metadataArtworkSource": "Ilustración · {source}",
   "metadataBulkEdited": "{count, plural, =1{Se ha editado 1 pista} other{Se han editado {count} pistas}}",
   "metadataBulkLeaveAsIs": "Dejar como está",
   "metadataBulkLockNote": "Guardar bloquea cada campo editado en cada pista seleccionada. Un lote admite como máximo 1.000 elementos.",
@@ -76,7 +75,6 @@
   "metadataForbiddenTitle": "Esta no es tuya para editarla",
   "metadataForceHelp": "Sobrescribe los campos que ya están bloqueados",
   "metadataForceTitle": "Forzar",
-  "metadataFromSource": "{count} de {source}",
   "metadataGenreAddCustom": "Añadir «{query}»",
   "metadataGenrePickerTitle": "Géneros",
   "metadataGenreSearchHint": "Busca o escribe un género",
@@ -96,7 +94,6 @@
   "metadataLyricsSource": "Letras · {source}",
   "metadataLyricsTitle": "Letra",
   "metadataNoCreditRoles": "No hay roles de crédito para este tipo",
-  "metadataNoSources": "No hay fuentes registradas",
   "metadataNothingToFetch": "No hay nada que obtener",
   "metadataNothingToPreview": "No hay nada que previsualizar",
   "metadataOpenAlbum": "Abrir el álbum",
@@ -155,29 +152,28 @@
   "metadataSaveChanges": "{count, plural, =1{Guardar 1 cambio} other{Guardar {count} cambios}}",
   "metadataSourceEnrichment": "un proveedor",
   "@metadataSourceEnrichment": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceFeed": "el feed",
   "@metadataSourceFeed": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceNormalize": "la pasada de limpieza",
   "metadataSourceOrganize": "el organizador",
   "@metadataSourceOrganize": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceSidecar": "archivos complementarios",
   "@metadataSourceSidecar": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceTag": "las etiquetas",
   "@metadataSourceTag": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
-  "metadataSourceUnknown": "Origen desconocido",
-  "metadataSourceUser": "ti",
+  "metadataSourceUser": "tú",
   "@metadataSourceUser": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataTagKey": "Clave",
   "metadataTagReserved": "{key} se guarda en su propio campo, no como etiqueta personalizada.",

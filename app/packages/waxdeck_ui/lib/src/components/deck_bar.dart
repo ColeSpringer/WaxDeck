@@ -45,6 +45,7 @@ class DeckBarActions {
     this.onStar,
     this.onSaveSong,
     this.onSeek,
+    this.onSpanToggle,
     this.pending = false,
   });
 
@@ -105,6 +106,12 @@ class DeckBarActions {
   final ValueChanged<bool>? onSaveSong;
 
   final ValueChanged<Duration>? onSeek;
+
+  /// Switches what the seek bar spans, for an item it can span two ways
+  /// (a book's chapter or the whole book). Wired with
+  /// [NowPlayingData.spanLabel], it makes the wide bar's end timecode a
+  /// control; null leaves it a readout.
+  final VoidCallback? onSpanToggle;
 
   /// The item's own controls (star, cast, more) wait for it to resolve:
   /// drawn disabled in their slots, so the bar keeps its shape mid-skip.
@@ -513,10 +520,13 @@ class DeckBar extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: WaxSpace.s8),
-                            _Timecode(
-                              span: now.duration,
-                              alignment: AlignmentDirectional.centerStart,
-                              child: Text(formatTimecode(now.duration)),
+                            _spanControl(
+                              context,
+                              _Timecode(
+                                span: now.duration,
+                                alignment: AlignmentDirectional.centerStart,
+                                child: Text(formatTimecode(now.duration)),
+                              ),
                             ),
                           ],
                         ),
@@ -783,6 +793,30 @@ class DeckBar extends StatelessWidget {
     ];
   }
 
+  /// The end timecode as the switch [DeckBarActions.onSpanToggle] asks
+  /// for: named for what a press does, valued with the length it shows.
+  Widget _spanControl(BuildContext context, Widget timecode) {
+    final toggle = actions.onSpanToggle;
+    final label = now.spanLabel;
+    if (toggle == null || label == null) return timecode;
+    return WaxInkTappable(
+      label: label,
+      value: context.waxL10n.spellDuration(now.duration),
+      onPressed: toggle,
+      semanticsId: ids.span,
+      borderRadius: WaxRadius.chip,
+      // The seek slot's full height, so the press is not a text line's.
+      child: SizedBox(
+        height: WaxSpace.touchTarget,
+        child: Align(
+          alignment: AlignmentDirectional.centerStart,
+          widthFactor: 1,
+          child: timecode,
+        ),
+      ),
+    );
+  }
+
   Widget _playButton(
     WaxColors colors,
     WaxGlyph glyph,
@@ -898,6 +932,7 @@ class DeckBarOffer extends StatelessWidget {
     required this.onResume,
     required this.onDismiss,
     this.subtitle,
+    this.heading,
     this.artwork,
     this.domain = WaxDomain.music,
     this.shape = ArtworkShape.square,
@@ -913,6 +948,12 @@ class DeckBarOffer extends StatelessWidget {
   /// count when the catalogue cannot name it (offline, never synced).
   final String title;
   final String? subtitle;
+
+  /// What the bar offers, said first and drawn as the caption when there
+  /// is no [subtitle]. Null takes the design system's own, a place to
+  /// pick up from. A heading that is the title is not said or drawn again,
+  /// and a subtitle is always drawn and said.
+  final String? heading;
   final WaxArtwork? artwork;
   final WaxDomain domain;
   final ArtworkShape shape;
@@ -936,15 +977,23 @@ class DeckBarOffer extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final l10n = context.waxL10n;
+    final heading = this.heading ?? l10n.deckBarOfferTitle;
+    // Each line once. A heading that is the title (a count that names the
+    // whole offer) is not said or drawn again, and a subtitle that only
+    // restates the heading is not said twice; a real subtitle is always
+    // drawn and said, whatever it reads.
+    final saysHeading = heading != title;
+    final caption = subtitle ?? (saysHeading ? heading : null);
     return Semantics(
       identifier: semanticsId,
       container: true,
       explicitChildNodes: true,
-      label: <String?>[
-        l10n.deckBarOfferTitle,
+      label: <String>[
+        if (saysHeading) heading,
         title,
-        subtitle,
-      ].nonNulls.join(', '),
+        if (subtitle != null && !(saysHeading && subtitle == heading))
+          subtitle!,
+      ].join(', '),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: colors.surface1,
@@ -996,12 +1045,13 @@ class DeckBarOffer extends StatelessWidget {
                               color: colors.textPrimary,
                             ),
                           ),
-                          WaxMarqueeText(
-                            subtitle ?? l10n.deckBarOfferTitle,
-                            style: WaxType.caption.copyWith(
-                              color: colors.textSecondary,
+                          if (caption != null)
+                            WaxMarqueeText(
+                              caption,
+                              style: WaxType.caption.copyWith(
+                                color: colors.textSecondary,
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ),

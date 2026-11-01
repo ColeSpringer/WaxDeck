@@ -195,6 +195,7 @@ void main() {
                   ..fileName = 'pony.flac'
                   ..sizeBytes = 4096
                   ..receivedBytes = 4096
+                  ..idleMs = 4200
                   ..mediaType = gen.MediaType.music
                   ..libraryPid = 'li-01JZX5N8QW3F4V9T2B7KDLIB'
                   ..state = 'staged'
@@ -221,6 +222,7 @@ void main() {
       expect(upload.id, 'up-01JZX5N8QW3F4V9T2B7KDUPLOAD');
       expect(upload.state, 'staged');
       expect(upload.receivedBytes, 4096);
+      expect(upload.idle, const Duration(milliseconds: 4200));
       expect(upload.reviewEntryId, 're-01JZX5N8QW3F4V9T2B7KDREVIEW');
       expect(upload.duplicate?.itemPid, 'tr-01JZX5N8QW3F4V9T2B7KDEXIST');
       expect(upload.duplicate?.kind, 'fingerprint');
@@ -235,6 +237,7 @@ void main() {
             ..fileName = 'pony.flac'
             ..sizeBytes = 4096
             ..receivedBytes = 0
+            ..idleMs = 0
             ..mediaType = gen.MediaType.audiobook
             ..state = 'receiving'
             ..createdAt = DateTime.utc(2026, 7, 1),

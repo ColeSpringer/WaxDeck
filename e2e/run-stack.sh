@@ -30,6 +30,9 @@ mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,fe
 # An audiobook as plain MP3s, which only an upload's media type (or an
 # audiobook library) makes a book.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset loose-book >/dev/null)
+# Another, for the book-folder journey alone: the two book journeys then
+# never upload each other's audio.
+(cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset folder-book >/dev/null)
 # The folder-pick journey's own album, written under a disc subdirectory
 # so what the picker walks is a tree. The stray text file is there to be
 # left behind: a folder pick cannot filter by type in the dialog, so the

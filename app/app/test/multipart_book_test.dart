@@ -1,15 +1,21 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/playback_session.dart';
+import 'package:waxdeck/src/player/timeline_scope.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
 
 const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
@@ -90,6 +96,86 @@ void main() {
     await harness.endPlayback(tester);
   });
 
+  // The second chapter runs from 30s to the end of the book, over the
+  // join between the two files.
+  Future<(PlayerHarness, FakeRepository, FakeEngine)> deckOverChapters(
+    WidgetTester tester,
+    BookTimelineScope scope,
+  ) async {
+    final repo = FakeRepository()
+      ..books[bookPid] = testBook(
+        bookPid,
+        durationMs: 120000,
+        partCount: 2,
+        chapters: const [
+          ChapterMark(index: 0, title: 'Prologue', startMs: 0),
+          ChapterMark(index: 1, title: 'The Road', startMs: 30000),
+        ],
+      );
+    final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final harness = PlayerHarness(
+      playbackContainer(repo: repo, engine: engine),
+    );
+    harness.container.read(bookTimelineScopeProvider.notifier).set(scope);
+    harness.play([_bookItem()], positionMs: 40000);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: harness.container,
+        child: localizedHost(
+          const Align(alignment: Alignment.bottomCenter, child: DeckBarHost()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(engine.loadedUrl, contains('part=0'));
+    return (harness, repo, engine);
+  }
+
+  Future<void> tapDeckSeek(WidgetTester tester, double fraction) async {
+    final bar = tester.getRect(
+      find.bySemanticsIdentifier(SemanticsIds.deckSeek),
+    );
+    await tester.tapAt(Offset(bar.left + bar.width * fraction, bar.center.dy));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a deck seek inside a chapter lands on the book timeline, '
+      'across a part boundary', (tester) async {
+    final (harness, repo, engine) = await deckOverChapters(
+      tester,
+      BookTimelineScope.chapter,
+    );
+
+    // Half way along the chapter's bar is 45s into a 90s chapter: 75s
+    // on the book, 15s into the second file.
+    await tapDeckSeek(tester, 0.5);
+
+    expect(engine.loadedUrl, contains('part=1'));
+    expect(engine.position, const Duration(seconds: 15));
+    expect(repo.playInfoCalls.last.positionMs, 75000);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a deck seek over the whole book crosses the part join on '
+      'the book\'s own scale', (tester) async {
+    final (harness, repo, engine) = await deckOverChapters(
+      tester,
+      BookTimelineScope.book,
+    );
+
+    // Three quarters of the two-minute book: 90s, 30s into the second
+    // file.
+    await tapDeckSeek(tester, 0.75);
+
+    expect(engine.loadedUrl, contains('part=1'));
+    expect(engine.position, const Duration(seconds: 30));
+    expect(repo.playInfoCalls.last.positionMs, 90000);
+    await harness.endPlayback(tester);
+  });
+
   testWidgets('a chapter jump never writes a part-shifted checkpoint', (
     tester,
   ) async {
@@ -146,40 +232,42 @@ void main() {
   testWidgets('a part that will not open surfaces the error and stops', (
     tester,
   ) async {
-    final repo = FakeRepository()
-      ..books[bookPid] = testBook(bookPid, durationMs: 120000, partCount: 2);
-    final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: _bookItem(),
-    );
-    expect(engine.loadedUrl, contains('part=0'));
+    await captureDebugPrints(() async {
+      final repo = FakeRepository()
+        ..books[bookPid] = testBook(bookPid, durationMs: 120000, partCount: 2);
+      final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: _bookItem(),
+      );
+      expect(engine.loadedUrl, contains('part=0'));
 
-    // Listen a little so the session has something to report, then run
-    // part 0 out with part 1's media refusing to open. The roll used to
-    // escape its unawaited zone as an unhandled async error: the book
-    // stopped dead with the session still installed and nothing on
-    // screen saying why.
-    for (var i = 0; i < 3; i++) {
-      engine.advance(const Duration(seconds: 2));
-      await tester.pump();
-    }
-    engine.failNextLoad = true;
-    engine.advance(const Duration(seconds: 56));
-    await tester.pumpAndSettle();
+      // Listen a little so the session has something to report, then run
+      // part 0 out with part 1's media refusing to open. The roll used to
+      // escape its unawaited zone as an unhandled async error: the book
+      // stopped dead with the session still installed and nothing on
+      // screen saying why.
+      for (var i = 0; i < 3; i++) {
+        engine.advance(const Duration(seconds: 2));
+        await tester.pump();
+      }
+      engine.failNextLoad = true;
+      engine.advance(const Duration(seconds: 56));
+      await tester.pumpAndSettle();
 
-    final playing = harness.container.read(nowPlayingProvider);
-    expect(playing.error, isNotNull);
-    expect(playing.session, isNull);
-    expect(engine.playing, isFalse);
-    // Checkpointed at the boundary this play actually reached, on the
-    // book timeline - not shifted onto the part that refused - and the
-    // listen reported unfinished, because the book is not over.
-    expect(repo.putPlayStateCalls.last.positionMs, 60000);
-    expect(repo.reportedSessions.last.finished, isFalse);
-    await harness.endPlayback(tester);
+      final playing = harness.container.read(nowPlayingProvider);
+      expect(playing.error, isNotNull);
+      expect(playing.session, isNull);
+      expect(engine.playing, isFalse);
+      // Checkpointed at the boundary this play actually reached, on the
+      // book timeline - not shifted onto the part that refused - and the
+      // listen reported unfinished, because the book is not over.
+      expect(repo.putPlayStateCalls.last.positionMs, 60000);
+      expect(repo.reportedSessions.last.finished, isFalse);
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('a disposed session\'s late part load never starts the engine', (
@@ -402,18 +490,20 @@ void main() {
     });
 
     test('a write that broke does not stop the ones after it', () async {
-      repo = _BreakingOnce()
-        ..books[threePartPid] = testBook(
-          threePartPid,
-          durationMs: 180000,
-          partCount: 3,
-        );
-      final session = await started(play: false);
-      await session.seek(const Duration(seconds: 10));
-      await pumpEventQueue();
-      await session.seek(const Duration(seconds: 20));
-      await pumpEventQueue();
-      expect(repo.putPlayStateCalls.last.positionMs, 20000);
+      await captureDebugPrints(() async {
+        repo = _BreakingOnce()
+          ..books[threePartPid] = testBook(
+            threePartPid,
+            durationMs: 180000,
+            partCount: 3,
+          );
+        final session = await started(play: false);
+        await session.seek(const Duration(seconds: 10));
+        await pumpEventQueue();
+        await session.seek(const Duration(seconds: 20));
+        await pumpEventQueue();
+        expect(repo.putPlayStateCalls.last.positionMs, 20000);
+      });
     });
 
     test('a slow stale write never lands after a fresh one', () async {

@@ -252,13 +252,14 @@ paths:
         units by the declared grouping intent: `album` opens one
         multi-file review entry over every staged member, `tracks`
         opens one entry per file, and `auto` clusters members into
-        album units by their tags and relative paths. Members join by
-        passing `batchId` (and optionally `batchPath`) at session
-        creation and must declare the batch's media type. The batch
-        stays open for 24 hours or until the finalize call; members
-        keep the normal upload retention. Nothing about a single
-        upload changes: a session without a batch opens its own
-        review entry at completion exactly as before.
+        units (albums, or books for an audiobook batch) by their tags
+        and relative paths. Members join by passing `batchId` (and
+        optionally `batchPath`) at session creation and must declare
+        the batch's media type. The batch stays open for 24 hours or
+        until the finalize call; members keep the normal upload
+        retention. Nothing about a single upload changes: a session
+        without a batch opens its own review entry at completion
+        exactly as before.
       tags: [uploads]
       requestBody:
         required: true
@@ -559,7 +560,7 @@ components:
     Upload:
       type: object
       description: One upload session.
-      required: [id, fileName, sizeBytes, receivedBytes, mediaType, state, createdAt]
+      required: [id, fileName, sizeBytes, receivedBytes, idleMs, mediaType, state, createdAt]
       properties:
         id:
           type: string
@@ -578,6 +579,16 @@ components:
           description: >
             Bytes stored so far; resume by sending the next chunk at
             this offset.
+        idleMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            How long the server had gone without taking a byte for the
+            session when it answered, in milliseconds by its own clock:
+            zero while a chunk's bytes are arriving or the upload is being
+            completed, otherwise the time since the last one arrived,
+            counted from the session's creation before any has.
         mediaType:
           $ref: "#/components/schemas/MediaType"
         libraryPid:
@@ -621,8 +632,10 @@ components:
       enum: [auto, album, tracks]
       description: >
         How a batch's staged files reach the review queue: `album`
-        opens one multi-file entry over all of them, `tracks` one
-        entry per file, and `auto` clusters them into album units by
+        opens one multi-file entry over all of them (one album for
+        music, one book in parts for an audiobook, its parts in disc,
+        track and path order), `tracks` opens one entry per file (each
+        its own track or book), and `auto` clusters them into units by
         their tags and relative paths (disc subfolders fold into
         their parent).
 

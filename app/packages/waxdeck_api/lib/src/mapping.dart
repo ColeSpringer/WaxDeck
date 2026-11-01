@@ -1582,6 +1582,7 @@ UploadSession uploadSessionFromGen(gen.Upload upload) {
     fileName: upload.fileName,
     sizeBytes: upload.sizeBytes,
     receivedBytes: upload.receivedBytes,
+    idle: Duration(milliseconds: upload.idleMs),
     mediaType: mediaTypeFromGen(upload.mediaType),
     libraryPid: upload.libraryPid,
     batchId: upload.batchId,

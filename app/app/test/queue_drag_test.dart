@@ -15,10 +15,17 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 import 'routed_host.dart';
 
 ItemSummary _track(String pid, String title) =>
     testItem(pid, title: title, durationMs: 180000);
+
+/// What the queues these tests build hold, so playback finds them.
+final _queued = <ItemSummary>[
+  for (final pid in ['tr-1', 'tr-2', 'tr-3', 'tr-4', 'tr-9'])
+    _track(pid, 'Track $pid'),
+];
 
 /// A listing row beside the queue panel, which is the arrangement the
 /// gesture exists for: the panel is only there at sidebar width, and a
@@ -100,7 +107,7 @@ void main() {
   ) async {
     final container = await _pump(
       tester,
-      FakeRepository(),
+      FakeRepository(items: _queued),
       QueueDrop.item(_track('tr-1', 'Alpha Song')),
     );
     container.read(queueControllerProvider.notifier).playNow(
@@ -122,6 +129,7 @@ void main() {
       shellMessageText(container.read(shellMessengerProvider)),
       'Added Alpha Song to the queue',
     );
+    await endEditedPlayback(tester, container);
   });
 
   // A drop lands where it was released, not at the end: the row under
@@ -130,7 +138,7 @@ void main() {
   testWidgets('a drop onto a row lands at that row', (tester) async {
     final container = await _pump(
       tester,
-      FakeRepository(),
+      FakeRepository(items: _queued),
       QueueDrop.item(_track('tr-new', 'Alpha Song')),
     );
     container.read(queueControllerProvider.notifier).playNow(
@@ -158,12 +166,13 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-1', 'tr-2', 'tr-new', 'tr-3'],
     );
+    await endEditedPlayback(tester, container);
   });
 
   testWidgets('a drop below a row lands after it', (tester) async {
     final container = await _pump(
       tester,
-      FakeRepository(),
+      FakeRepository(items: _queued),
       QueueDrop.item(_track('tr-new', 'Alpha Song')),
     );
     container.read(queueControllerProvider.notifier).playNow(
@@ -186,6 +195,7 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-1', 'tr-2', 'tr-new', 'tr-3'],
     );
+    await endEditedPlayback(tester, container);
   });
 
   // The gesture is pointer-only by decision: a touch drag would collide
@@ -213,7 +223,7 @@ void main() {
   // An index bucket has a name and a count and no items, so the tracks
   // are fetched when the drop lands rather than carried by the drag.
   testWidgets('a bucket resolves its tracks on the drop', (tester) async {
-    final repo = FakeRepository()
+    final repo = FakeRepository(items: _queued)
       ..facetItems['album gullwing'] = <ItemSummary>[
         _track('tr-1', 'Alpha Song'),
         _track('tr-2', 'Bravo Song'),
@@ -253,6 +263,7 @@ void main() {
       shellMessageText(container.read(shellMessengerProvider)),
       'Added 2 tracks to the queue',
     );
+    await endEditedPlayback(tester, container);
   });
 
   // The playing row is the likeliest row to aim at, and the one a
@@ -263,7 +274,7 @@ void main() {
   ) async {
     final container = await _pump(
       tester,
-      FakeRepository(),
+      FakeRepository(items: _queued),
       QueueDrop.item(_track('tr-new', 'Alpha Song')),
     );
     container.read(queueControllerProvider.notifier).playNow(
@@ -289,6 +300,7 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-1', 'tr-new', 'tr-2', 'tr-3'],
     );
+    await endEditedPlayback(tester, container);
   });
 
   // The slot is aimed before the fetch and applied after it, so it is
@@ -300,7 +312,7 @@ void main() {
     final gate = Completer<List<ItemSummary>>();
     final container = await _pump(
       tester,
-      FakeRepository(),
+      FakeRepository(items: _queued),
       QueueDrop(label: 'Gullwing', resolve: () => gate.future),
     );
     final queue = container.read(queueControllerProvider.notifier);
@@ -334,6 +346,7 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-1', 'tr-3', 'tr-new', 'tr-4'],
     );
+    await endEditedPlayback(tester, container);
   });
 
   // A bucket resolves over the network, and the panel it was dropped on
@@ -347,7 +360,7 @@ void main() {
     final gate = Completer<List<ItemSummary>>();
     final container = await _pump(
       tester,
-      FakeRepository(),
+      FakeRepository(items: _queued),
       QueueDrop(label: 'Gullwing', resolve: () => gate.future),
     );
     container.read(queueControllerProvider.notifier).playNow(
@@ -378,6 +391,7 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-9', 'tr-1'],
     );
+    await endEditedPlayback(tester, container);
   });
 
   // The one drop that reaches the network is the one that can fail on

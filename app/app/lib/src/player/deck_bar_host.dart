@@ -30,10 +30,12 @@ import '../shell/shell_messages.dart';
 import 'autoplay_gate.dart';
 import 'lyrics.dart';
 import 'now_playing_controller.dart';
+import 'now_playing_slot.dart';
 import 'output_volume.dart';
 import 'play_state_controller.dart';
 import 'playback_session.dart';
 import 'radio_face.dart';
+import 'timeline_scope.dart';
 
 /// How far the spoken-word skips jump, per this device's Playback
 /// settings. Both are read here rather than in the transports, so the
@@ -60,6 +62,7 @@ const _ids = DeckBarIds(
   star: SemanticsIds.deckStar,
   saveSong: SemanticsIds.deckSaveSong,
   seek: SemanticsIds.deckSeek,
+  span: SemanticsIds.deckSpan,
   queue: SemanticsIds.deckQueue,
   lyrics: SemanticsIds.deckLyrics,
   cast: SemanticsIds.deckCast,
@@ -72,11 +75,13 @@ const _ids = DeckBarIds(
 ///
 /// It lives in the shell's own slot, outside every branch navigator, so
 /// playback survives navigation and has one home on every screen. What
-/// it shows, in order: the station when live radio has the engine, the
-/// queue's current entry when there is one, a session this client is
-/// driving on another endpoint, the queue a launch found when there is
-/// one to offer back, and otherwise nothing at all - a bar with no item
-/// is a stripe of surface, and the first-run library should not have one.
+/// it shows is [nowPlayingSlotProvider]'s order: the station when live
+/// radio has the engine, the queue's current entry when there is one,
+/// the entry a station displaced as an offer to take it back, a session
+/// this client is driving on another endpoint, the queue a launch found
+/// when there is one to offer back, and otherwise nothing at all - a bar
+/// with no item is a stripe of surface, and the first-run library should
+/// not have one.
 ///
 /// The remote session sits *below* local playback in that order, which is
 /// the one ordering decision here worth its own paragraph. The bar's
@@ -93,20 +98,15 @@ class DeckBarHost extends ConsumerWidget {
   const DeckBarHost({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final station = ref.watch(radioPlaybackProvider);
-    if (station.station != null) return _RadioDeckBar(playback: station);
-
-    final now = ref.watch(nowPlayingProvider);
-    if (now.entry != null) return _PlayingDeckBar(now: now);
-
-    final remote = ref.watch(remoteSessionProvider);
-    if (remote != null) return _RemoteDeckBar(remote: remote);
-
-    final offer = ref.watch(queueRestoreProvider).value;
-    if (offer != null) return _OfferDeckBar(offer: offer);
-    return const SizedBox.shrink();
-  }
+  Widget build(BuildContext context, WidgetRef ref) =>
+      switch (ref.watch(nowPlayingSlotProvider)) {
+        StationSlot(:final playback) => _RadioDeckBar(playback: playback),
+        ItemSlot(:final now) => _PlayingDeckBar(now: now),
+        ParkedSlot(:final parked) => _ParkedDeckBar(parked: parked),
+        RemoteSlot(:final remote) => _RemoteDeckBar(remote: remote),
+        OfferSlot(:final offer) => _OfferDeckBar(offer: offer),
+        EmptySlot() => const SizedBox.shrink(),
+      };
 }
 
 /// The bar while an item is playing, loading, or standing where a
@@ -121,12 +121,12 @@ class _PlayingDeckBar extends ConsumerStatefulWidget {
 }
 
 class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
-  /// The live position, fed straight into the bar's ticking leaf. The
-  /// bar itself never rebuilds for it: it is on screen for the whole
+  /// The live position on the bar, fed straight into its ticking leaf.
+  /// The bar itself never rebuilds for it: it is on screen for the whole
   /// session, and a full rebuild several times a second is the most
-  /// repeated frame work the app would do.
-  final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
-  StreamSubscription<Duration>? _feed;
+  /// repeated frame work the app would do. It rebuilds for the window,
+  /// which moves only when a book crosses into another chapter.
+  final BookWindowFeed _feed = BookWindowFeed();
 
   /// The last session's speed, which the chip keeps while the next
   /// spoken-word entry loads.
@@ -135,28 +135,27 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
   @override
   void initState() {
     super.initState();
-    _follow();
+    _follow(ref.read(bookTimelineScopeProvider));
+    _feed.window.addListener(_windowMoved);
+    ref.listenManual(bookTimelineScopeProvider, (_, scope) => _follow(scope));
   }
 
   @override
   void didUpdateWidget(covariant _PlayingDeckBar old) {
     super.didUpdateWidget(old);
-    if (!identical(old.now.session, widget.now.session)) _follow();
+    _follow(ref.read(bookTimelineScopeProvider));
   }
 
-  void _follow() {
-    unawaited(_feed?.cancel());
-    final session = widget.now.session;
-    _position.value = session?.displayPosition ?? Duration.zero;
-    _feed = session?.displayPositionStream.listen((position) {
-      _position.value = position;
-    });
+  void _follow(BookTimelineScope scope) =>
+      _feed.follow(widget.now.session, scope);
+
+  void _windowMoved() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    unawaited(_feed?.cancel());
-    _position.dispose();
+    _feed.dispose();
     super.dispose();
   }
 
@@ -195,6 +194,10 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
     // Read whatever the bar is showing, so the two controls do not
     // appear at one distance and jump another after a settings change.
     final skips = ref.watch(skipIntervalsProvider);
+    // A book with chapters spans one of them or the whole book, switched
+    // here, in the full player, or from the menu.
+    final spans = _spansTwoWays(session);
+    final scope = ref.watch(bookTimelineScopeProvider);
 
     return _EngineTransport(
       // Playback's word rather than the session's: a start in flight has
@@ -212,10 +215,10 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
           shape: waxShapeOf(kind),
           // The seed the ticking leaf starts from; the live value
           // arrives through positionTicker.
-          position: _position.value,
-          duration:
-              session?.mediaDuration ??
-              Duration(milliseconds: item?.durationMs ?? 0),
+          position: _feed.value,
+          duration: session == null
+              ? Duration(milliseconds: item?.durationMs ?? 0)
+              : _feed.span,
           playing: playing,
           buffering: buffering,
           starred: starred,
@@ -229,9 +232,10 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
               ? session?.speed ?? (now.loading ? _lastSpeed : null)
               : null,
           volume: volume,
+          spanLabel: spans ? _spanAction(context.l10n, scope) : null,
         ),
         ids: _ids,
-        positionTicker: _position,
+        positionTicker: _feed,
         autoplayBlocked: blocked,
         actions: DeckBarActions(
           // The command, not a copy: the key and the button are one verb.
@@ -253,7 +257,12 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
           onRepeat: () => ref
               .read(queueControllerProvider.notifier)
               .setRepeat(nextQueueRepeat(modes.$2)),
-          onSeek: session == null ? null : (at) => unawaited(session.seek(at)),
+          onSeek: session == null
+              ? null
+              : (to) => unawaited(session.seek(_feed.seekTarget(to))),
+          onSpanToggle: spans
+              ? () => ref.read(bookTimelineScopeProvider.notifier).toggle()
+              : null,
           onStar: item == null || !wide
               ? null
               : (value) => unawaited(
@@ -300,6 +309,19 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
     );
   }
 }
+
+/// Whether [session] is a book its bars can span two ways: one with
+/// chapters.
+bool _spansTwoWays(PlaybackSession? session) =>
+    session?.item.mediaType == MediaType.audiobook &&
+    (session?.book?.chapters.isNotEmpty ?? false);
+
+/// What switching the span from [scope] does, said as the control's name.
+String _spanAction(AppLocalizations l10n, BookTimelineScope scope) =>
+    switch (scope) {
+      BookTimelineScope.chapter => l10n.playerShowWholeBook,
+      BookTimelineScope.book => l10n.playerShowChapter,
+    };
 
 /// The bar while live radio owns the engine.
 ///
@@ -507,12 +529,49 @@ class _OfferDeckBar extends ConsumerWidget {
       // Offline, or for a queue the mirror never learned about, the
       // count is all there is to say - and it is enough to decide on.
       title: item?.title ?? context.l10n.playerOfferQueued(offer.length),
-      subtitle: item?.artist ?? context.l10n.playerOfferResume,
+      subtitle: item?.artist,
+      heading: context.l10n.playerOfferResume,
       artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
       domain: waxDomainOf(item?.mediaType ?? MediaType.music),
       shape: waxShapeOf(item?.mediaType ?? MediaType.music),
       onResume: restore.accept,
       onDismiss: () => unawaited(restore.dismiss()),
+      semanticsId: SemanticsIds.deckOffer,
+      resumeSemanticsId: SemanticsIds.deckOfferResume,
+      dismissSemanticsId: SemanticsIds.deckOfferDismiss,
+    );
+  }
+}
+
+/// The bar as an offer of the entry a station holds back: it is not
+/// playing, and comes back only when asked to.
+class _ParkedDeckBar extends ConsumerWidget {
+  const _ParkedDeckBar({required this.parked});
+
+  final ParkedEntry parked;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final item = parked.item;
+    final kind = item?.mediaType ?? mediaTypeOfPid(parked.entry.pid);
+    final queued = l10n.playerOfferQueued(
+      ref.watch(queueControllerProvider.select((queue) => queue.length)),
+    );
+    return DeckBarOffer(
+      title: item?.title ?? queued,
+      // A fresh park never played: it is offered as queued, with no place
+      // to pick up from.
+      heading: parked.fresh ? queued : l10n.playerOfferResume,
+      artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
+      domain: waxDomainOf(kind),
+      shape: waxShapeOf(kind),
+      onResume: () => unawaited(
+        ref
+            .read(nowPlayingProvider.notifier)
+            .playEntryAt(ref.read(queueControllerProvider).currentIndex),
+      ),
+      onDismiss: ref.read(queueControllerProvider.notifier).clear,
       semanticsId: SemanticsIds.deckOffer,
       resumeSemanticsId: SemanticsIds.deckOfferResume,
       dismissSemanticsId: SemanticsIds.deckOfferDismiss,
@@ -635,6 +694,8 @@ Future<void> _showActions(
   final rootContext = Navigator.of(context, rootNavigator: true).context;
   final router = GoRouter.of(context);
   final l10n = context.l10n;
+  final scope = ref.read(bookTimelineScopeProvider);
+  final scopes = ref.read(bookTimelineScopeProvider.notifier);
   return showWaxSheet<void>(
     context: context,
     builder: (sheetContext) => SafeArea(
@@ -667,6 +728,19 @@ Future<void> _showActions(
               );
             },
           ),
+          // The compact bar has no timecode to press, so this row is its
+          // way to switch.
+          if (_spansTwoWays(session))
+            WaxOptionRow(
+              key: const ValueKey(SemanticsIds.deckSpanToggle),
+              semanticsId: SemanticsIds.deckSpanToggle,
+              glyph: WaxIcons.audiobooks,
+              title: _spanAction(l10n, scope),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                scopes.toggle();
+              },
+            ),
           WaxOptionRow(
             glyph: WaxIcons.expand,
             title: l10n.playerOpenPlayer,

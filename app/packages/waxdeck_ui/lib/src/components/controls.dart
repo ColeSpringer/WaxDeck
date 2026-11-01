@@ -338,6 +338,7 @@ class WaxInkTappable extends StatelessWidget {
     this.semanticsId,
     this.selected,
     this.expanded,
+    this.value,
     this.color = Colors.transparent,
     this.borderRadius,
     this.surface,
@@ -348,6 +349,9 @@ class WaxInkTappable extends StatelessWidget {
 
   /// The accessible name: what the row is, said once.
   final String label;
+
+  /// The spoken value, as on [WaxTappable].
+  final String? value;
 
   /// Null disables it, which is reported as well as drawn.
   final VoidCallback? onPressed;
@@ -386,6 +390,7 @@ class WaxInkTappable extends StatelessWidget {
     semanticsId: semanticsId,
     selected: selected,
     expanded: expanded,
+    value: value,
     borderRadius: borderRadius ?? BorderRadius.zero,
     surface: surface,
     tooltip: tooltip,

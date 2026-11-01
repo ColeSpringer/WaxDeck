@@ -412,7 +412,7 @@ class UploadsApi {
   }
 
   /// Open an upload batch
-  /// Opens a batch that groups several upload sessions into review units by the declared grouping intent: &#x60;album&#x60; opens one multi-file review entry over every staged member, &#x60;tracks&#x60; opens one entry per file, and &#x60;auto&#x60; clusters members into album units by their tags and relative paths. Members join by passing &#x60;batchId&#x60; (and optionally &#x60;batchPath&#x60;) at session creation and must declare the batch&#39;s media type. The batch stays open for 24 hours or until the finalize call; members keep the normal upload retention. Nothing about a single upload changes: a session without a batch opens its own review entry at completion exactly as before. 
+  /// Opens a batch that groups several upload sessions into review units by the declared grouping intent: &#x60;album&#x60; opens one multi-file review entry over every staged member, &#x60;tracks&#x60; opens one entry per file, and &#x60;auto&#x60; clusters members into units (albums, or books for an audiobook batch) by their tags and relative paths. Members join by passing &#x60;batchId&#x60; (and optionally &#x60;batchPath&#x60;) at session creation and must declare the batch&#39;s media type. The batch stays open for 24 hours or until the finalize call; members keep the normal upload retention. Nothing about a single upload changes: a session without a batch opens its own review entry at completion exactly as before. 
   ///
   /// Parameters:
   /// * [uploadBatchCreate] 

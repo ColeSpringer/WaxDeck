@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -175,6 +176,77 @@ func TestAnOverlappingCompleteIsToldToWait(t *testing.T) {
 	}
 	if _, err := os.Stat(svc.uploadPartPath(row)); err != nil {
 		t.Fatalf("the received bytes are gone: %v", err)
+	}
+}
+
+// A seal can run longer than a session may go quiet, and no bytes arrive
+// to show for it: the session reads as live until the seal ends, and the
+// seal holds no append up meanwhile.
+func TestASessionIsNotIdleWhileItsSealRuns(t *testing.T) {
+	ctx, svc, uc := uploadFixture(t)
+	up := receivedUpload(t, ctx, svc, uc)
+	// The last bytes were ten minutes ago.
+	if moved, err := svc.db.AdvanceUploadReceived(ctx, up.ID, up.SizeBytes, up.SizeBytes,
+		time.Now().Add(-10*time.Minute).UnixNano()); err != nil || !moved {
+		t.Fatalf("backdating = (%v, %v)", moved, err)
+	}
+	idle := func() time.Duration {
+		t.Helper()
+		got, err := svc.GetUpload(ctx, uc, up.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.Idle
+	}
+
+	// Parked at the seal's duplicate check, which follows its checksum,
+	// parse and promotion.
+	reached, release := make(chan struct{}), make(chan struct{})
+	letGo := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(letGo)
+	var once sync.Once
+	svc.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+		once.Do(func() {
+			close(reached)
+			<-release
+		})
+		return svc.lib.ImportAcquired(ctx, f, kind, meta)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := svc.CompleteUpload(ctx, uc, up.ID)
+		done <- err
+	}()
+	select {
+	case <-reached:
+	case err := <-done:
+		t.Fatalf("the seal ended before its duplicate check: %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("the seal never reached its duplicate check")
+	}
+	if got := idle(); got != 0 {
+		t.Errorf("idle %v while the seal runs, want none", got)
+	}
+
+	// A seal takes no turn: an append to the complete session is answered.
+	turn, stop := context.WithTimeout(ctx, 5*time.Second)
+	defer stop()
+	if _, err := svc.AppendUploadData(turn, uc, up.ID, up.SizeBytes, bytes.NewReader(nil)); err != nil {
+		t.Errorf("an append during the seal = %v, want it answered", err)
+	}
+
+	letGo()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if got := idle(); got < 10*time.Minute {
+		t.Errorf("idle %v after the seal ended, want the ten minutes since the last bytes", got)
+	}
+	if svc.appendLocks.live(up.ID) {
+		t.Error("the session still reads as live after its seal ended")
+	}
+	if n := len(svc.appendLocks.entries); n != 0 {
+		t.Errorf("%d lock entries left behind", n)
 	}
 }
 

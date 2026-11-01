@@ -8,6 +8,7 @@ import '../auth/auth_controller.dart';
 import '../providers.dart';
 import 'file_picker_port.dart';
 import 'local_file_reader.dart';
+import 'upload_phase.dart';
 
 /// The upload-format sets in force: the server-reported ones where the
 /// health payload carries them, the hardcoded mirrors where a server
@@ -96,11 +97,100 @@ Future<UploadFormatSets> resolveUploadFormats(WidgetRef ref) async {
 Future<UploadFormatSets> Function() dropFormats(WidgetRef ref) =>
     () => resolveUploadFormats(ref);
 
+/// What this app is doing for each session it transfers, keyed by
+/// upload id. Container-scoped, so the session list rebuilding on an
+/// event cannot touch it; [LiveTransfers.apply] is its only writer.
+final liveTransfersProvider =
+    NotifierProvider<LiveTransfers, Map<String, LiveTransfer>>(
+      LiveTransfers.new,
+    );
+
+class LiveTransfers extends Notifier<Map<String, LiveTransfer>> {
+  @override
+  Map<String, LiveTransfer> build() => const {};
+
+  void apply(String uploadId, TransferEvent event) {
+    final next = reduceTransfer(state[uploadId], event);
+    if (next == null && !state.containsKey(uploadId)) return;
+    state = {
+      for (final entry in state.entries)
+        if (entry.key != uploadId) entry.key: entry.value,
+      uploadId: ?next,
+    };
+  }
+}
+
+/// The creates this client has in flight, and the sessions it had listed
+/// when the first of them began: a refresh can list a session before its
+/// create answers, and only one this client had not listed by then can be
+/// such a session.
+final class UploadCreates {
+  const UploadCreates({this.inFlight = 0, this.listedBefore = const {}});
+
+  final int inFlight;
+  final Set<String> listedBefore;
+
+  /// Whether a create in flight here may have opened [uploadId].
+  bool mayHaveOpened(String uploadId) =>
+      inFlight > 0 && !listedBefore.contains(uploadId);
+}
+
+final uploadCreatesProvider =
+    NotifierProvider<UploadCreatesInFlight, UploadCreates>(
+      UploadCreatesInFlight.new,
+    );
+
+class UploadCreatesInFlight extends Notifier<UploadCreates> {
+  @override
+  UploadCreates build() => const UploadCreates();
+
+  /// A create begins; the first of a run takes [listed] as what this
+  /// client had listed before it.
+  void begin(Iterable<String> listed) => state = UploadCreates(
+    inFlight: state.inFlight + 1,
+    listedBefore: state.inFlight == 0 ? {...listed} : state.listedBefore,
+  );
+
+  void end() {
+    if (!ref.mounted) return;
+    state = state.inFlight <= 1
+        ? const UploadCreates()
+        : UploadCreates(
+            inFlight: state.inFlight - 1,
+            listedBefore: state.listedBefore,
+          );
+  }
+}
+
+/// How long a run of creates waits on the uploads list before its first.
+const _listedWait = Duration(seconds: 5);
+
+/// What a run of creates waits on before its first: the uploads list read
+/// to the end of its first page, since the first create takes what is
+/// listed then as the sessions that are not its own ([UploadCreates]). A
+/// run started where the list never loaded (the add sheet, a share) would
+/// otherwise take an old empty session listed meanwhile for one of its
+/// own. A list not read within [_listedWait] (failing, or in its retry
+/// backoff) leaves the run to what is held.
+Future<void> untilUploadsListed(Future<UploadsState> listed) async {
+  try {
+    await listed.timeout(_listedWait);
+  } on Object {
+    // Unread in time: the run starts from what is held.
+  }
+}
+
+/// How long a chunk that failed on the wire waits before its [attempt]
+/// (from 1) goes: 1 s, 2 s, 4 s. A provider so tests can make it zero.
+final uploadRetryBackoffProvider = Provider<Duration Function(int attempt)>(
+  (_) =>
+      (attempt) => Duration(seconds: 1 << (attempt - 1)),
+);
+
 /// Local file paths retained for resuming a failed path-backed
-/// transfer, keyed by upload id. Container-scoped so an event
-/// invalidation mid-upload cannot drop the retry affordance with the
-/// controller rebuild. Paths, never bytes: an audiobook-sized share
-/// must not live in heap memory for the life of a retry affordance.
+/// transfer, keyed by upload id. Paths, never bytes: an audiobook-sized
+/// share must not live in heap memory for the life of a retry
+/// affordance.
 final _retryPathsProvider = Provider<Map<String, String>>((_) => {});
 
 /// Windowed read accessors retained for resuming a failed
@@ -111,16 +201,15 @@ final _retryReadersProvider =
       (_) => {},
     );
 
-/// Accumulated pages of the caller's upload sessions, the caller's
-/// quota snapshot, plus which sessions failed locally mid-transfer and
-/// can retry.
+/// Accumulated pages of the caller's upload sessions and the caller's
+/// quota snapshot.
 class UploadsState {
   const UploadsState({
     required this.uploads,
     this.nextCursor,
     this.quota,
     this.loadingMore = false,
-    this.failed = const {},
+    this.readAt = const {},
   });
 
   final List<UploadSession> uploads;
@@ -131,10 +220,10 @@ class UploadsState {
 
   final bool loadingMore;
 
-  /// Upload ids whose transfer failed in this app session; their
-  /// source reference is retained so Retry can resume from what the
-  /// server received.
-  final Set<String> failed;
+  /// When this client last read each row, by upload id, on its monotonic
+  /// clock ([monotonicClockProvider]): a row's [UploadSession.idle] was the
+  /// server's as of then, which is when its window is counted from.
+  final Map<String, Duration> readAt;
 
   bool get hasMore => nextCursor != null;
 
@@ -145,13 +234,13 @@ class UploadsState {
     String? Function()? nextCursor,
     UploadQuota? quota,
     bool? loadingMore,
-    Set<String>? failed,
+    Map<String, Duration>? readAt,
   }) => UploadsState(
     uploads: uploads ?? this.uploads,
     nextCursor: nextCursor == null ? this.nextCursor : nextCursor(),
     quota: quota ?? this.quota,
     loadingMore: loadingMore ?? this.loadingMore,
-    failed: failed ?? this.failed,
+    readAt: readAt ?? this.readAt,
   );
 }
 
@@ -164,6 +253,10 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   /// references windowed through here.
   static const chunkBytes = 1024 * 1024;
 
+  /// Tries a chunk gets after a transient failure before the transfer
+  /// stops.
+  static const chunkRetries = 3;
+
   var _generation = 0;
 
   @override
@@ -172,20 +265,27 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     // Keyed on the account: the repository moves only with the server,
     // and the next account starts from its own first page.
     ref.watch(signedInAccountProvider);
+    final generation = _generation;
+    final clock = ref.read(monotonicClockProvider);
     final page = await ref
         .watch(repositoryProvider)
         .listUploads(limit: pageSize);
+    final readAt = clock();
+    if (generation == _generation) {
+      // Once the page is committed, so no reader sees the entry gone
+      // while the old row still shows.
+      late final void Function() stop;
+      stop = listenSelf((_, next) {
+        if (!identical(next.value?.uploads, page.uploads)) return;
+        stop();
+        _retireCaughtUp(page.uploads, complete: page.nextCursor == null);
+      });
+    }
     return UploadsState(
       uploads: page.uploads,
       nextCursor: page.nextCursor,
       quota: page.quota,
-      failed: {
-        for (final id in [
-          ...ref.read(_retryPathsProvider).keys,
-          ...ref.read(_retryReadersProvider).keys,
-        ])
-          if (page.uploads.any((u) => u.id == id)) id,
-      },
+      readAt: {for (final u in page.uploads) u.id: readAt},
     );
   }
 
@@ -195,29 +295,35 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     final generation = _generation;
     state = AsyncData(current.copyWith(loadingMore: true));
     // What the await answers lands on the list as it stands then: a
-    // transfer moves, drops or marks its row meanwhile, and the page
-    // must not undo that.
+    // transfer moves or drops its row meanwhile, and the page must not
+    // undo that.
     UploadsState now() => state.value ?? current;
+    final clock = ref.read(monotonicClockProvider);
     try {
       final page = await ref
           .read(repositoryProvider)
           .listUploads(cursor: current.nextCursor, limit: pageSize);
       if (generation != _generation) return;
+      final readAt = clock();
       final live = now();
       // A row already held keeps its copy here, which is the newer.
       final held = {for (final u in live.uploads) u.id};
+      final added = [
+        for (final u in page.uploads)
+          if (!held.contains(u.id)) u,
+      ];
       state = AsyncData(
         live.copyWith(
-          uploads: [
-            ...live.uploads,
-            for (final u in page.uploads)
-              if (!held.contains(u.id)) u,
-          ],
+          uploads: [...live.uploads, ...added],
           nextCursor: () => page.nextCursor,
           quota: page.quota ?? live.quota,
           loadingMore: false,
+          readAt: {...live.readAt, for (final u in added) u.id: readAt},
         ),
       );
+      // Only rows the server just answered and the list now shows: a held
+      // row may be this client's own copy.
+      _retireCaughtUp(added);
     } on WaxDeckApiException {
       // An expected transport or server error. Keep what we have;
       // scrolling near the end again retries.
@@ -281,10 +387,11 @@ class UploadsController extends AsyncNotifier<UploadsState> {
 
   /// Opens a session for one local file and streams it up in
   /// [chunkBytes] windows read straight from disk, so the file never
-  /// sits whole in memory. A transfer failure marks the row failed
-  /// and keeps the path for [retry]; the create failure itself
-  /// propagates to the caller since no row exists yet. [sizeBytes]
-  /// skips a redundant stat when the pick already measured the file.
+  /// sits whole in memory. A transfer that gives up stops in
+  /// [liveTransfersProvider] and keeps the path for [retry]; the create
+  /// failure itself propagates to the caller since no row exists yet.
+  /// [sizeBytes] skips a redundant stat when the pick already measured
+  /// the file.
   Future<void> uploadFromPath({
     required String fileName,
     required String path,
@@ -296,17 +403,15 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     bool? identify,
   }) async {
     final size = sizeBytes ?? await localFileLength(path);
-    final session = await ref
-        .read(repositoryProvider)
-        .createUpload(
-          fileName: fileName,
-          sizeBytes: size,
-          mediaType: mediaType,
-          libraryPid: libraryPid,
-          batchId: batchId,
-          batchPath: _cleanBatchPath(batchId, batchPath),
-          identify: identify,
-        );
+    final session = await _open(
+      fileName: fileName,
+      size: size,
+      mediaType: mediaType,
+      libraryPid: libraryPid,
+      batchId: batchId,
+      batchPath: batchPath,
+      identify: identify,
+    );
     _upsert(session);
     ref.read(_retryPathsProvider)[session.id] = path;
     await _transferFromPath(session.id, path, size, from: 0);
@@ -327,20 +432,57 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     String? batchPath,
     bool? identify,
   }) async {
-    final session = await ref
-        .read(repositoryProvider)
-        .createUpload(
-          fileName: fileName,
-          sizeBytes: size,
-          mediaType: mediaType,
-          libraryPid: libraryPid,
-          batchId: batchId,
-          batchPath: _cleanBatchPath(batchId, batchPath),
-          identify: identify,
-        );
+    final session = await _open(
+      fileName: fileName,
+      size: size,
+      mediaType: mediaType,
+      libraryPid: libraryPid,
+      batchId: batchId,
+      batchPath: batchPath,
+      identify: identify,
+    );
     _upsert(session);
     ref.read(_retryReadersProvider)[session.id] = openRead;
     await _transferFromReader(session.id, openRead, size, from: 0);
+  }
+
+  /// Creates a session, counted in [uploadCreatesProvider] until its
+  /// transfer has started: before that the row has no live entry, and the
+  /// server's event for the create can list it first.
+  Future<UploadSession> _open({
+    required String fileName,
+    required int size,
+    required String mediaType,
+    required String? libraryPid,
+    required String? batchId,
+    required String? batchPath,
+    required bool? identify,
+  }) async {
+    // What is listed now: the caller that started the run waited for the
+    // list ([untilUploadsListed]).
+    final creates = ref.read(uploadCreatesProvider.notifier)
+      ..begin([
+        for (final u in state.value?.uploads ?? const <UploadSession>[]) u.id,
+      ]);
+    try {
+      final session = await ref
+          .read(repositoryProvider)
+          .createUpload(
+            fileName: fileName,
+            sizeBytes: size,
+            mediaType: mediaType,
+            libraryPid: libraryPid,
+            batchId: batchId,
+            batchPath: _cleanBatchPath(batchId, batchPath),
+            identify: identify,
+          );
+      _emit(session.id, const TransferStarted(0));
+      return session;
+    } finally {
+      // Whatever this controller's state does meanwhile: a count left up
+      // would keep every run after this one from taking its own snapshot.
+      creates.end();
+    }
   }
 
   /// batchPath only travels with a batch, and an empty hint rides as
@@ -350,36 +492,69 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     return batchPath;
   }
 
-  /// Resumes a failed transfer from what the server already received.
+  /// Resumes a stopped transfer from what the server already received.
+  /// Does nothing while one runs for the session (a second loop would
+  /// race the first for the same offsets) or once it finished. A session
+  /// that settled meanwhile (sealed from another device, discarded,
+  /// expired) has nothing left to send: its entry and source go, and its
+  /// row reads what the server says.
   Future<void> retry(String uploadId) async {
+    final live = ref.read(liveTransfersProvider)[uploadId];
+    if (live != null && live.status != TransferStatus.stopped) return;
     final path = ref.read(_retryPathsProvider)[uploadId];
+    final openRead = ref.read(_retryReadersProvider)[uploadId];
+    if (path == null && openRead == null) return;
+    // Running before the first await, so a second tap meanwhile is
+    // refused too.
+    _emit(uploadId, TransferStarted(live?.sent ?? 0));
+    final UploadSession session;
+    final int size;
+    try {
+      session = await ref.read(repositoryProvider).getUpload(uploadId);
+      if (session.state != 'receiving') {
+        _forgetSource(uploadId);
+        _emit(uploadId, const Ended());
+        _upsert(session);
+        return;
+      }
+      size = path != null ? await localFileLength(path) : session.sizeBytes;
+    } on WaxDeckApiException catch (e) {
+      if (e.code == 'not-found') {
+        // Gone from the server: nothing is left to send it to, so the
+        // entry, its source and its row go, and the caller says why.
+        _forgetSource(uploadId);
+        _emit(uploadId, const Ended());
+        _drop(uploadId);
+      } else {
+        _emit(uploadId, Stopped(e));
+      }
+      rethrow;
+    } catch (e) {
+      _emit(uploadId, Stopped(e));
+      rethrow;
+    }
     if (path != null) {
-      final session = await ref.read(repositoryProvider).getUpload(uploadId);
-      final size = await localFileLength(path);
       await _transferFromPath(
         uploadId,
         path,
         size,
         from: session.receivedBytes,
       );
-      return;
+    } else {
+      await _transferFromReader(
+        uploadId,
+        openRead!,
+        size,
+        from: session.receivedBytes,
+      );
     }
-    final openRead = ref.read(_retryReadersProvider)[uploadId];
-    if (openRead == null) return;
-    final session = await ref.read(repositoryProvider).getUpload(uploadId);
-    await _transferFromReader(
-      uploadId,
-      openRead,
-      session.sizeBytes,
-      from: session.receivedBytes,
-    );
   }
 
   /// Discards a session and its staged bytes.
   Future<void> discard(String uploadId) async {
     await ref.read(repositoryProvider).deleteUpload(uploadId);
-    ref.read(_retryPathsProvider).remove(uploadId);
-    ref.read(_retryReadersProvider).remove(uploadId);
+    _forgetSource(uploadId);
+    _emit(uploadId, const Ended());
     if (!ref.mounted) return;
     ref.invalidateSelf();
   }
@@ -415,7 +590,10 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   }
 
   /// The shared transfer loop: reads [chunkBytes] windows from the
-  /// source, appends each at its offset, then seals the session.
+  /// source, appends each at its offset, then seals the session. A
+  /// chunk that fails on the wire is tried again [chunkRetries] times,
+  /// each after asking the server where it stands; the transfer stops
+  /// only once those are spent or the server refuses outright.
   Future<void> _transferWindows(
     String uploadId,
     int size, {
@@ -424,28 +602,63 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     required void Function() onSealed,
   }) async {
     final repository = ref.read(repositoryProvider);
+    final backoff = ref.read(uploadRetryBackoffProvider);
+    _emit(uploadId, TransferStarted(from));
     var sealing = false;
     try {
       var offset = from;
+      var failures = 0;
+      var conflictResynced = false;
+      var resync = false;
       while (offset < size) {
-        final want = (size - offset).clamp(0, chunkBytes);
-        final window = await read(offset, want);
-        if (window.isEmpty) {
-          throw StateError('the picked file shrank mid-upload');
+        try {
+          if (resync) {
+            // Covers a chunk the server stored whose answer was lost,
+            // which resending at the old offset would turn into a
+            // conflict.
+            offset = (await repository.getUpload(uploadId)).receivedBytes;
+            resync = false;
+            if (offset >= size) break;
+          }
+          final want = (size - offset).clamp(0, chunkBytes);
+          final window = await read(offset, want);
+          if (window.isEmpty) {
+            throw StateError('the picked file shrank mid-upload');
+          }
+          final session = await repository.putUploadData(
+            uploadId,
+            offset: offset,
+            bytes: window,
+          );
+          offset += window.length;
+          failures = 0;
+          conflictResynced = false;
+          _upsert(session);
+          _emit(uploadId, ChunkAcked(offset));
+        } catch (e) {
+          if (_transient(e) && failures < chunkRetries) {
+            failures++;
+            _emit(uploadId, const ChunkRetrying());
+            await Future<void>.delayed(backoff(failures));
+            resync = true;
+            continue;
+          }
+          if (e is WaxDeckApiException &&
+              e.code == 'conflict' &&
+              !conflictResynced) {
+            conflictResynced = true;
+            resync = true;
+            continue;
+          }
+          rethrow;
         }
-        final session = await repository.putUploadData(
-          uploadId,
-          offset: offset,
-          bytes: window,
-        );
-        offset += window.length;
-        _upsert(session);
       }
       sealing = true;
+      _emit(uploadId, const Sealing());
       final sealed = await repository.completeUpload(uploadId);
       onSealed();
       _upsert(sealed);
-      _markFailed(uploadId, failed: false);
+      _emit(uploadId, const Sealed());
     } catch (e) {
       // A seal the server refused for bytes no retry can mend (they do
       // not read as audio, or miss their hash) ended the session there,
@@ -456,17 +669,59 @@ class UploadsController extends AsyncNotifier<UploadsState> {
           (_endsSession(e) || await _ended(uploadId))) {
         onSealed();
         _drop(uploadId);
+        _emit(uploadId, const SealRefused());
         rethrow;
       }
-      // Marked failed whatever else threw - a server refusal, but also
-      // a source that stopped answering (a SAF document moved
+      // Stopped whatever else threw - a server refusal, but also a
+      // source that stopped answering (a SAF document moved
       // mid-transfer arrives as a PlatformException, a deleted local
       // file as a FileSystemException, a shrunk one as the StateError
-      // above). Without the mark the row sits in "uploading" forever
-      // with no Retry.
-      _markFailed(uploadId, failed: true);
+      // above). Otherwise the row sits in "uploading" forever with no
+      // Retry.
+      _emit(uploadId, Stopped(e));
       rethrow;
     }
+  }
+
+  /// Whether a chunk failure is the wire rather than an answer: no
+  /// response, a server error, or a busy catalog.
+  static bool _transient(Object e) => switch (e) {
+    WaxDeckApiException(statusCode: null) => true,
+    WaxDeckApiException(statusCode: final status?) when status >= 500 => true,
+    WaxDeckApiException(:final code) when code == 'catalog-busy' => true,
+    _ => false,
+  };
+
+  /// Retires the finished and stopped transfers a fresh page has caught
+  /// up with: listed past receiving, or gone from a list read to its end.
+  /// A page that still says receiving was read before the seal answered,
+  /// or leaves a stopped transfer its Retry. A stopped one that goes takes
+  /// its source with it.
+  void _retireCaughtUp(List<UploadSession> listed, {bool complete = false}) {
+    if (!ref.mounted) return;
+    final states = {for (final u in listed) u.id: u.state};
+    for (final MapEntry(key: id, value: live)
+        in ref.read(liveTransfersProvider).entries) {
+      final stopped = live.status == TransferStatus.stopped;
+      if (!live.finished && !stopped) continue;
+      final state = states[id];
+      if (state == null ? complete : state != 'receiving') {
+        if (stopped) _forgetSource(id);
+        _emit(id, const Ended());
+      }
+    }
+  }
+
+  /// Lets go of what [retry] would send [uploadId] from.
+  void _forgetSource(String uploadId) {
+    if (!ref.mounted) return;
+    ref.read(_retryPathsProvider).remove(uploadId);
+    ref.read(_retryReadersProvider).remove(uploadId);
+  }
+
+  void _emit(String uploadId, TransferEvent event) {
+    if (!ref.mounted) return;
+    ref.read(liveTransfersProvider.notifier).apply(uploadId, event);
   }
 
   /// Whether a refused seal's reason is one that ends the session.
@@ -486,6 +741,43 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     }
   }
 
+  /// Reads [uploadIds] again, each alone: rows sent from elsewhere whose
+  /// window ran out, which only a fresh read can say went quiet. A row the
+  /// server no longer has goes; one that cannot be read now stays as it
+  /// was, and so does the rest of the list, pages Load more brought
+  /// included.
+  Future<void> readAgain(Iterable<String> uploadIds) async {
+    // Called from a timer, which can land while this rebuilds: asked
+    // again later.
+    if (!ref.mounted) return;
+    final repository = ref.read(repositoryProvider);
+    final clock = ref.read(monotonicClockProvider);
+    for (final id in uploadIds) {
+      final UploadSession session;
+      try {
+        session = await repository.getUpload(id);
+      } on WaxDeckApiException catch (e) {
+        if (e.code == 'not-found') _drop(id);
+        continue;
+      }
+      if (!ref.mounted) return;
+      final current = state.value;
+      if (current == null || !current.uploads.any((u) => u.id == id)) {
+        continue;
+      }
+      state = AsyncData(
+        current.copyWith(
+          uploads: [
+            for (final u in current.uploads)
+              if (u.id == id) session else u,
+          ],
+          readAt: {...current.readAt, id: clock()},
+        ),
+      );
+      _retireCaughtUp([session]);
+    }
+  }
+
   void _drop(String uploadId) {
     if (!ref.mounted) return;
     final current = state.value;
@@ -496,7 +788,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
           for (final u in current.uploads)
             if (u.id != uploadId) u,
         ],
-        failed: {...current.failed}..remove(uploadId),
+        readAt: {...current.readAt}..remove(uploadId),
       ),
     );
   }
@@ -527,17 +819,12 @@ class UploadsController extends AsyncNotifier<UploadsState> {
                   if (u.id == session.id) session else u,
               ]
             : [session, ...current.uploads],
+        readAt: {
+          ...current.readAt,
+          session.id: ref.read(monotonicClockProvider)(),
+        },
       ),
     );
-  }
-
-  void _markFailed(String uploadId, {required bool failed}) {
-    if (!ref.mounted) return;
-    final current = state.value;
-    if (current == null) return;
-    final set = {...current.failed};
-    failed ? set.add(uploadId) : set.remove(uploadId);
-    state = AsyncData(current.copyWith(failed: set));
   }
 }
 

@@ -409,7 +409,9 @@ func DemoLibrary() []Spec {
 // them uniquely against the scanned library. The single is the
 // declined-identify journey's own file - declining imports on arrival,
 // so a file another upload test imports would race it for the
-// destination and flag it as a duplicate.
+// destination and flag it as a duplicate. The WAV is the one source
+// over a transfer chunk (1 MiB), for the journey that holds a chunk
+// mid-upload.
 func UploadSources() []Spec {
 	track := func(name, title, trackNo string, d time.Duration) Spec {
 		return Spec{
@@ -436,6 +438,16 @@ func UploadSources() []Spec {
 				"ARTIST":      "Night Transit",
 				"ALBUM":       "Sodium Sky",
 				"TRACKNUMBER": "1",
+			},
+		},
+		{
+			Name:     "long-take",
+			Codec:    CodecPCM,
+			Duration: 8 * time.Second,
+			Tags: map[string]string{
+				"TITLE":  "Long Take",
+				"ARTIST": "Held Signal",
+				"ALBUM":  "Long Take",
 			},
 		},
 	}

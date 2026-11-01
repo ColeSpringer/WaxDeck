@@ -93,10 +93,10 @@ String? artSourceLabelWithBorrow(AppLocalizations l10n, ArtSource? source) {
   }
 }
 
-/// A producer's name as it reads inside a tally ("3 from tags"), which
-/// is a short noun rather than the sentence the mark under a cover
-/// draws. [key] is a provider id where one supplied the value and a
-/// source token otherwise, which is how the provenance rows key it.
+/// A producer's name as it reads on a field's chip, which is a short
+/// noun rather than the sentence the mark under a cover draws. [key] is
+/// a provider id where one supplied the value and a source token
+/// otherwise, which is how the provenance rows key it.
 ///
 /// An unrecognized key falls through as itself. The vocabulary is open,
 /// and a wire token is a worse answer than a name only in the cases
@@ -117,6 +117,53 @@ String provenanceProducerName(AppLocalizations l10n, String key) {
   };
 }
 
+/// The chip beside a scalar field: who set its value, or null when there
+/// is no value to attribute. No row on a field with a value is the scan's
+/// own, which reads as the file; [fromFeed] names the feed instead, for
+/// an episode.
+String? fieldSourceName(
+  AppLocalizations l10n, {
+  required String? source,
+  String? provider,
+  required bool hasValue,
+  bool fromFeed = false,
+}) {
+  if (source == null) {
+    return hasValue
+        ? provenanceProducerName(l10n, fromFeed ? 'feed' : 'tag')
+        : null;
+  }
+  return provenanceProducerName(l10n, provider ?? source);
+}
+
+/// The chip beside a field a whole selection holds one value in: whose it
+/// is, worded as each item's own chip words it ([fieldSourceName]), when
+/// every item names the same source (and provider) for [field], and null
+/// when they differ, since no one set it for all of them.
+String? sharedFieldSourceName(
+  AppLocalizations l10n,
+  List<ItemMetadata> items,
+  String field,
+) {
+  String? shared;
+  for (final (at, item) in items.indexed) {
+    final row = item.provenance.where((p) => p.field == field).firstOrNull;
+    final name = fieldSourceName(
+      l10n,
+      source: row?.source,
+      provider: row?.provider,
+      hasValue: (item.fields[field] ?? '').isNotEmpty,
+      fromFeed: item.mediaType == MediaType.podcast,
+    );
+    if (at == 0) {
+      shared = name;
+    } else if (name != shared) {
+      return null;
+    }
+  }
+  return shared;
+}
+
 /// The same for one artwork slot the entity holds itself, which carries
 /// its own attribution rather than a resolve's.
 String? artRoleSourceLabel(AppLocalizations l10n, ArtRoleInfo role) =>
@@ -127,12 +174,11 @@ String? artRoleSourceLabel(AppLocalizations l10n, ArtRoleInfo role) =>
           : ArtSource(source: role.source!, provider: role.provider),
     );
 
-/// The same for a provenance row, which is always drawn behind a
-/// prefix naming the artifact ("Artwork · {source}", "Lyrics ·
-/// {source}"). That prefix is why two sources word themselves apart
-/// from the standalone marks: `tag` reads as the bare "From the file"
-/// - the standalone "Art from the file" would stutter behind "Artwork
-/// ·" and call a lyric a picture behind "Lyrics ·" - and a lyric's
+/// The same for a provenance row, which is drawn behind a prefix
+/// naming the artifact ("Lyrics · {source}"). That prefix is why two
+/// sources word themselves apart from the standalone marks: `tag` reads
+/// as the bare "From the file" - the standalone "Art from the file"
+/// would call a lyric a picture behind "Lyrics ·" - and a lyric's
 /// `sidecar` is an `.lrc` beside the track, which the artwork wording
 /// (a folder image) describes not at all.
 ///

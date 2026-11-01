@@ -78,6 +78,36 @@ void main() {
     expect(find.text('US & Europe'), findsOneWidget);
   });
 
+  testWidgets('a curated field names its source, not the wire token', (
+    tester,
+  ) async {
+    final repo = _repo(
+      curation: const [
+        EntityCuratedField(
+          field: 'label',
+          value: 'Meridian Sound',
+          source: 'user',
+          locked: false,
+        ),
+      ],
+    );
+    await _pump(tester, repo);
+
+    expect(find.text('you'), findsOneWidget);
+    expect(find.text('user'), findsNothing);
+    expect(find.text('From tags'), findsNothing);
+    // Barcode and country hold values read from the files.
+    expect(find.text('tags'), findsNWidgets(2));
+    // The catalog number holds nothing, so its row draws no chip.
+    expect(
+      find.descendant(
+        of: _byId(SemanticsIds.metadataField('catalog_number')),
+        matching: find.byType(CodecChip),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('only the fields that changed are sent, and they lock', (
     tester,
   ) async {

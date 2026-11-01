@@ -4,10 +4,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/off_tree.dart';
+import 'package:waxdeck/src/player/chapters.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
 import 'package:waxdeck/src/player/sleep_timer.dart';
-import 'package:waxdeck/src/player/spoken_face.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
@@ -18,6 +18,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
@@ -368,77 +369,81 @@ void main() {
   testWidgets('a platform refusal ends the ramp without restoring', (
     tester,
   ) async {
-    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
-    final repo = FakeRepository(items: [testItem(pid)]);
-    final engine = FakeEngine(
-      mediaDuration: const Duration(milliseconds: 214000),
-    );
-    final clock = _FakeClock();
-    final container = _container(repo, engine, clock);
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-      container: container,
-    );
+    await captureDebugPrints(() async {
+      const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+      final repo = FakeRepository(items: [testItem(pid)]);
+      final engine = FakeEngine(
+        mediaDuration: const Duration(milliseconds: 214000),
+      );
+      final clock = _FakeClock();
+      final container = _container(repo, engine, clock);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: testItem(pid),
+        container: container,
+      );
 
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
-    await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(5)));
-    await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(5)));
+      await tester.pumpAndSettle();
 
-    clock.advance(const Duration(minutes: 5, seconds: 1));
-    // The first write is refused, so the ramp owns nothing to put back.
-    engine.failNextSetVolume = true;
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pump(
-      SleepTimerController.fadeDuration + SleepTimerController.fadeStep,
-    );
+      clock.advance(const Duration(minutes: 5, seconds: 1));
+      // The first write is refused, so the ramp owns nothing to put back.
+      engine.failNextSetVolume = true;
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(
+        SleepTimerController.fadeDuration + SleepTimerController.fadeStep,
+      );
 
-    expect(engine.playing, isFalse);
-    expect(engine.volume, closeTo(1, 0.001));
-    await harness.endPlayback(tester);
+      expect(engine.playing, isFalse);
+      expect(engine.volume, closeTo(1, 0.001));
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('a refusal part way down still puts the level back', (
     tester,
   ) async {
-    // The ramp had already lowered the level and still owns it, so the
-    // refusal ends the fade but must not leave the listener quiet.
-    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
-    final repo = FakeRepository(items: [testItem(pid)]);
-    final engine = FakeEngine(
-      mediaDuration: const Duration(milliseconds: 214000),
-    );
-    final clock = _FakeClock();
-    final container = _container(repo, engine, clock);
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-      container: container,
-    );
-    await container.read(outputVolumeProvider.notifier).set(0.8);
-    await tester.pump();
+    await captureDebugPrints(() async {
+      // The ramp had already lowered the level and still owns it, so the
+      // refusal ends the fade but must not leave the listener quiet.
+      const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+      final repo = FakeRepository(items: [testItem(pid)]);
+      final engine = FakeEngine(
+        mediaDuration: const Duration(milliseconds: 214000),
+      );
+      final clock = _FakeClock();
+      final container = _container(repo, engine, clock);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: testItem(pid),
+        container: container,
+      );
+      await container.read(outputVolumeProvider.notifier).set(0.8);
+      await tester.pump();
 
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
-    await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(5)));
-    await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(5)));
+      await tester.pumpAndSettle();
 
-    clock.advance(const Duration(minutes: 5, seconds: 1));
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pump(SleepTimerController.fadeDuration ~/ 2);
-    expect(engine.volume, lessThan(0.8));
+      clock.advance(const Duration(minutes: 5, seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(SleepTimerController.fadeDuration ~/ 2);
+      expect(engine.volume, lessThan(0.8));
 
-    engine.failNextSetVolume = true;
-    await tester.pump(SleepTimerController.fadeDuration);
+      engine.failNextSetVolume = true;
+      await tester.pump(SleepTimerController.fadeDuration);
 
-    expect(engine.playing, isFalse);
-    expect(engine.volume, closeTo(0.8, 0.001));
-    await harness.endPlayback(tester);
+      expect(engine.playing, isFalse);
+      expect(engine.volume, closeTo(0.8, 0.001));
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('cancelling mid-fade stops the ramp and the pause', (
@@ -1913,13 +1918,16 @@ void main() {
       engine.advance(const Duration(seconds: 1));
       await pumpEventQueue();
     }
+    final before = repo.putPlayStateCalls.length;
     engine.advance(const Duration(milliseconds: 1500));
     await pumpEventQueue();
     await pumpEventQueue();
 
+    final saved = repo.putPlayStateCalls.skip(before).map((c) => c.positionMs);
     expect(engine.playing, isFalse);
     expect(engine.position, const Duration(seconds: 60));
-    expect(repo.putPlayStateCalls.last.positionMs, 60000);
+    // One checkpoint, where the stop parks: none at the tick past it.
+    expect(saved, [60000]);
     expect(container.read(sleepTimerProvider).active, isFalse);
   });
 }

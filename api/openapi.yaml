@@ -977,7 +977,12 @@ paths:
         running. A finished targeted job is left out (read it by pid),
         except a kind change (`set-kind`), an organize undo
         (`organize-undo`) and a library removal (`remove-root`), which
-        list with their result.
+        list with their result. A finished job of a kind that runs once
+        per item (an upload's `import`, a `delete`, a `restore`, a
+        `purge-trash`) is left out too, and lists only while it runs.
+        Jobs the caller cleared (`POST /jobs/clear-finished`) are left
+        out. A job left out takes no place on the page: the server reads
+        back through as many as the 800 newest jobs to fill it.
         The `job` sync marker says when to read again. Administrators
         only.
       tags: [admin]
@@ -999,6 +1004,32 @@ paths:
                 $ref: "#/components/schemas/JobList"
         "400":
           $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /jobs/clear-finished:
+    post:
+      operationId: clearFinishedJobs
+      summary: Clear finished catalog jobs from the caller's list
+      description: >
+        Hides every catalog job that has ended (`done`, `failed`, `crashed`
+        or `canceled`) from the caller's `GET /jobs`, and answers how many
+        that list held, a page of it or not. Running jobs stay. The jobs themselves are not
+        deleted: other administrators still list them, `GET /jobs/{pid}` is
+        unaffected, and an organize run can still be undone. A job that
+        ends after the call lists as usual. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: How many ended jobs were hidden.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobsCleared"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -4015,6 +4046,62 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EntityCardList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/items/resolve:
+    post:
+      operationId: resolveItems
+      summary: Resolve a list of item PIDs to summaries
+      description: >
+        Batch read of the summary rows behind a list of item PIDs
+        (`tr-`, `ep-`, `bk-`): what a client holding only handles, a
+        play queue for one, reads to learn what each is now without a
+        request per item. A POST because the PID list rides the body;
+        nothing changes server-side.
+
+
+        Each answer is the summary part of what `GET /items/{pid}`
+        answers for that PID, and answers come in request order, a
+        repeated PID once per occurrence. An item whose kind changed
+        answers under the prefix its kind has now, with the same ULID,
+        so match an answer to its request by the ULID after the prefix,
+        never by position.
+
+
+        PIDs that cannot be answered for are omitted rather than
+        erroring. Of the omissions, `departed` names the ones gone for
+        everyone: no item answers to the PID any more (a kind change
+        folded it into another) or ever did, or its item lost its files
+        for good (purged from the trash, deleted permanently, or its
+        library removed), which this lookup leaves out although
+        `GET /items/{pid}` still reads it. An item in the trash, which a
+        restore brings back, is answered as that read answers it. One
+        merely out of the caller's sight (a library grant, a content
+        setting) stays an unnamed omission, because it can come back. A
+        client holding a list may drop exactly the departed PIDs.
+
+
+        At most 100 PIDs per request (`invalid-request` past that); a
+        longer list is read in pieces.
+      tags: [library]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemResolveQuery"
+      responses:
+        "200":
+          description: Summaries for the PIDs that resolved, in request order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResolution"
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":
@@ -12589,13 +12676,14 @@ paths:
         units by the declared grouping intent: `album` opens one
         multi-file review entry over every staged member, `tracks`
         opens one entry per file, and `auto` clusters members into
-        album units by their tags and relative paths. Members join by
-        passing `batchId` (and optionally `batchPath`) at session
-        creation and must declare the batch's media type. The batch
-        stays open for 24 hours or until the finalize call; members
-        keep the normal upload retention. Nothing about a single
-        upload changes: a session without a batch opens its own
-        review entry at completion exactly as before.
+        units (albums, or books for an audiobook batch) by their tags
+        and relative paths. Members join by passing `batchId` (and
+        optionally `batchPath`) at session creation and must declare
+        the batch's media type. The batch stays open for 24 hours or
+        until the finalize call; members keep the normal upload
+        retention. Nothing about a single upload changes: a session
+        without a batch opens its own review entry at completion
+        exactly as before.
       tags: [uploads]
       requestBody:
         required: true
@@ -15430,6 +15518,19 @@ components:
           items:
             $ref: "#/components/schemas/Job"
 
+    JobsCleared:
+      type: object
+      description: The result of clearing finished catalog jobs.
+      required: [cleared]
+      properties:
+        cleared:
+          type: integer
+          description: >
+            How many ended jobs the caller's list held before it was
+            cleared: every one `GET /jobs` would list, whether or not a
+            page of it reached them.
+          example: 3
+
     LibraryProfile:
       type: object
       description: The organize profile a managed library is laid out by.
@@ -17843,6 +17944,47 @@ components:
           maxItems: 64
           example: [al-01JZX5N8QW3F4V9T2B7KD3M9R6]
 
+    ItemResolveQuery:
+      type: object
+      description: The item PIDs to resolve.
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          description: >
+            Type-prefixed item PIDs, in the order the answers should
+            come back in.
+          items:
+            type: string
+            pattern: "^(tr|ep|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 100
+          example: [tr-01JZX5N8QW3F4V9T2B7KD3M9R6]
+
+    ItemResolution:
+      type: object
+      description: >
+        Summaries for the requested PIDs, in request order, minus the
+        ones that could not be resolved.
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+        departed:
+          type: array
+          description: >
+            The requested PIDs gone for everyone: no item answers to it
+            any more (a kind change folded it into another) or ever did,
+            or its item lost its files for good (purged from the trash,
+            deleted permanently, or its library removed). As requested,
+            in request order, a repeated PID once, and absent rather than
+            empty when no miss was one of these.
+          items:
+            type: string
+            pattern: "^(tr|ep|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 100
+
     EntityCard:
       type: object
       description: >
@@ -18620,7 +18762,11 @@ components:
             type: string
         provenance:
           type: array
-          description: Per-field provenance for curated fields.
+          description: >
+            Per-field provenance for curated fields. A scalar field that
+            holds a value and has no row has never been curated: its value
+            is the one the item arrived with, read from its file or, for an
+            episode, from its feed.
           items:
             $ref: "#/components/schemas/FieldProvenance"
         credits:
@@ -19770,7 +19916,10 @@ components:
       properties:
         curated:
           type: array
-          description: Curated fields with provenance.
+          description: >
+            Curated fields with provenance. A scalar field that holds a
+            value and has no row has never been curated; its value is the
+            scan's own.
           items:
             $ref: "#/components/schemas/EntityCuratedField"
 
@@ -26024,7 +26173,7 @@ components:
     Upload:
       type: object
       description: One upload session.
-      required: [id, fileName, sizeBytes, receivedBytes, mediaType, state, createdAt]
+      required: [id, fileName, sizeBytes, receivedBytes, idleMs, mediaType, state, createdAt]
       properties:
         id:
           type: string
@@ -26043,6 +26192,16 @@ components:
           description: >
             Bytes stored so far; resume by sending the next chunk at
             this offset.
+        idleMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            How long the server had gone without taking a byte for the
+            session when it answered, in milliseconds by its own clock:
+            zero while a chunk's bytes are arriving or the upload is being
+            completed, otherwise the time since the last one arrived,
+            counted from the session's creation before any has.
         mediaType:
           $ref: "#/components/schemas/MediaType"
         libraryPid:
@@ -26086,8 +26245,10 @@ components:
       enum: [auto, album, tracks]
       description: >
         How a batch's staged files reach the review queue: `album`
-        opens one multi-file entry over all of them, `tracks` one
-        entry per file, and `auto` clusters them into album units by
+        opens one multi-file entry over all of them (one album for
+        music, one book in parts for an audiobook, its parts in disc,
+        track and path order), `tracks` opens one entry per file (each
+        its own track or book), and `auto` clusters them into units by
         their tags and relative paths (disc subfolders fold into
         their parent).
 

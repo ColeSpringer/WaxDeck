@@ -345,7 +345,7 @@
   },
   "playerOfferQueued": "{count, plural, =1{1 queued item} other{{count} queued items}}",
   "@playerOfferQueued": {
-    "description": "Names a queue offered for resuming when its first item has not resolved, so the count is all there is to say.",
+    "description": "A count of queued items, said by two offers on the deck. A queue offered for resuming shows it as its name when its first item has not resolved, so the count is all there is to say. An entry queued under a station, which never played, shows it as the line under its title, or alone when the entry has no name yet.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -355,7 +355,7 @@
   },
   "playerOfferResume": "Pick up where you left off",
   "@playerOfferResume": {
-    "description": "Under the offer to resume an earlier queue."
+    "description": "The first line of two offers on the deck: a queue from an earlier session offered back at launch, and an entry a station displaced from playback, offered back where it stopped. Said ahead of the title; shown under it when there is no artist to show."
   },
   "playerOfflineStart": "You're offline. Playback will continue when the connection is back.",
   "@playerOfflineStart": {
@@ -422,6 +422,14 @@
   "playerShareLink": "Share link",
   "@playerShareLink": {
     "description": "Menu item that mints a public link to what is playing. Names the act, like the other overflow rows that open the same dialog."
+  },
+  "playerShowChapter": "Show the chapter",
+  "@playerShowChapter": {
+    "description": "Control on the deck bar, and its menu row, that has a book's seek bar span the chapter playing rather than the whole book."
+  },
+  "playerShowWholeBook": "Show the whole book",
+  "@playerShowWholeBook": {
+    "description": "Control on the deck bar, and its menu row, that has a book's seek bar span the whole book rather than the chapter playing."
   },
   "playerSimilarTracks": "Similar tracks",
   "@playerSimilarTracks": {

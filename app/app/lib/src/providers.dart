@@ -190,6 +190,17 @@ final oidcFlowProvider = Provider<OidcLoginFlow>(
 /// with their fake timers.
 final wallClockProvider = Provider<DateTime Function()>((_) => DateTime.now);
 
+/// A clock that only moves forward, as the time since an arbitrary start,
+/// for a span measured on this device alone (how long since a read): unlike
+/// [wallClockProvider], setting the device's clock does not move it. Tests
+/// drive it in step with their fake timers.
+final monotonicClockProvider = Provider<Duration Function()>(
+  (_) =>
+      () => _sinceStart.elapsed,
+);
+
+final _sinceStart = Stopwatch()..start();
+
 /// The one audio engine. Tests override this with a [FakeEngine].
 ///
 /// In a browser the standard engine is wrapped so a music queue can

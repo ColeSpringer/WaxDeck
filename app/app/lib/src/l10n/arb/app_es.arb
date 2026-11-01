@@ -1327,7 +1327,6 @@
   "metadataAddCredit": "Añadir el crédito",
   "metadataAddGenre": "Añadir un género",
   "metadataAddTag": "Añadir la etiqueta",
-  "metadataArtworkSource": "Ilustración · {source}",
   "metadataBulkEdited": "{count, plural, =1{Se ha editado 1 pista} other{Se han editado {count} pistas}}",
   "metadataBulkLeaveAsIs": "Dejar como está",
   "metadataBulkLockNote": "Guardar bloquea cada campo editado en cada pista seleccionada. Un lote admite como máximo 1.000 elementos.",
@@ -1398,7 +1397,6 @@
   "metadataForbiddenTitle": "Esta no es tuya para editarla",
   "metadataForceHelp": "Sobrescribe los campos que ya están bloqueados",
   "metadataForceTitle": "Forzar",
-  "metadataFromSource": "{count} de {source}",
   "metadataGenreAddCustom": "Añadir «{query}»",
   "metadataGenrePickerTitle": "Géneros",
   "metadataGenreSearchHint": "Busca o escribe un género",
@@ -1418,7 +1416,6 @@
   "metadataLyricsSource": "Letras · {source}",
   "metadataLyricsTitle": "Letra",
   "metadataNoCreditRoles": "No hay roles de crédito para este tipo",
-  "metadataNoSources": "No hay fuentes registradas",
   "metadataNothingToFetch": "No hay nada que obtener",
   "metadataNothingToPreview": "No hay nada que previsualizar",
   "metadataOpenAlbum": "Abrir el álbum",
@@ -1477,29 +1474,28 @@
   "metadataSaveChanges": "{count, plural, =1{Guardar 1 cambio} other{Guardar {count} cambios}}",
   "metadataSourceEnrichment": "un proveedor",
   "@metadataSourceEnrichment": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceFeed": "el feed",
   "@metadataSourceFeed": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceNormalize": "la pasada de limpieza",
   "metadataSourceOrganize": "el organizador",
   "@metadataSourceOrganize": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceSidecar": "archivos complementarios",
   "@metadataSourceSidecar": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceTag": "las etiquetas",
   "@metadataSourceTag": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
-  "metadataSourceUnknown": "Origen desconocido",
-  "metadataSourceUser": "ti",
+  "metadataSourceUser": "tú",
   "@metadataSourceUser": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataTagKey": "Clave",
   "metadataTagReserved": "{key} se guarda en su propio campo, no como etiqueta personalizada.",
@@ -1532,7 +1528,6 @@
   "musicAlbumEditorFieldLocked": "{field} está bloqueado",
   "musicAlbumEditorForbiddenMessage": "Los códigos de barras, los sellos y los números de catálogo los comparte todo el que puede ver este álbum, así que el servidor los reserva a los administradores.",
   "musicAlbumEditorForbiddenTitle": "Solo los administradores pueden editar una edición",
-  "musicAlbumEditorFromTags": "De las etiquetas",
   "musicAlbumEditorNamesOverline": "Cómo se ordena y con qué coincide",
   "musicAlbumEditorNamesTitle": "Nombre e identificador",
   "musicAlbumEditorSaveChanges": "{count, plural, =1{Guardar 1 cambio} other{Guardar {count} cambios}}",
@@ -1841,6 +1836,8 @@
   "playerSaveSong": "Guardar esta canción",
   "playerSeekSpans": "Alcance de la barra de posición",
   "playerShareLink": "Compartir un enlace",
+  "playerShowChapter": "Mostrar el capítulo",
+  "playerShowWholeBook": "Mostrar el libro entero",
   "playerSimilarTracks": "Pistas similares",
   "playerSkippedUnplayable": "Se ha omitido {title}: este archivo no se puede reproducir",
   "playerSkippedUnplayableMany": "Se han omitido {count} pistas que no se pueden reproducir",
@@ -2428,6 +2425,7 @@
   "queuePlayingFrom": "Reproduciendo desde {source}",
   "queuePlayingFromLibrary": "Reproduciendo de tu biblioteca",
   "queuePlayingFromMix": "Reproduciendo una mezcla",
+  "queuePlayingGone": "Lo que sonaba ya no está en la biblioteca.",
   "queuePreviously": "ANTERIORES ({count})",
   "queueRemove": "Quitar",
   "queueRemoveEntry": "Quitar de la cola",
@@ -3092,6 +3090,8 @@
   "shellReload": "Volver a cargar",
   "shellServerOutdated": "El servidor se ha actualizado. Reinicia WaxDeck para ponerte al día.",
   "shellSignOut": "Cerrar sesión",
+  "shellWindowTitleItem": "{title} · {artist}",
+  "shellWindowTitleLive": "{station} · {song}",
   "speedMultiplier": "{speed}x",
   "statsBucketDay": "Día",
   "statsBucketDayInline": "día",
@@ -3195,8 +3195,8 @@
   "toolsClearAllBody": "Se borran los recibos de tareas terminadas y fallidas de todas las cuentas, incluidos informes que aún no han leído. Las tareas en curso se quedan.",
   "toolsClearAllTitle": "¿Borrar las tareas terminadas de todos?",
   "toolsClearFinished": "Borrar las terminadas",
-  "toolsClearFinishedAll": "Borrar las tareas terminadas de todos",
-  "toolsClearFinishedMine": "Borrar mis tareas terminadas",
+  "toolsClearFinishedAll": "Borrar las terminadas de todos",
+  "toolsClearFinishedMine": "Borrar las mías terminadas",
   "toolsCountAdded": "añadidos {count}",
   "toolsCountAnalyzed": "analizados {count}",
   "toolsCountArchived": "archivados {count}",
@@ -3243,6 +3243,7 @@
   "toolsJobScan": "Escaneo de la biblioteca",
   "toolsJobSetKind": "Cambio de tipo",
   "toolsJobTargeted": "{job}: {target}",
+  "toolsJobsCleared": "{count, plural, =1{Se ha borrado 1 trabajo de la biblioteca} other{Se han borrado {count} trabajos de la biblioteca}}",
   "toolsJobsTitle": "Trabajos de la biblioteca",
   "toolsLoadError": "No se han podido cargar las tareas de herramientas",
   "toolsOpenReviewQueue": "Abrir la cola de revisión",
@@ -3329,14 +3330,22 @@
   "uploadsFileTypeAny": "Todos los archivos",
   "uploadsFileTypeAudio": "Audio",
   "uploadsFileUnreadable": "No se ha podido leer el archivo",
+  "uploadsFinishing": "Terminando",
   "uploadsFormat": "Formato de descarga",
   "uploadsFormatBest": "La mejor calidad (recomendado)",
   "uploadsFromUrl": "Añadir desde una URL",
+  "uploadsFromUrlBook": "Añadir un audiolibro desde una URL",
+  "uploadsFromUrlMusic": "Añadir música desde una URL",
   "uploadsFromUrlSubtitle": "Un vídeo, una lista de reproducción o un canal",
   "uploadsGroupingAlbum": "Un solo álbum",
   "uploadsGroupingAlbumHelp": "Revisar todos los archivos como un solo lanzamiento",
   "uploadsGroupingAuto": "Detectar automáticamente",
   "uploadsGroupingAutoHelp": "Agrupar en álbumes según sus etiquetas y carpetas",
+  "uploadsGroupingBookAutoHelp": "Un libro por carpeta o título",
+  "uploadsGroupingBookEach": "Libros sueltos",
+  "uploadsGroupingBookEachHelp": "Cada archivo es un libro aparte",
+  "uploadsGroupingBookOne": "{count, plural, =1{Un libro} other{Un libro en {count} partes}}",
+  "uploadsGroupingBookOneHelp": "Partes de un libro, en orden de carpeta y pista",
   "uploadsGroupingTitle": "¿Cómo hay que agrupar estos archivos?",
   "uploadsGroupingTracks": "Pistas sueltas",
   "uploadsGroupingTracksHelp": "Revisar cada archivo por separado",
@@ -3345,6 +3354,7 @@
   "uploadsIdentifyOther": "Revisar antes de añadir",
   "uploadsIdentifyOtherHelp": "Espera tu decisión. Desactivado, lo añade con las etiquetas que trae",
   "uploadsIdentifying": "{count, plural, =1{Se ha subido 1 archivo. Se está identificando y aparecerá cuando pase la revisión} other{Se han subido {count} archivos. Se están identificando y aparecerán cuando pasen la revisión}}",
+  "uploadsInterrupted": "Interrumpida. Descártala y vuelve a subir el archivo.",
   "uploadsLibrary": "Biblioteca",
   "uploadsLibraryHelp": "Qué ajustes de biblioteca se aplican. Dónde se colocan los archivos lo decide el servidor.",
   "uploadsLoadError": "No se han podido cargar las subidas",
@@ -3364,6 +3374,7 @@
   "uploadsQuotaOverline": "Esperando a importarse",
   "uploadsReceivedOf": "{percent} % de {size} recibido",
   "uploadsReceiving": "Recibiendo",
+  "uploadsReconnecting": "Se perdió la conexión, reintentando",
   "uploadsRetry": "Reintentar la subida",
   "uploadsSessionsSubtitle": "Cuota, lo que sigue subiendo y lo que hay que reintentar",
   "uploadsSessionsTitle": "Subidas anteriores",
@@ -3376,6 +3387,10 @@
   "uploadsTransferFailed": "Transferencia fallida",
   "uploadsUpload": "Subir",
   "uploadsWhatMany": "¿Qué son estos {count} archivos?",
+  "uploadsWhatManyBook": "Subir {count} archivos como audiolibro",
+  "uploadsWhatManyMusic": "Subir {count} archivos como música",
   "uploadsWhatOne": "¿Qué estás subiendo?",
+  "uploadsWhatOneBook": "Subir como audiolibro",
+  "uploadsWhatOneMusic": "Subir como música",
   "uploadsWhatThisIs": "Qué es esto"
 }

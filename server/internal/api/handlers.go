@@ -110,6 +110,9 @@ type Server struct {
 	// relayWriteStallNoRange is the same wait for a stream the player
 	// cannot resume by range.
 	relayWriteStallNoRange time.Duration
+	// chunkReadIdle is how long an upload chunk's body may go without a
+	// byte; tests shorten it.
+	chunkReadIdle time.Duration
 	// enclosureBounds are the limits one relayed episode is held to;
 	// tests tighten them.
 	enclosureBounds relayLimits
@@ -203,6 +206,7 @@ func NewServer(version string, opts Options) *Server {
 		shareStreams:       relayGate{limit: maxShareStreams},
 
 		relayWriteStallNoRange: relayWriteStallNoRangeLimit,
+		chunkReadIdle:          chunkReadIdleLimit,
 		enclosureBounds: relayLimits{
 			idle: enclosureIdle, maxBytes: enclosureMaxBytes,
 			minRate: enclosureMinRate, rateGrace: enclosureRateGrace,
@@ -552,6 +556,31 @@ func (s *Server) ResolveEntities(ctx context.Context, req ResolveEntitiesRequest
 		out.Entities = append(out.Entities, card)
 	}
 	return ResolveEntities200JSONResponse(out), nil
+}
+
+func (s *Server) ResolveItems(ctx context.Context, req ResolveItemsRequestObject) (ResolveItemsResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return ResolveItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	items, departed, err := s.svc.ResolveItems(ctx, uc, req.Body.Pids)
+	if err != nil {
+		if service.KindOf(err) == service.KindInvalid {
+			return ResolveItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	out := ItemResolution{Items: make([]ItemSummary, 0, len(items))}
+	if len(departed) > 0 {
+		out.Departed = &departed
+	}
+	for _, it := range items {
+		out.Items = append(out.Items, summaryJSON(it))
+	}
+	return ResolveItems200JSONResponse(out), nil
 }
 
 func (s *Server) GetAlbum(ctx context.Context, req GetAlbumRequestObject) (GetAlbumResponseObject, error) {
@@ -1668,6 +1697,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 		if !capRequestBody(w, r) {
 			return
 		}
+		boundChunkRead(w, r, s.chunkReadIdle)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

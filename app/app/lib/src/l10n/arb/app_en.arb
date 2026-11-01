@@ -3199,7 +3199,7 @@
   },
   "artSourceFromFile": "From the file",
   "@artSourceFromFile": {
-    "description": "Provenance of an artifact read out of the audio file's own tags, on the rows that already name the artifact (\"Artwork · {source}\", \"Lyrics · {source}\"). Bare on purpose: the standalone artSourceTag would stutter behind the Artwork prefix and call a lyric a picture behind the Lyrics one."
+    "description": "Provenance of an artifact read out of the audio file's own tags, on the lyrics line (\"Lyrics · {source}\"). Bare on purpose: the standalone artSourceTag would call a lyric a picture behind the Lyrics prefix."
   },
   "artSourceGenerated": "Made by the server",
   "@artSourceGenerated": {
@@ -3229,7 +3229,7 @@
   },
   "artSourceTag": "Art from the file",
   "@artSourceTag": {
-    "description": "Source mark under a cover read out of the audio file itself (its embedded tags). Says what the mark is about, not the mechanism: \"from the file's tags\" read as nonsense under a picture. The provenance rows, already prefixed with the artifact's name, draw the bare artSourceFromFile instead."
+    "description": "Source mark under a cover read out of the audio file itself (its embedded tags). Says what the mark is about, not the mechanism: \"from the file's tags\" read as nonsense under a picture. The lyrics line, already prefixed with the artifact's name, draws the bare artSourceFromFile instead."
   },
   "artSourceUser": "Set by hand",
   "@artSourceUser": {
@@ -6825,16 +6825,6 @@
   "@metadataAddTag": {
     "description": "Button that stores the typed custom tag."
   },
-  "metadataArtworkSource": "Artwork · {source}",
-  "@metadataArtworkSource": {
-    "description": "The provenance line for the item's cover, beside the count of edited fields. {source} is where the picture came from, already worded ('From the file', 'Set by hand', 'From Deezer').",
-    "placeholders": {
-      "source": {
-        "type": "String",
-        "example": "From the file"
-      }
-    }
-  },
   "metadataBulkEdited": "{count, plural, =1{Edited 1 track} other{Edited {count} tracks}}",
   "@metadataBulkEdited": {
     "description": "Message part after a bulk save: how many catalog rows took the edit.",
@@ -7142,20 +7132,6 @@
   "@metadataForceTitle": {
     "description": "Switch that lets a save overwrite fields somebody locked. Its name is quoted in the refusal that suggests it, so the two must agree."
   },
-  "metadataFromSource": "{count} from {source}",
-  "@metadataFromSource": {
-    "description": "One entry in the provenance line: how many fields came from one source. {source} is a provider or source name from the server.",
-    "placeholders": {
-      "count": {
-        "type": "int",
-        "example": "5"
-      },
-      "source": {
-        "type": "String",
-        "example": "MusicBrainz"
-      }
-    }
-  },
   "metadataGenreAddCustom": "Add \"{query}\"",
   "@metadataGenreAddCustom": {
     "description": "Genre picker row that stages exactly what was typed, for a genre the canonical tree does not carry. {query} is the typed text.",
@@ -7184,7 +7160,7 @@
   },
   "metadataKindPinned": "Kind: {kind}, pinned",
   "@metadataKindPinned": {
-    "description": "Line under the editor's provenance summary when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).",
+    "description": "Line in the editor's header when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).",
     "placeholders": {
       "kind": {
         "type": "String",
@@ -7271,10 +7247,6 @@
   "metadataNoCreditRoles": "No credit roles for this kind",
   "@metadataNoCreditRoles": {
     "description": "Drawn in place of the credit editor for a kind of item that declares no roles."
-  },
-  "metadataNoSources": "No recorded sources",
-  "@metadataNoSources": {
-    "description": "Stands in for the provenance line when nothing recorded where the item's values came from."
   },
   "metadataNothingToFetch": "Nothing to fetch",
   "@metadataNothingToFetch": {
@@ -7553,35 +7525,31 @@
   },
   "metadataSourceEnrichment": "a provider",
   "@metadataSourceEnrichment": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceFeed": "the feed",
   "@metadataSourceFeed": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceNormalize": "the clean-up pass",
   "@metadataSourceNormalize": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from the clean-up pass\"): a value a clean-up pass such as the genre normalizer rewrote in the catalog. A short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a value a clean-up pass such as the genre normalizer rewrote in the catalog. A short noun, not a sentence."
   },
   "metadataSourceOrganize": "the organizer",
   "@metadataSourceOrganize": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceSidecar": "companion files",
   "@metadataSourceSidecar": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceTag": "tags",
   "@metadataSourceTag": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
-  },
-  "metadataSourceUnknown": "Source unknown",
-  "@metadataSourceUnknown": {
-    "description": "Chip beside a field whose value has no recorded source."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataSourceUser": "you",
   "@metadataSourceUser": {
-    "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
+    "description": "A producer name as it reads on the chip beside a field: a short noun, not a sentence."
   },
   "metadataTagKey": "Key",
   "@metadataTagKey": {
@@ -7763,10 +7731,6 @@
   "musicAlbumEditorForbiddenTitle": "Only administrators can edit a release",
   "@musicAlbumEditorForbiddenTitle": {
     "description": "Empty state shown where the album editor would be, to an account that may not write it."
-  },
-  "musicAlbumEditorFromTags": "From tags",
-  "@musicAlbumEditorFromTags": {
-    "description": "Chip beside an album-editor field whose value came from the files' own tags rather than from somebody typing it."
   },
   "musicAlbumEditorNamesOverline": "How this release files and matches",
   "@musicAlbumEditorNamesOverline": {
@@ -9312,7 +9276,7 @@
   },
   "playerOfferQueued": "{count, plural, =1{1 queued item} other{{count} queued items}}",
   "@playerOfferQueued": {
-    "description": "Names a queue offered for resuming when its first item has not resolved, so the count is all there is to say.",
+    "description": "A count of queued items, said by two offers on the deck. A queue offered for resuming shows it as its name when its first item has not resolved, so the count is all there is to say. An entry queued under a station, which never played, shows it as the line under its title, or alone when the entry has no name yet.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -9322,7 +9286,7 @@
   },
   "playerOfferResume": "Pick up where you left off",
   "@playerOfferResume": {
-    "description": "Under the offer to resume an earlier queue."
+    "description": "The first line of two offers on the deck: a queue from an earlier session offered back at launch, and an entry a station displaced from playback, offered back where it stopped. Said ahead of the title; shown under it when there is no artist to show."
   },
   "playerOfflineStart": "You're offline. Playback will continue when the connection is back.",
   "@playerOfflineStart": {
@@ -9389,6 +9353,14 @@
   "playerShareLink": "Share link",
   "@playerShareLink": {
     "description": "Menu item that mints a public link to what is playing. Names the act, like the other overflow rows that open the same dialog."
+  },
+  "playerShowChapter": "Show the chapter",
+  "@playerShowChapter": {
+    "description": "Control on the deck bar, and its menu row, that has a book's seek bar span the chapter playing rather than the whole book."
+  },
+  "playerShowWholeBook": "Show the whole book",
+  "@playerShowWholeBook": {
+    "description": "Control on the deck bar, and its menu row, that has a book's seek bar span the whole book rather than the chapter playing."
   },
   "playerSimilarTracks": "Similar tracks",
   "@playerSimilarTracks": {
@@ -12718,6 +12690,10 @@
   "@queuePlayingFromMix": {
     "description": "Where the queue came from, for a mix with no seed of its own to name."
   },
+  "queuePlayingGone": "What was playing is no longer in the library.",
+  "@queuePlayingGone": {
+    "description": "Message when the item standing on the deck (paused, or where its start failed) turned out to be gone from the library, folded into a book or deleted elsewhere: it left the queue, and what follows it waits in its place."
+  },
   "queuePreviously": "PREVIOUSLY ({count})",
   "@queuePreviously": {
     "description": "Heading over the tracks already played in this queue, with how many. Upper case as a typographic style; write it the way small headings are written in this language.",
@@ -16004,6 +15980,34 @@
   "@shellSignOut": {
     "description": "The one verb in the account menu."
   },
+  "shellWindowTitleItem": "{title} · {artist}",
+  "@shellWindowTitleItem": {
+    "description": "The browser tab or window title while a track, episode or book plays. {title} is the item, {artist} its artist, show or author.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Prancing Pony Blues"
+      },
+      "artist": {
+        "type": "String",
+        "example": "The Bree Trio"
+      }
+    }
+  },
+  "shellWindowTitleLive": "{station} · {song}",
+  "@shellWindowTitleLive": {
+    "description": "The browser tab or window title while a radio station plays a song it announced. {station} is the station, {song} the in-stream title.",
+    "placeholders": {
+      "station": {
+        "type": "String",
+        "example": "Prancing Pony FM"
+      },
+      "song": {
+        "type": "String",
+        "example": "Bag End Blues"
+      }
+    }
+  },
   "speedMultiplier": "{speed}x",
   "@speedMultiplier": {
     "description": "A playback rate as a picker option. The x is the multiplier convention; {speed} arrives already written for this language, so a locale that separates decimals differently is already handled.",
@@ -16558,15 +16562,15 @@
   },
   "toolsClearFinished": "Clear finished",
   "@toolsClearFinished": {
-    "description": "Label of the Tasks screen's control that clears the signed-in account's finished tasks at once; for an administrator it opens a menu of the two sweeps."
+    "description": "Label of the Tasks screen's control that clears the signed-in account's finished tasks at once; for an administrator it opens a menu of the two sweeps, and either one also hides the administrator's own finished library jobs."
   },
-  "toolsClearFinishedAll": "Clear everyone's finished tasks",
+  "toolsClearFinishedAll": "Clear everyone's finished",
   "@toolsClearFinishedAll": {
-    "description": "Menu row, for an administrator, that clears every account's finished tasks after a confirmation."
+    "description": "Menu row, for an administrator, that clears every account's finished tasks after a confirmation, and the administrator's own finished library jobs."
   },
-  "toolsClearFinishedMine": "Clear my finished tasks",
+  "toolsClearFinishedMine": "Clear my finished",
   "@toolsClearFinishedMine": {
-    "description": "Menu row, for an administrator, that clears only their own finished tasks."
+    "description": "Menu row, for an administrator, that clears only their own finished tasks, and their own finished library jobs."
   },
   "toolsCountAdded": "added {count}",
   "@toolsCountAdded": {
@@ -16938,6 +16942,16 @@
       "target": {
         "type": "String",
         "example": "Amber Waves"
+      }
+    }
+  },
+  "toolsJobsCleared": "{count, plural, =1{Cleared 1 library job} other{Cleared {count} library jobs}}",
+  "@toolsJobsCleared": {
+    "description": "Message after an administrator cleared their finished library jobs, saying how many went.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
       }
     }
   },
@@ -17471,6 +17485,10 @@
   "@uploadsFileUnreadable": {
     "description": "The reason slot of uploadsFileFailed when the picked file itself stopped answering (moved, unmounted, or shrunk between pick and transfer) rather than the server refusing it."
   },
+  "uploadsFinishing": "Finishing",
+  "@uploadsFinishing": {
+    "description": "Under an upload row once every byte has arrived and the server is sealing the session."
+  },
   "uploadsFormat": "Download format",
   "@uploadsFormat": {
     "description": "Accessible name of the picker choosing what a URL download is converted to."
@@ -17482,6 +17500,14 @@
   "uploadsFromUrl": "Add from URL",
   "@uploadsFromUrl": {
     "description": "Opens the dialog that has the server download from a source URL. The bar button, the sheet row, and the dialog's own title."
+  },
+  "uploadsFromUrlBook": "Add an audiobook from URL",
+  "@uploadsFromUrlBook": {
+    "description": "Title of the add-from-URL dialog opened from the audiobook section, which already knows the kind."
+  },
+  "uploadsFromUrlMusic": "Add music from URL",
+  "@uploadsFromUrlMusic": {
+    "description": "Title of the add-from-URL dialog opened from the music section, which already knows the kind."
   },
   "uploadsFromUrlSubtitle": "A video, a playlist, or a channel",
   "@uploadsFromUrlSubtitle": {
@@ -17502,6 +17528,32 @@
   "uploadsGroupingAutoHelp": "Group into albums by their tags and folders",
   "@uploadsGroupingAutoHelp": {
     "description": "Help under the auto-detect grouping choice."
+  },
+  "uploadsGroupingBookAutoHelp": "One book per folder or title",
+  "@uploadsGroupingBookAutoHelp": {
+    "description": "Help under the auto-detect grouping choice when the files are an audiobook."
+  },
+  "uploadsGroupingBookEach": "Separate books",
+  "@uploadsGroupingBookEach": {
+    "description": "Grouping choice for an audiobook: every file is a book of its own."
+  },
+  "uploadsGroupingBookEachHelp": "Every file is a book of its own",
+  "@uploadsGroupingBookEachHelp": {
+    "description": "Help under the separate-books grouping choice."
+  },
+  "uploadsGroupingBookOne": "{count, plural, =1{One book} other{One book in {count} parts}}",
+  "@uploadsGroupingBookOne": {
+    "description": "Grouping choice for an audiobook: every file is a part of one book.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uploadsGroupingBookOneHelp": "Parts of one book, in folder and track order",
+  "@uploadsGroupingBookOneHelp": {
+    "description": "Help under the one-book grouping choice."
   },
   "uploadsGroupingTitle": "How should these files be grouped?",
   "@uploadsGroupingTitle": {
@@ -17540,6 +17592,10 @@
         "example": "12"
       }
     }
+  },
+  "uploadsInterrupted": "Interrupted. Discard it, then upload the file again.",
+  "@uploadsInterrupted": {
+    "description": "Under an upload row the server is still receiving but nothing on this device is sending: the tab closed, or the upload started elsewhere."
   },
   "uploadsLibrary": "Library",
   "@uploadsLibrary": {
@@ -17637,6 +17693,10 @@
   "@uploadsReceiving": {
     "description": "Under an upload row while bytes are arriving and the total size is not known."
   },
+  "uploadsReconnecting": "Connection lost, trying again",
+  "@uploadsReconnecting": {
+    "description": "Under an upload row while a chunk that failed on the wire waits to be sent again."
+  },
   "uploadsRetry": "Retry upload",
   "@uploadsRetry": {
     "description": "Accessible name of the control that sends a failed upload again."
@@ -17703,9 +17763,37 @@
       }
     }
   },
+  "uploadsWhatManyBook": "Upload {count} files as an audiobook",
+  "@uploadsWhatManyBook": {
+    "description": "Title of the upload dialog opened from the audiobook section, which already knows the files are an audiobook.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uploadsWhatManyMusic": "Upload {count} files as music",
+  "@uploadsWhatManyMusic": {
+    "description": "Title of the upload dialog opened from the music section, which already knows the files are music.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "uploadsWhatOne": "What are you uploading?",
   "@uploadsWhatOne": {
     "description": "Title of the dialog asking what one file is."
+  },
+  "uploadsWhatOneBook": "Upload as an audiobook",
+  "@uploadsWhatOneBook": {
+    "description": "Title of the upload dialog for one file opened from the audiobook section."
+  },
+  "uploadsWhatOneMusic": "Upload as music",
+  "@uploadsWhatOneMusic": {
+    "description": "Title of the upload dialog for one file opened from the music section."
   },
   "uploadsWhatThisIs": "What this is",
   "@uploadsWhatThisIs": {

@@ -290,6 +290,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
                       field.wire,
                       albumNameValue(album, field),
                     ),
+                    stored: albumNameValue(album, field),
                     curated: curation[field.wire],
                     dirty: changed.containsKey(field.wire),
                   ),
@@ -309,6 +310,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
                       field.wire,
                       albumIdentityValue(album, field),
                     ),
+                    stored: albumIdentityValue(album, field),
                     curated: curation[field.wire],
                     dirty: changed.containsKey(field.wire),
                   ),
@@ -671,6 +673,7 @@ class _FieldRow extends StatelessWidget {
     required this.help,
     required this.wire,
     required this.controller,
+    required this.stored,
     required this.curated,
     required this.dirty,
   });
@@ -684,6 +687,9 @@ class _FieldRow extends StatelessWidget {
 
   final TextEditingController controller;
 
+  /// The value the pane opened on, which is what the chip attributes.
+  final String stored;
+
   /// The curation row, when a user has already set this field. Its lock
   /// is what Force overrides.
   final EntityCuratedField? curated;
@@ -695,6 +701,11 @@ class _FieldRow extends StatelessWidget {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final row = curated;
+    final source = fieldSourceName(
+      l10n,
+      source: row?.source,
+      hasValue: stored.isNotEmpty,
+    );
     return WaxTextField(
       label: label,
       // Under the box, selectable, and spoken with it: a placeholder went
@@ -705,10 +716,7 @@ class _FieldRow extends StatelessWidget {
       beside: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          CodecChip(
-            row == null ? l10n.musicAlbumEditorFromTags : row.source,
-            emphasis: dirty,
-          ),
+          if (source != null) CodecChip(source, emphasis: dirty),
           // Read-only: the lock is set by the save below (through "Lock
           // edited fields") and cleared by Force.
           if (row?.locked ?? false)

@@ -24,6 +24,7 @@ import 'package:waxdeck_api_gen/src/model/genre_tree.dart';
 import 'package:waxdeck_api_gen/src/model/genre_tree_update.dart';
 import 'package:waxdeck_api_gen/src/model/job.dart';
 import 'package:waxdeck_api_gen/src/model/job_list.dart';
+import 'package:waxdeck_api_gen/src/model/jobs_cleared.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
 import 'package:waxdeck_api_gen/src/model/library_create.dart';
 import 'package:waxdeck_api_gen/src/model/library_created.dart';
@@ -199,6 +200,90 @@ class AdminApi {
     );
 
     return _response;
+  }
+
+  /// Clear finished catalog jobs from the caller&#39;s list
+  /// Hides every catalog job that has ended (&#x60;done&#x60;, &#x60;failed&#x60;, &#x60;crashed&#x60; or &#x60;canceled&#x60;) from the caller&#39;s &#x60;GET /jobs&#x60;, and answers how many that list held, a page of it or not. Running jobs stay. The jobs themselves are not deleted: other administrators still list them, &#x60;GET /jobs/{pid}&#x60; is unaffected, and an organize run can still be undone. A job that ends after the call lists as usual. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [JobsCleared] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<JobsCleared>> clearFinishedJobs({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/jobs/clear-finished';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    JobsCleared? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(JobsCleared),
+      ) as JobsCleared;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<JobsCleared>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// Create a backup now
@@ -2108,7 +2193,7 @@ class AdminApi {
   }
 
   /// List recent catalog jobs
-  /// Recent catalog jobs, newest first: &#x60;limit&#x60; of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (&#x60;set-kind&#x60;), an organize undo (&#x60;organize-undo&#x60;) and a library removal (&#x60;remove-root&#x60;), which list with their result. The &#x60;job&#x60; sync marker says when to read again. Administrators only. 
+  /// Recent catalog jobs, newest first: &#x60;limit&#x60; of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (&#x60;set-kind&#x60;), an organize undo (&#x60;organize-undo&#x60;) and a library removal (&#x60;remove-root&#x60;), which list with their result. A finished job of a kind that runs once per item (an upload&#39;s &#x60;import&#x60;, a &#x60;delete&#x60;, a &#x60;restore&#x60;, a &#x60;purge-trash&#x60;) is left out too, and lists only while it runs. Jobs the caller cleared (&#x60;POST /jobs/clear-finished&#x60;) are left out. A job left out takes no place on the page: the server reads back through as many as the 800 newest jobs to fill it. The &#x60;job&#x60; sync marker says when to read again. Administrators only. 
   ///
   /// Parameters:
   /// * [limit] - Maximum jobs returned.

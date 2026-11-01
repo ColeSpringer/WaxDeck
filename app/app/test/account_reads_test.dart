@@ -44,6 +44,7 @@ void _holdFor(FakeRepository repo, WaxDeckUser who) {
       fileName: '${who.username}.flac',
       sizeBytes: 8,
       receivedBytes: 8,
+      idle: Duration.zero,
       mediaType: MediaType.music,
       state: 'staged',
       createdAt: at,

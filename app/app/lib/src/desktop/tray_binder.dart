@@ -5,9 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/off_tree.dart';
 import '../player/now_playing_controller.dart';
+import '../player/now_playing_slot.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_persistence.dart';
-import '../radio/radio_controller.dart';
 import 'desktop_ports.dart';
 import 'desktop_ports_io.dart'
     if (dart.library.js_interop) 'desktop_ports_stub.dart';
@@ -115,19 +115,23 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
   }
 
   TrayFace face() {
-    final station = ref.read(radioPlaybackProvider).station;
-    final now = ref.read(nowPlayingProvider);
+    final slot = ref.read(nowPlayingSlotProvider);
     final copy = ref.read(offTreeL10nProvider);
     return TrayFace(
       playing: ref.read(nowPlayingProvider.notifier).meansToPlay,
-      title:
-          station?.name ??
-          now.item?.title ??
-          (now.loading ? copy.commonLoadingTitle : null),
-      subtitle: station == null ? now.item?.artist : null,
+      title: switch (slot) {
+        StationSlot(:final station) => station.name,
+        ItemSlot(:final now) =>
+          now.item?.title ?? (now.loading ? copy.commonLoadingTitle : null),
+        _ => null,
+      },
+      subtitle: switch (slot) {
+        ItemSlot(:final now) => now.item?.artist,
+        _ => null,
+      },
       // Radio never queues, so there is nothing to step to; an item
-      // needs a queue with somewhere to go.
-      canStep: station == null && ref.read(queueControllerProvider).length > 1,
+      // needs a queue with somewhere to go, and one radio parked is not up.
+      canStep: slot is ItemSlot && ref.read(queueControllerProvider).length > 1,
       labels: TrayLabels(
         play: copy.desktopTrayPlay,
         pause: copy.desktopTrayPause,
@@ -176,8 +180,7 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
 
   void publish() => binder.show(face());
 
-  ref.listen(radioPlaybackProvider, (_, _) => publish());
-  ref.listen(nowPlayingProvider, (_, _) => publish());
+  ref.listen(nowPlayingSlotProvider, (_, _) => publish());
   ref.listen(queueControllerProvider, (_, _) => publish());
   ref.listen(offTreeL10nProvider, (_, _) => publish());
   // The engine is not a provider, so the transport is followed directly:

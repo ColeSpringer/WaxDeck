@@ -177,6 +177,7 @@ class NowPlayingData {
     this.remoteEndpoint,
     this.volume,
     this.speed,
+    this.spanLabel,
   });
 
   final String title;
@@ -237,6 +238,11 @@ class NowPlayingData {
 
   /// Playback rate for spoken word, shown as a compact chip.
   final double? speed;
+
+  /// The accessible name of the control that switches what the seek bar
+  /// spans, saying what a press does ("Show the whole book"). Null where
+  /// the item spans one way only.
+  final String? spanLabel;
 
   double get fraction => fractionAt(position);
 

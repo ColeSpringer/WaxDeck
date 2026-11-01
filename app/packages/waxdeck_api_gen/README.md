@@ -454,6 +454,7 @@ Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 [*AdminApi*](doc/AdminApi.md) | [**analyzeLibrary**](doc/AdminApi.md#analyzelibrary) | **POST** /library/analyze | Start the analyze pass
 [*AdminApi*](doc/AdminApi.md) | [**cancelStagedRestore**](doc/AdminApi.md#cancelstagedrestore) | **DELETE** /admin/backups/restore | Cancel the staged restore
+[*AdminApi*](doc/AdminApi.md) | [**clearFinishedJobs**](doc/AdminApi.md#clearfinishedjobs) | **POST** /jobs/clear-finished | Clear finished catalog jobs from the caller&#39;s list
 [*AdminApi*](doc/AdminApi.md) | [**createBackup**](doc/AdminApi.md#createbackup) | **POST** /admin/backups | Create a backup now
 [*AdminApi*](doc/AdminApi.md) | [**createGenreNormalization**](doc/AdminApi.md#creategenrenormalization) | **POST** /admin/genre-normalize | Normalize every genre in the catalog
 [*AdminApi*](doc/AdminApi.md) | [**createLibrary**](doc/AdminApi.md#createlibrary) | **POST** /libraries | Create a library at runtime
@@ -550,6 +551,7 @@ Class | Method | HTTP request | Description
 [*LibraryApi*](doc/LibraryApi.md) | [**listFacets**](doc/LibraryApi.md#listfacets) | **GET** /library/facets | Enumerate a browse dimension
 [*LibraryApi*](doc/LibraryApi.md) | [**listItems**](doc/LibraryApi.md#listitems) | **GET** /library/items | Browse library items
 [*LibraryApi*](doc/LibraryApi.md) | [**resolveEntities**](doc/LibraryApi.md#resolveentities) | **POST** /library/entities | Resolve a list of entity PIDs to cards
+[*LibraryApi*](doc/LibraryApi.md) | [**resolveItems**](doc/LibraryApi.md#resolveitems) | **POST** /library/items/resolve | Resolve a list of item PIDs to summaries
 [*LibraryApi*](doc/LibraryApi.md) | [**search**](doc/LibraryApi.md#search) | **GET** /library/search | Search the library
 [*MetadataApi*](doc/MetadataApi.md) | [**bulkEditMetadata**](doc/MetadataApi.md#bulkeditmetadata) | **POST** /items/bulk-edit | Edit fields on many items
 [*MetadataApi*](doc/MetadataApi.md) | [**clearEntityArtwork**](doc/MetadataApi.md#clearentityartwork) | **DELETE** /entities/{entityType}/{entityPid}/artwork | Clear entity artwork
@@ -907,10 +909,13 @@ Class | Method | HTTP request | Description
  - [ItemMetadata](doc/ItemMetadata.md)
  - [ItemPage](doc/ItemPage.md)
  - [ItemPermissions](doc/ItemPermissions.md)
+ - [ItemResolution](doc/ItemResolution.md)
+ - [ItemResolveQuery](doc/ItemResolveQuery.md)
  - [ItemSummary](doc/ItemSummary.md)
  - [Job](doc/Job.md)
  - [JobList](doc/JobList.md)
  - [JobTarget](doc/JobTarget.md)
+ - [JobsCleared](doc/JobsCleared.md)
  - [KindFields](doc/KindFields.md)
  - [LastfmConnectStart](doc/LastfmConnectStart.md)
  - [Libraries](doc/Libraries.md)

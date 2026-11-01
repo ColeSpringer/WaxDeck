@@ -18,6 +18,18 @@ func openTest(t *testing.T) *DB {
 	return d
 }
 
+// openTwoUsersTest is a store holding the accounts us-1 and us-2.
+func openTwoUsersTest(t *testing.T) *DB {
+	t.Helper()
+	d := openTest(t)
+	for _, id := range []string{"us-1", "us-2"} {
+		if err := d.CreateUser(context.Background(), mkUser(id, "user-"+id, nil), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return d
+}
+
 func TestInsertListenDeduplicates(t *testing.T) {
 	d := openTest(t)
 	ctx := context.Background()

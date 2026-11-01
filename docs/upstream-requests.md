@@ -272,6 +272,19 @@ note.
   unit's files that sees each other's destinations and books. Shipped
   workaround: a multi-file decision hashes files 2..N twice, inside a
   request the client gives a long budget.
+- **Importing a book's later parts logs a failed provenance write.**
+  Applying an `ImportAcquired` plan (the inbox's `importOne`) stamps
+  each placed file with the acquisition through
+  `store.PutAcquisitionForFile`, which finds the item only by a
+  `primary` or `alternate` file edge; a book's second and later parts
+  are `part` edges, so the lookup misses and the import logs `recording
+  acquisition provenance ... no cataloged item backs the placed file`
+  for every part after the first. Nothing is lost: part one stamps the
+  one item that owns every part, and the file still imports and
+  catalogs. Wanted: the lookup to accept a `part` edge (or the stamp to
+  be skipped once the item has its row), so a multi-part import is
+  quiet. Shipped workaround: none needed; the warning is noise, and a
+  test pins that the book keeps its origin.
 - **A duplicate audit finding's reason is only in its sentence.**
   `AuditFinding` has no field for why a duplicate group was paired
   ("shared MBID", "same collation key", `model.ReasonSameAlbumName`), so

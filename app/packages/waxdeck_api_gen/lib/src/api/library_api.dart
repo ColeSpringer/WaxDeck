@@ -25,6 +25,8 @@ import 'package:waxdeck_api_gen/src/model/facet_sort.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
 import 'package:waxdeck_api_gen/src/model/item_files.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
+import 'package:waxdeck_api_gen/src/model/item_resolution.dart';
+import 'package:waxdeck_api_gen/src/model/item_resolve_query.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics.dart';
 import 'package:waxdeck_api_gen/src/model/media_type.dart';
 import 'package:waxdeck_api_gen/src/model/search_results.dart';
@@ -1197,6 +1199,112 @@ class LibraryApi {
     }
 
     return Response<EntityCardList>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Resolve a list of item PIDs to summaries
+  /// Batch read of the summary rows behind a list of item PIDs (&#x60;tr-&#x60;, &#x60;ep-&#x60;, &#x60;bk-&#x60;): what a client holding only handles, a play queue for one, reads to learn what each is now without a request per item. A POST because the PID list rides the body; nothing changes server-side.  Each answer is the summary part of what &#x60;GET /items/{pid}&#x60; answers for that PID, and answers come in request order, a repeated PID once per occurrence. An item whose kind changed answers under the prefix its kind has now, with the same ULID, so match an answer to its request by the ULID after the prefix, never by position.  PIDs that cannot be answered for are omitted rather than erroring. Of the omissions, &#x60;departed&#x60; names the ones gone for everyone: no item answers to the PID any more (a kind change folded it into another) or ever did, or its item lost its files for good (purged from the trash, deleted permanently, or its library removed), which this lookup leaves out although &#x60;GET /items/{pid}&#x60; still reads it. An item in the trash, which a restore brings back, is answered as that read answers it. One merely out of the caller&#39;s sight (a library grant, a content setting) stays an unnamed omission, because it can come back. A client holding a list may drop exactly the departed PIDs.  At most 100 PIDs per request (&#x60;invalid-request&#x60; past that); a longer list is read in pieces. 
+  ///
+  /// Parameters:
+  /// * [itemResolveQuery] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ItemResolution] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ItemResolution>> resolveItems({ 
+    required ItemResolveQuery itemResolveQuery,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/library/items/resolve';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(ItemResolveQuery);
+      _bodyData = _serializers.serialize(itemResolveQuery, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ItemResolution? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ItemResolution),
+      ) as ItemResolution;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ItemResolution>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

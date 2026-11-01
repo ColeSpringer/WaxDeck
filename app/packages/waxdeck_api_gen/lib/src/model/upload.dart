@@ -17,6 +17,7 @@ part 'upload.g.dart';
 /// * [fileName] - The declared file name.
 /// * [sizeBytes] - Declared total size.
 /// * [receivedBytes] - Bytes stored so far; resume by sending the next chunk at this offset. 
+/// * [idleMs] - How long the server had gone without taking a byte for the session when it answered, in milliseconds by its own clock: zero while a chunk's bytes are arriving or the upload is being completed, otherwise the time since the last one arrived, counted from the session's creation before any has. 
 /// * [mediaType] 
 /// * [libraryPid] - Target library.
 /// * [state] - Session state: `receiving` (bytes still arriving), `staged` (complete, in the review pipeline), `imported` (its file entered the library), or `discarded`. A string, not a closed enum. 
@@ -43,6 +44,10 @@ abstract class Upload implements Built<Upload, UploadBuilder> {
   /// Bytes stored so far; resume by sending the next chunk at this offset. 
   @BuiltValueField(wireName: r'receivedBytes')
   int get receivedBytes;
+
+  /// How long the server had gone without taking a byte for the session when it answered, in milliseconds by its own clock: zero while a chunk's bytes are arriving or the upload is being completed, otherwise the time since the last one arrived, counted from the session's creation before any has. 
+  @BuiltValueField(wireName: r'idleMs')
+  int get idleMs;
 
   @BuiltValueField(wireName: r'mediaType')
   MediaType get mediaType;
@@ -120,6 +125,11 @@ class _$UploadSerializer implements PrimitiveSerializer<Upload> {
     yield r'receivedBytes';
     yield serializers.serialize(
       object.receivedBytes,
+      specifiedType: const FullType(int),
+    );
+    yield r'idleMs';
+    yield serializers.serialize(
+      object.idleMs,
       specifiedType: const FullType(int),
     );
     yield r'mediaType';
@@ -229,6 +239,13 @@ class _$UploadSerializer implements PrimitiveSerializer<Upload> {
             specifiedType: const FullType(int),
           ) as int;
           result.receivedBytes = valueDes;
+          break;
+        case r'idleMs':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.idleMs = valueDes;
           break;
         case r'mediaType':
           final valueDes = serializers.deserialize(

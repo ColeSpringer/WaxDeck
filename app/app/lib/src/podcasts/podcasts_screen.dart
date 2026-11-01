@@ -23,6 +23,7 @@ import '../sync/streamed_play_states.dart';
 import '../uploads/file_picker_port.dart';
 import 'add_podcast.dart';
 import 'episode_actions.dart';
+import 'episode_row.dart';
 import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
 import 'show_actions.dart';
@@ -598,46 +599,11 @@ class _LatestEpisodes extends ConsumerWidget {
           const SizedBox(height: WaxSpace.s16),
           SectionHeader(title: l10n.podcastLatestTitle),
           for (final row in latest)
-            MediaListRow(
-              key: ValueKey(SemanticsIds.episode(row.episode.pid)),
-              data: MediaTileData(
-                title: row.episode.title,
-                subtitle: row.showTitle,
-                artwork: store.source(row.episode.artUrl),
-                domain: WaxDomain.podcasts,
-                trailingText: formatTimecode(
-                  Duration(milliseconds: row.episode.durationMs),
-                ),
-                downloaded: row.episode.downloaded,
-                unplayed: true,
-                semanticsId: SemanticsIds.episode(row.episode.pid),
-              ),
-              actions: <Widget>[
-                WaxIconButton(
-                  glyph: WaxIcons.info,
-                  label: l10n.podcastEpisodeDetails(row.episode.title),
-                  size: 18,
-                  semanticsId: SemanticsIds.episodeInfo(row.episode.pid),
-                  // Pushed: the episode's declared parent is its show,
-                  // and this is the hub, so `go` would rebuild the show
-                  // beneath it and back would land there rather than
-                  // here.
-                  onPressed: () => context.push(
-                    WaxRoute.showEpisode(row.episode.showPid, row.episode.pid),
-                  ),
-                ),
-              ],
-              // The row plays, which is what a list of new episodes is
-              // for. It can: these are real episode rows, so the same
-              // `hasEnclosure` rule the show's list follows applies here
-              // too, and an episode with no audio in its feed falls back
-              // to the fetch rather than failing in the player.
-              onTap: () => unawaited(
-                EpisodeActions(
-                  ref: ref,
-                  showPid: row.episode.showPid,
-                ).play(context, row.episode),
-              ),
+            EpisodeRow(
+              key: episodeRowKey(row.episode),
+              episode: row.episode,
+              subtitle: row.showTitle ?? '',
+              artwork: store.source(row.episode.artUrl),
             ),
           const SizedBox(height: WaxSpace.s32),
         ],

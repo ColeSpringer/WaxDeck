@@ -8,6 +8,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
+import 'package:waxdeck/src/uploads/upload_phase.dart';
 import 'package:waxdeck/src/shell/async_box_face.dart';
 import 'package:waxdeck/src/uploads/uploads_controller.dart';
 import 'package:waxdeck/src/uploads/uploads_screen.dart';
@@ -60,11 +61,122 @@ PickedAudioFile readerFile(String name, Uint8List bytes, {String dir = ''}) =>
       ),
     );
 
-Widget _host(FakeRepository repo, {FilePickerPort? picker}) => ProviderScope(
+/// Lists every session still receiving as the server saw it before its
+/// first chunk.
+class _StaleList extends FakeRepository {
+  _StaleList() : super(sessionState: testUploaderSession());
+
+  @override
+  Future<UploadPage> listUploads({String? cursor, int? limit}) async {
+    final page = await super.listUploads(cursor: cursor, limit: limit);
+    return UploadPage(
+      uploads: [
+        for (final u in page.uploads)
+          u.state == 'receiving'
+              ? testUpload(
+                  u.id,
+                  fileName: u.fileName,
+                  sizeBytes: u.sizeBytes,
+                  receivedBytes: 0,
+                )
+              : u,
+      ],
+      nextCursor: page.nextCursor,
+      quota: page.quota,
+    );
+  }
+}
+
+/// Opens the session on the server, then holds the create's answer until
+/// [release] opens: the server's event for it can refresh the list first.
+class _ListedBeforeCreated extends FakeRepository {
+  _ListedBeforeCreated() : super(sessionState: testUploaderSession());
+
+  final reached = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<UploadSession> createUpload({
+    required String fileName,
+    required int sizeBytes,
+    required String mediaType,
+    String? libraryPid,
+    String? sha256,
+    String? batchId,
+    String? batchPath,
+    bool? identify,
+  }) async {
+    final session = await super.createUpload(
+      fileName: fileName,
+      sizeBytes: sizeBytes,
+      mediaType: mediaType,
+      libraryPid: libraryPid,
+      sha256: sha256,
+      batchId: batchId,
+      batchPath: batchPath,
+      identify: identify,
+    );
+    reached.complete();
+    await release.future;
+    return session;
+  }
+}
+
+/// Opens each session on the server, then holds the create's answer
+/// until the test lets that create go: a refresh can list it first.
+class _HeldCreates extends FakeRepository {
+  _HeldCreates() : super(sessionState: testUploaderSession());
+
+  /// One gate per create, in call order.
+  final held = <Completer<void>>[];
+
+  @override
+  Future<UploadSession> createUpload({
+    required String fileName,
+    required int sizeBytes,
+    required String mediaType,
+    String? libraryPid,
+    String? sha256,
+    String? batchId,
+    String? batchPath,
+    bool? identify,
+  }) async {
+    final session = await super.createUpload(
+      fileName: fileName,
+      sizeBytes: sizeBytes,
+      mediaType: mediaType,
+      libraryPid: libraryPid,
+      sha256: sha256,
+      batchId: batchId,
+      batchPath: batchPath,
+      identify: identify,
+    );
+    final gate = Completer<void>();
+    held.add(gate);
+    await gate.future;
+    return session;
+  }
+}
+
+/// A monotonic clock the test moves by hand.
+class _Monotonic {
+  Duration now = Duration.zero;
+
+  Duration call() => now;
+}
+
+Widget _host(
+  FakeRepository repo, {
+  FilePickerPort? picker,
+  Duration backoff = Duration.zero,
+  Duration Function()? monotonic,
+}) => ProviderScope(
   overrides: [
     repositoryProvider.overrideWithValue(repo),
+    uploadRetryBackoffProvider.overrideWithValue((_) => backoff),
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
     filePickerProvider.overrideWithValue(picker),
+    if (monotonic != null) monotonicClockProvider.overrideWithValue(monotonic),
   ],
   child: routedHost(const UploadsScreen()),
 );
@@ -159,22 +271,8 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    final receivingRow = find.bySemanticsIdentifier(
-      SemanticsIds.uploadRow('up-1'),
-    );
-    expect(receivingRow, findsOneWidget);
     expect(
-      find.descendant(
-        of: receivingRow,
-        matching: find.byType(LinearProgressIndicator),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: receivingRow,
-        matching: find.text('25% of 4.0 MB received'),
-      ),
+      find.bySemanticsIdentifier(SemanticsIds.uploadRow('up-1')),
       findsOneWidget,
     );
     expect(find.text('staged'), findsOneWidget);
@@ -190,6 +288,485 @@ void main() {
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadReview('up-2')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('a receiving session with no transfer here reads Interrupted', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.uploadsById['up-1'] = testUpload(
+      'up-1',
+      receivedBytes: 1048576,
+      sizeBytes: 4194304,
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    final row = find.bySemanticsIdentifier(SemanticsIds.uploadRow('up-1'));
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadPhase('up-1')),
+        matching: find.text(
+          'Interrupted. Discard it, then upload the file again.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row, matching: find.byType(WaxProgressBar)),
+      findsNothing,
+      reason: 'nothing here is moving it',
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRetry('up-1')),
+      findsNothing,
+      reason: 'there is no source here to send again',
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadDelete('up-1')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a session another device is sending reads its share, with '
+      'nothing to retry or discard, until it goes quiet', (tester) async {
+    final clock = _Monotonic();
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    repo.uploadsById['up-1'] = testUpload(
+      'up-1',
+      receivedBytes: 1048576,
+      sizeBytes: 4194304,
+      idle: const Duration(seconds: 30),
+    );
+    await tester.pumpWidget(_host(repo, monotonic: clock.call));
+    await tester.pumpAndSettle();
+    final listed = repo.listUploadsCalls;
+
+    final row = find.bySemanticsIdentifier(SemanticsIds.uploadRow('up-1'));
+    final phase = find.bySemanticsIdentifier(SemanticsIds.uploadPhase('up-1'));
+    final discard = find.bySemanticsIdentifier(
+      SemanticsIds.uploadDelete('up-1'),
+    );
+    expect(
+      find.descendant(of: phase, matching: find.textContaining('25% of')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row, matching: find.byType(WaxProgressBar)),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRetry('up-1')),
+      findsNothing,
+    );
+    expect(
+      discard,
+      findsNothing,
+      reason: 'discarding would fail the upload still being sent',
+    );
+
+    // More arrives before the window is out: that session is read again,
+    // alone, and is still being sent.
+    repo.uploadsById['up-1'] = testUpload(
+      'up-1',
+      receivedBytes: 2097152,
+      sizeBytes: 4194304,
+      idle: const Duration(seconds: 5),
+    );
+    // Read with 30 s gone, it is due when the window would close.
+    var due = uploadIdleWindow - const Duration(seconds: 30);
+    clock.now += due;
+    await tester.pump(due);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: phase, matching: find.textContaining('50% of')),
+      findsOneWidget,
+    );
+    expect(discard, findsNothing);
+    expect(repo.getUploadCalls, 1);
+
+    // Then nothing more: a window on, the read says it has gone quiet,
+    // and it is offered to discard.
+    repo.uploadsById['up-1'] = testUpload(
+      'up-1',
+      receivedBytes: 2097152,
+      sizeBytes: 4194304,
+      idle: uploadIdleWindow + const Duration(seconds: 5),
+    );
+    due = uploadIdleWindow - const Duration(seconds: 5);
+    clock.now += due;
+    await tester.pump(due);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: phase,
+        matching: find.text(
+          'Interrupted. Discard it, then upload the file again.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(discard, findsOneWidget);
+    expect(repo.getUploadCalls, 2);
+    expect(repo.listUploadsCalls, listed, reason: 'the list is never reloaded');
+  });
+
+  testWidgets('a re-read timer that fires a hair before its row is due still '
+      'reads that row, and only the rows that are due', (tester) async {
+    // A timer rounds its delay down to a whole millisecond, so it can land
+    // under a millisecond ahead of the stopwatch it was set from: the row
+    // is not yet due by the clock when the timer calls.
+    final clock = _Monotonic();
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    repo.uploadsById['up-1'] = testUpload(
+      'up-1',
+      receivedBytes: 1048576,
+      sizeBytes: 4194304,
+      idle: const Duration(seconds: 30),
+    );
+    repo.uploadsById['up-2'] = testUpload(
+      'up-2',
+      receivedBytes: 1048576,
+      sizeBytes: 4194304,
+      idle: const Duration(seconds: 5),
+    );
+    await tester.pumpWidget(_host(repo, monotonic: clock.call));
+    await tester.pumpAndSettle();
+    final discard = find.bySemanticsIdentifier(
+      SemanticsIds.uploadDelete('up-1'),
+    );
+    expect(discard, findsNothing);
+
+    // Nothing more arrived for up-1 by the end of its window.
+    repo.uploadsById['up-1'] = testUpload(
+      'up-1',
+      receivedBytes: 1048576,
+      sizeBytes: 4194304,
+      idle: uploadIdleWindow + const Duration(seconds: 1),
+    );
+    final due = uploadIdleWindow - const Duration(seconds: 30);
+    clock.now += due - const Duration(microseconds: 999);
+    await tester.pump(due);
+    await tester.pumpAndSettle();
+
+    expect(
+      repo.getUploadCalls,
+      1,
+      reason: 'a row read on the thirty second retry is offered late',
+    );
+    expect(discard, findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadDelete('up-2')),
+      findsNothing,
+      reason: 'up-2 is not due for another twenty-five seconds',
+    );
+  });
+
+  testWidgets('an old empty session stays interrupted through a batch, while '
+      "the batch's own sessions read as starting", (tester) async {
+    final repo = _HeldCreates();
+    repo.uploadsById['up-old'] = testUpload(
+      'up-old',
+      sizeBytes: 64,
+      receivedBytes: 0,
+    );
+    final picker = _FakePicker([
+      readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
+      readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(UploadsScreen)),
+    );
+    Finder phaseOf(String id) =>
+        find.bySemanticsIdentifier(SemanticsIds.uploadPhase(id));
+    final interrupted = find.descendant(
+      of: phaseOf('up-old'),
+      matching: find.text(
+        'Interrupted. Discard it, then upload the file again.',
+      ),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadGroupingOption('album')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    for (final (at, id) in [(0, 'up-FAKE0'), (1, 'up-FAKE1')]) {
+      expect(repo.held, hasLength(at + 1));
+      // The server's event for the create lists the session first.
+      container.invalidate(uploadsProvider);
+      await tester.pumpAndSettle();
+      expect(interrupted, findsOneWidget, reason: 'create ${at + 1}');
+      expect(
+        find.descendant(of: phaseOf(id), matching: find.textContaining('0%')),
+        findsOneWidget,
+        reason: 'create ${at + 1}',
+      );
+      repo.held[at].complete();
+      await tester.pumpAndSettle();
+    }
+    expect(repo.uploadsById['up-FAKE1']!.state, 'staged');
+    expect(interrupted, findsOneWidget);
+  });
+
+  testWidgets('a run started while the list still loads waits for it, so '
+      'an old empty session is never taken for its own', (tester) async {
+    final repo = _HeldCreates()..listUploadsGate = Completer<void>();
+    repo.uploadsById['up-old'] = testUpload('up-old', sizeBytes: 64);
+    final picker = _FakePicker([readerFile('fresh.flac', Uint8List(64))]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pump();
+    // Frames by hand: the list's loading face animates while it waits.
+    Future<void> frames() async {
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await frames();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await frames();
+    expect(repo.held, isEmpty, reason: 'nothing is created before the list');
+
+    repo.listUploadsGate!.complete();
+    await tester.pumpAndSettle();
+    expect(repo.held, hasLength(1));
+    // The server's event for the create lists the session first.
+    ProviderScope.containerOf(
+      tester.element(find.byType(UploadsScreen)),
+    ).invalidate(uploadsProvider);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadPhase('up-old')),
+        matching: find.text(
+          'Interrupted. Discard it, then upload the file again.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadPhase('up-FAKE0')),
+        matching: find.textContaining('0%'),
+      ),
+      findsOneWidget,
+    );
+
+    repo.held.single.complete();
+    await tester.pumpAndSettle();
+    expect(repo.uploadsById['up-FAKE0']!.state, 'staged');
+  });
+
+  testWidgets('a session listed before its create answers reads as '
+      'starting', (tester) async {
+    final repo = _ListedBeforeCreated();
+    final picker = _FakePicker([
+      readerFile('long-take.flac', Uint8List(2621440)),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.reached.isCompleted, isTrue);
+    final id = repo.uploadsById.keys.single;
+
+    ProviderScope.containerOf(
+      tester.element(find.byType(UploadsScreen)),
+    ).invalidate(uploadsProvider);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRow(id)),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Interrupted. Discard it, then upload the file again.'),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadPhase(id)),
+        matching: find.text('0% of 2.5 MB received'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRetry(id)),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadDelete(id)),
+      findsNothing,
+    );
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+    expect(repo.uploadsById[id]!.state, 'staged');
+  });
+
+  testWidgets('a running upload shows progress, not Retry, through a '
+      'session refresh', (tester) async {
+    final repo = _StaleList()
+      ..putUploadDataGate = Completer<void>()
+      ..putUploadDataGateAt = 2;
+    // 2.5 MiB: the held chunk is the second of three.
+    final picker = _FakePicker([
+      readerFile('long-take.flac', Uint8List(2621440)),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.putUploadDataReached.isCompleted, isTrue);
+    final id = repo.uploadsById.keys.single;
+
+    // The server's event for this session refreshes the list, which
+    // answers the row as it stood before any chunk arrived.
+    ProviderScope.containerOf(
+      tester.element(find.byType(UploadsScreen)),
+    ).invalidate(uploadsProvider);
+    await tester.pumpAndSettle();
+
+    final row = find.bySemanticsIdentifier(SemanticsIds.uploadRow(id));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRetry(id)),
+      findsNothing,
+    );
+    expect(find.text('Transfer failed'), findsNothing);
+    expect(
+      find.descendant(of: row, matching: find.byType(WaxProgressBar)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadPhase(id)),
+        matching: find.text('40% of 2.5 MB received'),
+      ),
+      findsOneWidget,
+      reason: 'progress reads the bytes this app sent, not the stale page',
+    );
+
+    repo.putUploadDataGate!.complete();
+    await tester.pumpAndSettle();
+    expect(repo.uploadsById[id]!.state, 'staged');
+    expect(find.text('staged'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRetry(id)),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a chunk waiting out its backoff says it is trying again', (
+    tester,
+  ) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    var puts = 0;
+    repo.onPutUploadData = () => repo.uploadError = ++puts == 2
+        ? const WaxDeckApiException(
+            code: 'transport',
+            message: 'connection closed',
+          )
+        : null;
+    final picker = _FakePicker([
+      readerFile('long-take.flac', Uint8List(2621440)),
+    ]);
+    await tester.pumpWidget(
+      _host(repo, picker: picker, backoff: const Duration(seconds: 1)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    final id = repo.uploadsById.keys.single;
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadPhase(id)),
+        matching: find.text('Connection lost, trying again'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRetry(id)),
+      findsNothing,
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(repo.uploadsById[id]!.state, 'staged');
+    expect(find.text('Connection lost, trying again'), findsNothing);
+  });
+
+  testWidgets('a transfer that gave up offers Retry, which finishes it', (
+    tester,
+  ) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    var puts = 0;
+    repo.onPutUploadData = () {
+      if (++puts == 2) {
+        repo.uploadError = const WaxDeckApiException(
+          code: 'invalid-request',
+          message: 'offset out of range',
+          statusCode: 400,
+        );
+      }
+    };
+    final picker = _FakePicker([
+      readerFile('long-take.flac', Uint8List(2621440)),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    final id = repo.uploadsById.keys.single;
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadPhase(id)),
+        matching: find.text('Transfer failed'),
+      ),
+      findsOneWidget,
+    );
+
+    repo
+      ..uploadError = null
+      ..onPutUploadData = null;
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadRetry(id)));
+    await tester.pumpAndSettle();
+    expect(repo.uploadsById[id]!.state, 'staged');
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRetry(id)),
+      findsNothing,
     );
   });
 

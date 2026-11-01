@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
@@ -208,6 +209,24 @@ const _patience = Duration(seconds: 3);
 /// A probe that finds [found] whatever it is asked.
 StreamAsk _finding(StreamProbe found) =>
     (_, {segmentAt}) async => ProbeAnswer(found);
+
+/// What the engine says on the console when it lets a window edit go.
+const _gaveUp = 'audio engine: gave up waiting on a window edit';
+
+/// Captures [debugPrint] for the rest of the test and answers what it
+/// printed. Each line also goes to [printOnFailure], shown beside a
+/// failure and silent on a pass.
+List<String> _capturePrints() {
+  final lines = <String>[];
+  final previous = debugPrint;
+  debugPrint = (String? message, {int? wrapWidth}) {
+    if (message == null) return;
+    lines.add(message);
+    printOnFailure(message);
+  };
+  addTearDown(() => debugPrint = previous);
+  return lines;
+}
 
 /// An engine over [player] with a deadline short enough to wait out.
 JustAudioEngine _engine(
@@ -485,6 +504,7 @@ void main() {
   // waits for.
   group('window edits', () {
     test('a preload that never answers is let go at the deadline', () async {
+      final printed = _capturePrints();
       final player = _HangingPlayer(loadHangs: false);
       final engine = _engine(player, found: StreamProbe.answered);
       addTearDown(engine.dispose);
@@ -495,9 +515,12 @@ void main() {
       // Nothing behind it is held up either, the stop included.
       await engine.clearPreload().timeout(_patience);
       await engine.stop().timeout(_patience);
+      // And the console says it let the one edit go.
+      expect(printed, [_gaveUp]);
     });
 
     test('a preload that lands after its deadline is still the one', () async {
+      _capturePrints();
       // Not cancelled, only no longer waited for, and the caller has
       // recorded it as prepared. Landing while nothing replaced it, it is
       // the preload it was meant to be, and the crossing stays gapless.
@@ -519,6 +542,7 @@ void main() {
     });
 
     test('a late preload the caller let go is taken out', () async {
+      _capturePrints();
       // Landing behind the item playing, where nothing would announce a
       // crossing into it: left there, it plays after this item as a
       // track the queue no longer wants.
@@ -540,6 +564,7 @@ void main() {
     });
 
     test('a removal that never answers holds nothing up behind it', () async {
+      final printed = _capturePrints();
       final player = _HangingPlayer(loadHangs: false);
       final engine = _engine(player, found: StreamProbe.answered);
       addTearDown(engine.dispose);
@@ -564,6 +589,8 @@ void main() {
       player.land();
       await pumpEventQueue();
       expect(player.urls, ['http://x/a.mp3']);
+      // Only the removal ran out: the preload behind it was never sent.
+      expect(printed, [_gaveUp]);
     });
 
     test('a preload the platform will not let go stays on record', () async {
@@ -624,6 +651,7 @@ void main() {
     test(
       'the stop that abandons a load does not decide what it was behind',
       () async {
+        _capturePrints();
         // Stopping can shake the held call loose. What the load was held
         // behind is read before that, or a load that never reached the
         // platform is blamed on its file.
@@ -670,6 +698,7 @@ void main() {
     });
 
     test('a trim waits for the list a load is still building', () async {
+      _capturePrints();
       // A load made while an add is held leaves the old list standing
       // until the add lands, because the reset waits its turn behind
       // it. Trimmed then, the removals would reach the platform after
@@ -695,6 +724,7 @@ void main() {
     });
 
     test('a load behind a call the platform holds is not the media', () async {
+      _capturePrints();
       // The load never reached the platform: its reset waits in turn
       // behind the held add. Nothing is known about the file, and a
       // probe that answers would blame it and walk the queue one good
@@ -715,6 +745,7 @@ void main() {
     });
 
     test('a held call costs the edits behind it nothing', () async {
+      _capturePrints();
       // Everything after a held call waits in turn behind it, so a call
       // made now only spends a deadline. The preload is best effort: it
       // is let go, and the item loads on advance instead.

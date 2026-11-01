@@ -446,7 +446,12 @@ paths:
         running. A finished targeted job is left out (read it by pid),
         except a kind change (`set-kind`), an organize undo
         (`organize-undo`) and a library removal (`remove-root`), which
-        list with their result.
+        list with their result. A finished job of a kind that runs once
+        per item (an upload's `import`, a `delete`, a `restore`, a
+        `purge-trash`) is left out too, and lists only while it runs.
+        Jobs the caller cleared (`POST /jobs/clear-finished`) are left
+        out. A job left out takes no place on the page: the server reads
+        back through as many as the 800 newest jobs to fill it.
         The `job` sync marker says when to read again. Administrators
         only.
       tags: [admin]
@@ -468,6 +473,32 @@ paths:
                 $ref: "#/components/schemas/JobList"
         "400":
           $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /jobs/clear-finished:
+    post:
+      operationId: clearFinishedJobs
+      summary: Clear finished catalog jobs from the caller's list
+      description: >
+        Hides every catalog job that has ended (`done`, `failed`, `crashed`
+        or `canceled`) from the caller's `GET /jobs`, and answers how many
+        that list held, a page of it or not. Running jobs stay. The jobs themselves are not
+        deleted: other administrators still list them, `GET /jobs/{pid}` is
+        unaffected, and an organize run can still be undone. A job that
+        ends after the call lists as usual. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: How many ended jobs were hidden.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobsCleared"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -2967,6 +2998,19 @@ components:
           description: Jobs, newest first.
           items:
             $ref: "#/components/schemas/Job"
+
+    JobsCleared:
+      type: object
+      description: The result of clearing finished catalog jobs.
+      required: [cleared]
+      properties:
+        cleared:
+          type: integer
+          description: >
+            How many ended jobs the caller's list held before it was
+            cleared: every one `GET /jobs` would list, whether or not a
+            page of it reached them.
+          example: 3
 
     LibraryProfile:
       type: object

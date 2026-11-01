@@ -117,6 +117,10 @@
   "@queuePlayingFromMix": {
     "description": "Where the queue came from, for a mix with no seed of its own to name."
   },
+  "queuePlayingGone": "What was playing is no longer in the library.",
+  "@queuePlayingGone": {
+    "description": "Message when the item standing on the deck (paused, or where its start failed) turned out to be gone from the library, folded into a book or deleted elsewhere: it left the queue, and what follows it waits in its place."
+  },
   "queuePreviously": "PREVIOUSLY ({count})",
   "@queuePreviously": {
     "description": "Heading over the tracks already played in this queue, with how many. Upper case as a typographic style; write it the way small headings are written in this language.",

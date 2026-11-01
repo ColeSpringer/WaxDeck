@@ -185,14 +185,18 @@ WAXDECK_MANAGED_ROOTS=music \
 
 Then, in the web UI, the **+** button on the library adds audio: **Add
 from URL** acquires from a video, playlist, or channel, and **Upload
-files** sends them from your device. The button uses the media type of
-the section you are in (Music, Audiobooks), and the type chooser offers
-those two: podcasts are added by subscribing to a feed instead, and the
-server refuses an upload or acquisition labelled as one. The type you
-pick is what the files become: an Audiobook upload is cataloged as a
-book and a Music upload as a track, whatever their tags say, and later
-scans keep it. **Past uploads**, in the same **+** sheet, lists
-in-progress and past sessions with the quota they are spending; a
+files** sends them from your device. Opened in the Music or Audiobooks
+section, the dialogs take that section's type and do not ask; opened
+anywhere else, such as home, they ask Music or Audiobook, with the
+answer preselected from the files (Audiobook when one is an `.m4b`; a
+link starts on Music). Podcasts are added by subscribing to a feed
+instead, and the server refuses an upload or acquisition labelled as
+one. The type is what the files become: an Audiobook upload is cataloged
+as a book and a Music upload as a track, whatever their tags say, and
+later scans keep it. **Past uploads**, in the same **+** sheet, lists
+in-progress and past sessions with the quota they are spending; one
+that another device or tab is still sending shows how far it has got,
+and can be discarded only once nothing has arrived for six minutes. A
 notification about an upload opens the same list, as does the origin
 line on a review entry. Either way the download runs as a background
 task: the files arrive with the source's own title, thumbnail, and

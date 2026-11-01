@@ -13,11 +13,14 @@ import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/artwork/artwork_palette.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/desktop/desktop_ports.dart';
+import 'package:waxdeck/src/desktop/tray_binder.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/router.dart';
@@ -1018,6 +1021,8 @@ void main() {
         extra: [
           credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
           desktopProvider.overrideWithValue(true),
+          // The real tray would load the host's native library.
+          trayPortProvider.overrideWithValue(const NoTray()),
         ],
       );
       await tester.pumpWidget(
@@ -1289,6 +1294,68 @@ void main() {
       await tester.tapAt(const Offset(24, 420));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('player-idle')), findsNothing);
+    });
+
+    /// Stops a station tuned over the player's item. [frameFirst] runs a
+    /// frame before Riverpod's refresh timers, so the leave lands inside
+    /// the provider scope's build rather than from the timer.
+    Future<void> stopOverPark(
+      WidgetTester tester, {
+      required bool frameFirst,
+    }) async {
+      // The item the station displaced is not what is playing, so the
+      // stop leaves nothing here to show.
+      final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
+      final engine = FakeEngine();
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: _track(_first, 'Salt Harbour'),
+        // Still: the station face's platter turns for as long as it plays.
+        host: (player) => routedHost(
+          Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: player,
+            ),
+          ),
+          pushed: true,
+        ),
+      );
+      final radio = harness.container.read(radioPlaybackProvider.notifier);
+      await radio.play(
+        RadioStation(
+          pid: 'ra-1',
+          name: 'Coastal FM',
+          streamUrl: 'https://radio.example/stream',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayerScreen), findsOneWidget);
+
+      await radio.stop();
+      if (frameFirst) {
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PlayerScreen), findsNothing);
+      expect(engine.playing, isFalse);
+      await harness.endPlayback(tester);
+    }
+
+    testWidgets('a station stopped over a parked queue leaves it', (
+      tester,
+    ) async {
+      await stopOverPark(tester, frameFirst: false);
+    });
+
+    testWidgets('a station stopped over a parked queue leaves it within a '
+        'frame', (tester) async {
+      await stopOverPark(tester, frameFirst: true);
     });
   });
 }

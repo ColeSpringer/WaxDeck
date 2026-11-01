@@ -16,6 +16,8 @@ class _$Upload extends Upload {
   @override
   final int receivedBytes;
   @override
+  final int idleMs;
+  @override
   final MediaType mediaType;
   @override
   final String? libraryPid;
@@ -42,6 +44,7 @@ class _$Upload extends Upload {
     required this.fileName,
     required this.sizeBytes,
     required this.receivedBytes,
+    required this.idleMs,
     required this.mediaType,
     this.libraryPid,
     required this.state,
@@ -67,6 +70,7 @@ class _$Upload extends Upload {
         fileName == other.fileName &&
         sizeBytes == other.sizeBytes &&
         receivedBytes == other.receivedBytes &&
+        idleMs == other.idleMs &&
         mediaType == other.mediaType &&
         libraryPid == other.libraryPid &&
         state == other.state &&
@@ -85,6 +89,7 @@ class _$Upload extends Upload {
     _$hash = $jc(_$hash, fileName.hashCode);
     _$hash = $jc(_$hash, sizeBytes.hashCode);
     _$hash = $jc(_$hash, receivedBytes.hashCode);
+    _$hash = $jc(_$hash, idleMs.hashCode);
     _$hash = $jc(_$hash, mediaType.hashCode);
     _$hash = $jc(_$hash, libraryPid.hashCode);
     _$hash = $jc(_$hash, state.hashCode);
@@ -105,6 +110,7 @@ class _$Upload extends Upload {
           ..add('fileName', fileName)
           ..add('sizeBytes', sizeBytes)
           ..add('receivedBytes', receivedBytes)
+          ..add('idleMs', idleMs)
           ..add('mediaType', mediaType)
           ..add('libraryPid', libraryPid)
           ..add('state', state)
@@ -137,6 +143,10 @@ class UploadBuilder implements Builder<Upload, UploadBuilder> {
   int? get receivedBytes => _$this._receivedBytes;
   set receivedBytes(int? receivedBytes) =>
       _$this._receivedBytes = receivedBytes;
+
+  int? _idleMs;
+  int? get idleMs => _$this._idleMs;
+  set idleMs(int? idleMs) => _$this._idleMs = idleMs;
 
   MediaType? _mediaType;
   MediaType? get mediaType => _$this._mediaType;
@@ -188,6 +198,7 @@ class UploadBuilder implements Builder<Upload, UploadBuilder> {
       _fileName = $v.fileName;
       _sizeBytes = $v.sizeBytes;
       _receivedBytes = $v.receivedBytes;
+      _idleMs = $v.idleMs;
       _mediaType = $v.mediaType;
       _libraryPid = $v.libraryPid;
       _state = $v.state;
@@ -236,6 +247,11 @@ class UploadBuilder implements Builder<Upload, UploadBuilder> {
               receivedBytes,
               r'Upload',
               'receivedBytes',
+            ),
+            idleMs: BuiltValueNullFieldError.checkNotNull(
+              idleMs,
+              r'Upload',
+              'idleMs',
             ),
             mediaType: BuiltValueNullFieldError.checkNotNull(
               mediaType,

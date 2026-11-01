@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auto/media_session_feed.dart';
+import 'package:waxdeck/src/connect/remote_session.dart';
 import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
@@ -110,13 +111,11 @@ void main() {
   void update({
     RadioPlayback radio = const RadioPlayback(),
     NowPlaying now = NowPlaying.nothing,
-    bool remote = false,
     QueueState? queue,
     Map<String, ItemSummary> known = const <String, ItemSummary>{},
   }) => feed.update(
     radio: radio,
     now: now,
-    remote: remote,
     queue: queue ?? _queue(const <String>[]),
     summaryFor: (pid) => known[pid],
   );
@@ -225,35 +224,79 @@ void main() {
     expect(session.queues.last.$1.map((r) => r.id), <String>['tr-1']);
   });
 
-  test('a session on another endpoint publishes nothing at all', () {
-    final item = _item('tr-1');
-    update(
-      now: NowPlaying(
-        entry: const QueueEntry(queueId: '0', pid: 'tr-1'),
-        item: item,
-      ),
-      remote: true,
-      queue: _queue(const <String>['tr-1']),
-      known: <String, ItemSummary>{'tr-1': item},
+  /// The feed as the app binds it, over a playback container where this
+  /// client also drives a session on another endpoint.
+  Future<({ProviderContainer container, _RecordingSession recorded})>
+  drivingElsewhere(String pid) async {
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(
+          FakeRepository(items: [testItem(pid)]),
+        ),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+        localeOverrideProvider.overrideWithValue(null),
+        remoteSessionProvider.overrideWithBuild(
+          (ref, _) => RemoteSession(
+            session: PlaybackSessionInfo(
+              id: 'ps-kitchen',
+              endpointId: 'pe-kitchen',
+              endpointName: 'Kitchen speaker',
+              mine: true,
+              authority: 'remote',
+              playing: true,
+              index: 0,
+              positionMs: 0,
+              positionAt: DateTime.utc(2026, 7, 25),
+              rate: 1,
+              queueVersion: 1,
+              entries: const [],
+            ),
+            entries: const [],
+          ),
+        ),
+      ],
     );
-    // Nothing was ever published, so there is nothing to clear either.
-    expect(session.published, isEmpty);
-    expect(session.queues, isEmpty);
-  });
+    addTearDown(container.dispose);
+    container.read(systemLocalesProvider.notifier).locales = const [
+      Locale('en'),
+    ];
+    final recorded = _RecordingSession();
+    container.read(mediaSessionProvider).bind(recorded);
+    final subscription = container.listen(mediaSessionFeedProvider, (_, _) {});
+    addTearDown(subscription.close);
+    await container.read(nowPlayingProvider.notifier).playPids([
+      pid,
+    ], source: const QueueSource(kind: QueueSourceKind.album, label: 'Album'));
+    await pumpEventQueue();
+    return (container: container, recorded: recorded);
+  }
 
-  test('handing playback away clears what was published', () {
-    final item = _item('tr-1');
-    final now = NowPlaying(
-      entry: const QueueEntry(queueId: '0', pid: 'tr-1'),
-      item: item,
-    );
-    final queue = _queue(const <String>['tr-1']);
-    final known = <String, ItemSummary>{'tr-1': item};
-    update(now: now, queue: queue, known: known);
-    update(now: now, remote: true, queue: queue, known: known);
+  test(
+    'a session driven elsewhere leaves the item playing here named',
+    () async {
+      const pid = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
+      final h = await drivingElsewhere(pid);
 
-    expect(session.published.last, isNull);
-    expect(session.queues.last.$1, isEmpty);
+      // The local item outranks the remote session, as on the deck bar:
+      // it is what is coming out of this device.
+      expect(h.recorded.last?.id, pid);
+      expect(h.recorded.queues.last.$1.map((r) => r.id), [pid]);
+      h.container.read(queueControllerProvider.notifier).clear();
+      await pumpEventQueue();
+    },
+  );
+
+  test('handing playback away clears what was published', () async {
+    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
+    final h = await drivingElsewhere(pid);
+    expect(h.recorded.last?.id, pid);
+
+    // A handoff empties the local queue, which leaves the remote session.
+    h.container.read(queueControllerProvider.notifier).clear();
+    await pumpEventQueue();
+
+    expect(h.recorded.published.last, isNull);
+    expect(h.recorded.queues.last.$1, isEmpty);
   });
 
   test('an entry still resolving keeps the queue standing', () {
@@ -426,4 +469,42 @@ void main() {
       await pumpEventQueue();
     },
   );
+
+  test('a station stopped over a parked queue publishes nothing', () async {
+    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(
+          FakeRepository(items: [testItem(pid)]),
+        ),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+        localeOverrideProvider.overrideWithValue(null),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(systemLocalesProvider.notifier).locales = const [
+      Locale('en'),
+    ];
+    final recorded = _RecordingSession();
+    container.read(mediaSessionProvider).bind(recorded);
+    final subscription = container.listen(mediaSessionFeedProvider, (_, _) {});
+    addTearDown(subscription.close);
+    await container.read(nowPlayingProvider.notifier).playPids([
+      pid,
+    ], source: const QueueSource(kind: QueueSourceKind.album, label: 'Album'));
+    await pumpEventQueue();
+    expect(recorded.last?.id, pid);
+
+    final radio = container.read(radioPlaybackProvider.notifier);
+    await radio.play(_station());
+    await pumpEventQueue();
+    expect(recorded.last?.title, 'Fixture FM');
+
+    await radio.stop();
+    await pumpEventQueue();
+    expect(recorded.published.last, isNull);
+    expect(recorded.queues.last.$1, isEmpty);
+    container.read(queueControllerProvider.notifier).clear();
+    await pumpEventQueue();
+  });
 }

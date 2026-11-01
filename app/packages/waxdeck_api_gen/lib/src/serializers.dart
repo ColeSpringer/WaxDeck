@@ -159,10 +159,13 @@ import 'package:waxdeck_api_gen/src/model/item_files.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
 import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
+import 'package:waxdeck_api_gen/src/model/item_resolution.dart';
+import 'package:waxdeck_api_gen/src/model/item_resolve_query.dart';
 import 'package:waxdeck_api_gen/src/model/item_summary.dart';
 import 'package:waxdeck_api_gen/src/model/job.dart';
 import 'package:waxdeck_api_gen/src/model/job_list.dart';
 import 'package:waxdeck_api_gen/src/model/job_target.dart';
+import 'package:waxdeck_api_gen/src/model/jobs_cleared.dart';
 import 'package:waxdeck_api_gen/src/model/kind_fields.dart';
 import 'package:waxdeck_api_gen/src/model/lastfm_connect_start.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
@@ -583,10 +586,13 @@ part 'serializers.g.dart';
   ItemMetadata,
   ItemPage,
   ItemPermissions,
+  ItemResolution,
+  ItemResolveQuery,
   ItemSummary,$ItemSummary,
   Job,
   JobList,
   JobTarget,
+  JobsCleared,
   KindFields,
   LastfmConnectStart,
   Libraries,

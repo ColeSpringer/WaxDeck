@@ -136,9 +136,24 @@ class ScriptedRepository implements WaxDeckRepository {
   /// The cursor each server walk was asked from; null mints a fresh one.
   final serverSinces = <String?>[];
 
+  /// Answers the next walk from a cursor with a sync-reset.
+  bool resetServerOnce = false;
+
+  /// Holds every mint (a walk from no cursor) until completed, when set.
+  Completer<void>? mintGate;
+
   @override
   Future<ServerSyncPage> syncServer({String? since, int? limit}) async {
     serverSinces.add(since);
+    if (since == null) await mintGate?.future;
+    if (since != null && resetServerOnce) {
+      resetServerOnce = false;
+      throw const WaxDeckApiException(
+        code: 'sync-reset',
+        message: 'reset',
+        statusCode: 410,
+      );
+    }
     if (serverPages.isEmpty) {
       return const ServerSyncPage(nextSince: 'scur-0');
     }
@@ -1697,6 +1712,61 @@ void main() {
     expect(rows.map((r) => r.pid), ['tr-NEW']);
     final cursors = await db.select(db.syncCursors).getSingle();
     expect(cursors.catalogSince, 'cur-9');
+  });
+
+  group('a server walk that lost its place', () {
+    test('says so once it has minted again', () async {
+      var resets = 0;
+      final heard = engine.serverResets.listen((_) => resets++);
+      addTearDown(heard.cancel);
+      // A first walk mints, and nothing was walked before it to lose.
+      await engine.pullServer();
+      await engine.pullServer();
+      expect(resets, 0);
+
+      repo.resetServerOnce = true;
+      await engine.pullServer();
+      await pumpEventQueue();
+
+      expect(resets, 1);
+      expect(repo.serverSinces.last, isNull, reason: 'it minted again');
+    });
+
+    test('says nothing once signed out during the mint', () async {
+      await engine.pullServer();
+      final gate = repo.mintGate = Completer<void>();
+      repo.resetServerOnce = true;
+      final pulling = engine.pullServer();
+      await pumpEventQueue();
+      expect(repo.serverSinces.last, isNull, reason: 'the mint is under way');
+
+      engine.dispose();
+      gate.complete();
+      await expectLater(pulling, completes);
+    });
+
+    test('says so when the server asks for a resync of it', () async {
+      late void Function(String) deliver;
+      final framed = SyncEngine(
+        db: db,
+        repository: repo,
+        channelFactory: capturingFrames((sink) => deliver = sink),
+      )..account = _owner;
+      addTearDown(framed.dispose);
+      var resets = 0;
+      final heard = framed.serverResets.listen((_) => resets++);
+      addTearDown(heard.cancel);
+      framed.start();
+      await pumpEventQueue();
+
+      deliver(jsonEncode({'type': 'resync', 'topic': 'catalog'}));
+      await pumpEventQueue();
+      expect(resets, 0, reason: 'the catalog has its own news');
+
+      deliver(jsonEncode({'type': 'resync', 'topic': 'user'}));
+      await pumpEventQueue();
+      expect(resets, 1);
+    });
   });
 
   group('a snapshot, which carries no tombstones,', () {

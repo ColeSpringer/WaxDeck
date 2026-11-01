@@ -127,10 +127,11 @@ class ServerEventBus {
 /// The bus, wired to whichever transport this build runs.
 ///
 /// Native reads the engine's own published stream, which the mirror is
-/// already walking; web mints a cursor and walks it off the socket's
-/// invalidation hints. Mounted for as long as the session is, so a
-/// consumer that appears late (a screen, a binder) joins a walk already
-/// in progress rather than starting one of its own.
+/// already walking, and its word that the walk lost its place; web mints a
+/// cursor and walks it off the socket's invalidation hints. Mounted for as
+/// long as the session is, so a consumer that appears late (a screen, a
+/// binder) joins a walk already in progress rather than starting one of
+/// its own.
 final serverEventBusProvider = Provider.autoDispose<ServerEventBus>((ref) {
   final bus = ServerEventBus();
   ref.onDispose(bus.dispose);
@@ -138,7 +139,11 @@ final serverEventBusProvider = Provider.autoDispose<ServerEventBus>((ref) {
   final engine = ref.watch(syncEngineProvider);
   if (engine != null) {
     final subscription = engine.serverEvents.listen(bus.add);
-    ref.onDispose(subscription.cancel);
+    final resets = engine.serverResets.listen((_) => bus.reset());
+    ref.onDispose(() {
+      unawaited(subscription.cancel());
+      unawaited(resets.cancel());
+    });
     return bus;
   }
   if (!kIsWeb) return bus;

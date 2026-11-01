@@ -336,6 +336,10 @@ type Library struct {
 	// discardReadHook runs between a discard's first read of its session
 	// and its guards, in a test; nothing in the server sets it.
 	discardReadHook func()
+	// bodyReadHook runs once an append has read a chunk's body and before
+	// the session counts its bytes, in a test; nothing in the server sets
+	// it.
+	bodyReadHook func()
 	// applyImportHook stands in for the catalog's import apply in a test;
 	// nothing in the server sets it.
 	applyImportHook func(context.Context, *inbox.Plan) (*inbox.Report, error)
@@ -617,6 +621,8 @@ type Library struct {
 	// completing holds the ids of the upload sessions a complete or a
 	// discard is working on, so a second waits its turn.
 	completing sync.Map
+	// appendLocks serialize the chunk appends of one upload session.
+	appendLocks sessionLocks
 	// deciding holds the ids of the review entries a decision, revert,
 	// search or discard is changing, one at a time.
 	deciding sync.Map
@@ -1290,22 +1296,102 @@ func (l *Library) mayReadEndedItemJob(ctx context.Context, uc *UserCtx, job Job)
 // someone's deliberate act whose result is worth a row, not a burst.
 var listedOnceEnded = map[string]bool{"set-kind": true, "organize-undo": true, "remove-root": true}
 
+// perItemJobKinds run once per item: an upload's imports, a delete, a
+// restore, one purge. Ended, a burst of them would bury the passes, so the
+// list keeps them only while they run.
+var perItemJobKinds = map[string]bool{"import": true, "delete": true, "restore": true, "purge-trash": true}
+
+// listableJobs reads the newest fetch catalog jobs and keeps those the list
+// shows the caller (listedJob). It answers too how many the catalog read
+// held, which falls short of fetch once there are no older jobs.
+func (l *Library) listableJobs(ctx context.Context, uc *UserCtx, fetch int) ([]*model.Job, int, error) {
+	jobs, err := l.lib.Jobs(ctx, fetch)
+	if err != nil {
+		return nil, 0, classify(err)
+	}
+	clearedAt, err := l.db.JobsClearedAt(ctx, uc.ID)
+	if err != nil {
+		return nil, 0, err
+	}
+	read := len(jobs)
+	return slices.DeleteFunc(jobs, func(j *model.Job) bool {
+		return !listedJob(j, clearedAt)
+	}), read, nil
+}
+
+// listedJob reports whether the list shows j to a caller who cleared what
+// ended by clearedAt: every running job, and an ended one unless it is
+// targeted (listedOnceEnded aside), of a per-item kind, or cleared.
+func listedJob(j *model.Job, clearedAt int64) bool {
+	if j.State == model.JobRunning {
+		return true
+	}
+	if perItemJobKinds[j.Kind] || (j.TargetType != "" && !listedOnceEnded[j.Kind]) {
+		return false
+	}
+	return jobEndedAt(j) > clearedAt
+}
+
+// jobEndedAt is when a job ended, from the first time it recorded.
+func jobEndedAt(j *model.Job) int64 {
+	switch {
+	case j.FinishedAt != 0:
+		return j.FinishedAt
+	case j.HeartbeatAt != 0:
+		return j.HeartbeatAt
+	}
+	return j.StartedAt
+}
+
+// ClearFinishedJobs hides the caller's listed ended jobs from their list
+// and answers how many there were. The cut is the newest end among them,
+// not the clock, so a job that ends during the call is neither counted nor
+// hidden. Administrators only.
+func (l *Library) ClearFinishedJobs(ctx context.Context, uc *UserCtx) (int, error) {
+	if !uc.Admin {
+		return 0, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	jobs, _, err := l.listableJobs(ctx, uc, jobsFetchCap)
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	var newest int64
+	for _, j := range jobs {
+		if j.State != model.JobRunning {
+			n++
+			newest = max(newest, jobEndedAt(j))
+		}
+	}
+	if n == 0 {
+		return 0, nil
+	}
+	return n, l.db.SetJobsClearedAt(ctx, uc.ID, newest)
+}
+
 // Jobs lists recent catalog jobs, newest first, after any still running
 // that newer ones pushed out. A finished targeted job is left out (read by
 // pid): a burst of them would push the passes out. A kind change, an
 // organize undo and a library removal are the exceptions
-// (listedOnceEnded). Administrators only.
+// (listedOnceEnded). A finished job of a per-item kind is left out too, and
+// so are jobs the caller cleared, before the limit applies: the read widens
+// past them until the page is full, the catalog has no older jobs, or it
+// reaches jobsFetchCap. Administrators only.
 func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, error) {
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	jobs, err := l.lib.Jobs(ctx, min(limit*jobsOverfetch, jobsFetchCap))
-	if err != nil {
-		return nil, classify(err)
+	var jobs []*model.Job
+	for fetch := min(limit*jobsOverfetch, jobsFetchCap); ; fetch = min(fetch*jobsOverfetch, jobsFetchCap) {
+		listable, read, err := l.listableJobs(ctx, uc, fetch)
+		if err != nil {
+			return nil, err
+		}
+		jobs = listable
+		if len(jobs) >= limit || read < fetch || fetch == jobsFetchCap {
+			break
+		}
 	}
-	jobs = slices.DeleteFunc(jobs, func(j *model.Job) bool {
-		return j.TargetType != "" && j.State != model.JobRunning && !listedOnceEnded[j.Kind]
-	})
 	jobs = jobs[:min(len(jobs), limit)]
 	listed := make(map[model.PID]bool, len(jobs))
 	for _, job := range jobs {

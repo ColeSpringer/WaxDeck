@@ -41,6 +41,10 @@ export class Podcasts extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.episodeFetch(pid)));
   }
 
+  episodeRemove(pid: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.episodeRemove(pid)));
+  }
+
   episodeInfo(pid: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.episodeInfo(pid)));
   }

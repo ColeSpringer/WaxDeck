@@ -8,6 +8,7 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
@@ -420,124 +421,132 @@ void main() {
   });
 
   testWidgets('a start failure renders on the player', (tester) async {
-    final repo = FakeRepository(items: [testItem(pid)])
-      ..playInfoError = const WaxDeckApiException(
-        code: 'not-found',
-        message: 'no item with that pid',
-        statusCode: 404,
+    await captureDebugPrints(() async {
+      final repo = FakeRepository(items: [testItem(pid)])
+        ..playInfoError = const WaxDeckApiException(
+          code: 'not-found',
+          message: 'no item with that pid',
+          statusCode: 404,
+        );
+      final engine = FakeEngine();
+
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: testItem(pid),
       );
-    final engine = FakeEngine();
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
-
-    expect(find.byKey(const Key('player-error')), findsOneWidget);
-    // The code's sentence, not the server's: a start that failed is a
-    // failed operation rather than a refusal of something just typed.
-    expect(find.text('That is not here any more.'), findsOneWidget);
-    await harness.endPlayback(tester);
+      expect(find.byKey(const Key('player-error')), findsOneWidget);
+      // The code's sentence, not the server's: a start that failed is a
+      // failed operation rather than a refusal of something just typed.
+      expect(find.text('That is not here any more.'), findsOneWidget);
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('a transcode-limited start renders the server sentence on the '
       'player', (tester) async {
-    final repo = FakeRepository(items: [testItem(pid)]);
-    // The stream URL itself was refused (the probe read the 429), not the
-    // play-info: the pane says why rather than blaming the file.
-    final engine = FakeEngine()
-      ..failEveryLoad = true
-      ..loadFault = MediaFault.transport
-      ..loadRefusal = const StreamRefusal(
-        status: 429,
-        code: 'transcode-limited',
-        message: 'too many streams',
+    await captureDebugPrints(() async {
+      final repo = FakeRepository(items: [testItem(pid)]);
+      // The stream URL itself was refused (the probe read the 429), not the
+      // play-info: the pane says why rather than blaming the file.
+      final engine = FakeEngine()
+        ..failEveryLoad = true
+        ..loadFault = MediaFault.transport
+        ..loadRefusal = const StreamRefusal(
+          status: 429,
+          code: 'transcode-limited',
+          message: 'too many streams',
+        );
+
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: testItem(pid),
       );
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
-
-    expect(find.byKey(const Key('player-error')), findsOneWidget);
-    expect(
-      find.text(
-        'Too many streams are being converted at once. Try again in a moment.',
-      ),
-      findsOneWidget,
-    );
-    engine.failEveryLoad = false;
-    await harness.endPlayback(tester);
+      expect(find.byKey(const Key('player-error')), findsOneWidget);
+      expect(
+        find.text(
+          'Too many streams are being converted at once. Try again in a moment.',
+        ),
+        findsOneWidget,
+      );
+      engine.failEveryLoad = false;
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('a failed start can be retried from the player', (tester) async {
-    final repo = FakeRepository(items: [testItem(pid)])
-      ..playInfoError = const WaxDeckApiException(
-        code: 'transport',
-        message: 'network unreachable',
+    await captureDebugPrints(() async {
+      final repo = FakeRepository(items: [testItem(pid)])
+        ..playInfoError = const WaxDeckApiException(
+          code: 'transport',
+          message: 'network unreachable',
+        );
+      final engine = FakeEngine();
+
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: testItem(pid),
+        positionMs: 30000,
       );
-    final engine = FakeEngine();
+      expect(find.byKey(const Key('player-error')), findsOneWidget);
+      // A start that never loaded records nothing: the engine's position
+      // is not this item's, and a zero would lose the listener's place
+      // for the retry to resume from.
+      expect(repo.putPlayStateCalls, isEmpty);
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-      positionMs: 30000,
-    );
-    expect(find.byKey(const Key('player-error')), findsOneWidget);
-    // A start that never loaded records nothing: the engine's position
-    // is not this item's, and a zero would lose the listener's place
-    // for the retry to resume from.
-    expect(repo.putPlayStateCalls, isEmpty);
+      // The queue still holds the entry, so the same tap that failed is
+      // one button away from playing - from where it was asked to start,
+      // not from wherever the item was last checkpointed.
+      repo.playInfoError = null;
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerRetry));
+      await tester.pumpAndSettle();
 
-    // The queue still holds the entry, so the same tap that failed is
-    // one button away from playing - from where it was asked to start,
-    // not from wherever the item was last checkpointed.
-    repo.playInfoError = null;
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerRetry));
-    await tester.pumpAndSettle();
-
-    expect(engine.loadedUrl, contains(pid));
-    expect(engine.playing, isTrue);
-    expect(engine.position, const Duration(seconds: 30));
-    expect(find.byKey(const Key('player-error')), findsNothing);
-    await harness.endPlayback(tester);
+      expect(engine.loadedUrl, contains(pid));
+      expect(engine.playing, isTrue);
+      expect(engine.position, const Duration(seconds: 30));
+      expect(find.byKey(const Key('player-error')), findsNothing);
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('retrying a music start comes back to the head', (tester) async {
-    // A music start is at the head unless somebody asked otherwise, and
-    // the retry asks for what the start asked for. Recording the request
-    // rather than what the start settled on left the retry with nothing
-    // to ask for, which reads as "go and look at the checkpoint" - the
-    // very checkpoint the fresh start declined to honour.
-    final repo = FakeRepository(items: [testItem(pid)])
-      ..playPositions[pid] = 45000
-      ..playInfoError = const WaxDeckApiException(
-        code: 'transport',
-        message: 'network unreachable',
+    await captureDebugPrints(() async {
+      // A music start is at the head unless somebody asked otherwise, and
+      // the retry asks for what the start asked for. Recording the request
+      // rather than what the start settled on left the retry with nothing
+      // to ask for, which reads as "go and look at the checkpoint" - the
+      // very checkpoint the fresh start declined to honour.
+      final repo = FakeRepository(items: [testItem(pid)])
+        ..playPositions[pid] = 45000
+        ..playInfoError = const WaxDeckApiException(
+          code: 'transport',
+          message: 'network unreachable',
+        );
+      final engine = FakeEngine();
+
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: testItem(pid),
       );
-    final engine = FakeEngine();
+      expect(find.byKey(const Key('player-error')), findsOneWidget);
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
-    expect(find.byKey(const Key('player-error')), findsOneWidget);
+      repo.playInfoError = null;
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerRetry));
+      await tester.pumpAndSettle();
 
-    repo.playInfoError = null;
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerRetry));
-    await tester.pumpAndSettle();
-
-    expect(engine.loadedUrl, contains(pid));
-    expect(engine.position, Duration.zero);
-    await harness.endPlayback(tester);
+      expect(engine.loadedUrl, contains(pid));
+      expect(engine.position, Duration.zero);
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('the player says so when nothing is playing', (tester) async {

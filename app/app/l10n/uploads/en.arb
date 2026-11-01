@@ -171,6 +171,10 @@
   "@uploadsFileUnreadable": {
     "description": "The reason slot of uploadsFileFailed when the picked file itself stopped answering (moved, unmounted, or shrunk between pick and transfer) rather than the server refusing it."
   },
+  "uploadsFinishing": "Finishing",
+  "@uploadsFinishing": {
+    "description": "Under an upload row once every byte has arrived and the server is sealing the session."
+  },
   "uploadsFormat": "Download format",
   "@uploadsFormat": {
     "description": "Accessible name of the picker choosing what a URL download is converted to."
@@ -182,6 +186,14 @@
   "uploadsFromUrl": "Add from URL",
   "@uploadsFromUrl": {
     "description": "Opens the dialog that has the server download from a source URL. The bar button, the sheet row, and the dialog's own title."
+  },
+  "uploadsFromUrlBook": "Add an audiobook from URL",
+  "@uploadsFromUrlBook": {
+    "description": "Title of the add-from-URL dialog opened from the audiobook section, which already knows the kind."
+  },
+  "uploadsFromUrlMusic": "Add music from URL",
+  "@uploadsFromUrlMusic": {
+    "description": "Title of the add-from-URL dialog opened from the music section, which already knows the kind."
   },
   "uploadsFromUrlSubtitle": "A video, a playlist, or a channel",
   "@uploadsFromUrlSubtitle": {
@@ -202,6 +214,32 @@
   "uploadsGroupingAutoHelp": "Group into albums by their tags and folders",
   "@uploadsGroupingAutoHelp": {
     "description": "Help under the auto-detect grouping choice."
+  },
+  "uploadsGroupingBookAutoHelp": "One book per folder or title",
+  "@uploadsGroupingBookAutoHelp": {
+    "description": "Help under the auto-detect grouping choice when the files are an audiobook."
+  },
+  "uploadsGroupingBookEach": "Separate books",
+  "@uploadsGroupingBookEach": {
+    "description": "Grouping choice for an audiobook: every file is a book of its own."
+  },
+  "uploadsGroupingBookEachHelp": "Every file is a book of its own",
+  "@uploadsGroupingBookEachHelp": {
+    "description": "Help under the separate-books grouping choice."
+  },
+  "uploadsGroupingBookOne": "{count, plural, =1{One book} other{One book in {count} parts}}",
+  "@uploadsGroupingBookOne": {
+    "description": "Grouping choice for an audiobook: every file is a part of one book.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uploadsGroupingBookOneHelp": "Parts of one book, in folder and track order",
+  "@uploadsGroupingBookOneHelp": {
+    "description": "Help under the one-book grouping choice."
   },
   "uploadsGroupingTitle": "How should these files be grouped?",
   "@uploadsGroupingTitle": {
@@ -240,6 +278,10 @@
         "example": "12"
       }
     }
+  },
+  "uploadsInterrupted": "Interrupted. Discard it, then upload the file again.",
+  "@uploadsInterrupted": {
+    "description": "Under an upload row the server is still receiving but nothing on this device is sending: the tab closed, or the upload started elsewhere."
   },
   "uploadsLibrary": "Library",
   "@uploadsLibrary": {
@@ -337,6 +379,10 @@
   "@uploadsReceiving": {
     "description": "Under an upload row while bytes are arriving and the total size is not known."
   },
+  "uploadsReconnecting": "Connection lost, trying again",
+  "@uploadsReconnecting": {
+    "description": "Under an upload row while a chunk that failed on the wire waits to be sent again."
+  },
   "uploadsRetry": "Retry upload",
   "@uploadsRetry": {
     "description": "Accessible name of the control that sends a failed upload again."
@@ -403,9 +449,37 @@
       }
     }
   },
+  "uploadsWhatManyBook": "Upload {count} files as an audiobook",
+  "@uploadsWhatManyBook": {
+    "description": "Title of the upload dialog opened from the audiobook section, which already knows the files are an audiobook.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uploadsWhatManyMusic": "Upload {count} files as music",
+  "@uploadsWhatManyMusic": {
+    "description": "Title of the upload dialog opened from the music section, which already knows the files are music.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "uploadsWhatOne": "What are you uploading?",
   "@uploadsWhatOne": {
     "description": "Title of the dialog asking what one file is."
+  },
+  "uploadsWhatOneBook": "Upload as an audiobook",
+  "@uploadsWhatOneBook": {
+    "description": "Title of the upload dialog for one file opened from the audiobook section."
+  },
+  "uploadsWhatOneMusic": "Upload as music",
+  "@uploadsWhatOneMusic": {
+    "description": "Title of the upload dialog for one file opened from the music section."
   },
   "uploadsWhatThisIs": "What this is",
   "@uploadsWhatThisIs": {

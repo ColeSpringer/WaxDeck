@@ -30,6 +30,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
@@ -519,50 +520,62 @@ void main() {
     testWidgets('holds nothing pending for an entry that failed to resolve', (
       tester,
     ) async {
-      final repo = FakeRepository(items: [testItem('tr-A')]);
-      final harness = await _pumpDeck(tester, repo: repo, engine: FakeEngine());
-      unawaited(harness.playback.playPids(['tr-gone'], source: _album));
-      await tester.pumpAndSettle();
-      expect(harness.container.read(nowPlayingProvider).error, isNotNull);
+      await captureDebugPrints(() async {
+        final repo = FakeRepository(items: [testItem('tr-A')]);
+        final harness = await _pumpDeck(
+          tester,
+          repo: repo,
+          engine: FakeEngine(),
+        );
+        unawaited(harness.playback.playPids(['tr-gone'], source: _album));
+        await tester.pumpAndSettle();
+        expect(harness.container.read(nowPlayingProvider).error, isNotNull);
 
-      for (final id in <String>[
-        SemanticsIds.deckStar,
-        SemanticsIds.deckCast,
-        SemanticsIds.deckMore,
-      ]) {
-        expect(_byId(id), findsNothing, reason: id);
-      }
-      await harness.endPlayback(tester);
+        for (final id in <String>[
+          SemanticsIds.deckStar,
+          SemanticsIds.deckCast,
+          SemanticsIds.deckMore,
+        ]) {
+          expect(_byId(id), findsNothing, reason: id);
+        }
+        await harness.endPlayback(tester);
+      });
     });
 
     testWidgets('offers the words exactly when the command does', (
       tester,
     ) async {
-      final repo = FakeRepository(items: [testItem('tr-A')]);
-      final harness = await _pumpDeck(tester, repo: repo, engine: FakeEngine());
-      bool command() => waxStandingCommands
-          .firstWhere((c) => c.id == 'lyrics')
-          .isEnabled(tester.element(find.byType(DeckBarHost)) as WidgetRef);
+      await captureDebugPrints(() async {
+        final repo = FakeRepository(items: [testItem('tr-A')]);
+        final harness = await _pumpDeck(
+          tester,
+          repo: repo,
+          engine: FakeEngine(),
+        );
+        bool command() => waxStandingCommands
+            .firstWhere((c) => c.id == 'lyrics')
+            .isEnabled(tester.element(find.byType(DeckBarHost)) as WidgetRef);
 
-      // Loading counts: the bar keeps the toggle through a skip.
-      final gate = repo.playInfoGate = Completer<void>();
-      harness.play([testItem('tr-A')]);
-      await tester.pumpAndSettle();
-      expect(harness.container.read(nowPlayingProvider).session, isNull);
-      expect(_byId(SemanticsIds.deckLyrics), findsOneWidget);
-      expect(command(), isTrue);
-      gate.complete();
-      await tester.pumpAndSettle();
+        // Loading counts: the bar keeps the toggle through a skip.
+        final gate = repo.playInfoGate = Completer<void>();
+        harness.play([testItem('tr-A')]);
+        await tester.pumpAndSettle();
+        expect(harness.container.read(nowPlayingProvider).session, isNull);
+        expect(_byId(SemanticsIds.deckLyrics), findsOneWidget);
+        expect(command(), isTrue);
+        gate.complete();
+        await tester.pumpAndSettle();
 
-      // A start that failed has nothing to follow the words of.
-      unawaited(harness.playback.playPids(['tr-gone'], source: _album));
-      await tester.pumpAndSettle();
-      expect(harness.container.read(nowPlayingProvider).error, isNotNull);
-      expect(_byId(SemanticsIds.deckLyrics), findsNothing);
-      expect(command(), isFalse);
-      await harness.endPlayback(tester);
-      // Connect reports a queue change after a pause.
-      await tester.pump(const Duration(seconds: 1));
+        // A start that failed has nothing to follow the words of.
+        unawaited(harness.playback.playPids(['tr-gone'], source: _album));
+        await tester.pumpAndSettle();
+        expect(harness.container.read(nowPlayingProvider).error, isNotNull);
+        expect(_byId(SemanticsIds.deckLyrics), findsNothing);
+        expect(command(), isFalse);
+        await harness.endPlayback(tester);
+        // Connect reports a queue change after a pause.
+        await tester.pump(const Duration(seconds: 1));
+      });
     });
 
     testWidgets('ticks its progress without rebuilding the bar', (
@@ -604,22 +617,24 @@ void main() {
     });
 
     testWidgets('says so when the browser refuses to resume', (tester) async {
-      final repo = FakeRepository(items: [testItem('tr-A')]);
-      final engine = FakeEngine()..refuseNextPlay = true;
-      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      await captureDebugPrints(() async {
+        final repo = FakeRepository(items: [testItem('tr-A')]);
+        final engine = FakeEngine()..refuseNextPlay = true;
+        final harness = await _pumpDeck(tester, repo: repo, engine: engine);
 
-      harness.play([testItem('tr-A')]);
-      await tester.pumpAndSettle();
+        harness.play([testItem('tr-A')]);
+        await tester.pumpAndSettle();
 
-      expect(engine.playing, isFalse);
-      expect(find.bySemanticsLabel('Tap to resume'), findsOneWidget);
+        expect(engine.playing, isFalse);
+        expect(find.bySemanticsLabel('Tap to resume'), findsOneWidget);
 
-      await tester.tap(find.bySemanticsLabel('Tap to resume'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.bySemanticsLabel('Tap to resume'));
+        await tester.pumpAndSettle();
 
-      expect(engine.playing, isTrue, reason: 'the tap is the gesture');
-      expect(find.bySemanticsLabel('Pause'), findsOneWidget);
-      await harness.endPlayback(tester);
+        expect(engine.playing, isTrue, reason: 'the tap is the gesture');
+        expect(find.bySemanticsLabel('Pause'), findsOneWidget);
+        await harness.endPlayback(tester);
+      });
     });
 
     testWidgets('does not restart a start that is still loading', (
@@ -826,6 +841,8 @@ void main() {
       );
       harness.play([testItem('tr-A')]);
       await tester.pumpAndSettle();
+      engine.advance(const Duration(seconds: 30));
+      await tester.pump();
 
       await harness.container
           .read(radioPlaybackProvider.notifier)
@@ -847,58 +864,410 @@ void main() {
         isFalse,
       );
 
-      // Stopping the station puts the item back on the bar, where it
-      // has been standing all along with nothing driving it: the play
-      // button is what takes the engine back.
+      // Stopping the station leaves nothing playing. The queue the station
+      // displaced is offered back rather than drawn as if it were current.
       await harness.container.read(radioPlaybackProvider.notifier).stop();
       await tester.pumpAndSettle();
+      expect(find.byType(DeckBar), findsNothing);
+      expect(find.byType(WaxSeekBar), findsNothing);
+      expect(_byId(SemanticsIds.deckOffer), findsOneWidget);
       expect(find.text('Prancing Pony Blues'), findsOneWidget);
+      expect(find.text('Pick up where you left off'), findsOneWidget);
+      // Said once, not as a heading and again as a caption.
+      expect(
+        tester
+            .widget<Semantics>(_byId(SemanticsIds.deckOffer))
+            .properties
+            .label,
+        'Pick up where you left off, Prancing Pony Blues',
+      );
+      expect(_byId(SemanticsIds.deckOfferResume), findsOneWidget);
+      expect(_byId(SemanticsIds.deckOfferDismiss), findsOneWidget);
+      expect(engine.playing, isFalse);
+      expect(
+        harness.container.read(queueControllerProvider).currentEntry?.pid,
+        'tr-A',
+      );
 
-      await tester.tap(find.bySemanticsLabel('Play'));
+      await tester.tap(_byId(SemanticsIds.deckOfferResume));
       await tester.pumpAndSettle();
       expect(engine.playing, isTrue);
       expect(engine.loadedUrl, contains('tr-A'));
+      expect(engine.position, const Duration(seconds: 30));
+      expect(find.byType(DeckBar), findsOneWidget);
+      expect(_byId(SemanticsIds.deckOffer), findsNothing);
 
       await harness.endPlayback(tester);
+    });
+
+    testWidgets('a track queued under a station is offered as queued, and '
+        'starts at its head', (tester) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      // Heard to 1:12 once, and never since.
+      repo.playPositions['tr-A'] = 72000;
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      final radio = harness.container.read(radioPlaybackProvider.notifier);
+      await radio.play(
+        RadioStation(
+          pid: 'ra-1',
+          name: 'Coastal FM',
+          streamUrl: 'https://radio.example/stream',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      harness.playback.enqueue([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+      await radio.stop();
+      await tester.pumpAndSettle();
+
+      // It never played, so the offer names no place to come back to.
+      expect(_byId(SemanticsIds.deckOffer), findsOneWidget);
+      expect(find.text('Prancing Pony Blues'), findsOneWidget);
+      expect(find.text('1 queued item'), findsOneWidget);
+      expect(find.text('Pick up where you left off'), findsNothing);
+      expect(
+        tester
+            .widget<Semantics>(_byId(SemanticsIds.deckOffer))
+            .properties
+            .label,
+        '1 queued item, Prancing Pony Blues',
+      );
+
+      await tester.tap(_byId(SemanticsIds.deckOfferResume));
+      await tester.pumpAndSettle();
+      expect(engine.loadedUrl, contains('tr-A'));
+      expect(engine.position, Duration.zero);
+      expect(engine.playing, isTrue);
+      expect(_byId(SemanticsIds.deckOffer), findsNothing);
+
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('an undo a station overtook before it loaded is offered as a '
+        'place to pick up from', (tester) async {
+      final repo = FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+      engine.advance(const Duration(seconds: 6));
+      await tester.pump();
+      // A tap replaces it. Its summary is gone by the time the undo asks for
+      // it back, so that start waits on a fetch.
+      harness.play([testItem('tr-B')]);
+      await tester.pumpAndSettle();
+      harness.playback.forgetItems({'A'});
+      final gate = Completer<void>();
+      repo.getItemGate = gate;
+      harness.playback.undoReplace();
+      await tester.pump();
+      final radio = harness.container.read(radioPlaybackProvider.notifier);
+      await radio.play(
+        RadioStation(
+          pid: 'ra-1',
+          name: 'Coastal FM',
+          streamUrl: 'https://radio.example/stream',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      repo.getItemGate = null;
+      gate.complete();
+      await harness.playback.settled;
+      await radio.stop();
+      await tester.pumpAndSettle();
+
+      // The undo was to resume at 0:06: the offer names a place to come
+      // back to rather than a count.
+      expect(_byId(SemanticsIds.deckOffer), findsOneWidget);
+      expect(find.text('Pick up where you left off'), findsOneWidget);
+      expect(find.text('1 queued item'), findsNothing);
+
+      await tester.tap(_byId(SemanticsIds.deckOfferResume));
+      await tester.pumpAndSettle();
+      expect(engine.loadedUrl, contains('tr-A'));
+      expect(engine.position, const Duration(seconds: 6));
+      expect(engine.playing, isTrue);
+
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a start given a place that a station overtook before it '
+        'loaded is offered as a place to pick up from', (tester) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      final gate = Completer<void>();
+      repo.getItemGate = gate;
+      // A bookmark's, or a handoff's: a position asked for outright.
+      final started = harness.playback.playPids(
+        ['tr-A'],
+        source: QueueSource.none,
+        positionMs: 6000,
+      );
+      await tester.pump();
+      final radio = harness.container.read(radioPlaybackProvider.notifier);
+      await radio.play(
+        RadioStation(
+          pid: 'ra-1',
+          name: 'Coastal FM',
+          streamUrl: 'https://radio.example/stream',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      repo.getItemGate = null;
+      gate.complete();
+      await started;
+      await radio.stop();
+      await tester.pumpAndSettle();
+
+      expect(_byId(SemanticsIds.deckOffer), findsOneWidget);
+      expect(find.text('Pick up where you left off'), findsOneWidget);
+      expect(find.text('1 queued item'), findsNothing);
+
+      await tester.tap(_byId(SemanticsIds.deckOfferResume));
+      await tester.pumpAndSettle();
+      expect(engine.loadedUrl, contains('tr-A'));
+      expect(engine.position, const Duration(seconds: 6));
+      expect(engine.playing, isTrue);
+
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('an entry queued under a station that nothing has named '
+        'says its count once', (tester) async {
+      // A queue handed over by pid: only the entry that played resolved.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      unawaited(
+        harness.playback.playPids(['tr-A', 'tr-B'], source: QueueSource.none),
+      );
+      await tester.pumpAndSettle();
+      final radio = harness.container.read(radioPlaybackProvider.notifier);
+      await radio.play(
+        RadioStation(
+          pid: 'ra-1',
+          name: 'Coastal FM',
+          streamUrl: 'https://radio.example/stream',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // What lands in the parked entry's place never played, and was
+      // never named.
+      harness.playback.dropCurrent();
+      await radio.stop();
+      await tester.pumpAndSettle();
+
+      expect(_byId(SemanticsIds.deckOffer), findsOneWidget);
+      expect(find.text('1 queued item'), findsOneWidget);
+      expect(find.text('Pick up where you left off'), findsNothing);
+      expect(
+        tester
+            .widget<Semantics>(_byId(SemanticsIds.deckOffer))
+            .properties
+            .label,
+        '1 queued item',
+      );
+      await endEditedPlayback(tester, harness.container);
+    });
+
+    testWidgets('a queue a stopped station displaced can be let go', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+      final radio = harness.container.read(radioPlaybackProvider.notifier);
+      await radio.play(
+        RadioStation(
+          pid: 'ra-1',
+          name: 'Coastal FM',
+          streamUrl: 'https://radio.example/stream',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await radio.stop();
+      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.deckOffer), findsOneWidget);
+
+      await tester.tap(_byId(SemanticsIds.deckOfferDismiss));
+      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.deckOffer), findsNothing);
+      expect(find.byType(DeckBar), findsNothing);
+      expect(harness.container.read(queueControllerProvider).isEmpty, isTrue);
+      expect(engine.playing, isFalse);
     });
 
     testWidgets('a refused station says so instead of offering to stop', (
       tester,
     ) async {
-      // The gate is the engine's and a station rides the same engine, so
-      // this bar is the only surface that could report a refusal. Left
-      // unwired it drew "Play" over a silent stream and stopped the
-      // station when that was pressed.
-      final repo = FakeRepository(items: [testItem('tr-A')]);
-      final station = RadioStation(
-        pid: 'ra-1',
-        name: 'Coastal FM',
-        streamUrl: 'https://radio.example/stream',
-        createdAt: DateTime.utc(2026, 7, 1),
+      await captureDebugPrints(() async {
+        // The gate is the engine's and a station rides the same engine, so
+        // this bar is the only surface that could report a refusal. Left
+        // unwired it drew "Play" over a silent stream and stopped the
+        // station when that was pressed.
+        final repo = FakeRepository(items: [testItem('tr-A')]);
+        final station = RadioStation(
+          pid: 'ra-1',
+          name: 'Coastal FM',
+          streamUrl: 'https://radio.example/stream',
+          createdAt: DateTime.utc(2026, 7, 1),
+        );
+        repo.radioStationsByPid[station.pid] = station;
+        final engine = FakeEngine()..refuseNextPlay = true;
+        final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+
+        await harness.container
+            .read(radioPlaybackProvider.notifier)
+            .play(station);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Coastal FM'), findsOneWidget);
+        expect(find.bySemanticsLabel('Tap to resume'), findsOneWidget);
+
+        await tester.tap(find.bySemanticsLabel('Tap to resume'));
+        await tester.pumpAndSettle();
+
+        expect(engine.playing, isTrue, reason: 'the tap is the gesture');
+        expect(
+          harness.container.read(radioPlaybackProvider).station,
+          isNotNull,
+          reason: 'the station is still tuned',
+        );
+        await harness.container.read(radioPlaybackProvider.notifier).stop();
+        await tester.pumpAndSettle();
+      });
+    });
+  });
+
+  group('a book with chapters', () {
+    const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDSPAN01';
+
+    testWidgets('spans the chapter on the deck by default and the book on '
+        'request', (tester) async {
+      final repo = FakeRepository()
+        ..books[bookPid] = testBook(
+          bookPid,
+          durationMs: 3600000,
+          chapters: const [
+            ChapterMark(index: 0, title: 'An Unexpected Party', startMs: 0),
+            ChapterMark(index: 1, title: 'Roast Mutton', startMs: 1800000),
+          ],
+        );
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        routed: true,
       );
-      repo.radioStationsByPid[station.pid] = station;
-      final engine = FakeEngine()..refuseNextPlay = true;
-      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
-
-      await harness.container
-          .read(radioPlaybackProvider.notifier)
-          .play(station);
+      harness.play([
+        testItem(bookPid, mediaType: MediaType.audiobook, durationMs: 3600000),
+      ]);
       await tester.pumpAndSettle();
 
-      expect(find.text('Coastal FM'), findsOneWidget);
-      expect(find.bySemanticsLabel('Tap to resume'), findsOneWidget);
+      Finder timecode(String text) =>
+          find.descendant(of: find.byType(DeckBar), matching: find.text(text));
+      expect(timecode('30:00'), findsOneWidget, reason: 'the chapter');
+      expect(timecode('1:00:00'), findsNothing);
 
-      await tester.tap(find.bySemanticsLabel('Tap to resume'));
+      await tester.tap(_byId(SemanticsIds.deckSpan));
+      await tester.pumpAndSettle();
+      expect(timecode('1:00:00'), findsOneWidget, reason: 'the whole book');
+      expect(timecode('30:00'), findsNothing);
+
+      // The menu switches it too, which is the compact bar's only way.
+      await tester.tap(find.bySemanticsLabel('More'));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.deckSpanToggle));
+      await tester.pumpAndSettle();
+      expect(timecode('30:00'), findsOneWidget);
+      await tester.tap(_byId(SemanticsIds.deckSpan));
       await tester.pumpAndSettle();
 
-      expect(engine.playing, isTrue, reason: 'the tap is the gesture');
+      // One scope: the full player opens on what the deck chose.
+      await tester.tap(_byId(SemanticsIds.deckExpand));
+      await tester.pumpAndSettle();
       expect(
-        harness.container.read(radioPlaybackProvider).station,
-        isNotNull,
-        reason: 'the station is still tuned',
+        tester.getSemantics(
+          find.bySemanticsIdentifier(SemanticsIds.playerTimeline('book')),
+        ),
+        isSemantics(isSelected: true),
       );
-      await harness.container.read(radioPlaybackProvider.notifier).stop();
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('spans what the full player chose once it collapses', (
+      tester,
+    ) async {
+      // The bar stays mounted under the player, so the switch reaches it
+      // while it is covered.
+      final repo = FakeRepository()
+        ..books[bookPid] = testBook(
+          bookPid,
+          durationMs: 3600000,
+          chapters: const [
+            ChapterMark(index: 0, title: 'An Unexpected Party', startMs: 0),
+            ChapterMark(index: 1, title: 'Roast Mutton', startMs: 1800000),
+          ],
+        );
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        routed: true,
+      );
+      harness.play([
+        testItem(bookPid, mediaType: MediaType.audiobook, durationMs: 3600000),
+      ]);
       await tester.pumpAndSettle();
+      Finder timecode(String text) =>
+          find.descendant(of: find.byType(DeckBar), matching: find.text(text));
+      expect(timecode('30:00'), findsOneWidget);
+
+      await tester.tap(_byId(SemanticsIds.deckExpand));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playerTimeline('book')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerBack));
+      await tester.pumpAndSettle();
+
+      expect(timecode('1:00:00'), findsOneWidget);
+      expect(timecode('30:00'), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('draws no switch for a book without chapters', (tester) async {
+      final repo = FakeRepository()
+        ..books[bookPid] = testBook(bookPid, durationMs: 3600000);
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+      );
+      harness.play([
+        testItem(bookPid, mediaType: MediaType.audiobook, durationMs: 3600000),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(DeckBar),
+          matching: find.text('1:00:00'),
+        ),
+        findsOneWidget,
+      );
+      expect(_byId(SemanticsIds.deckSpan), findsNothing);
+      await harness.endPlayback(tester);
     });
   });
 
@@ -1521,6 +1890,13 @@ void main() {
 
       expect(find.byType(DeckBarOffer), findsOneWidget);
       expect(find.text('2 queued items'), findsOneWidget);
+      expect(
+        tester
+            .widget<Semantics>(_byId(SemanticsIds.deckOffer))
+            .properties
+            .label,
+        'Pick up where you left off, 2 queued items',
+      );
 
       await tester.tap(find.bySemanticsLabel('Resume'));
       await tester.pumpAndSettle();

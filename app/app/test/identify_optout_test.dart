@@ -315,7 +315,7 @@ void main() {
         repo,
         (context, ref) => uploadPickedFiles(context, ref, <PickedAudioFile>[
           _file('a.m4b'),
-        ], initial: MediaType.audiobook),
+        ], fixed: MediaType.audiobook),
       ),
     );
     await tester.tap(find.text('Open'));

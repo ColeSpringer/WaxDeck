@@ -5,9 +5,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
 import '../artwork/artwork_providers.dart';
-import '../connect/remote_session.dart';
 import '../l10n/off_tree.dart';
 import '../player/now_playing_controller.dart';
+import '../player/now_playing_slot.dart';
 import '../player/playback_session.dart';
 import '../providers.dart';
 import '../queue/queue_controller.dart';
@@ -24,14 +24,15 @@ import 'session_artwork.dart';
 /// surface that told a different story would be a second source of truth
 /// about what is playing.
 ///
-/// What it names follows the deck bar's own order, with two faces
-/// dropped. A station outranks an item, because a station has taken the
-/// engine. A **remote session names nothing**: the sound is coming out of
-/// another endpoint, and a lock screen that claimed otherwise would put a
-/// transport over silence and a play button that starts nothing here. The
-/// deck bar is the surface for a session playing elsewhere - it can say
-/// "on the kitchen speaker", which a notification cannot. Same for the
-/// restore offer: a queue nobody has accepted yet is not playing.
+/// What it names is the deck bar's slot ([nowPlayingSlotProvider]), with
+/// three faces dropped. A station outranks an item, because a station has
+/// taken the engine. A **remote session names nothing**: the sound is
+/// coming out of another endpoint, and a lock screen that claimed
+/// otherwise would put a transport over silence and a play button that
+/// starts nothing here. The deck bar is the surface for a session playing
+/// elsewhere - it can say "on the kitchen speaker", which a notification
+/// cannot. Same for the restore offer and for an entry a station
+/// displaced: a queue nobody has taken back is not playing.
 class MediaSessionFeed {
   MediaSessionFeed({
     required this.session,
@@ -101,7 +102,6 @@ class MediaSessionFeed {
   void update({
     required RadioPlayback radio,
     required NowPlaying now,
-    required bool remote,
     required QueueState queue,
     required ItemSummary? Function(String pid) summaryFor,
   }) {
@@ -124,7 +124,7 @@ class MediaSessionFeed {
     }
     final item = now.item;
     final entry = now.entry;
-    if (remote || entry == null || (item == null && !now.loading)) {
+    if (entry == null || (item == null && !now.loading)) {
       _clear();
       return;
     }
@@ -278,20 +278,28 @@ final mediaSessionFeedProvider = Provider.autoDispose<MediaSessionFeed>((ref) {
     standInTitle: ref.read(offTreeL10nProvider).autoQueuedItem,
   );
 
-  void publish() => feed.update(
-    radio: ref.read(radioPlaybackProvider),
-    now: ref.read(nowPlayingProvider),
-    remote: ref.read(remoteSessionProvider) != null,
-    queue: ref.read(queueControllerProvider),
-    summaryFor: ref.read(nowPlayingProvider.notifier).summaryFor,
-  );
+  void publish() {
+    final slot = ref.read(nowPlayingSlotProvider);
+    feed.update(
+      radio: switch (slot) {
+        StationSlot(:final playback) => playback,
+        _ => const RadioPlayback(),
+      },
+      // A parked entry, a remote session and the launch offer are not
+      // playing here.
+      now: switch (slot) {
+        ItemSlot(:final now) => now,
+        _ => NowPlaying.nothing,
+      },
+      queue: ref.read(queueControllerProvider),
+      summaryFor: ref.read(nowPlayingProvider.notifier).summaryFor,
+    );
+  }
 
-  // Every source reads all four, because what the surfaces show is a
-  // decision across them. The feed's own guards are what keep that from
-  // being a publish per position tick.
-  ref.listen(radioPlaybackProvider, (_, _) => publish());
-  ref.listen(nowPlayingProvider, (_, _) => publish());
-  ref.listen(remoteSessionProvider, (_, _) => publish());
+  // The slot and the queue both republish, because what the surfaces
+  // show is a decision across them. The feed's own guards are what keep
+  // that from being a publish per position tick.
+  ref.listen(nowPlayingSlotProvider, (_, _) => publish());
   ref.listen(queueControllerProvider, (_, _) => publish());
   ref.listen(offTreeL10nProvider, (_, copy) {
     feed.standInTitle = copy.autoQueuedItem;

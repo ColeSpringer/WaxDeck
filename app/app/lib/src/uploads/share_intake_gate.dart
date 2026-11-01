@@ -75,7 +75,10 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     // still offers it, and nothing is named otherwise. A share must not
     // grow a prompt, and inheriting the last answer is closer to what
     // the person meant than sending none is on a server with several.
-    final libraryPid = await _sharedTarget(ref);
+    // The kind is the one the files would be offered in a dialog: an
+    // .m4b among them makes the share an audiobook.
+    final kind = detectUploadMediaType(files.map((f) => f.name));
+    final libraryPid = await _sharedTarget(ref, kind);
     String? batchId;
     if (files.length > 1) {
       try {
@@ -83,7 +86,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
             .read(repositoryProvider)
             .createUploadBatch(
               grouping: UploadGrouping.auto,
-              mediaType: MediaType.music.wireName,
+              mediaType: kind.wireName,
               libraryPid: libraryPid,
             );
         batchId = batch.id;
@@ -92,6 +95,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
         return;
       }
     }
+    await untilUploadsListed(ref.read(uploadsProvider.future));
     for (final file in files) {
       // Measured here rather than inside the upload, so a refusal can
       // be told against the allowance as a picked file's is.
@@ -106,7 +110,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
             .uploadFromPath(
               fileName: file.name,
               path: file.path,
-              mediaType: MediaType.music.wireName,
+              mediaType: kind.wireName,
               libraryPid: libraryPid,
               batchId: batchId,
               sizeBytes: size,
@@ -137,12 +141,12 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
   }
 
   /// The library a dialogless share is filed under: the remembered one
-  /// where it is still a music candidate, and null otherwise. Null is
-  /// the server routing exactly as it did before this existed.
-  Future<String?> _sharedTarget(WidgetRef ref) async {
+  /// where it is still a candidate for [kind], and null otherwise. Null
+  /// is the server routing exactly as it did before this existed.
+  Future<String?> _sharedTarget(WidgetRef ref, MediaType kind) async {
     final (remembered, targets) = await sharedUploadTarget(ref);
     if (remembered.isEmpty) return null;
-    final candidates = uploadTargetsFor(targets, MediaType.music);
+    final candidates = uploadTargetsFor(targets, kind);
     if (candidates.length < 2) return null;
     return candidates.any((t) => t.pid == remembered) ? remembered : null;
   }

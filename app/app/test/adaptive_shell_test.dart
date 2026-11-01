@@ -37,6 +37,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
@@ -731,20 +732,22 @@ void main() {
   });
 
   testWidgets('a similar tracks failure is told on the player', (tester) async {
-    final container = await _pumpShell(tester);
-    _similarRepo(container).discoveryError = const WaxDeckApiException(
-      code: 'transport',
-      message: 'network unreachable',
-    );
+    await captureDebugPrints(() async {
+      final container = await _pumpShell(tester);
+      _similarRepo(container).discoveryError = const WaxDeckApiException(
+        code: 'transport',
+        message: 'network unreachable',
+      );
 
-    await _askForSimilar(tester, container);
+      await _askForSimilar(tester, container);
 
-    expect(find.byType(PlayerScreen), findsOneWidget);
-    expect(find.byType(SnackBar), findsOneWidget);
-    expect(find.byType(TrackListScreen), findsNothing);
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byType(TrackListScreen), findsNothing);
 
-    container.read(queueControllerProvider.notifier).clear();
-    await tester.pump(const Duration(seconds: 1));
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pump(const Duration(seconds: 1));
+    });
   });
 
   testWidgets('playback keeps its slot across every destination', (

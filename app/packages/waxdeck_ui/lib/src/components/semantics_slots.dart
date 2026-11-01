@@ -27,6 +27,7 @@ class DeckBarIds {
     this.star,
     this.saveSong,
     this.seek,
+    this.span,
     this.queue,
     this.lyrics,
     this.cast,
@@ -57,6 +58,9 @@ class DeckBarIds {
   final String? saveSong;
 
   final String? seek;
+
+  /// The end timecode, where it switches what the seek bar spans.
+  final String? span;
   final String? queue;
   final String? lyrics;
   final String? cast;

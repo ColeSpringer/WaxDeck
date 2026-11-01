@@ -8,7 +8,6 @@
   "musicAlbumEditorFieldLocked": "{field} está bloqueado",
   "musicAlbumEditorForbiddenMessage": "Los códigos de barras, los sellos y los números de catálogo los comparte todo el que puede ver este álbum, así que el servidor los reserva a los administradores.",
   "musicAlbumEditorForbiddenTitle": "Solo los administradores pueden editar una edición",
-  "musicAlbumEditorFromTags": "De las etiquetas",
   "musicAlbumEditorNamesOverline": "Cómo se ordena y con qué coincide",
   "musicAlbumEditorNamesTitle": "Nombre e identificador",
   "musicAlbumEditorSaveChanges": "{count, plural, =1{Guardar 1 cambio} other{Guardar {count} cambios}}",

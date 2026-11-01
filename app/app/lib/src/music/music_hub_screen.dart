@@ -104,7 +104,7 @@ class MusicHubScreen extends ConsumerWidget {
             label: l10n.musicHubAddToLibrary,
             semanticsId: SemanticsIds.musicAdd,
             onPressed: () =>
-                showAddToLibrarySheet(context, ref, initial: MediaType.music),
+                showAddToLibrarySheet(context, ref, fixed: MediaType.music),
           ),
         const SearchAction(),
         const AccountAction(),
@@ -202,7 +202,9 @@ class _AllEmptyInvitation extends ConsumerWidget {
         message: l10n.musicHubEmptyMessage,
         glyph: WaxIcons.music,
         actionLabel: offerAdd ? l10n.musicHubAddToLibrary : null,
-        onAction: offerAdd ? () => showAddToLibrarySheet(context, ref) : null,
+        onAction: offerAdd
+            ? () => showAddToLibrarySheet(context, ref, fixed: MediaType.music)
+            : null,
       ),
     );
   }

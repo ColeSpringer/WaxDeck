@@ -94,6 +94,27 @@ void main() {
     expect(edit.writeBack, isFalse);
   });
 
+  testWidgets('an uncurated field has no source chip; a curated one names it', (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.entityCurationByKey['artist/$_artist'] = const [
+      EntityCuratedField(
+        field: 'sort',
+        value: 'Bree Trio, The',
+        source: 'user',
+        locked: false,
+      ),
+    ];
+    await _pump(tester, repo, entity: EditableEntity.artist, pid: _artist);
+
+    expect(find.text('Source unknown'), findsNothing);
+    expect(find.text('you'), findsOneWidget);
+    // The curated row's chip is the only one: an uncurated field is empty.
+    expect(find.byType(CodecChip), findsOneWidget);
+    expect(find.text('tags'), findsNothing);
+  });
+
   testWidgets('a field keeps its help on screen, selectable, with a value', (
     tester,
   ) async {

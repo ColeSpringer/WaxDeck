@@ -655,6 +655,23 @@ void main() {
         await letting;
       },
     );
+
+    test('an end-of-chapter stop checkpoints only where it parks', () async {
+      final session = await started();
+      engine.advance(const Duration(milliseconds: 59990));
+      await settle();
+      repo.putPlayStateCalls.clear();
+      final reached = <Object?>[];
+      session.stopReached.listen(reached.add);
+      session.stopAt(60000);
+      // The tick that crosses the boundary lands past it, as a real one does.
+      engine.advance(const Duration(milliseconds: 24));
+      await settle();
+      expect(reached, hasLength(1));
+      expect(engine.playing, isFalse);
+      expect(engine.position, const Duration(seconds: 60));
+      expect(repo.putPlayStateCalls.map((c) => c.positionMs), [60000]);
+    });
   });
 
   test(

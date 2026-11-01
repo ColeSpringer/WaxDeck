@@ -64,5 +64,7 @@
   "shellReconnecting": "Reconectando con el servidor. Lo que ya se esté reproduciendo sigue sonando.",
   "shellReload": "Volver a cargar",
   "shellServerOutdated": "El servidor se ha actualizado. Reinicia WaxDeck para ponerte al día.",
-  "shellSignOut": "Cerrar sesión"
+  "shellSignOut": "Cerrar sesión",
+  "shellWindowTitleItem": "{title} · {artist}",
+  "shellWindowTitleLive": "{station} · {song}"
 }

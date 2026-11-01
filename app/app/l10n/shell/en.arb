@@ -274,5 +274,33 @@
   "shellSignOut": "Sign out",
   "@shellSignOut": {
     "description": "The one verb in the account menu."
+  },
+  "shellWindowTitleItem": "{title} · {artist}",
+  "@shellWindowTitleItem": {
+    "description": "The browser tab or window title while a track, episode or book plays. {title} is the item, {artist} its artist, show or author.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Prancing Pony Blues"
+      },
+      "artist": {
+        "type": "String",
+        "example": "The Bree Trio"
+      }
+    }
+  },
+  "shellWindowTitleLive": "{station} · {song}",
+  "@shellWindowTitleLive": {
+    "description": "The browser tab or window title while a radio station plays a song it announced. {station} is the station, {song} the in-stream title.",
+    "placeholders": {
+      "station": {
+        "type": "String",
+        "example": "Prancing Pony FM"
+      },
+      "song": {
+        "type": "String",
+        "example": "Bag End Blues"
+      }
+    }
   }
 }

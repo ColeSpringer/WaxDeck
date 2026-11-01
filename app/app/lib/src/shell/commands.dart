@@ -13,13 +13,13 @@ import '../desktop/mini_window.dart';
 import '../l10n/l10n.dart';
 import '../player/lyrics.dart';
 import '../player/now_playing_controller.dart';
+import '../player/now_playing_slot.dart';
 import '../player/output_volume.dart';
 import '../player/waveform.dart';
 import '../playlists/playlist_create.dart';
 import '../queue/queue_controller.dart';
 import '../settings/settings_registry.dart';
 import '../queue/queue_view.dart';
-import '../radio/radio_controller.dart';
 import 'command_palette.dart';
 import 'routes.dart';
 import 'shortcut_sheet.dart';
@@ -409,10 +409,12 @@ List<ShortcutActivator> _chord(LogicalKeyboardKey key) => <ShortcutActivator>[
   SingleActivator(key, meta: true),
 ];
 
-/// An item in the queue, or a station on the air.
+/// An item up, or a station on the air.
 bool _somethingToPlay(WidgetRef ref) =>
-    ref.read(nowPlayingProvider).entry != null ||
-    ref.read(radioPlaybackProvider).station != null;
+    switch (ref.read(nowPlayingSlotProvider)) {
+      StationSlot() || ItemSlot() => true,
+      _ => false,
+    };
 
 /// A music item whose shape has been measured.
 ///
@@ -432,10 +434,10 @@ bool _visualizable(WidgetRef ref) {
   return waveformMayHavePeaks(ref.watch(trackWaveformProvider(item.pid)));
 }
 
-/// Radio never queues, so there is nothing to step through.
+/// Radio never queues, and a parked queue is not up, so only an item has
+/// something to step through.
 bool _queuedPlayback(WidgetRef ref) =>
-    ref.read(nowPlayingProvider).entry != null &&
-    ref.read(radioPlaybackProvider).station == null;
+    ref.read(nowPlayingSlotProvider) is ItemSlot;
 
 bool _seekable(WidgetRef ref) => ref.read(nowPlayingProvider).session != null;
 

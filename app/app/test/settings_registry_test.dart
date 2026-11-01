@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/desktop/desktop_ports.dart';
+import 'package:waxdeck/src/desktop/tray_binder.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/setting_anchor.dart';
@@ -621,6 +623,8 @@ void main() {
         ),
         credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
         desktopProvider.overrideWithValue(true),
+        // The real tray would load the host's native library.
+        trayPortProvider.overrideWithValue(const NoTray()),
       ],
     );
     addTearDown(container.dispose);

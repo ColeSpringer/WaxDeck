@@ -14,6 +14,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 
 const _album = QueueSource(
@@ -361,36 +362,39 @@ void main() {
     );
 
     test('an offered item the catalogue lost still names itself', () async {
-      // Deleted while the account was away. An offer that names what it
-      // was playing beats no offer at all, so the entry's own fields
-      // stand in rather than the whole thing being dropped.
-      final repository = FakeRepository()
-        ..sessionHistory = <PlaybackSessionHistoryEntry>[
-          PlaybackSessionHistoryEntry(
-            id: 'ps-1',
-            endpointId: 'pe-1',
-            authority: 'mirror',
-            index: 0,
-            positionMs: 42000,
-            positionAt: DateTime.utc(2026, 7, 28, 9),
-            rate: 1,
-            entries: const <PlaybackSessionEntry>[
-              PlaybackSessionEntry(
-                pid: 'tr-GONE',
-                title: 'So What',
-                artist: 'Miles Davis',
-              ),
-            ],
-          ),
-        ];
+      final printed = await captureDebugPrints(() async {
+        // Deleted while the account was away. An offer that names what it
+        // was playing beats no offer at all, so the entry's own fields
+        // stand in rather than the whole thing being dropped.
+        final repository = FakeRepository()
+          ..sessionHistory = <PlaybackSessionHistoryEntry>[
+            PlaybackSessionHistoryEntry(
+              id: 'ps-1',
+              endpointId: 'pe-1',
+              authority: 'mirror',
+              index: 0,
+              positionMs: 42000,
+              positionAt: DateTime.utc(2026, 7, 28, 9),
+              rate: 1,
+              entries: const <PlaybackSessionEntry>[
+                PlaybackSessionEntry(
+                  pid: 'tr-GONE',
+                  title: 'So What',
+                  artist: 'Miles Davis',
+                ),
+              ],
+            ),
+          ];
 
-      final offer = await _container(
-        RecordingQueueStore(),
-        repository: repository,
-      ).read(queueRestoreProvider.future);
+        final offer = await _container(
+          RecordingQueueStore(),
+          repository: repository,
+        ).read(queueRestoreProvider.future);
 
-      expect(offer!.currentItem!.title, 'So What');
-      expect(offer.currentItem!.artUrl, isNull);
+        expect(offer!.currentItem!.title, 'So What');
+        expect(offer.currentItem!.artUrl, isNull);
+      });
+      expect(printed, [startsWith('offered item tr-GONE unavailable')]);
     });
 
     test('accepting starts the entry named by the offer\'s own read', () async {

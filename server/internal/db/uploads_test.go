@@ -170,3 +170,89 @@ func TestUploadBytesOutstandingCountsOnlyWhatIsStillComing(t *testing.T) {
 		t.Fatalf("outstanding over a wider window = %d (%v)", owed, err)
 	}
 }
+
+func TestAdvanceUploadReceivedIsACompareAndSet(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	if err := d.CreateUser(ctx, mkUser("us-1", "u1", nil), false); err != nil {
+		t.Fatal(err)
+	}
+	for id, state := range map[string]string{"up-receiving": "receiving", "up-staged": "staged"} {
+		if err := d.InsertUpload(ctx, Upload{
+			ID: id, UserID: "us-1", FileName: id + ".flac", MediaType: "music",
+			SizeBytes: 100, ReceivedBytes: 10, State: state, CreatedAtNS: 1, ReceivedAtNS: 1,
+		}); err != nil {
+			t.Fatalf("insert %s: %v", id, err)
+		}
+	}
+
+	// The time bytes last arrived moves with the count and only with it.
+	for _, tc := range []struct {
+		name, id   string
+		from, to   int64
+		at         int64
+		want       bool
+		stored, ns int64
+	}{
+		{"wrong from", "up-receiving", 5, 20, 50, false, 10, 1},
+		{"not receiving", "up-staged", 10, 20, 50, false, 10, 1},
+		{"missing row", "up-nope", 10, 20, 50, false, 0, 0},
+		{"match", "up-receiving", 10, 20, 60, true, 20, 60},
+		{"match again from the old count", "up-receiving", 10, 30, 70, false, 20, 60},
+	} {
+		moved, err := d.AdvanceUploadReceived(ctx, tc.id, tc.from, tc.to, tc.at)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if moved != tc.want {
+			t.Fatalf("%s: moved = %v, want %v", tc.name, moved, tc.want)
+		}
+		if tc.id == "up-nope" {
+			continue
+		}
+		u, err := d.UploadByID(ctx, tc.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if u.ReceivedBytes != tc.stored || u.ReceivedAtNS != tc.ns {
+			t.Fatalf("%s: stored %d at %d, want %d at %d", tc.name, u.ReceivedBytes, u.ReceivedAtNS, tc.stored, tc.ns)
+		}
+	}
+}
+
+// A touch records bytes that arrived without being kept: it only ever
+// moves the time forward, and only on a session still receiving.
+func TestTouchUploadReceivedOnlyMovesForward(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	if err := d.CreateUser(ctx, mkUser("us-1", "u1", nil), false); err != nil {
+		t.Fatal(err)
+	}
+	for id, state := range map[string]string{"up-receiving": "receiving", "up-staged": "staged"} {
+		if err := d.InsertUpload(ctx, Upload{
+			ID: id, UserID: "us-1", FileName: id + ".flac", MediaType: "music",
+			SizeBytes: 100, State: state, CreatedAtNS: 1, ReceivedAtNS: 50,
+		}); err != nil {
+			t.Fatalf("insert %s: %v", id, err)
+		}
+	}
+	for _, tc := range []struct {
+		name, id string
+		at, want int64
+	}{
+		{"later", "up-receiving", 80, 80},
+		{"earlier", "up-receiving", 60, 80},
+		{"not receiving", "up-staged", 90, 50},
+	} {
+		if err := d.TouchUploadReceived(ctx, tc.id, tc.at); err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		u, err := d.UploadByID(ctx, tc.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if u.ReceivedAtNS != tc.want {
+			t.Fatalf("%s: received at %d, want %d", tc.name, u.ReceivedAtNS, tc.want)
+		}
+	}
+}

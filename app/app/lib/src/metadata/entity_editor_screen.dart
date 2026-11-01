@@ -573,6 +573,10 @@ class _EntityFieldRow extends StatelessWidget {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final row = curated;
+    // An uncurated field is empty here, so it has no source to name.
+    final source = row == null
+        ? null
+        : fieldSourceName(l10n, source: row.source, hasValue: true);
     return WaxTextField(
       label: label,
       // Under the box, selectable, and spoken with it: a placeholder went
@@ -583,12 +587,7 @@ class _EntityFieldRow extends StatelessWidget {
       beside: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          CodecChip(
-            row == null
-                ? l10n.metadataSourceUnknown
-                : provenanceProducerName(l10n, row.source),
-            emphasis: dirty,
-          ),
+          if (source != null) CodecChip(source, emphasis: dirty),
           if (row?.locked ?? false)
             Padding(
               padding: const EdgeInsetsDirectional.only(start: WaxSpace.s4),

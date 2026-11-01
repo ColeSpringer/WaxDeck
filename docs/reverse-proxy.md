@@ -175,7 +175,8 @@ server {
     }
 
     # Everything else keeps nginx's own minute for a client that has
-    # stopped reading.
+    # stopped reading. Uploads go through here too, unbuffered, because
+    # WaxDeck judges a sender by the bytes it sees arrive.
     location / {
         proxy_pass http://127.0.0.1:4420;
         proxy_http_version 1.1;
@@ -183,6 +184,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_buffering off;
+        proxy_request_buffering off;
         proxy_read_timeout 1d;
         proxy_send_timeout 1d;
     }

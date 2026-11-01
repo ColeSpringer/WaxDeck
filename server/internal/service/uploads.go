@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	waxlabel "github.com/colespringer/waxlabel"
@@ -136,6 +137,9 @@ type UploadDTO struct {
 	FileName      string
 	SizeBytes     int64
 	ReceivedBytes int64
+	// Idle is how long the server had gone without taking a byte for the
+	// session when the DTO was made (Library.uploadIdle).
+	Idle          time.Duration
 	MediaType     string
 	LibraryPID    string
 	BatchID       string
@@ -416,20 +420,22 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 		return UploadDTO{}, err
 	}
 
+	now := time.Now()
 	u := wdb.Upload{
-		ID:          "up-" + ulid.Make().String(),
-		UserID:      uc.ID,
-		FileName:    name,
-		SizeBytes:   p.SizeBytes,
-		MediaType:   p.MediaType,
-		LibraryPID:  p.LibraryPID,
-		BatchID:     p.BatchID,
-		BatchPath:   p.BatchPath,
-		SHA256:      strings.ToLower(p.SHA256),
-		State:       uploadReceiving,
-		Identify:    l.resolveIdentify(ctx, uc.ID, p.Identify),
-		CreatedAtNS: time.Now().UnixNano(),
-		ExpiresAtNS: time.Now().Add(l.uploadRetention).UnixNano(),
+		ID:           "up-" + ulid.Make().String(),
+		UserID:       uc.ID,
+		FileName:     name,
+		SizeBytes:    p.SizeBytes,
+		MediaType:    p.MediaType,
+		LibraryPID:   p.LibraryPID,
+		BatchID:      p.BatchID,
+		BatchPath:    p.BatchPath,
+		SHA256:       strings.ToLower(p.SHA256),
+		State:        uploadReceiving,
+		Identify:     l.resolveIdentify(ctx, uc.ID, p.Identify),
+		CreatedAtNS:  now.UnixNano(),
+		ReceivedAtNS: now.UnixNano(),
+		ExpiresAtNS:  now.Add(l.uploadRetention).UnixNano(),
 	}
 
 	// The up-front exact-duplicate warning, when the caller sent the
@@ -531,7 +537,21 @@ func (l *Library) holdsFiles(ctx context.Context, pid model.PID) bool {
 func (l *Library) hydrateUploadDuplicate(ctx context.Context, uc *UserCtx, u wdb.Upload) UploadDTO {
 	dto := uploadDTO(u)
 	dto.Duplicate = l.duplicateFor(ctx, uc, u.DuplicatePID, u.DuplicateKind)
+	dto.Idle = l.uploadIdle(u, time.Now())
 	return dto
+}
+
+// uploadIdle is how long the server had gone without taking a byte for u
+// at now, on its own clock: none while a chunk's bytes are arriving or its
+// seal is running, otherwise the time since the last arrived, or since the
+// session opened before any did. A client judges by this rather than by
+// comparing a time of the server's with its own clock.
+func (l *Library) uploadIdle(u wdb.Upload, now time.Time) time.Duration {
+	if l.appendLocks.live(u.ID) {
+		return 0
+	}
+	last := time.Unix(0, cmp.Or(u.ReceivedAtNS, u.CreatedAtNS))
+	return max(now.Sub(last), 0)
 }
 
 // duplicateFor is the warning an upload's match carries for the caller:
@@ -615,9 +635,122 @@ func (l *Library) ListUploadsPage(ctx context.Context, uc *UserCtx, cursor strin
 	return out, next, quota, nil
 }
 
+// sessionLocks serializes work per upload session. An entry lives only
+// while a holder, waiter or seal references it, so nothing leaks, and a
+// session never has two live locks. Keying by session confines a stalled client to
+// its own session's later appends, and the API's idle bound on a chunk's
+// body read ends the stall itself. A waiter leaves when its context ends.
+type sessionLocks struct {
+	mu      sync.Mutex
+	entries map[string]*sessionLock
+}
+
+type sessionLock struct {
+	refs int
+	slot chan struct{}
+	// reading is whether the turn's holder is reading a chunk's body:
+	// the session is taking bytes now. sealing counts the seals working on
+	// the session, which take no turn. Both are guarded by sessionLocks.mu.
+	reading bool
+	sealing int
+}
+
+// ref takes a reference on id's entry, making the entry if there is none.
+func (s *sessionLocks) ref(id string) *sessionLock {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entries[id]
+	if e == nil {
+		if s.entries == nil {
+			s.entries = map[string]*sessionLock{}
+		}
+		e = &sessionLock{slot: make(chan struct{}, 1)}
+		s.entries[id] = e
+	}
+	e.refs++
+	return e
+}
+
+func (s *sessionLocks) acquire(ctx context.Context, id string) (release func(), err error) {
+	e := s.ref(id)
+	select {
+	case e.slot <- struct{}{}:
+		return func() {
+			<-e.slot
+			s.unref(id, e)
+		}, nil
+	case <-ctx.Done():
+		s.unref(id, e)
+		return nil, ctx.Err()
+	}
+}
+
+func (s *sessionLocks) unref(id string, e *sessionLock) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e.refs--; e.refs == 0 {
+		delete(s.entries, id)
+	}
+}
+
+// read marks whether the holder of id's turn is reading a chunk's body.
+func (s *sessionLocks) read(id string, on bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.entries[id]; e != nil {
+		e.reading = on
+	}
+}
+
+// seal marks id as being sealed until the returned func is called. A seal
+// takes no turn, so it holds no append up: it only keeps the session from
+// reading as idle while the work, which takes no bytes, runs.
+func (s *sessionLocks) seal(id string) (done func()) {
+	e := s.ref(id)
+	s.mu.Lock()
+	e.sealing++
+	s.mu.Unlock()
+	return func() {
+		s.mu.Lock()
+		e.sealing--
+		s.mu.Unlock()
+		s.unref(id, e)
+	}
+}
+
+// live reports whether id is at work now: a chunk's body is being read, or
+// a seal is running.
+func (s *sessionLocks) live(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entries[id]
+	return e != nil && (e.reading || e.sealing > 0)
+}
+
+// landingReader notes when a read of a chunk's body last brought bytes.
+type landingReader struct {
+	r      io.Reader
+	lastNS int64
+}
+
+func (r *landingReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 {
+		r.lastNS = time.Now().UnixNano()
+	}
+	return n, err
+}
+
 // AppendUploadData writes one chunk at offset, which must equal the
 // session's received byte count.
 func (l *Library) AppendUploadData(ctx context.Context, uc *UserCtx, id string, offset int64, body io.Reader) (UploadDTO, error) {
+	// The read, the compare, the write and the advance are one turn per
+	// session; the advance's own compare-and-set backstops it.
+	release, err := l.appendLocks.acquire(ctx, id)
+	if err != nil {
+		return UploadDTO{}, err
+	}
+	defer release()
 	u, err := l.uploadForCaller(ctx, uc, id)
 	if err != nil {
 		return UploadDTO{}, err
@@ -663,7 +796,25 @@ func (l *Library) AppendUploadData(ctx context.Context, uc *UserCtx, id string, 
 	// session's own. Nothing is read past either, so a client streaming
 	// an endless body gets one chunk's worth of disk and a refusal.
 	limit := min(remaining, MaxUploadChunk)
-	n, err := io.Copy(f, io.LimitReader(body, limit+1))
+	// Bytes that arrive count as the session taking them, kept or not: a
+	// chunk that fails late was still being sent, and its retry follows.
+	// The session reads as taking them until that is on its row, so a read
+	// between the last byte and the stamp does not see the stamp before.
+	landed := &landingReader{r: body}
+	stored := false
+	l.appendLocks.read(id, true)
+	defer func() {
+		if !stored && landed.lastNS != 0 {
+			if err := l.db.TouchUploadReceived(context.WithoutCancel(ctx), u.ID, landed.lastNS); err != nil {
+				l.log.Warn("recording an upload's arrived bytes", "upload", u.ID, "err", err)
+			}
+		}
+		l.appendLocks.read(id, false)
+	}()
+	n, err := io.Copy(f, io.LimitReader(landed, limit+1))
+	if l.bodyReadHook != nil {
+		l.bodyReadHook()
+	}
 	if err != nil {
 		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
@@ -684,10 +835,27 @@ func (l *Library) AppendUploadData(ctx context.Context, uc *UserCtx, id string, 
 	if err := f.Sync(); err != nil {
 		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	u.ReceivedBytes += n
-	if err := l.db.UpdateUpload(ctx, u); err != nil {
+	at := time.Now().UnixNano()
+	moved, err := l.db.AdvanceUploadReceived(ctx, u.ID, offset, offset+n, at)
+	if err != nil {
 		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
+	if !moved {
+		// Lost to a writer the lock does not cover: a discard or the
+		// expiry sweep.
+		cur, err := l.uploadForCaller(ctx, uc, id)
+		if err != nil {
+			return UploadDTO{}, err
+		}
+		if cur.State != uploadReceiving {
+			return UploadDTO{}, &Error{Kind: KindConflict, Msg: "the upload is no longer receiving bytes"}
+		}
+		return UploadDTO{}, &Error{Kind: KindConflict, Msg: fmt.Sprintf(
+			"offset %d does not match the %d bytes received; resume there", offset, cur.ReceivedBytes)}
+	}
+	stored = true
+	u.ReceivedBytes += n
+	u.ReceivedAtNS = at
 	return l.hydrateUploadDuplicate(ctx, uc, u), nil
 }
 
@@ -762,6 +930,9 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 		return UploadDTO{}, &Error{Kind: KindConflict, Msg: fmt.Sprintf(
 			"%d of %d bytes received; the upload is incomplete", u.ReceivedBytes, u.SizeBytes)}
 	}
+	// The seal can outlast the time a session may go quiet, with no bytes
+	// arriving to show for it.
+	defer l.appendLocks.seal(id)()
 	part, final := l.uploadPartPath(u), l.uploadFinalPath(u)
 	// A complete that went away after promoting the file (a crash, or a
 	// request its client gave up on mid-import) left only the final

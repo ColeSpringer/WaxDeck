@@ -147,6 +147,10 @@ const baselineSchema = `
 		json          TEXT    NOT NULL,
 		updated_at_ns INTEGER NOT NULL
 	);
+	CREATE TABLE job_clears (
+		user_id       TEXT    PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+		cleared_at_ns INTEGER NOT NULL
+	);
 	-- Which starter playlist each account was seeded with, and whether
 	-- they threw it away. The seeded list is an ordinary owned playlist
 	-- once it exists -- editable, renameable, deletable -- so this row
@@ -815,6 +819,10 @@ const baselineSchema = `
 		file_name      TEXT    NOT NULL,
 		size_bytes     INTEGER NOT NULL,
 		received_bytes INTEGER NOT NULL DEFAULT 0,
+		-- When bytes last arrived: the session's creation, then each chunk
+		-- stored, or one whose bytes arrived and were not kept. What a
+		-- session's idleness counts from.
+		received_at_ns INTEGER NOT NULL DEFAULT 0,
 		media_type     TEXT    NOT NULL,
 		library_pid    TEXT    NOT NULL DEFAULT '',
 		batch_id       TEXT    NOT NULL DEFAULT '',

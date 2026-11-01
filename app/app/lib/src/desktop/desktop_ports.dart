@@ -1,9 +1,9 @@
-/// The two desktop shell surfaces WaxDeck owns: the mini window and the
-/// tray.
+/// The desktop shell surfaces WaxDeck owns: the mini window, the tray and
+/// the window title.
 ///
-/// Both are wrapped rather than called (`window_manager` and
-/// `tray_manager` never appear above this line), and both are allowed to
-/// do less than they were asked. That is not defensive coding: a Wayland
+/// Each is wrapped rather than called (`window_manager` and
+/// `tray_manager` never appear above this line), and each is allowed to
+/// do less than it was asked. That is not defensive coding: a Wayland
 /// compositor decides for itself whether a window may be frameless, sit
 /// above others, or be put where the app wants it, and a Linux session
 /// with no StatusNotifier host has nowhere to put a tray icon at all. The
@@ -193,6 +193,12 @@ abstract interface class TrayPort {
   Future<void> dispose();
 }
 
+/// The title the platform shows for this window: the browser tab, the
+/// desktop title bar.
+abstract interface class WindowTitlePort {
+  void show(String title);
+}
+
 /// The ports where there is no desktop shell: web, and both mobiles.
 class NoMiniWindow implements MiniWindowPort {
   const NoMiniWindow();
@@ -236,4 +242,12 @@ class NoTray implements TrayPort {
 
   @override
   Future<void> dispose() async {}
+}
+
+/// A phone has no title bar and its recents label is left alone.
+class NoWindowTitle implements WindowTitlePort {
+  const NoWindowTitle();
+
+  @override
+  void show(String title) {}
 }

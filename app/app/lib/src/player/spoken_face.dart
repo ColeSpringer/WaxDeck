@@ -16,8 +16,10 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'bookmarks.dart';
+import 'chapters.dart';
 import 'playback_session.dart';
 import 'speed_sheet.dart';
+import 'timeline_scope.dart';
 import 'waveform.dart';
 
 /// Rebuilds only when the live position crosses into a new [T].
@@ -80,81 +82,9 @@ class _WhenChangedState<T> extends State<WhenChanged<T>> {
   Widget build(BuildContext context) => widget.builder(context, _value);
 }
 
-/// Which chapter [position] falls in, or null when the book has none.
-///
-/// The latest start at or before the position, taken by comparison
-/// rather than by walking to the end of the list. The contract says
-/// chapters arrive ordered by `startMs` and they always have; these
-/// marks come out of file metadata through a third-party reader, and a
-/// helper that reads the same either way costs nothing to write.
-///
-/// A position before the first chapter answers the first one: the book
-/// is in its opening chapter as far as anything that names one is
-/// concerned, which is what the title block and the chapter list want.
-/// The seek cluster is what holds that position inside the span it
-/// draws.
-ChapterMark? chapterAt(List<ChapterMark> chapters, Duration position) {
-  final positionMs = position.inMilliseconds;
-  ChapterMark? current;
-  for (final chapter in chapters) {
-    if (chapter.startMs > positionMs) continue;
-    if (current == null || chapter.startMs > current.startMs) current = chapter;
-  }
-  return current ?? (chapters.isEmpty ? null : chapters.first);
-}
-
 /// A chapter's own name, or its number when the source named none.
 String chapterTitle(ChapterMark chapter) =>
     chapter.title ?? 'Chapter ${chapter.index + 1}';
-
-/// Where a chapter ends on the timeline it lives on.
-///
-/// The mark's own end when it carries one, the *nearest* later start
-/// when it does not, and the item's end for the last one. Nearest by
-/// comparison rather than first-encountered, for the reason [chapterAt]
-/// compares: an end taken from the first later mark in an unordered
-/// list is a chapter bar drawn twice its width and a sleep timer that
-/// stops a chapter late.
-///
-/// [relayed] is an episode the server streams from its feed, whose last
-/// chapter it ends at the length the feed declares, which can be 0 or
-/// off the audio: that chapter ends at [totalMs] instead whenever that is
-/// past its start, and where the stream ends ([PlaybackSession.mediaEndStopMs])
-/// when no length is known.
-int chapterEndMs(
-  List<ChapterMark> chapters,
-  ChapterMark chapter,
-  int totalMs, {
-  bool relayed = false,
-}) {
-  int? nearest;
-  for (final other in chapters) {
-    if (other.startMs <= chapter.startMs) continue;
-    if (nearest == null || other.startMs < nearest) nearest = other.startMs;
-  }
-  if (relayed && nearest == null) {
-    return totalMs > chapter.startMs ? totalMs : PlaybackSession.mediaEndStopMs;
-  }
-  return chapter.endMs ?? nearest ?? totalMs;
-}
-
-/// Where end-of-chapter sleep stops in the chapter playing at [position],
-/// the marks laid out against [totalMs] as [chapterEndMs] lays them
-/// ([relayed] likewise): that chapter's end, or null when no chapter is
-/// playing, its end is not known (the last chapter of audio whose length
-/// nothing reports yet), or the end is not ahead of [position] (a gap
-/// between hand-edited chapters).
-int? chapterStopMs(
-  List<ChapterMark> chapters,
-  Duration position,
-  int totalMs, {
-  bool relayed = false,
-}) {
-  final current = chapterAt(chapters, position);
-  if (current == null) return null;
-  final end = chapterEndMs(chapters, current, totalMs, relayed: relayed);
-  return end > current.startMs && end > position.inMilliseconds ? end : null;
-}
 
 /// The show an episode is from, above its title and tappable.
 class ShowOverline extends ConsumerWidget {
@@ -257,15 +187,12 @@ class BookSeek extends ConsumerStatefulWidget {
 }
 
 class _BookSeekState extends ConsumerState<BookSeek> {
-  static const _chapterView = 'chapter';
-  static const _bookView = 'book';
-
-  var _view = _chapterView;
-
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final total = widget.session.mediaDuration;
+    // Shared with the deck and the mini window, and kept across opens.
+    final scope = ref.watch(bookTimelineScopeProvider);
     // The whole book's envelope, whichever view is drawn. A book that
     // has not been analyzed, or one part of which cannot be, answers
     // null and the bar is the plain one it has always been.
@@ -273,23 +200,15 @@ class _BookSeekState extends ConsumerState<BookSeek> {
     return ValueListenableBuilder<Duration>(
       valueListenable: widget.position,
       builder: (context, at, _) {
-        final chapter = _view == _chapterView
-            ? chapterAt(widget.chapters, at)
-            : null;
-        final start = chapter == null
-            ? Duration.zero
-            : Duration(milliseconds: chapter.startMs);
-        final span = chapter == null
-            ? total
-            : Duration(
-                milliseconds:
-                    chapterEndMs(
-                      widget.chapters,
-                      chapter,
-                      total.inMilliseconds,
-                    ) -
-                    chapter.startMs,
-              );
+        final window = bookWindow(
+          chapters: widget.chapters,
+          at: at,
+          total: total,
+          scope: scope,
+        );
+        final chapter = window.chapter;
+        final start = window.start;
+        final span = window.span;
         return Column(
           children: <Widget>[
             if (widget.chapters.isNotEmpty)
@@ -297,20 +216,26 @@ class _BookSeekState extends ConsumerState<BookSeek> {
                 padding: const EdgeInsets.only(bottom: WaxSpace.s8),
                 child: WaxSegmented(
                   label: l10n.playerSeekSpans,
-                  selected: _view,
+                  selected: scope.name,
                   segments: <WaxSegment>[
                     WaxSegment(
-                      name: _chapterView,
+                      name: BookTimelineScope.chapter.name,
                       label: l10n.playerSpanChapter,
-                      semanticsId: SemanticsIds.playerTimeline(_chapterView),
+                      semanticsId: SemanticsIds.playerTimeline(
+                        BookTimelineScope.chapter.name,
+                      ),
                     ),
                     WaxSegment(
-                      name: _bookView,
+                      name: BookTimelineScope.book.name,
                       label: l10n.playerSpanBook,
-                      semanticsId: SemanticsIds.playerTimeline(_bookView),
+                      semanticsId: SemanticsIds.playerTimeline(
+                        BookTimelineScope.book.name,
+                      ),
                     ),
                   ],
-                  onSelect: (view) => setState(() => _view = view),
+                  onSelect: (name) => ref
+                      .read(bookTimelineScopeProvider.notifier)
+                      .set(BookTimelineScope.values.byName(name)),
                 ),
               ),
             SeekCluster(
@@ -318,14 +243,8 @@ class _BookSeekState extends ConsumerState<BookSeek> {
                 title: widget.session.item.title,
                 // Chapter-relative, so both timecodes read as the
                 // chapter's own rather than as book positions the bar
-                // is not drawing. Held inside the chapter, because a
-                // book whose first chapter starts after zero - an
-                // intro, a credits region - stands before its own
-                // opening chapter for as long as that lasts, and the
-                // bare subtraction is negative there. `formatTimecode`
-                // does not draw a negative as one: minus five seconds
-                // reads "0:55".
-                position: _within(at - start, span),
+                // is not drawing.
+                position: withinWindow(at, window),
                 duration: span,
                 playing: true,
               ),
@@ -402,12 +321,6 @@ class _BookSeekState extends ConsumerState<BookSeek> {
       ];
     }
     return _starts;
-  }
-
-  /// A position held inside the span the bar is drawing.
-  static Duration _within(Duration at, Duration span) {
-    if (at < Duration.zero) return Duration.zero;
-    return at > span ? span : at;
   }
 
   /// "42 percent, 6 hr 12 min left" (5.3). Percent and a span, because

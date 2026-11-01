@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
+import 'package:waxdeck/src/admin/first_run_wizard.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
@@ -30,16 +31,14 @@ _bind({
   Prefs prefs = const Prefs(timezone: 'America/Denver'),
   List<ServerSyncPage> serverPages = const [],
   List<ProviderObserver> observers = const [],
+  WaxDeckUser user = const WaxDeckUser(id: 'us-1', username: 'admin'),
 }) async {
   final db = inMemoryMirrorDatabase();
   addTearDown(db.close);
   final downloads = FakeDownloads();
   addTearDown(downloads.dispose);
   final repo = _CountingRepository()
-    ..sessionState = const SessionState(
-      authenticated: true,
-      user: WaxDeckUser(id: 'us-1', username: 'admin'),
-    )
+    ..sessionState = SessionState(authenticated: true, user: user)
     ..prefs = prefs
     ..serverPages.addAll(serverPages);
   final engine = SyncEngine(
@@ -120,6 +119,22 @@ class _CountingRepository extends FakeRepository {
   int prefsReads = 0;
   int healthReads = 0;
   int taskReads = 0;
+
+  /// Answers the next walk from a cursor with a sync-reset.
+  bool resetServerNext = false;
+
+  @override
+  Future<ServerSyncPage> syncServer({String? since, int? limit}) {
+    if (resetServerNext && since != null) {
+      resetServerNext = false;
+      throw const WaxDeckApiException(
+        code: 'sync-reset',
+        message: 'the cursor is too old',
+        statusCode: 410,
+      );
+    }
+    return super.syncServer(since: since, limit: limit);
+  }
 
   @override
   Future<ToolTaskPage> listToolTasks({String? cursor, int? limit}) {
@@ -243,6 +258,27 @@ void main() {
     await b.engine.flushOutbox();
 
     expect(b.repo.prefs.locale, 'es');
+  });
+
+  testWidgets('a walk that lost its place refreshes what the session holds', (
+    tester,
+  ) async {
+    // What fell between the cursor and the one minted in its stead was
+    // never walked, so nothing can say what moved: the session reads its
+    // surfaces again, as it does on web.
+    final b = await _bind();
+    final repo = b.repo as _CountingRepository;
+    await b.engine.pullServer();
+    await b.engine.pullServer();
+    final reads = repo.prefsReads;
+
+    repo.resetServerNext = true;
+    await b.engine.pullServer();
+    await tester.pump(kUserRefreshWindow + const Duration(seconds: 1));
+
+    expect(repo.resetServerNext, isFalse, reason: 'the walk was reset');
+    expect(repo.prefsReads, reads + 1);
+    await _signOut(tester, b.container);
   });
 
   testWidgets('a play-state change refreshes the user surfaces once', (
@@ -522,6 +558,81 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 1500));
 
     expect(repo.organizeProfileReads, reads + 1);
+  });
+
+  group('the libraries\' item counts', () {
+    Future<void> settle(WidgetTester tester) async {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+    }
+
+    LibraryInfo library(int items) =>
+        LibraryInfo(pid: 'lb-1', name: 'Music', itemCount: items);
+
+    testWidgets('are read once a run of catalog changes goes quiet, so a '
+        'scan\'s items show without a library marker', (tester) async {
+      final b = await _bind();
+      b.repo.libraries.add(library(0));
+      b.container.listen(libraryCountsProvider, (_, _) {});
+      expect(
+        (await b.container.read(libraryCountsProvider.future)).single.itemCount,
+        0,
+      );
+      int countReads() => b.repo.listLibrariesCalls.where((c) => c).length;
+      final reads = countReads();
+
+      b.repo.libraries[0] = library(40);
+      for (var hint = 0; hint < 10; hint++) {
+        await b.engine.pullCatalog();
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(kCatalogRefreshWindow + const Duration(seconds: 1));
+
+      expect(countReads(), reads + 1, reason: 'one read for the run');
+      expect(
+        (await b.container.read(libraryCountsProvider.future)).single.itemCount,
+        40,
+      );
+      await _signOut(tester, b.container);
+    });
+
+    testWidgets('keep the first-run tour off the scan step once a swept '
+        'scan has landed its items', (tester) async {
+      final b = await _bind(
+        user: const WaxDeckUser(
+          id: 'us-1',
+          username: 'admin',
+          roles: ['admin'],
+        ),
+      );
+      b.repo.healthSummary = const HealthSummary(
+        score: 0,
+        totalItems: 0,
+        evaluatedItems: 0,
+        warmingUp: true,
+      );
+      b.container.listen(firstRunWizardProvider, (_, _) {});
+      await settle(tester);
+      expect(b.container.read(firstRunWizardProvider), FirstRunStep.addLibrary);
+
+      // The library is declared with nothing read yet: the counts cache a
+      // zero, and the tour offers the scan.
+      b.repo.libraries.add(library(0));
+      b.container.invalidate(librariesProvider);
+      await settle(tester);
+      expect(b.container.read(firstRunWizardProvider), FirstRunStep.scan);
+
+      // A scan outside the dashboard lands its items and is swept from
+      // Tasks. Nothing invalidates the counts by hand.
+      b.repo.libraries[0] = library(40);
+      await b.engine.pullCatalog();
+      await tester.pump(kCatalogRefreshWindow + const Duration(seconds: 1));
+      await settle(tester);
+
+      expect(b.container.read(firstRunWizardProvider), FirstRunStep.warming);
+      await _signOut(tester, b.container);
+    });
   });
 
   group('home\'s library probe', () {

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart' show ulidOf;
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
@@ -806,6 +807,47 @@ class FakeRepository implements WaxDeckRepository {
           if (departedEntityPids.contains(pid)) pid,
       ],
     );
+  }
+
+  /// Item pids [resolveItems] leaves out without naming departed: the
+  /// server's shape for an item out of the caller's sight.
+  final Set<String> hiddenItemPids = {};
+
+  /// Every pid list [resolveItems] was asked for, in call order.
+  final List<List<String>> resolvedItemPids = [];
+
+  /// Thrown by [resolveItems] while set.
+  WaxDeckApiException? resolveItemsError;
+
+  /// Answers from [libraryItems] by ULID, as the server reaches an item
+  /// under either a track's or a book's prefix; a pid nothing answers to
+  /// is departed.
+  @override
+  Future<ItemResolution> resolveItems(List<String> pids) async {
+    resolvedItemPids.add(List<String>.of(pids));
+    final error = resolveItemsError;
+    if (error != null) throw error;
+    if (pids.length > itemLookupCap) {
+      throw const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'too many pids',
+        statusCode: 400,
+      );
+    }
+    final items = <ItemSummary>[];
+    final departed = <String>[];
+    for (final pid in pids) {
+      if (hiddenItemPids.contains(pid)) continue;
+      final item = libraryItems
+          .where((i) => ulidOf(i.pid) == ulidOf(pid))
+          .firstOrNull;
+      if (item != null) {
+        items.add(item);
+      } else if (!departed.contains(pid)) {
+        departed.add(pid);
+      }
+    }
+    return ItemResolution(items: items, departed: departed);
   }
 
   /// Albums [getAlbum] answers, keyed by pid.
@@ -1740,7 +1782,13 @@ class FakeRepository implements WaxDeckRepository {
     _markUndownloaded(pid);
   }
 
-  void _markUndownloaded(String pid) {
+  void _markUndownloaded(String pid) => _rewriteEpisode(pid, downloaded: false);
+
+  void _rewriteEpisode(
+    String pid, {
+    required bool downloaded,
+    String? fetchState,
+  }) {
     for (final entry in episodesByShow.entries) {
       episodesByShow[entry.key] = [
         for (final e in entry.value)
@@ -1752,13 +1800,17 @@ class FakeRepository implements WaxDeckRepository {
               artist: e.artist,
               album: e.album,
               durationMs: e.durationMs,
+              sortKey: e.sortKey,
               artUrl: e.artUrl,
               showPid: e.showPid,
               season: e.season,
               episodeNumber: e.episodeNumber,
               episodeType: e.episodeType,
               publishedAt: e.publishedAt,
-              downloaded: false,
+              downloaded: downloaded,
+              fetchState: fetchState,
+              // No fetch error: the server pairs one with a failed fetch
+              // only, and a queued fetch or a removal clears it.
               explicit: e.explicit,
               hasTranscript: e.hasTranscript,
               hasEnclosure: e.hasEnclosure,
@@ -1772,6 +1824,7 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<void> fetchEpisode(String pid) async {
     fetchEpisodeCalls.add(pid);
+    _rewriteEpisode(pid, downloaded: false, fetchState: 'queued');
   }
 
   /// How many new episodes a feed refresh reports, by show pid.
@@ -3580,6 +3633,14 @@ class FakeRepository implements WaxDeckRepository {
   /// tests use it to trip failures at a chosen chunk.
   void Function()? onPutUploadData;
 
+  /// When set, the [putUploadDataGateAt]th chunk (counting from one)
+  /// waits on it before it is taken, and [putUploadDataReached] completes
+  /// as it arrives: a transfer stood up mid-file.
+  Completer<void>? putUploadDataGate;
+  int putUploadDataGateAt = 1;
+  final putUploadDataReached = Completer<void>();
+  var _chunksSeen = 0;
+
   /// Runs before each createUpload, ahead of the [uploadError] check;
   /// tests use it to fail a chosen file in a multi-file flow.
   void Function(String fileName)? onCreateUpload;
@@ -3610,12 +3671,14 @@ class FakeRepository implements WaxDeckRepository {
   UploadSession _uploadWith(
     UploadSession u, {
     int? receivedBytes,
+    Duration? idle,
     String? state,
   }) => UploadSession(
     id: u.id,
     fileName: u.fileName,
     sizeBytes: u.sizeBytes,
     receivedBytes: receivedBytes ?? u.receivedBytes,
+    idle: idle ?? u.idle,
     mediaType: u.mediaType,
     libraryPid: u.libraryPid,
     batchId: u.batchId,
@@ -3633,8 +3696,12 @@ class FakeRepository implements WaxDeckRepository {
   /// The cursor every uploads page answers, so the screen offers more.
   String? uploadsNextCursor;
 
+  /// How many times [listUploads] was asked.
+  int listUploadsCalls = 0;
+
   @override
   Future<UploadPage> listUploads({String? cursor, int? limit}) async {
+    listUploadsCalls++;
     final error = uploadError;
     if (error != null) throw error;
     await listUploadsGate?.future;
@@ -3734,6 +3801,8 @@ class FakeRepository implements WaxDeckRepository {
       fileName: fileName,
       sizeBytes: sizeBytes,
       receivedBytes: 0,
+      // Just opened: the server has taken it this moment.
+      idle: Duration.zero,
       mediaType: MediaType.values.firstWhere(
         (m) => m.wireName == mediaType,
         orElse: () => MediaType.music,
@@ -3785,6 +3854,11 @@ class FakeRepository implements WaxDeckRepository {
     required int offset,
     required Uint8List bytes,
   }) async {
+    final gate = putUploadDataGate;
+    if (++_chunksSeen == putUploadDataGateAt && gate != null) {
+      putUploadDataReached.complete();
+      await gate.future;
+    }
     onPutUploadData?.call();
     final error = uploadError;
     if (error != null) throw error;
@@ -3796,6 +3870,7 @@ class FakeRepository implements WaxDeckRepository {
     final updated = _uploadWith(
       _uploadById(uploadId),
       receivedBytes: offset + bytes.length,
+      idle: Duration.zero,
     );
     uploadsById[uploadId] = updated;
     return updated;
@@ -6606,20 +6681,51 @@ class FakeRepository implements WaxDeckRepository {
   /// whether a client noticed its copy had gone stale.
   int jobReads = 0;
 
+  /// How many times [clearFinishedJobs] was called.
+  int clearFinishedJobCalls = 0;
+
+  /// Thrown by [clearFinishedJobs] when set.
+  Object? clearFinishedJobsError;
+
+  /// The finished jobs each account has cleared from its own list, by
+  /// account id. Still read by pid, as the server keeps them.
+  final Map<String?, Set<String>> clearedJobPids = {};
+
+  @override
+  Future<int> clearFinishedJobs() async {
+    clearFinishedJobCalls++;
+    if (clearFinishedJobsError case final error?) throw error;
+    // The server's clear: what the caller's list shows finished leaves
+    // that list, and only that is counted.
+    final cleared = [
+      for (final job in _listedJobs())
+        if (job.ended) job.pid,
+    ];
+    (clearedJobPids[sessionState.user?.id] ??= {}).addAll(cleared);
+    return cleared.length;
+  }
+
   @override
   Future<List<Job>> listJobs() async {
     jobReads++;
-    // The server's listing: a finished targeted job is left out, so a
-    // burst of one-item runs does not bury the passes, except a kind
-    // change, an organize undo or a library removal, which someone asked
-    // for and is told the result of.
+    return _listedJobs();
+  }
+
+  /// The server's listing: a finished targeted job is left out, so a
+  /// burst of one-item runs does not bury the passes, except a kind
+  /// change, an organize undo or a library removal, which someone asked
+  /// for and is told the result of; and so is whatever this account
+  /// cleared.
+  List<Job> _listedJobs() {
+    final cleared = clearedJobPids[sessionState.user?.id] ?? const {};
     return [
       for (final job in jobs)
-        if (job.target == null ||
-            job.state == 'running' ||
-            job.kind == 'set-kind' ||
-            job.kind == 'organize-undo' ||
-            job.kind == 'remove-root')
+        if (!cleared.contains(job.pid) &&
+            (job.target == null ||
+                job.state == 'running' ||
+                job.kind == 'set-kind' ||
+                job.kind == 'organize-undo' ||
+                job.kind == 'remove-root'))
           job,
     ];
   }
@@ -7613,6 +7719,8 @@ EpisodeSummary testEpisode(
   DateTime? publishedAt,
   bool downloaded = true,
   String? fetchState,
+  String? fetchError,
+  String? sortKey,
   bool hasTranscript = false,
   bool explicit = false,
   bool hasEnclosure = true,
@@ -7624,12 +7732,14 @@ EpisodeSummary testEpisode(
   title: title,
   artist: artist,
   durationMs: durationMs,
+  sortKey: sortKey,
   showPid: showPid,
   season: season,
   episodeNumber: episodeNumber,
   publishedAt: publishedAt ?? DateTime.utc(2026, 7, 10, 6),
   downloaded: downloaded,
   fetchState: fetchState,
+  fetchError: fetchError,
   hasTranscript: hasTranscript,
   explicit: explicit,
   hasEnclosure: hasEnclosure,
@@ -7665,7 +7775,8 @@ ReviewEntry testReviewEntry(
   duplicateCount: duplicateCount,
 );
 
-/// Handy upload-session factory for tests.
+/// Handy upload-session factory for tests. [idle] defaults to a day: a
+/// row built by hand is an old one nobody is sending any more.
 UploadSession testUpload(
   String id, {
   String fileName = 'neon-meridian.flac',
@@ -7677,11 +7788,13 @@ UploadSession testUpload(
   String? reviewEntryId,
   DuplicateWarning? duplicate,
   String? uploadedBy,
+  Duration idle = const Duration(days: 1),
 }) => UploadSession(
   id: id,
   fileName: fileName,
   sizeBytes: sizeBytes,
   receivedBytes: receivedBytes,
+  idle: idle,
   mediaType: mediaType,
   batchId: batchId,
   state: state,

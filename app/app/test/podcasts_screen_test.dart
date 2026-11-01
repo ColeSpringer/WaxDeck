@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/podcasts/add_podcast.dart';
@@ -178,6 +179,97 @@ void main() {
     // its own rather than the two sharing one.
     expect(byId(SemanticsIds.episodeContinue('tr-half')), findsOneWidget);
     expect(byId(SemanticsIds.episode('tr-half')), findsOneWidget);
+  });
+
+  testWidgets('the Latest rows carry the show page\'s fetch, remove and menu', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode(
+          'tr-new',
+          showPid: 'pc-A',
+          title: 'Brand New',
+          downloaded: false,
+        ),
+        testEpisode(
+          'tr-held',
+          showPid: 'pc-A',
+          title: 'Already Held',
+          publishedAt: DateTime.utc(2026, 7, 9),
+        ),
+      ];
+    await _pump(tester, repo);
+
+    Finder byId(String id) => find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.identifier == id,
+    );
+    expect(byId(SemanticsIds.episodeFetch('tr-new')), findsOneWidget);
+    expect(byId(SemanticsIds.episodeMore('tr-new')), findsOneWidget);
+    expect(byId(SemanticsIds.episodeRemove('tr-held')), findsOneWidget);
+    expect(byId(SemanticsIds.episodeFetch('tr-held')), findsNothing);
+
+    await tester.tap(byId(SemanticsIds.episodeFetch('tr-new')));
+    await tester.pumpAndSettle();
+    expect(repo.fetchEpisodeCalls, <String>['tr-new']);
+    expect(
+      find.text('Barliman Butterbur · Queued for download'),
+      findsOneWidget,
+    );
+    // The fetch re-reads both shelves, not only the one on screen.
+    expect(
+      repo.subscribedEpisodeCalls.where(
+        (f) => f == SubscribedEpisodes.inProgress,
+      ),
+      hasLength(2),
+    );
+    expect(byId(SemanticsIds.episodeFetch('tr-new')), findsNothing);
+
+    await tester.tap(byId(SemanticsIds.episodeRemove('tr-held')));
+    await tester.pumpAndSettle();
+    expect(repo.removeDownloadCalls, <String>['tr-held']);
+    expect(byId(SemanticsIds.episodeFetch('tr-held')), findsOneWidget);
+
+    await tester.tap(byId(SemanticsIds.episodeMore('tr-new')));
+    await tester.pumpAndSettle();
+    expect(byId(SemanticsIds.itemMenuSheet('tr-new')), findsOneWidget);
+
+    // The hub never builds the show's own listing to flip a button.
+    expect(repo.listEpisodesCalls, isEmpty);
+
+    // Info is pushed over the hub, not gone to, so back lands here.
+    await tester.tapAt(const Offset(1, 1));
+    await tester.pumpAndSettle();
+    await tester.tap(byId(SemanticsIds.episodeInfo('tr-new')));
+    await tester.pumpAndSettle();
+    final router = GoRouter.of(
+      tester.element(find.byType(PodcastsScreen, skipOffstage: false)),
+    );
+    expect(router.canPop(), isTrue);
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      isNot(contains('tr-new')),
+    );
+  });
+
+  testWidgets('a Latest row with no show title says just where its audio '
+      'stands', (tester) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode(
+          'tr-new',
+          showPid: 'pc-A',
+          title: 'Brand New',
+          artist: null,
+          downloaded: false,
+          fetchState: 'queued',
+        ),
+      ];
+    await _pump(tester, repo);
+
+    expect(find.text('Queued for download'), findsOneWidget);
   });
 
   testWidgets('a show card opens the show header\'s own actions', (

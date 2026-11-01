@@ -24,6 +24,7 @@ import '../playlists/playlists_controller.dart';
 import '../podcasts/podcast_shelves.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
+import '../queue/queue_recheck.dart';
 import '../radio/radio_controller.dart';
 import '../review/review_controller.dart';
 import '../settings/prefs_controller.dart';
@@ -245,6 +246,31 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     retry: probeFanOut.retry,
     quiet: kCatalogRefreshWindow,
   );
+  // The libraries' item counts lag a running scan and cost a count per
+  // root, and no library marker says that items landed: asked once a run
+  // of catalog changes goes quiet, so a scan's burst is one read.
+  final countsFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [libraryCountsProvider],
+  );
+  final countsOnceQuiet = QuietRefresh(
+    fanOut: countsFanOut.sweep,
+    retry: countsFanOut.retry,
+    quiet: kCatalogRefreshWindow,
+  );
+  // The queue's items, read again once a run of catalog changes goes
+  // quiet: what a kind change made anywhere did to them reaches the queue
+  // here (see [QueueRecheck]). Once a run, not once a pass, like the
+  // counts.
+  final recheck = ref.read(queueRecheckProvider);
+  final queueOnceQuiet = QuietRefresh(
+    fanOut: () {
+      unawaited(recheck.run());
+      return true;
+    },
+    quiet: kCatalogRefreshWindow,
+  );
 
   // Both transports hand their hints to the same pacers: the fan-out
   // is what a hint costs, and running it on every one of them is what
@@ -280,6 +306,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   void catalogHint() {
     catalog.hint();
     probeOnceQuiet.hint();
+    countsOnceQuiet.hint();
+    queueOnceQuiet.hint();
   }
 
   final jobs = PacedRefresh(fanOut: jobsFanOut.sweep, retry: jobsFanOut.retry);
@@ -322,6 +350,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       pacer.dispose();
     }
     probeOnceQuiet.dispose();
+    countsOnceQuiet.dispose();
+    queueOnceQuiet.dispose();
   });
 
   // A walk that lost its place, or a catch-up that may have lost changes,

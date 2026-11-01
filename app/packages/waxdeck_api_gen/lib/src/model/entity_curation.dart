@@ -13,10 +13,10 @@ part 'entity_curation.g.dart';
 /// An entity's curated fields.
 ///
 /// Properties:
-/// * [curated] - Curated fields with provenance.
+/// * [curated] - Curated fields with provenance. A scalar field that holds a value and has no row has never been curated; its value is the scan's own. 
 @BuiltValue()
 abstract class EntityCuration implements Built<EntityCuration, EntityCurationBuilder> {
-  /// Curated fields with provenance.
+  /// Curated fields with provenance. A scalar field that holds a value and has no row has never been curated; its value is the scan's own. 
   @BuiltValueField(wireName: r'curated')
   BuiltList<EntityCuratedField> get curated;
 

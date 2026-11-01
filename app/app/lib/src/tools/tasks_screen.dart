@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,10 +17,14 @@ import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import 'job_rows.dart';
 import 'tool_tasks_provider.dart';
 
 /// Whether a task has reached a terminal state, a parked one included.
 bool _finished(ToolTask task) => task.finished;
+
+/// The row's key, so it moves with its task (see [indexByKey]).
+Key _taskKey(ToolTask task) => ValueKey(SemanticsIds.taskRow(task.id));
 
 /// The kinds in words. The three imports name a product rather than a
 /// kind of work, so the name rides in as a placeholder and the sentence
@@ -69,13 +72,16 @@ class TasksScreen extends ConsumerWidget {
     final tasks = ref.watch(toolTasksProvider);
     // Catalog jobs are an administrator's: nobody else may list them.
     final jobs = ref.watch(isAdminProvider)
-        ? _visibleJobs(ref.watch(adminJobsProvider).value ?? const <Job>[])
+        ? visibleJobs(ref.watch(adminJobsProvider).value ?? const <Job>[])
         : const <Job>[];
     // Read off the value rather than the runtime type, for the same
     // reason the face below does: a refresh carries the previous value
     // under an AsyncLoading, and a toolbar control that vanished on
-    // every reload would be its own bug.
-    final anyFinished = tasks.value?.tasks.any(_finished) ?? false;
+    // every reload would be its own bug. Two sources feed the sweep, so
+    // either one being done offers it.
+    final anyFinished =
+        (tasks.value?.tasks.any(_finished) ?? false) ||
+        jobs.any((job) => job.ended);
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         final metrics = notification.metrics;
@@ -129,9 +135,9 @@ class TasksScreen extends ConsumerWidget {
             ),
             SliverList.builder(
               itemCount: jobs.length,
-              findChildIndexCallback: indexByKey(jobs, _jobKey),
+              findChildIndexCallback: indexByKey(jobs, jobKey),
               itemBuilder: (context, index) =>
-                  _JobRow(key: _jobKey(jobs[index]), job: jobs[index]),
+                  JobRow(key: jobKey(jobs[index]), job: jobs[index]),
             ),
             SliverToBoxAdapter(
               child: Padding(
@@ -189,6 +195,12 @@ class TasksScreen extends ConsumerWidget {
     // by the time the answer comes back.
     final messenger = ref.read(shellMessengerProvider.notifier);
     final notifier = ref.read(toolTasksProvider.notifier);
+    final container = ref.container;
+    // Catalog jobs are an administrator's, and the choice of whose tasks
+    // does not reach them: either one hides the caller's own.
+    final repository = ref.read(isAdminProvider)
+        ? ref.read(repositoryProvider)
+        : null;
     final l10n = context.l10n;
     if (all) {
       final confirmed = await showDialog<bool>(
@@ -214,11 +226,26 @@ class TasksScreen extends ConsumerWidget {
     }
     try {
       final cleared = await notifier.clearFinished(all: all);
+      var jobs = 0;
+      String? jobsError;
+      if (repository != null) {
+        // The tasks are already gone, so a refused job clear is told
+        // beside what did clear rather than instead of it.
+        try {
+          jobs = await repository.clearFinishedJobs();
+        } on WaxDeckApiException catch (e) {
+          jobsError = explainError(l10n, e);
+        }
+        container.invalidate(adminJobsProvider);
+      }
       // What stayed, and where to read why: each kept row says it.
       messenger.show(
         [
-          l10n.toolsTasksCleared(cleared.deleted),
+          if (cleared.deleted > 0 || (jobs == 0 && jobsError == null))
+            l10n.toolsTasksCleared(cleared.deleted),
+          if (jobs > 0) l10n.toolsJobsCleared(jobs),
           if (cleared.kept > 0) l10n.toolsTasksKept(cleared.kept),
+          ?jobsError,
         ].join('\n'),
         channel: ShellChannel.tasks,
       );
@@ -236,7 +263,7 @@ class _TaskRow extends ConsumerWidget {
   WaxGlyph get _glyph => switch (task.type) {
     'book-merge' || 'book-split' => WaxIcons.audiobooks,
     'cue-split' => WaxIcons.music,
-    'playlist-sync' => WaxIcons.refresh,
+    'playlist-sync' => WaxIcons.library,
     // Fixes, which rewrite what the catalog holds. A check mark would read
     // as an outcome beside a row that failed.
     'catalog-repair' || 'health-fix' || 'genre-normalize' => WaxIcons.edit,
@@ -334,13 +361,13 @@ class _TaskRow extends ConsumerWidget {
       // A catalog repair's, once its closing check is in: what its steps
       // rewrote and deleted, then how that check read.
       if (summary['after'] case final Map<Object?, Object?> after) ...<String>[
-        if (_count(summary['sortKeysRewritten']) case final n? when n > 0)
+        if (summaryCount(summary['sortKeysRewritten']) case final n? when n > 0)
           l10n.toolsCountSortKeys(n),
-        if (_count(summary['orphansDeleted']) case final n? when n > 0)
+        if (summaryCount(summary['orphansDeleted']) case final n? when n > 0)
           l10n.toolsCountEntriesRemoved(n),
         if (_sum(summary, _reclaimedCounts) case final n when n > 0)
           l10n.toolsCountReclaimed(n),
-        if (_count(summary['searchRowsRebuilt']) case final n? when n > 0)
+        if (summaryCount(summary['searchRowsRebuilt']) case final n? when n > 0)
           l10n.toolsCountSearchRows(n),
         if (after['consistent'] == true)
           l10n.toolsSummaryConsistent
@@ -349,16 +376,19 @@ class _TaskRow extends ConsumerWidget {
       ],
       // A health fix's: what it filled of what it tried, and the rest. A
       // path fix moves its items rather than filling them, and holds some.
-      if (_count(summary['attempted']) case final attempted?) ...<String>[
-        if (_count(summary['moved']) case final moved?)
+      if (summaryCount(summary['attempted']) case final attempted?) ...<String>[
+        if (summaryCount(summary['moved']) case final moved?)
           l10n.toolsCountMovedOf(moved, attempted)
         else
-          l10n.toolsCountFilledOf(_count(summary['filled']) ?? 0, attempted),
+          l10n.toolsCountFilledOf(
+            summaryCount(summary['filled']) ?? 0,
+            attempted,
+          ),
         if (_skippedTotal(summary['held']) case final held?)
           l10n.toolsCountHeld(held),
         if (_skippedTotal(summary['skipped']) case final skipped?)
           l10n.toolsCountSkipped(skipped),
-        if (_count(summary['failed']) case final failed?)
+        if (summaryCount(summary['failed']) case final failed?)
           l10n.toolsCountFailed(failed),
       ],
       if (summary['matched'] != null)
@@ -851,26 +881,19 @@ class _TaskAccountState extends State<_TaskAccount> {
   }
 }
 
-/// A summary counter as a whole number, or null when absent.
-int? _count(Object? value) => value is num ? value.toInt() : null;
-
-/// How many entries a result's list or map holds, zero for anything else.
-int _length(Object? value) => switch (value) {
-  final List<Object?> list => list.length,
-  final Map<Object?, Object?> map => map.length,
-  _ => 0,
-};
-
 /// Everything a fix left alone, whatever the reasons, or null when none.
 int? _skippedTotal(Object? skipped) {
   if (skipped is! Map) return null;
-  final total = skipped.values.fold<int>(0, (sum, n) => sum + (_count(n) ?? 0));
+  final total = skipped.values.fold<int>(
+    0,
+    (sum, n) => sum + (summaryCount(n) ?? 0),
+  );
   return total == 0 ? null : total;
 }
 
 /// The named counters summed, an absent one as zero.
 int _sum(Map<Object?, Object?> counts, List<String> keys) =>
-    keys.fold(0, (sum, key) => sum + (_count(counts[key]) ?? 0));
+    keys.fold(0, (sum, key) => sum + (summaryCount(counts[key]) ?? 0));
 
 /// What a catalog repair deleted as unused, by its summary's counters.
 const _reclaimedCounts = [
@@ -894,286 +917,3 @@ const _driftCounts = [
   'albumYearDrift',
   'releaseYearDrift',
 ];
-
-/// Kinds a job runs per item: an upload's imports, a delete, a restore,
-/// one purge. Finished, they would bury a scan.
-const _perItemJobKinds = {'import', 'delete', 'restore', 'purge-trash'};
-
-/// How many finished jobs the section keeps.
-const _finishedJobsShown = 20;
-
-/// The jobs worth a row: every running one first, then the finished
-/// ones newest first, per-item kinds left out. The server already leaves
-/// finished targeted jobs out of the list.
-List<Job> _visibleJobs(List<Job> jobs) {
-  DateTime at(Job j) =>
-      j.finishedAt ?? j.startedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-  final finished = [
-    for (final job in jobs)
-      if (job.state != 'running' && !_perItemJobKinds.contains(job.kind)) job,
-  ]..sort((a, b) => at(b).compareTo(at(a)));
-  return [
-    for (final job in jobs)
-      if (job.state == 'running') job,
-    ...finished.take(_finishedJobsShown),
-  ];
-}
-
-/// The rows' keys, so a row moves with its job or task (see [indexByKey]).
-Key _jobKey(Job job) => ValueKey(SemanticsIds.jobRow(job.pid));
-
-Key _taskKey(ToolTask task) => ValueKey(SemanticsIds.taskRow(task.id));
-
-/// A job's name, and what it ran on when that is known.
-String _jobTitle(AppLocalizations l10n, Job job) {
-  final label = _jobLabel(l10n, job.kind);
-  final name = job.target?.name;
-  return name == null || name.isEmpty
-      ? label
-      : l10n.toolsJobTargeted(label, name);
-}
-
-String _jobLabel(AppLocalizations l10n, String kind) => switch (kind) {
-  'scan' => l10n.toolsJobScan,
-  'enrich' => l10n.toolsJobEnrich,
-  'analyze' => l10n.toolsJobAnalyze,
-  'organize' => l10n.toolsJobOrganize,
-  'organize-undo' => l10n.toolsJobOrganizeUndo,
-  'empty-trash' => l10n.toolsJobEmptyTrash,
-  'purge-trash' => l10n.toolsJobPurgeTrash,
-  'import' => l10n.toolsJobImport,
-  'delete' => l10n.toolsJobDelete,
-  'restore' => l10n.toolsJobRestore,
-  'remove-root' => l10n.toolsJobRemoveRoot,
-  'set-kind' => l10n.toolsJobSetKind,
-  _ => kind,
-};
-
-/// One catalog job: what it is, how far along, what it said, and once
-/// finished what it did.
-class _JobRow extends StatelessWidget {
-  const _JobRow({super.key, required this.job});
-
-  final Job job;
-
-  WaxGlyph get _glyph => switch (job.kind) {
-    'scan' => WaxIcons.refresh,
-    'enrich' => WaxIcons.search,
-    'analyze' => WaxIcons.waveform,
-    'organize' || 'organize-undo' || 'restore' => WaxIcons.archive,
-    'empty-trash' || 'purge-trash' || 'delete' => WaxIcons.delete,
-    'remove-root' => WaxIcons.delete,
-    'import' => WaxIcons.upload,
-    'set-kind' => WaxIcons.audiobooks,
-    _ => WaxIcons.hourglass,
-  };
-
-  String _stateLabel(AppLocalizations l10n) {
-    final progress = job.progress;
-    return switch (job.state) {
-      'running' =>
-        progress == null
-            ? l10n.toolsStateRunning
-            : l10n.toolsStateRunningPct((progress * 100).round()),
-      'done' => l10n.toolsStateDone,
-      'failed' => l10n.toolsStateFailed,
-      'crashed' => l10n.toolsStateCrashed,
-      'canceled' => l10n.toolsStateCanceled,
-      final other => other,
-    };
-  }
-
-  Color _stateColor(WaxColors colors) => switch (job.state) {
-    'done' => colors.success,
-    'failed' || 'crashed' => colors.error,
-    'running' => colors.accent,
-    _ => colors.textTertiary,
-  };
-
-  /// The finished job's headline counters, by kind.
-  String? _resultLine(AppLocalizations l10n) {
-    final r = job.result;
-    if (r == null) return null;
-    int? n(String key) => _count(r[key]);
-    final parts = <String>[
-      ...switch (job.kind) {
-        'scan' => <String>[
-          if (n('created') case final v?) l10n.toolsCountAdded(v),
-          if (n('updated') case final v?) l10n.toolsCountUpdated(v),
-          if (n('copies') case final v?) l10n.toolsCountCopies(v),
-          if (n('missing') case final v?) l10n.toolsCountMissing(v),
-          if (n('errored') case final v?) l10n.toolsCountErrored(v),
-          // Entries the walk could not read are no file count's, and an
-          // unreachable folder is none at all: the counts alone read clean.
-          if (n('walkErrors') case final v? when v > 0)
-            l10n.toolsCountUnreadable(v),
-          if (r['rootUnreachable'] == true) l10n.toolsRootUnreachable,
-        ],
-        'enrich' => <String>[
-          if (n('lyricsMatched') case final v?) l10n.toolsCountLyrics(v),
-          if (n('artFetched') case final v?) l10n.toolsCountCovers(v),
-          if (n('auxArtFetched') case final v?) l10n.toolsCountPictures(v),
-        ],
-        'analyze' => <String>[
-          if (n('analyzed') case final v?) l10n.toolsCountAnalyzed(v),
-          if (n('errored') case final v?) l10n.toolsCountErrored(v),
-          if (n('fingerprintFallbacks') case final v? when v > 0)
-            l10n.toolsCountFallbacks(v),
-        ],
-        // An undo reads like the run it takes back: what moved, and what
-        // stayed where it was. The job's skipped counts every file that did
-        // not move, the held ones among them: said apart, as Organize says
-        // them.
-        'organize' || 'organize-undo' => <String>[
-          if (n('moved') case final v?) l10n.toolsCountMoved(v),
-          if (n('skipped') case final v?)
-            l10n.toolsCountSkipped(max(0, v - (n('held') ?? 0))),
-          if (n('held') case final v? when v > 0) l10n.toolsCountHeld(v),
-          if (n('errored') case final v?) l10n.toolsCountErrored(v),
-          if (n('dirsPruned') case final v? when v > 0)
-            l10n.toolsCountFoldersRemoved(v),
-        ],
-        // What the catalog let go of, as the removal's notice says it;
-        // trash entries only when the library had any.
-        'remove-root' => <String>[
-          if (n('filesDetached') case final v?) l10n.toolsCountDetached(v),
-          if (n('itemsArchived') case final v?) l10n.toolsCountArchived(v),
-          if (n('trashRowsDropped') case final v? when v > 0)
-            l10n.toolsCountTrashEntriesDropped(v),
-        ],
-        // Lists and a map rather than counts: the pids are what a client
-        // follows to the items' new forms, and the line is their size.
-        'set-kind' => <String>[
-          l10n.toolsCountChanged(
-            _length(r['converted']) + _length(r['created']),
-          ),
-          l10n.toolsCountFolded(_length(r['absorbed'])),
-          if (_length(r['writeBackFailures']) case final v when v > 0)
-            l10n.toolsCountNotWritten(v),
-        ],
-        _ => const <String>[],
-      },
-    ];
-    return parts.isEmpty ? null : parts.join(', ');
-  }
-
-  /// A scan of several libraries says what it found in each, the
-  /// administrator's breakdown of the line above; one library's run is
-  /// that line.
-  List<String> _runLines(AppLocalizations l10n) {
-    final runs = job.result?['runs'];
-    if (job.kind != 'scan' || runs is! List || runs.length < 2) {
-      return const [];
-    }
-    return [
-      for (final run in runs.whereType<Map<Object?, Object?>>())
-        if (run['library'] ?? run['libraryPid'] case final String name)
-          run['rootUnreachable'] == true
-              ? l10n.toolsScanRunUnreachable(name)
-              : l10n.toolsScanRun(
-                  name,
-                  _count(run['audioFiles']) ?? 0,
-                  _count(run['copies']) ?? 0,
-                ),
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
-    final l10n = context.l10n;
-    final message = job.message;
-    final error = job.error;
-    final result = _resultLine(l10n);
-    final runs = _runLines(l10n);
-    // Its lines stay nodes of their own, as a task row's do, rather than
-    // merging into one label that changes shape as the job moves.
-    return Semantics(
-      identifier: SemanticsIds.jobRow(job.pid),
-      container: true,
-      explicitChildNodes: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: WaxSpace.s16,
-          vertical: WaxSpace.s12,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.only(top: WaxSpace.s4),
-              child: WaxIcon(_glyph, size: 20, color: colors.textSecondary),
-            ),
-            const SizedBox(width: WaxSpace.s12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          _jobTitle(l10n, job),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: WaxType.titleItem.copyWith(
-                            color: colors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: WaxSpace.s8),
-                      Text(
-                        _stateLabel(l10n),
-                        style: WaxType.overline.copyWith(
-                          color: _stateColor(colors),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (message != null && message.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: WaxSpace.s4),
-                    Text(
-                      message,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: WaxType.monoData.copyWith(
-                        color: colors.textTertiary,
-                      ),
-                    ),
-                  ],
-                  if (job.state == 'running') ...<Widget>[
-                    const SizedBox(height: WaxSpace.s8),
-                    LinearProgressIndicator(value: job.progress),
-                  ],
-                  if (error != null) ...<Widget>[
-                    const SizedBox(height: WaxSpace.s4),
-                    Text(
-                      error,
-                      style: WaxType.caption.copyWith(color: colors.error),
-                    ),
-                  ],
-                  if (result != null) ...<Widget>[
-                    const SizedBox(height: WaxSpace.s4),
-                    Text(
-                      result,
-                      style: WaxType.caption.copyWith(
-                        color: colors.textTertiary,
-                      ),
-                    ),
-                  ],
-                  for (final line in runs)
-                    Text(
-                      line,
-                      style: WaxType.caption.copyWith(
-                        color: colors.textTertiary,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

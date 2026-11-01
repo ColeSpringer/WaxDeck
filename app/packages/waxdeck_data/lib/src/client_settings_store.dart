@@ -115,6 +115,11 @@ abstract final class ClientSettingKeys {
   static const trimSilenceExplained = 'waxdeck.playback.trimExplained';
   static const voiceBoostExplained = 'waxdeck.playback.boostExplained';
 
+  /// Whether a book's seek bars span the chapter playing or the whole
+  /// book. Per device: it describes this screen, and the deck, the
+  /// player and the mini window here share it.
+  static const bookTimelineScope = 'waxdeck.playback.bookTimelineScope';
+
   /// What the spoken-word effects do when a show or book has no stored
   /// choice of its own. Per device like the speed default beside them:
   /// they are about the ears and the speaker in front of this machine.

@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../player/now_playing_controller.dart';
+import '../player/now_playing_slot.dart';
 import '../providers.dart';
-import '../radio/radio_controller.dart';
 import '../settings/client_prefs.dart';
 import 'discord_ipc_io.dart'
     if (dart.library.js_interop) 'discord_ipc_stub.dart';
@@ -286,19 +286,20 @@ final discordPresenceProvider = Provider.autoDispose<DiscordPresenceBinder>((
   }
 
   void publish() {
-    final station = ref.read(radioPlaybackProvider).station;
-    if (station != null) {
+    final slot = ref.read(nowPlayingSlotProvider);
+    if (slot case StationSlot(:final station, :final playback)) {
       // A station has no length and no place in one, so it gets a name
       // and the title it announced and no progress bar.
       binder.show(
-        DiscordActivity(
-          title: station.name,
-          artist: ref.read(radioPlaybackProvider).nowPlaying,
-        ),
+        DiscordActivity(title: station.name, artist: playback.nowPlaying),
       );
       return;
     }
-    final now = ref.read(nowPlayingProvider);
+    // A parked entry, a remote session and the launch offer say nothing.
+    final now = switch (slot) {
+      ItemSlot(:final now) => now,
+      _ => NowPlaying.nothing,
+    };
     // An entry still resolving keeps what is shown until it has a name.
     if (now.loading && now.item == null) return;
     binder.show(
@@ -316,7 +317,7 @@ final discordPresenceProvider = Provider.autoDispose<DiscordPresenceBinder>((
   ref.listen(discordPresenceEnabledProvider, (_, _) => configure());
   ref.listen(discordApplicationIdProvider, (_, _) => configure());
   ref.listen(discordCoversEnabledProvider, (_, _) => binder.covers = covers());
-  ref.listen(radioPlaybackProvider, (_, _) => publish());
+  ref.listen(nowPlayingSlotProvider, (_, _) => publish());
   // The engine is not a provider, and pause is the other half of what
   // presence follows; a load of the app's own is the rest of it.
   final transport = ref
@@ -329,7 +330,6 @@ final discordPresenceProvider = Provider.autoDispose<DiscordPresenceBinder>((
     unawaited(transport.cancel());
     opening.removeListener(publish);
   });
-  ref.listen(nowPlayingProvider, (_, _) => publish());
   configure();
   publish();
   ref.onDispose(() => unawaited(binder.dispose()));

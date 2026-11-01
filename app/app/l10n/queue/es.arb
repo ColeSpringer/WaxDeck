@@ -25,6 +25,7 @@
   "queuePlayingFrom": "Reproduciendo desde {source}",
   "queuePlayingFromLibrary": "Reproduciendo de tu biblioteca",
   "queuePlayingFromMix": "Reproduciendo una mezcla",
+  "queuePlayingGone": "Lo que sonaba ya no está en la biblioteca.",
   "queuePreviously": "ANTERIORES ({count})",
   "queueRemove": "Quitar",
   "queueRemoveEntry": "Quitar de la cola",

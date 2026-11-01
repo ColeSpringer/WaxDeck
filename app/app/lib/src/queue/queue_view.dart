@@ -12,6 +12,7 @@ import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../media_view.dart';
+import '../player/now_playing_controller.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -279,6 +280,8 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
   final l10n = context.l10n;
   final queue = ref.watch(queueControllerProvider);
   final notifier = ref.read(queueControllerProvider.notifier);
+  final playback = ref.read(nowPlayingProvider.notifier);
+  final parked = ref.watch(parkedEntryProvider) != null;
   final showHistory = ref.watch(queueHistoryOpenProvider);
   final keepPlaying = ref.watch(keepPlayingSimilarProvider);
   // The entries the continuation appended, which is what the seam below
@@ -397,7 +400,7 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
                         selection,
                         entry.queueId,
                         upNextIds,
-                        orJump: () => notifier.jumpTo(at),
+                        orJump: () => unawaited(playback.playEntryAt(at)),
                       ),
                 onRemove: selecting ? null : () => notifier.removeAt(at),
                 // Only while a set is picked: the checkbox takes the
@@ -532,8 +535,11 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
           // node whose only change is its identifier is never resent.
           key: ValueKey(SemanticsIds.queueEntry(queue.currentEntry!.queueId)),
           entry: queue.currentEntry!,
-          playing: true,
-          onTap: () => context.push(WaxRoute.nowPlaying),
+          playing: !parked,
+          // Parked under live radio, the row is the way back to it.
+          onTap: parked
+              ? () => unawaited(playback.playEntryAt(queue.currentIndex))
+              : () => context.push(WaxRoute.nowPlaying),
         ),
       ),
     ),
@@ -673,7 +679,7 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
           itemBuilder: (context, index) => QueueRow(
             key: _historyKey(played[index]),
             entry: played[index],
-            onTap: () => notifier.jumpTo(index),
+            onTap: () => unawaited(playback.playEntryAt(index)),
             onRemove: () => notifier.removeAt(index),
             semanticsId: SemanticsIds.queueHistoryEntry(played[index].queueId),
           ),

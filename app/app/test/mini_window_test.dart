@@ -5,9 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/desktop/desktop_ports.dart';
 import 'package:waxdeck/src/desktop/mini_window.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/player/timeline_scope.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/shell/commands.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -114,6 +117,117 @@ void main() {
 
       gate.complete();
       await tester.pumpAndSettle();
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('offers no stepping through a queue radio parked', (
+      tester,
+    ) async {
+      final window = _FakeWindow(
+        const MiniWindowCapabilities(
+          available: true,
+          frameless: true,
+          alwaysOnTop: true,
+        ),
+      );
+      final repo = FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]);
+      final container = playbackContainer(
+        repo: repo,
+        engine: FakeEngine(),
+        extra: [miniWindowPortProvider.overrideWithValue(window)],
+      );
+      container.read(miniWindowProvider);
+      await tester.pump();
+      await container.read(miniWindowProvider.notifier).enter();
+      await container.read(nowPlayingProvider.notifier).playPids([
+        'tr-A',
+        'tr-B',
+      ], source: QueueSource.none);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: localizedHost(
+            const MiniWindowGate(child: SizedBox()),
+            theme: buildWaxTheme(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      DeckBarActions actions() =>
+          tester.widget<MiniPlayer>(find.byType(MiniPlayer)).actions;
+      expect(actions().onNext, isNotNull);
+      expect(actions().onPrevious, isNotNull);
+
+      final radio = container.read(radioPlaybackProvider.notifier);
+      await radio.play(
+        RadioStation(
+          pid: 'ra-1',
+          name: 'Coastal FM',
+          streamUrl: 'https://radio.example/stream',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await radio.stop();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing is playing'), findsOneWidget);
+      expect(actions().onNext, isNull);
+      expect(actions().onPrevious, isNull);
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('spans a book\'s chapter or the whole book, as the deck '
+        'does', (tester) async {
+      const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDMINI01';
+      final window = _FakeWindow(
+        const MiniWindowCapabilities(
+          available: true,
+          frameless: true,
+          alwaysOnTop: true,
+        ),
+      );
+      final repo = FakeRepository()
+        ..books[bookPid] = testBook(
+          bookPid,
+          durationMs: 3600000,
+          chapters: const [
+            ChapterMark(index: 0, title: 'An Unexpected Party', startMs: 0),
+            ChapterMark(index: 1, title: 'Roast Mutton', startMs: 1800000),
+          ],
+        );
+      final container = playbackContainer(
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        extra: [miniWindowPortProvider.overrideWithValue(window)],
+      );
+      container.read(miniWindowProvider);
+      await tester.pump();
+      await container.read(miniWindowProvider.notifier).enter();
+      PlayerHarness(container).play([
+        testItem(bookPid, mediaType: MediaType.audiobook),
+      ], positionMs: 2700000);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: localizedHost(
+            const MiniWindowGate(child: SizedBox()),
+            theme: buildWaxTheme(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      NowPlayingData drawn() =>
+          tester.widget<MiniPlayer>(find.byType(MiniPlayer)).now;
+      expect(drawn().duration, const Duration(minutes: 30));
+      expect(drawn().position, const Duration(minutes: 15));
+
+      container.read(bookTimelineScopeProvider.notifier).toggle();
+      await tester.pumpAndSettle();
+      expect(drawn().duration, const Duration(hours: 1));
+      expect(drawn().position, const Duration(minutes: 45));
       container.read(queueControllerProvider.notifier).clear();
       await tester.pumpAndSettle();
     });

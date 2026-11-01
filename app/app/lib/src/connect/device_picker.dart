@@ -6,8 +6,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../player/now_playing_slot.dart';
 import '../providers.dart';
-import '../radio/radio_controller.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -125,7 +125,9 @@ class _DevicePickerSheet extends ConsumerWidget {
     // point: refusing to move that session between two other endpoints,
     // with a sentence about stations under every row, would be a
     // non-sequitur and a control taken away for no reason.
-    final onRadio = _here && ref.watch(radioPlaybackProvider).station != null;
+    final onRadio =
+        _here &&
+        ref.watch(nowPlayingSlotProvider.select((slot) => slot is StationSlot));
     final l10n = context.l10n;
     // This device's own endpoint id arrives with registration, which may
     // land after the sheet opens: listened to rather than read once, or

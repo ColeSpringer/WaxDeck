@@ -192,6 +192,19 @@ test('the book player spans a chapter, and bookmarks keep a place', async ({ app
   await app.player.spanWholeBook();
   await expect(app.player.text(/percent/)).toBeVisible();
 
+  // One choice for every bar: collapsed, the deck spans the book too
+  // (its name ends with the length it spans), and switching back there
+  // is what the player opens on next.
+  await app.player.collapse(app.player.deckSpan());
+  await expect(app.player.deckSpan()).toHaveAccessibleName(
+    new RegExp(`^Show the chapter ${Math.floor(book.durationMs / 1000)} seconds$`),
+  );
+  await app.player.deckSpanChapter();
+  await app.player.ready();
+  await expect(app.player.timeline('chapter')).toHaveAttribute('aria-current', 'true', {
+    timeout: T.nav,
+  });
+
   // The chapter list is the player's own bottom region, not a button
   // that opens a sheet.
   await expect(app.player.chapter(0)).toBeVisible();

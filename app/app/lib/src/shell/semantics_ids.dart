@@ -289,6 +289,8 @@ abstract final class SemanticsIds {
   static const String deckShuffle = 'deck-shuffle';
   static const String deckSkipBack = 'deck-skip-back';
   static const String deckSkipForward = 'deck-skip-forward';
+  static const String deckSpan = 'deck-span';
+  static const String deckSpanToggle = 'deck-span-toggle';
   static const String deckSaveSong = 'deck-save-song';
   static const String deckStar = 'deck-star';
   static const String deckVolume = 'deck-volume';
@@ -1049,6 +1051,7 @@ abstract final class SemanticsIds {
   static const String uploadMediaType = 'upload-media-type';
   static String uploadMediaTypeOption(Object wireName) =>
       'upload-media-type-$wireName';
+  static String uploadPhase(Object id) => 'upload-phase-$id';
   static const String uploadPick = 'upload-pick';
   static const String uploadQuota = 'upload-quota';
   static String uploadRetry(Object id) => 'upload-retry-$id';

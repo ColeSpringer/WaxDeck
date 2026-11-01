@@ -25,6 +25,11 @@ class WaxDeckApp extends ConsumerWidget {
       child: MaterialApp.router(
         // brand, not copy
         title: 'WaxDeck',
+        // Constant, so Flutter's own title write fires at boot and never
+        // again: it re-fires when this changes, and a color taken from the
+        // theme would put the app's name back over the window title the
+        // moment a theme setting moved it.
+        color: WaxColors.light.accent,
         // Null follows the platform; a stored preference overrides it.
         locale: ref.watch(localeOverrideProvider),
         localizationsDelegates: appLocalizationsDelegates,

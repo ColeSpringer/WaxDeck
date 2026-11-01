@@ -2253,7 +2253,8 @@ class PlaybackSession {
       }
       // The stop a load starts with is not the listener stopping: the
       // engine already reads the new media while the state is the old.
-      if (_loading == 0) unawaited(_checkpoint());
+      // Nor is a boundary stop's own pause, which checkpoints where it parks.
+      if (_loading == 0 && !_stopping) unawaited(_checkpoint());
     }
   }
 

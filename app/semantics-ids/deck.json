@@ -22,6 +22,8 @@
     "deckShuffle": "deck-shuffle",
     "deckSkipBack": "deck-skip-back",
     "deckSkipForward": "deck-skip-forward",
+    "deckSpan": "deck-span",
+    "deckSpanToggle": "deck-span-toggle",
     "deckSaveSong": "deck-save-song",
     "deckStar": "deck-star",
     "deckVolume": "deck-volume",

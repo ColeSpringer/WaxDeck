@@ -918,5 +918,7 @@ a menu of two sweeps - your own, or everyone's, which asks first and
 takes the reports other accounts have not read
 (`POST /api/v1/tools/tasks/clear-finished` with `scope` `mine`, the
 default, or `all`, which is administrators only). Running and queued
-tasks stay either way. Neither the prune nor the sweeps clear the
-catalog's jobs.
+tasks stay either way. Either sweep also hides the administrator's own
+finished library jobs (`POST /api/v1/jobs/clear-finished`), for that
+administrator only; the jobs themselves stay, and the prune never
+touches them.

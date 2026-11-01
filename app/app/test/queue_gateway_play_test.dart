@@ -259,5 +259,48 @@ void main() {
         reason: 'a pause silences playback; it does not throw the queue away',
       );
     });
+
+    test(
+      'a queue the station parked is not started or stepped through',
+      () async {
+        // A headset's play or next over an empty deck must not start the
+        // entry radio displaced, nor the one after it.
+        const second = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK2';
+        final repo = FakeRepository(items: [testItem(pid), testItem(second)]);
+        final engine = FakeEngine(mediaDuration: const Duration(seconds: 30));
+        final container = ProviderContainer(
+          overrides: [
+            repositoryProvider.overrideWithValue(repo),
+            audioEngineProvider.overrideWithValue(engine),
+          ],
+        );
+        addTearDown(container.dispose);
+        PlayerHarness(container).play([testItem(pid), testItem(second)]);
+        await pumpEventQueue();
+        await container.read(nowPlayingProvider.notifier).settled;
+        final station = RadioStation(
+          pid: stationPid,
+          name: 'Coastal FM',
+          streamUrl: 'https://stream.example/coastal',
+          createdAt: DateTime.utc(2026, 7, 1),
+        );
+        repo.radioStationsByPid[stationPid] = station;
+        await container.read(radioPlaybackProvider.notifier).play(station);
+        await pumpEventQueue();
+        final gateway = container.read(queueGatewayProvider);
+        await gateway.stop();
+        await pumpEventQueue();
+        final loads = engine.loadedUrls.length;
+
+        expect(await gateway.play(), isFalse);
+        expect(await gateway.next(), isFalse);
+        expect(await gateway.previous(), isFalse);
+        await pumpEventQueue();
+
+        expect(container.read(queueControllerProvider).currentIndex, 0);
+        expect(engine.loadedUrls, hasLength(loads));
+        expect(engine.playing, isFalse);
+      },
+    );
   });
 }

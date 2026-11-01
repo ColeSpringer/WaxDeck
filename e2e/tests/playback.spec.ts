@@ -78,6 +78,27 @@ test('resume position and listen dedupe survive a replay', async ({ app }) => {
   expect(second.duplicates).toBe(1);
 });
 
+// The tab names what the deck names, keeps it through a pause, and goes
+// back to the app's own name once nothing is queued.
+test('the browser tab follows what is playing', async ({ app }) => {
+  const page = app.page;
+  const { pid } = await app.seed.item('Alpha Song');
+  await app.music.playAlbumOf(pid);
+  await app.player.pause();
+
+  // The track the browser's media session names is the one the deck is
+  // on, whichever the album's first row is.
+  const track = await app.player.nowPlaying();
+  const artist = await app.player.nowPlayingArtist();
+  expect(track, 'the media session names a track').not.toBe('');
+  await expect(page).toHaveTitle(artist === '' ? track : `${track} · ${artist}`);
+
+  await app.queue.openFromPlayer();
+  await app.queue.clear().click();
+  await expect(app.queue.text('Nothing queued')).toBeVisible();
+  await expect(page).toHaveTitle('WaxDeck');
+});
+
 // A stream URL dies with the session that asked for it: after a sign-out
 // it opens nothing, where it used to play out its fifteen minutes.
 test('signing out ends new opens of a minted stream URL', async ({ app, anonApi }) => {

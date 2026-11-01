@@ -13,9 +13,10 @@ import '../metadata/metadata_controller.dart';
 import '../music/album_detail.dart';
 import '../music/music_controllers.dart';
 import '../player/now_playing_controller.dart';
+import '../player/now_playing_slot.dart';
 import '../providers.dart';
 import '../queue/queue_controller.dart';
-import '../radio/radio_controller.dart';
+import '../queue/queue_item.dart';
 import '../settings/settings_registry.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -77,6 +78,7 @@ Future<void> confirmSetKind(
       // let go of as on success, and why it stopped is what is said, in
       // the server's words, as a failed job carries no code to translate.
       await _letGoOfFolded(container, job.result);
+      _forgetConverted(container, job.result);
       invalidate();
       final why = job.error?.trim() ?? '';
       messenger.show(
@@ -120,6 +122,7 @@ Future<void> confirmSetKind(
   if (await _letGoOfFolded(container, result)) {
     notes.add(l10n.libraryKindStoppedPlaying);
   }
+  _forgetConverted(container, result);
   if (_joinedUnseen(result)) notes.add(l10n.libraryKindJoinedUnseen);
   if (notes.isNotEmpty) messenger.show(notes.join('\n'));
   // Where to go is read before the listings are dropped, so the screen
@@ -134,7 +137,8 @@ Future<void> confirmSetKind(
 /// prefix: the queue drops it, and where it was playing it stops and
 /// goes too, what followed it waiting rather than starting. Answers
 /// whether that stopped playback. A station tuned over the queue is
-/// what plays then, not the queue's entry, and is left alone.
+/// what plays then, and a parked entry is not playing: either way the
+/// entry just goes, and what follows it takes over the park.
 Future<bool> _letGoOfFolded(
   ProviderContainer container,
   Map<String, Object?>? result,
@@ -143,17 +147,38 @@ Future<bool> _letGoOfFolded(
   if (absorbed is! Map || absorbed.isEmpty) return false;
   final gone = {
     for (final pid in absorbed.keys)
-      if (pid is String) pid.substring(pid.indexOf('-') + 1),
+      if (pid is String) ulidOf(pid),
   };
   final current = container
       .read(queueControllerProvider.notifier)
       .dropItems(gone);
-  if (!current || container.read(radioPlaybackProvider).station != null) {
-    return false;
+  if (!current) return false;
+  final playback = container.read(nowPlayingProvider.notifier);
+  switch (container.read(nowPlayingSlotProvider)) {
+    case StationSlot() || ParkedSlot():
+      playback.dropCurrent();
+      return false;
+    case _:
+      await container.read(queueGatewayProvider).stop();
+      playback.dropCurrent();
+      return true;
   }
-  await container.read(queueGatewayProvider).stop();
-  container.read(nowPlayingProvider.notifier).dropCurrent();
-  return true;
+}
+
+/// Forgets what playback held of the items [result] says changed kind in
+/// place, under either prefix, so each starts as what it is now, and has
+/// the queue rows naming them read them again.
+void _forgetConverted(
+  ProviderContainer container,
+  Map<String, Object?>? result,
+) {
+  final converted = result?['converted'];
+  if (converted is! List || converted.isEmpty) return;
+  container.read(nowPlayingProvider.notifier).forgetItems({
+    for (final pid in converted)
+      if (pid is String) ulidOf(pid),
+  });
+  container.invalidate(queueItemProvider);
 }
 
 /// The location of what the change made of [landed]: the book, or the

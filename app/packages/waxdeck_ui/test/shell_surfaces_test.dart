@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -155,6 +156,82 @@ void main() {
       semantics.dispose();
     });
 
+    testWidgets('its end timecode switches the span only when wired with '
+        'a name', (tester) async {
+      // A book's bar spans its chapter or the whole book; the control is
+      // named for what a press does and valued with the length it shows.
+      final semantics = tester.ensureSemantics();
+      const book = NowPlayingData(
+        title: 'There And Back Again',
+        position: Duration(minutes: 10),
+        duration: Duration(minutes: 30),
+        playing: true,
+        spanLabel: 'Show the whole book',
+      );
+      const ids = DeckBarIds(span: 'span');
+      var toggled = 0;
+      Future<void> pumpWith(NowPlayingData now, VoidCallback? onSpanToggle) =>
+          _pump(
+            tester,
+            DeckBar(
+              now: now,
+              ids: ids,
+              sizeClass: WaxSizeClass.wide,
+              actions: DeckBarActions(
+                onPlayPause: () {},
+                onSeek: (_) {},
+                onSpanToggle: onSpanToggle,
+              ),
+            ),
+          );
+
+      await pumpWith(book, () => toggled++);
+      final span = find.bySemanticsIdentifier('span');
+      expect(
+        tester.getSemantics(span),
+        isSemantics(
+          label: 'Show the whole book',
+          value: '30 minutes',
+          isButton: true,
+          hasTapAction: true,
+        ),
+      );
+      await tester.tap(span);
+      await tester.pump();
+      expect(toggled, 1);
+      // The keyboard's press is the same one: Enter on the focused control.
+      final stop = tester.widget<FocusableActionDetector>(
+        find
+            .ancestor(
+              of: find.text('30:00'),
+              matching: find.byType(FocusableActionDetector),
+            )
+            .first,
+      );
+      stop.focusNode!.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(toggled, 2);
+
+      // Either half missing leaves a readout.
+      await pumpWith(book, null);
+      expect(span, findsNothing);
+      expect(find.text('30:00'), findsOneWidget);
+      await pumpWith(
+        const NowPlayingData(
+          title: 'There And Back Again',
+          position: Duration(minutes: 10),
+          duration: Duration(minutes: 30),
+          playing: true,
+        ),
+        () => toggled++,
+      );
+      expect(span, findsNothing);
+      expect(find.text('30:00'), findsOneWidget);
+      semantics.dispose();
+    });
+
     testWidgets('ticks from its ticker, not from its data', (tester) async {
       final ticker = ValueNotifier<Duration>(Duration.zero);
       addTearDown(ticker.dispose);
@@ -198,6 +275,82 @@ void main() {
       await tester.pump();
       expect(resumed, 1);
       expect(dismissed, 1);
+    });
+
+    testWidgets('an offer of something never played says so in its own '
+        'heading', (tester) async {
+      // Its heading is said first and stands in for a missing caption, so
+      // no part of the offer names a place to pick up from.
+      await _pump(
+        tester,
+        DeckBarOffer(
+          title: 'Salt Harbour',
+          heading: '1 queued item',
+          onResume: () {},
+          onDismiss: () {},
+        ),
+        size: const Size(420, 800),
+      );
+
+      expect(find.text('1 queued item'), findsOneWidget);
+      expect(find.text('Pick up where you left off'), findsNothing);
+      expect(
+        find.bySemanticsLabel('1 queued item, Salt Harbour'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an offer says each of its lines once', (tester) async {
+      // A count that is the whole title has no caption to repeat it.
+      await _pump(
+        tester,
+        DeckBarOffer(
+          title: '1 queued item',
+          heading: '1 queued item',
+          onResume: () {},
+          onDismiss: () {},
+        ),
+        size: const Size(420, 800),
+      );
+      expect(find.text('1 queued item'), findsOneWidget);
+      expect(find.bySemanticsLabel('1 queued item'), findsOneWidget);
+
+      // Nor is the heading said twice by a caption that restates it.
+      await _pump(
+        tester,
+        DeckBarOffer(
+          title: 'Salt Harbour',
+          subtitle: 'Pick up where you left off',
+          onResume: () {},
+          onDismiss: () {},
+        ),
+        size: const Size(420, 800),
+      );
+      expect(
+        find.bySemanticsLabel('Pick up where you left off, Salt Harbour'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a subtitle that reads as the title is still drawn and '
+        'said', (tester) async {
+      // A self-titled song by an artist of the same name: the artist line
+      // is a real one.
+      await _pump(
+        tester,
+        DeckBarOffer(
+          title: 'Weezer',
+          subtitle: 'Weezer',
+          onResume: () {},
+          onDismiss: () {},
+        ),
+        size: const Size(420, 800),
+      );
+      expect(find.text('Weezer'), findsNWidgets(2));
+      expect(
+        find.bySemanticsLabel('Pick up where you left off, Weezer, Weezer'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a held bar opens the item menu', (tester) async {

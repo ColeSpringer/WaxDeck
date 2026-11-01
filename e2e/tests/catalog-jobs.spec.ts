@@ -1,7 +1,7 @@
 import type { Locator, Request } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { App, J, T, clickUntilRequested, retryCatalogBusy } from './driver';
-import { clickThrough, typeInto, wheelIntoReach, wheelIntoView } from './driver/gestures';
+import { chooseFromMenu, clickThrough, typeInto, wheelIntoReach, wheelIntoView } from './driver/gestures';
 import type { components } from './api-types';
 import { SemanticsIds } from './semantics-ids';
 
@@ -114,6 +114,23 @@ test('a scan started from the dashboard runs in Tasks and ends in the bell', asy
   await expect(row).toContainText('Library scan');
   await expect(row).toContainText('Done');
   await expect(row).toContainText(`copies ${n.copies}`, { timeout: T.fetch });
+
+  // The toolbar sweep covers the library jobs too, for this administrator
+  // only: the row goes and the list stops serving it, while the job itself
+  // is still there to read.
+  const isJobSweep = (r: Request) =>
+    r.url().endsWith('/jobs/clear-finished') && r.method() === 'POST';
+  const swept = app.page.waitForResponse((r) => isJobSweep(r.request()), { timeout: T.fetch });
+  await chooseFromMenu(
+    app.admin.control(SemanticsIds.tasksClearFinished),
+    app.admin.control(SemanticsIds.tasksClearFinishedMine),
+  );
+  expect((await swept).status()).toBe(200);
+  await expect(row).toBeHidden({ timeout: T.fetch });
+  const listed = await app.api.get('/jobs', { query: { limit: 200 } });
+  expect(listed.jobs.map((j) => j.pid)).not.toContain(job.pid);
+  const kept = await app.api.get('/jobs/{pid}', { path: { pid: job.pid } });
+  expect(kept.state).toBe('done');
 });
 
 test('a rule the server cannot fix says why, and one it can runs as a job', async ({ app }) => {

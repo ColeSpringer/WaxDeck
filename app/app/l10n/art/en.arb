@@ -73,7 +73,7 @@
   },
   "artSourceFromFile": "From the file",
   "@artSourceFromFile": {
-    "description": "Provenance of an artifact read out of the audio file's own tags, on the rows that already name the artifact (\"Artwork · {source}\", \"Lyrics · {source}\"). Bare on purpose: the standalone artSourceTag would stutter behind the Artwork prefix and call a lyric a picture behind the Lyrics one."
+    "description": "Provenance of an artifact read out of the audio file's own tags, on the lyrics line (\"Lyrics · {source}\"). Bare on purpose: the standalone artSourceTag would call a lyric a picture behind the Lyrics prefix."
   },
   "artSourceGenerated": "Made by the server",
   "@artSourceGenerated": {
@@ -103,7 +103,7 @@
   },
   "artSourceTag": "Art from the file",
   "@artSourceTag": {
-    "description": "Source mark under a cover read out of the audio file itself (its embedded tags). Says what the mark is about, not the mechanism: \"from the file's tags\" read as nonsense under a picture. The provenance rows, already prefixed with the artifact's name, draw the bare artSourceFromFile instead."
+    "description": "Source mark under a cover read out of the audio file itself (its embedded tags). Says what the mark is about, not the mechanism: \"from the file's tags\" read as nonsense under a picture. The lyrics line, already prefixed with the artifact's name, draws the bare artSourceFromFile instead."
   },
   "artSourceUser": "Set by hand",
   "@artSourceUser": {

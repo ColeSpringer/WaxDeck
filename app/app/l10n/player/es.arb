@@ -79,6 +79,8 @@
   "playerSaveSong": "Guardar esta canción",
   "playerSeekSpans": "Alcance de la barra de posición",
   "playerShareLink": "Compartir un enlace",
+  "playerShowChapter": "Mostrar el capítulo",
+  "playerShowWholeBook": "Mostrar el libro entero",
   "playerSimilarTracks": "Pistas similares",
   "playerSkippedUnplayable": "Se ha omitido {title}: este archivo no se puede reproducir",
   "playerSkippedUnplayableMany": "Se han omitido {count} pistas que no se pueden reproducir",

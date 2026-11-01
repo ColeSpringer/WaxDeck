@@ -100,11 +100,8 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
             glyph: WaxIcons.add,
             label: l10n.booksAddToLibrary,
             semanticsId: SemanticsIds.booksAdd,
-            onPressed: () => showAddToLibrarySheet(
-              context,
-              ref,
-              initial: MediaType.audiobook,
-            ),
+            onPressed: () =>
+                showAddToLibrarySheet(context, ref, fixed: MediaType.audiobook),
           ),
         const _HubOverflow(),
         const SearchAction(),

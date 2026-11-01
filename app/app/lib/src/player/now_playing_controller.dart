@@ -88,6 +88,35 @@ class NowPlaying {
       };
 }
 
+/// The queue entry a station holds back, standing where it was without
+/// being what is playing: the way back to it is an explicit choice.
+class ParkedEntry {
+  const ParkedEntry({required this.entry, this.item, this.fresh = false});
+
+  final QueueEntry entry;
+
+  /// Null while no summary is held for it, as when radio overtook its
+  /// start before the item resolved; one that arrives later is offered.
+  final ItemSummary? item;
+
+  /// Never played and holding no place to come back to, neither a
+  /// checkpoint to resume nor a position its start was given: parked by an
+  /// add or a landing under a station, or a tap's start held back before it
+  /// had loaded. It is offered as queued and taken back as an ordinary
+  /// start.
+  final bool fresh;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ParkedEntry &&
+      other.entry.queueId == entry.queueId &&
+      other.item == item &&
+      other.fresh == fresh;
+
+  @override
+  int get hashCode => Object.hash(entry.queueId, item, fresh);
+}
+
 /// Owns playback. One [PlaybackSession] at a time, following the queue's
 /// current entry: whatever puts an entry there (a tap, a skip, a
 /// restored queue, an advance at the end of an item) is what starts
@@ -107,6 +136,67 @@ class NowPlayingController extends Notifier<NowPlaying> {
 
   PlaybackSession? _session;
   String? _sessionEntryId;
+
+  /// The entry a station holds back, until a start or an emptied queue
+  /// retires it: one piece of state, which [parkedEntryProvider] watches
+  /// and this controller reads. See [parked].
+  _Park? get _park => ref.read(_parkProvider);
+  String? get _parkedEntryId => _park?.id;
+
+  void _setPark(String? id, {bool fresh = false, int? positionMs}) {
+    _Park? park;
+    if (id != null) {
+      final pid = ref
+          .read(queueControllerProvider)
+          .entries
+          .where((e) => e.queueId == id)
+          .firstOrNull
+          ?.pid;
+      park = (
+        id: id,
+        pid: pid,
+        item: pid == null ? null : _known[pid],
+        fresh: fresh,
+        positionMs: positionMs,
+      );
+    }
+    if (park == _park) return;
+    ref.read(_parkProvider.notifier).set(park);
+  }
+
+  /// Republishes the park once the summary held for its pid changed, so
+  /// the offer names what the entry is now.
+  void _parkFollowsKnown() {
+    final park = _park;
+    final pid = park?.pid;
+    if (park == null || pid == null) return;
+    final item = _known[pid];
+    if (identical(item, park.item)) return;
+    ref.read(_parkProvider.notifier).set((
+      id: park.id,
+      pid: pid,
+      item: item,
+      fresh: park.fresh,
+      positionMs: park.positionMs,
+    ));
+  }
+
+  /// Whether a session for [_sessionEntryId] has loaded since it became
+  /// the entry: what a station takes from it then is displaced from
+  /// playback, where one that never loaded parks fresh.
+  bool _sessionEntryLoaded = false;
+
+  /// Whether the latest start of [_sessionEntryId] meant to resume its
+  /// checkpoint (a launch's queue, a queue standing when playback was
+  /// built, a park taken back) rather than begin it: one a station holds
+  /// back before it loaded still comes back to that place.
+  bool _entryUseSaved = false;
+
+  /// Armed across one synchronous queue call whose new current entry is
+  /// parked fresh rather than started: by [dropCurrent] while parked, so
+  /// what lands in the dropped one's place takes over the park, and by an
+  /// add while a station plays, so an empty queue's new entry waits for it.
+  bool _parkLanding = false;
 
   /// The start in flight, so a caller that has to answer for one can
   /// wait on it.
@@ -348,6 +438,11 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// is still loading belongs to.
   PlaybackSession? get liveSession => _session;
 
+  /// The queue's current entry while a station holds it back: not
+  /// playing, and started again only through [playEntryAt].
+  ParkedEntry? get parked =>
+      _parkedOf(_park, ref.read(queueControllerProvider).currentEntry);
+
   /// A load of the app's own is opening the item and means to play it:
   /// a start in flight, or the live session reopening its stream
   /// ([PlaybackSession.reopening]). The engine reads stopped through
@@ -392,6 +487,31 @@ class NowPlayingController extends Notifier<NowPlaying> {
   void noteSummary(ItemSummary item) {
     if (item.mediaType == MediaType.podcast) return;
     _known.putIfAbsent(item.pid, () => item);
+    _parkFollowsKnown();
+  }
+
+  /// Forgets the summaries held for [ulids] (pids without their prefix),
+  /// under either prefix: items a kind change converted in place, which
+  /// start next time as what they are now.
+  void forgetItems(Set<String> ulids) {
+    if (ulids.isEmpty) return;
+    _known.removeWhere((pid, _) => ulids.contains(ulidOf(pid)));
+    _parkFollowsKnown();
+  }
+
+  /// Forgets every summary the queue does not need, for a caller that has
+  /// just checked the queue's own against the server: what is left is
+  /// what it checked, and what an undo would bring back.
+  void forgetUnqueued() => _prune(ref.read(queueControllerProvider));
+
+  /// Holds [item] for [pid], read again because the item changed kind:
+  /// what was held under either prefix goes, and the fresh summary is kept
+  /// under the pid the queue names it by, as a start would keep it.
+  void refreshSummary(String pid, ItemSummary item) {
+    final ulid = ulidOf(pid);
+    _known.removeWhere((held, _) => ulidOf(held) == ulid);
+    if (item.mediaType != MediaType.podcast) _known[pid] = item;
+    _parkFollowsKnown();
   }
 
   /// Resolves when the start in flight has finished, or immediately when
@@ -432,6 +552,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     for (final item in items) {
       _known[item.pid] = item;
     }
+    _parkFollowsKnown();
     unawaited(
       playPids(
         [for (final item in items) item.pid],
@@ -456,15 +577,20 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// queue layer already does with an insert into nothing, and playback
   /// follows the queue's current entry, so adding to nothing starts it.
   /// That is the design rather than a surprise: there is one queue and
-  /// playback is a view of it.
+  /// playback is a view of it. Except under a station, which nothing
+  /// loads over: the entry waits, parked fresh, and is offered as queued
+  /// once it stops.
   void enqueue(List<ItemSummary> items) {
     if (items.isEmpty) return;
     for (final item in items) {
       _known[item.pid] = item;
     }
-    ref.read(queueControllerProvider.notifier).addToEnd([
-      for (final item in items) item.pid,
-    ]);
+    _parkFollowsKnown();
+    _addingUnderStation(
+      () => ref.read(queueControllerProvider.notifier).addToEnd([
+        for (final item in items) item.pid,
+      ]),
+    );
   }
 
   /// The same verb, landing at a chosen slot: what a row dropped onto
@@ -475,9 +601,22 @@ class NowPlayingController extends Notifier<NowPlaying> {
     for (final item in items) {
       _known[item.pid] = item;
     }
-    ref.read(queueControllerProvider.notifier).insertAt([
-      for (final item in items) item.pid,
-    ], at);
+    _parkFollowsKnown();
+    _addingUnderStation(
+      () => ref.read(queueControllerProvider.notifier).insertAt([
+        for (final item in items) item.pid,
+      ], at),
+    );
+  }
+
+  /// Runs [add], parking what it makes current while a station plays.
+  void _addingUnderStation(void Function() add) {
+    _parkLanding = _radioOwnsEngine;
+    try {
+      add();
+    } finally {
+      _parkLanding = false;
+    }
   }
 
   /// The same verb for a queue named by pid alone, which is what
@@ -551,6 +690,9 @@ class NowPlayingController extends Notifier<NowPlaying> {
       unawaited(meansToPlay ? transportPause() : transportPlay());
       return;
     }
+    // Nothing is showing a parked entry as playing, so a press here does
+    // not start it.
+    if (_parkedEntryId != null) return;
     resume();
   }
 
@@ -558,7 +700,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// lock screen, a headset, a head unit, a routed command): a start in
   /// flight lands playing, a live session plays, and an entry a failed
   /// start left standing starts again. False when there is nothing to
-  /// play at all.
+  /// play at all, a parked entry included.
   Future<bool> transportPlay() async {
     final session = _session;
     if (_startPlays != null) {
@@ -573,8 +715,26 @@ class NowPlayingController extends Notifier<NowPlaying> {
       return true;
     }
     if (ref.read(queueControllerProvider).isEmpty) return false;
+    if (_parkedEntryId != null) return false;
     resume();
     return true;
+  }
+
+  /// Plays the queue entry at [index]: a row tapped, an offer accepted.
+  /// The current entry starts again where it stood when nothing is
+  /// driving it, a parked one included, and a fresh park starts as any
+  /// entry does. The park goes with the start, so a press [resume]
+  /// declines (a start radio overtook still unwinding) leaves the offer
+  /// standing.
+  Future<void> playEntryAt(int index) {
+    final queue = ref.read(queueControllerProvider);
+    if (queue.isEmpty) return settled;
+    if (index != queue.currentIndex) {
+      ref.read(queueControllerProvider.notifier).jumpTo(index);
+      return settled;
+    }
+    resume();
+    return settled;
   }
 
   /// Pauses, for a pause raised anywhere but a session's own controls (the
@@ -711,9 +871,8 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// nothing else would ever try. A start that failed leaves the entry
   /// sitting there: a stream that expired under a sleeping phone, or a
   /// server that was down for a moment, is one tap from playing rather
-  /// than a queue that has to be rebuilt. And an item that let the
-  /// engine go to live radio keeps its place on every surface, so the
-  /// transport that is still showing it has to be able to take it back.
+  /// than a queue that has to be rebuilt. And an entry a station parked
+  /// is taken back this way through [playEntryAt].
   ///
   /// Does nothing while a session is live: that session's own toggle is
   /// the verb for playing and pausing. Nor while one is still starting,
@@ -730,12 +889,20 @@ class NowPlayingController extends Notifier<NowPlaying> {
     // One that let go of the engine checkpointed where it stood on its
     // way out, and that checkpoint is the truthful place to come back
     // to; the original request is where it began, which is behind.
-    _pendingPositionMs = state.error != null ? _entryPositionMs : null;
     // Both states this answers are resumes: a start that failed asks
     // again for where it was going, and an item that let go of the
     // engine to radio comes back to the checkpoint it wrote on its way
-    // out. Neither is a fresh play.
-    _inFlight = _start(entry, useSavedPosition: true);
+    // out. A park that never loaded comes back from the place its start
+    // asked for, if it asked for one; a fresh one is no resume, so its
+    // item's own start rules apply.
+    final park = _park;
+    final parked = park != null && park.id == entry.queueId;
+    _pendingPositionMs = parked
+        ? park.positionMs
+        : state.error != null
+        ? _entryPositionMs
+        : null;
+    _inFlight = _start(entry, useSavedPosition: !(parked && park.fresh));
   }
 
   /// Puts a queue back in play at its checkpoint, paused unless
@@ -822,8 +989,10 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// Takes the entry playing out of the queue, for an item that stopped
   /// existing under the listener (a kind change folded it into a book).
   /// What lands in its place waits, paused, rather than starting: the
-  /// listener was just told playback stopped. The last entry going
-  /// empties the queue.
+  /// listener was just told playback stopped. A parked entry is not
+  /// playing, so nothing loads at all: what lands in its place takes over
+  /// the park, fresh, having never played. The last entry going empties
+  /// the queue.
   ///
   /// Armed across the one synchronous call that can consume it, as
   /// [restore] arms its flags: the queue notifies as it is assigned.
@@ -832,25 +1001,36 @@ class NowPlayingController extends Notifier<NowPlaying> {
     if (queue.isEmpty) return;
     _pendingPositionMs = null;
     _pendingPaused = true;
+    _parkLanding = parked != null;
     try {
       ref.read(queueControllerProvider.notifier).removeAt(queue.currentIndex);
     } finally {
       _pendingPaused = false;
+      _parkLanding = false;
     }
   }
 
   void _onQueueChanged(QueueState? previous, QueueState next) {
     // Summaries accumulate as entries come and go, and a session can run
-    // for days; the queue's own cap is the bound worth holding them to.
+    // for days; what a sweep keeps (the queue, the one an undo would bring
+    // back, and the item playing) is the bound worth holding them to.
     // Guarded rather than swept every time, because a drag emits a queue
     // state per frame.
-    if (_known.length > kQueueCap) _prune(next);
+    if (_known.length > 2 * kQueueCap + 1) _prune(next);
     final entry = next.currentEntry;
     if (entry == null) {
       _stop();
       return;
     }
     if (entry.queueId != _sessionEntryId) {
+      if (_parkLanding) {
+        _parkLanding = false;
+        _sessionEntryId = entry.queueId;
+        _sessionEntryLoaded = false;
+        // Displaced from nothing: it never played.
+        _setPark(entry.queueId, fresh: true);
+        return;
+      }
       final adopting = _adopting;
       _adopting = null;
       if (adopting != null && adopting.entry.queueId == entry.queueId) {
@@ -901,9 +1081,12 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _resumeOnReconnect = false;
     _armedOnline = null;
     _unplayable = null;
+    _setPark(null);
+    if (entry.queueId != _sessionEntryId) _sessionEntryLoaded = false;
     _sessionEntryId = entry.queueId;
     var positionMs = _pendingPositionMs;
     final useSaved = useSavedPosition || _pendingUseSaved;
+    _entryUseSaved = useSaved;
     // A seek held for a start this one replaces did not land there.
     _settleStartSeek(null);
     _startPlays = !_pendingPaused;
@@ -985,6 +1168,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
       _feeder.started();
       _skipRun = 0;
       state = NowPlaying(entry: entry, item: item, session: session);
+      _sessionEntryLoaded = true;
       await _syncPreload();
     } on Object catch (error) {
       if (_superseded(token)) return;
@@ -1012,7 +1196,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
         _pendingPaused = !(_startPlays ?? true);
         await (_inFlight = _start(
           entry,
-          useSavedPosition: true,
+          useSavedPosition: useSaved,
           ordinary: true,
         ));
         return;
@@ -1047,7 +1231,11 @@ class NowPlayingController extends Notifier<NowPlaying> {
     final token = ++_startToken;
     _starting = token;
     _dropStartIntent();
+    _setPark(null);
+    if (entry.queueId != _sessionEntryId) _sessionEntryLoaded = false;
     _sessionEntryId = entry.queueId;
+    _entryPositionMs = null;
+    _entryUseSaved = false;
     try {
       var item = _known[entry.pid];
       if (item == null) {
@@ -1060,7 +1248,6 @@ class NowPlayingController extends Notifier<NowPlaying> {
         item = await _resolve(entry.pid);
         if (_superseded(token)) return;
       }
-      _entryPositionMs = null;
       // A replacement timeline minted while the outgoing one played is
       // swapped in here, at the seam that is happening now, before the
       // session that will own the stream exists. Nothing to do in the
@@ -1085,6 +1272,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // the transport has nothing to bind to.
       _skipRun = 0;
       state = NowPlaying(entry: entry, item: item, session: session);
+      _sessionEntryLoaded = true;
       await adopting;
       if (_superseded(token)) return;
       await _syncPreload();
@@ -1110,9 +1298,9 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// the position is still its own: leaving it subscribed would count
   /// the station's stream as time listened to the item, checkpoint the
   /// item's pid at the station's position, and report it finished when
-  /// the stream dropped. The queue keeps its entry, so what was playing
-  /// is still named; nothing restarts it, because that would load over
-  /// the radio the listener just chose.
+  /// the stream dropped. The queue keeps its entry, parked: no surface
+  /// names it as playing, and nothing restarts it, because that would
+  /// load over the radio the listener just chose.
   ///
   /// The token bump is unconditional, session or none: a start still
   /// resolving has no session installed yet, and guarding the bump on
@@ -1127,13 +1315,35 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _resumeOnReconnect = false;
     _armedOnline = null;
     _adopting = null;
+    // The park is the entry's state now: a queue edit under the station
+    // skips nothing past it, and the press that takes it back plays.
+    _unplayable = null;
+    _pendingPaused = false;
     _feeder.clear();
     unawaited(_dropPreload());
+    // [_sessionEntryId] is kept, so a queue edit under radio does not
+    // restart the entry. One that had loaded was in playback and comes
+    // back where it let go. One whose start never loaded, or failed,
+    // keeps the place that start asked for, and comes back as that start
+    // meant: to its checkpoint, to a place it was given (an undo, a
+    // handoff, a bookmark), or from its own beginning with neither. A park
+    // an earlier station left stays as it was made.
+    if (_parkedEntryId != _sessionEntryId) {
+      final loaded = _sessionEntryLoaded;
+      final place = loaded ? null : _entryPositionMs;
+      // Fresh is a park with nowhere to come back to. A position the start
+      // was given decides it (the head is none); with none given, the
+      // checkpoint it meant to resume does.
+      final fresh = !loaded && (place == null ? !_entryUseSaved : place <= 0);
+      _setPark(_sessionEntryId, fresh: fresh, positionMs: place);
+    }
     final session = _session;
-    if (session == null) return;
-    unawaited(_release(session, _Farewell.handOver));
-    _setSession(null);
-    state = NowPlaying(entry: state.entry, item: state.item);
+    if (session != null) {
+      unawaited(_release(session, _Farewell.handOver));
+      _setSession(null);
+    }
+    // Session or none: a start radio overtook is retired too.
+    state = NowPlaying.nothing;
   }
 
   /// The queue ran out from under playback: let the item go and say so.
@@ -1142,6 +1352,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _dropStartIntent();
     _adopting = null;
     _sessionEntryId = null;
+    _setPark(null);
     _feeder.clear();
     unawaited(_dropPreload());
     unawaited(_release(_session, _Farewell.stop));
@@ -1830,7 +2041,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     final repository = ref.read(repositoryProvider);
     final item = await repository.getItem(pid);
     if (item.mediaType != MediaType.podcast) {
-      _known[pid] = item;
+      _remember(pid, item);
       return item;
     }
     // An episode reached by pid alone (a queue handed over by another
@@ -1842,26 +2053,75 @@ class NowPlayingController extends Notifier<NowPlaying> {
     // has no summary in hand.
     try {
       final episode = await repository.getEpisode(pid);
-      _known[pid] = episode;
+      _remember(pid, episode);
       return episode;
     } on WaxDeckApiException {
       // The show's settings are a refinement; the episode still plays.
-      _known[pid] = item;
+      _remember(pid, item);
       return item;
     }
   }
 
-  /// Forgets summaries no queue needs any more. The cache is a
-  /// convenience for the queue in hand, not a catalog.
+  /// Holds [item] for [pid] from a read, which a start overtaken meanwhile
+  /// may be past caring about: the park naming [pid] still follows. Not
+  /// once the container has gone.
+  void _remember(String pid, ItemSummary item) {
+    if (!ref.mounted) return;
+    _known[pid] = item;
+    _parkFollowsKnown();
+  }
+
+  /// Forgets summaries no queue needs any more: neither the queue in hand
+  /// nor the one an undo would bring back. The cache is a convenience for
+  /// those, not a catalog.
   void _prune(QueueState queue) {
-    final keep = queue.pids.toSet();
+    final keep = {...queue.pids, ...?queue.undo?.queue.pids};
     final playing = _session?.item.pid;
     if (playing != null) keep.add(playing);
     _known.removeWhere((pid, _) => !keep.contains(pid));
+    _parkFollowsKnown();
   }
 }
 
 /// The one playback owner.
 final nowPlayingProvider = NotifierProvider<NowPlayingController, NowPlaying>(
   NowPlayingController.new,
+);
+
+/// A park: the entry's queue id and pid, the summary held for that pid,
+/// whether it is [ParkedEntry.fresh], and where a start that never loaded
+/// was asked to begin.
+typedef _Park = ({
+  String id,
+  String? pid,
+  ItemSummary? item,
+  bool fresh,
+  int? positionMs,
+});
+
+/// [NowPlayingController]'s park, the one place it is held.
+final _parkProvider = NotifierProvider<_ParkState, _Park?>(_ParkState.new);
+
+class _ParkState extends Notifier<_Park?> {
+  @override
+  _Park? build() => null;
+
+  void set(_Park? park) => state = park;
+}
+
+/// The parked entry [park] makes of the queue's current [entry]: none once
+/// the queue moved off it.
+ParkedEntry? _parkedOf(_Park? park, QueueEntry? entry) =>
+    park == null || entry == null || entry.queueId != park.id
+    ? null
+    : ParkedEntry(entry: entry, item: park.item, fresh: park.fresh);
+
+/// [NowPlayingController.parked], followed: it changes when a park is set
+/// or retired, when the summary it names changes, and when the queue moves
+/// off the parked entry.
+final parkedEntryProvider = Provider<ParkedEntry?>(
+  (ref) => _parkedOf(
+    ref.watch(_parkProvider),
+    ref.watch(queueControllerProvider.select((queue) => queue.currentEntry)),
+  ),
 );

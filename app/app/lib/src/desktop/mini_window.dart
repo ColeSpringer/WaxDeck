@@ -9,7 +9,8 @@ import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
-import '../player/playback_session.dart';
+import '../player/now_playing_slot.dart';
+import '../player/timeline_scope.dart';
 import '../providers.dart';
 import '../queue/queue_controller.dart';
 import '../radio/radio_controller.dart';
@@ -178,34 +179,39 @@ class _MiniWindowSurface extends ConsumerStatefulWidget {
 }
 
 class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
-  /// The live position, fed into the hairline alone. Same reasoning as
-  /// the deck bar's: a window that rebuilt several times a second would
-  /// be the most repeated frame work a minimized app does.
-  final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
-  StreamSubscription<Duration>? _feed;
-  PlaybackSession? _following;
+  /// The live position on the bar, fed into the hairline alone. Same
+  /// reasoning as the deck bar's: a window that rebuilt several times a
+  /// second would be the most repeated frame work a minimized app does.
+  /// It rebuilds for the window, as the deck does.
+  final BookWindowFeed _feed = BookWindowFeed();
+
+  @override
+  void initState() {
+    super.initState();
+    _feed.window.addListener(_windowMoved);
+  }
+
+  void _windowMoved() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
-    unawaited(_feed?.cancel());
-    _position.dispose();
+    _feed.dispose();
     super.dispose();
-  }
-
-  void _follow(PlaybackSession? session) {
-    if (identical(session, _following)) return;
-    _following = session;
-    unawaited(_feed?.cancel());
-    _position.value = session?.displayPosition ?? Duration.zero;
-    _feed = session?.displayPositionStream.listen((at) => _position.value = at);
   }
 
   @override
   Widget build(BuildContext context) {
     final mini = ref.read(miniWindowProvider.notifier);
-    final station = ref.watch(radioPlaybackProvider);
-    final now = ref.watch(nowPlayingProvider);
-    _follow(now.session);
+    final slot = ref.watch(nowPlayingSlotProvider);
+    // A parked entry, a remote session and the launch offer play nothing
+    // here.
+    final now = switch (slot) {
+      ItemSlot(:final now) => now,
+      _ => NowPlaying.nothing,
+    };
+    _feed.follow(now.session, ref.watch(bookTimelineScopeProvider));
     final item = now.item;
 
     final playback = ref.read(nowPlayingProvider.notifier);
@@ -214,52 +220,30 @@ class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
       initialData: playback.meansToPlay,
       builder: (context, snapshot) {
         final playing = snapshot.data ?? playback.meansToPlay;
-        final live = station.station != null;
-        // Same mapping as the deck bar and the face: a station playing a
-        // matched song shows the song here too.
-        final art = live
-            ? waxRadioArtwork(
-                ref.watch(artworkStoreProvider),
-                ref.watch(repositoryProvider),
-                station.station!,
-                ref.watch(radioNowPlayingArtProvider),
-              )
-            : null;
         return MiniPlayer(
-          // Keyed on the artwork rather than on `live`: they answer the
-          // same question, and this one narrows the type.
-          now: art != null
-              ? NowPlayingData(
-                  title: station.station!.name,
-                  subtitle: station.nowPlaying,
-                  artwork: art.artwork,
-                  domain: WaxDomain.radio,
-                  shape: art.shape,
-                  position: Duration.zero,
-                  duration: Duration.zero,
-                  live: true,
-                  playing: playing || station.starting,
-                )
-              : NowPlayingData(
-                  title:
-                      item?.title ??
-                      (now.loading
-                          ? context.l10n.commonLoadingTitle
-                          : context.l10n.playerNothingPlaying),
-                  subtitle: item?.artist,
-                  artwork: waxArtwork(
-                    ref.watch(artworkStoreProvider),
-                    item?.artUrl,
-                  ),
-                  domain: waxDomainOf(item?.mediaType ?? MediaType.music),
-                  shape: waxShapeOf(item?.mediaType ?? MediaType.music),
-                  position: _position.value,
-                  duration:
-                      now.session?.mediaDuration ??
-                      Duration(milliseconds: item?.durationMs ?? 0),
-                  playing: playing,
-                ),
-          positionTicker: _position,
+          now: switch (slot) {
+            StationSlot() => _onAir(slot, playing: playing),
+            _ => NowPlayingData(
+              title:
+                  item?.title ??
+                  (now.loading
+                      ? context.l10n.commonLoadingTitle
+                      : context.l10n.playerNothingPlaying),
+              subtitle: item?.artist,
+              artwork: waxArtwork(
+                ref.watch(artworkStoreProvider),
+                item?.artUrl,
+              ),
+              domain: waxDomainOf(item?.mediaType ?? MediaType.music),
+              shape: waxShapeOf(item?.mediaType ?? MediaType.music),
+              position: _feed.value,
+              duration: now.session == null
+                  ? Duration(milliseconds: item?.durationMs ?? 0)
+                  : _feed.span,
+              playing: playing,
+            ),
+          },
+          positionTicker: _feed,
           ids: const MiniPlayerIds(
             surface: SemanticsIds.miniWindow,
             play: SemanticsIds.miniWindowPlay,
@@ -272,10 +256,11 @@ class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
             // window is a smaller surface onto one playback, not a
             // second transport with rules of its own.
             onPlayPause: () => togglePlayback(ref),
-            onNext: live || !ref.watch(queueCanAdvanceProvider)
+            // As the keys do: only an item up has a queue to step through.
+            onNext: slot is! ItemSlot || !ref.watch(queueCanAdvanceProvider)
                 ? null
                 : () => unawaited(ref.read(nowPlayingProvider.notifier).next()),
-            onPrevious: live
+            onPrevious: slot is! ItemSlot
                 ? null
                 : () => unawaited(
                     ref.read(nowPlayingProvider.notifier).previous(),
@@ -285,6 +270,28 @@ class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
           onDrag: mini.drag,
         );
       },
+    );
+  }
+
+  /// Same mapping as the deck bar and the face: a station playing a
+  /// matched song shows the song here too.
+  NowPlayingData _onAir(StationSlot slot, {required bool playing}) {
+    final art = waxRadioArtwork(
+      ref.watch(artworkStoreProvider),
+      ref.watch(repositoryProvider),
+      slot.station,
+      ref.watch(radioNowPlayingArtProvider),
+    );
+    return NowPlayingData(
+      title: slot.station.name,
+      subtitle: slot.playback.nowPlaying,
+      artwork: art.artwork,
+      domain: WaxDomain.radio,
+      shape: art.shape,
+      position: Duration.zero,
+      duration: Duration.zero,
+      live: true,
+      playing: playing || slot.playback.starting,
     );
   }
 }

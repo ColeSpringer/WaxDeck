@@ -97,6 +97,7 @@ import 'commands.dart';
 import 'routes.dart';
 import 'shell_messages.dart';
 import 'signed_in_cover.dart';
+import 'window_title_binder.dart';
 
 /// The app's router, built once per provider container.
 ///
@@ -946,8 +947,12 @@ class _SignedInScope extends ConsumerWidget {
     // The desktop tray and the Discord status, for the same reason.
     // Mounted rather than merely guarded inside: off the desktops
     // neither has anything to talk to, and leaving them there is a set
-    // of listeners that exist to read three providers and return.
-    if (ref.watch(desktopProvider)) {
+    // of listeners that exist to read three providers and return. The
+    // window title is the same, wherever a window has one to set: the
+    // desktops and a browser tab.
+    final desktop = ref.watch(desktopProvider);
+    if (kIsWeb || desktop) ref.watch(windowTitleBinderProvider);
+    if (desktop) {
       ref.watch(trayBinderProvider);
       ref.watch(discordPresenceProvider);
     }

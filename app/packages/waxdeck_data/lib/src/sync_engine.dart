@@ -88,6 +88,7 @@ class SyncEngine {
   final _catalogChanged = StreamController<void>.broadcast();
   final _playStateChanged = StreamController<PlayStateChange>.broadcast();
   final _serverEvents = StreamController<ServerSyncEvent>.broadcast();
+  final _serverResets = StreamController<void>.broadcast();
 
   SyncStatus _current = const SyncStatus(connection: SyncConnection.offline);
   EventsChannel? _channel;
@@ -131,6 +132,12 @@ class SyncEngine {
   /// this is that rule on the other transport, rather than a difference
   /// decided by which build somebody is running.
   Stream<ServerSyncEvent> get serverEvents => _serverEvents.stream;
+
+  /// The server walk lost its place (a sync-reset, or a resync the server
+  /// asked for): what fell between the cursor it held and the one minted
+  /// in its stead was never walked, so a reader of [serverEvents] reads
+  /// again what it holds. Not a first walk's mint, which lost nothing.
+  Stream<void> get serverResets => _serverResets.stream;
 
   /// Pids whose downloads are to be reclaimed: audio the server cannot
   /// give back, mostly.
@@ -225,6 +232,7 @@ class SyncEngine {
     _catalogChanged.close();
     _playStateChanged.close();
     _serverEvents.close();
+    _serverResets.close();
     _itemsRemoved.close();
     _prefsFlushed.close();
     _prefsRefused.close();
@@ -336,7 +344,10 @@ class SyncEngine {
         final topic = frame['topic'];
         _serialized(() async {
           if (topic == null || topic == 'catalog') await resyncCatalog();
-          if (topic == null || topic == 'user') await _remintServer();
+          if (topic == null || topic == 'user') {
+            await _remintServer();
+            if (!_serverResets.isClosed) _serverResets.add(null);
+          }
         });
       default:
         // Command-bus frames route to the Connect layer; anything it
@@ -907,6 +918,7 @@ class SyncEngine {
     } on WaxDeckApiException catch (e) {
       if (e.code == 'sync-reset') {
         await _remintServer();
+        if (!_serverResets.isClosed) _serverResets.add(null);
         return;
       }
       _handleApiFailure(e);

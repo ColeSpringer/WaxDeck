@@ -8,6 +8,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 
@@ -298,47 +299,51 @@ void main() {
   testWidgets(
     'an ICY title change neither bumps the generation nor blames a verb',
     (tester) async {
-      final repo = FakeRepository(items: [testItem('tr-A')]);
-      final station = _station('ra-1', 'Coastal FM');
-      repo.radioStationsByPid[station.pid] = station;
-      final engine = FakeEngine();
-      final container = playbackContainer(repo: repo, engine: engine);
-      final harness = PlayerHarness(container);
+      await captureDebugPrints(() async {
+        final repo = FakeRepository(items: [testItem('tr-A')]);
+        final station = _station('ra-1', 'Coastal FM');
+        repo.radioStationsByPid[station.pid] = station;
+        final engine = FakeEngine();
+        final container = playbackContainer(repo: repo, engine: engine);
+        final harness = PlayerHarness(container);
 
-      // A start that failed leaves its error on the state, and nothing
-      // clears it while radio plays. The Connect gateway decides whether
-      // a routed command owns a failure by generation stability, so a
-      // bump per ICY tick would hand this stale error to whichever
-      // routed verb happened to be in flight when a song changed.
-      repo.playInfoError = const WaxDeckApiException(
-        code: 'transport',
-        message: 'network unreachable',
-      );
-      harness.play([testItem('tr-A')]);
-      await tester.pumpAndSettle();
-      expect(container.read(nowPlayingProvider).error, isNotNull);
-      repo.playInfoError = null;
+        // A start that failed leaves its error on the state, and nothing
+        // clears it while radio plays. The Connect gateway decides whether
+        // a routed command owns a failure by generation stability, so a
+        // bump per ICY tick would hand this stale error to whichever
+        // routed verb happened to be in flight when a song changed.
+        repo.playInfoError = const WaxDeckApiException(
+          code: 'transport',
+          message: 'network unreachable',
+        );
+        harness.play([testItem('tr-A')]);
+        await tester.pumpAndSettle();
+        expect(container.read(nowPlayingProvider).error, isNotNull);
+        repo.playInfoError = null;
 
-      final radio = container.read(radioPlaybackProvider.notifier);
-      await radio.play(station);
-      await tester.pumpAndSettle();
+        final radio = container.read(radioPlaybackProvider.notifier);
+        await radio.play(station);
+        await tester.pumpAndSettle();
 
-      final began = container.read(nowPlayingProvider.notifier).startGeneration;
-      repo.radioNowPlaying[station.pid] = 'Second Song';
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pump();
-      expect(container.read(radioPlaybackProvider).nowPlaying, 'Second Song');
-      expect(
-        container.read(nowPlayingProvider.notifier).startGeneration,
-        began,
-      );
+        final began = container
+            .read(nowPlayingProvider.notifier)
+            .startGeneration;
+        repo.radioNowPlaying[station.pid] = 'Second Song';
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pump();
+        expect(container.read(radioPlaybackProvider).nowPlaying, 'Second Song');
+        expect(
+          container.read(nowPlayingProvider.notifier).startGeneration,
+          began,
+        );
 
-      // The routed skip mid-broadcast answers honestly instead of
-      // throwing the stale error: radio has the engine, nothing steps.
-      expect(await container.read(queueGatewayProvider).next(), isFalse);
+        // The routed skip mid-broadcast answers honestly instead of
+        // throwing the stale error: radio has the engine, nothing steps.
+        expect(await container.read(queueGatewayProvider).next(), isFalse);
 
-      await radio.stop();
-      await harness.endPlayback(tester);
+        await radio.stop();
+        await harness.endPlayback(tester);
+      });
     },
   );
 

@@ -15,8 +15,11 @@ type Upload struct {
 	FileName      string
 	SizeBytes     int64
 	ReceivedBytes int64
-	MediaType     string
-	LibraryPID    string
+	// ReceivedAtNS is when bytes last arrived: the session's creation,
+	// then each chunk stored, or one whose bytes arrived and were not kept.
+	ReceivedAtNS int64
+	MediaType    string
+	LibraryPID   string
 	// BatchID and BatchPath join the session to an upload batch:
 	// BatchPath is the file's directory relative to the picked folder,
 	// the auto grouping's clustering hint.
@@ -42,17 +45,18 @@ type Upload struct {
 	ExpiresAtNS int64
 }
 
-const uploadCols = `id, user_id, file_name, size_bytes, received_bytes, media_type,
-	library_pid, batch_id, batch_path, sha256, state, staging_path, review_entry_id,
-	track_doc, duplicate_pid, duplicate_kind, item_pid, identify, created_at_ns,
-	expires_at_ns`
+const uploadCols = `id, user_id, file_name, size_bytes, received_bytes, received_at_ns,
+	media_type, library_pid, batch_id, batch_path, sha256, state, staging_path,
+	review_entry_id, track_doc, duplicate_pid, duplicate_kind, item_pid, identify,
+	created_at_ns, expires_at_ns`
 
 func scanUpload(row interface{ Scan(...any) error }) (Upload, error) {
 	var u Upload
 	err := row.Scan(&u.ID, &u.UserID, &u.FileName, &u.SizeBytes, &u.ReceivedBytes,
-		&u.MediaType, &u.LibraryPID, &u.BatchID, &u.BatchPath, &u.SHA256, &u.State,
-		&u.StagingPath, &u.ReviewEntryID, &u.TrackDoc, &u.DuplicatePID,
-		&u.DuplicateKind, &u.ItemPID, &u.Identify, &u.CreatedAtNS, &u.ExpiresAtNS)
+		&u.ReceivedAtNS, &u.MediaType, &u.LibraryPID, &u.BatchID, &u.BatchPath,
+		&u.SHA256, &u.State, &u.StagingPath, &u.ReviewEntryID, &u.TrackDoc,
+		&u.DuplicatePID, &u.DuplicateKind, &u.ItemPID, &u.Identify, &u.CreatedAtNS,
+		&u.ExpiresAtNS)
 	return u, err
 }
 
@@ -60,11 +64,11 @@ func scanUpload(row interface{ Scan(...any) error }) (Upload, error) {
 func (d *DB) InsertUpload(ctx context.Context, u Upload) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO uploads (`+uploadCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		u.ID, u.UserID, u.FileName, u.SizeBytes, u.ReceivedBytes, u.MediaType,
-		u.LibraryPID, u.BatchID, u.BatchPath, u.SHA256, u.State, u.StagingPath,
-		u.ReviewEntryID, u.TrackDoc, u.DuplicatePID, u.DuplicateKind, u.ItemPID,
-		u.Identify, u.CreatedAtNS, u.ExpiresAtNS)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		u.ID, u.UserID, u.FileName, u.SizeBytes, u.ReceivedBytes, u.ReceivedAtNS,
+		u.MediaType, u.LibraryPID, u.BatchID, u.BatchPath, u.SHA256, u.State,
+		u.StagingPath, u.ReviewEntryID, u.TrackDoc, u.DuplicatePID, u.DuplicateKind,
+		u.ItemPID, u.Identify, u.CreatedAtNS, u.ExpiresAtNS)
 	if err != nil {
 		return fmt.Errorf("db: inserting upload: %w", err)
 	}
@@ -119,6 +123,35 @@ func (d *DB) UpdateUpload(ctx context.Context, u Upload) error {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// AdvanceUploadReceived moves a receiving session's byte count from one
+// value to the next, stamping atNS as when bytes last arrived, and reports
+// whether it was still at from.
+func (d *DB) AdvanceUploadReceived(ctx context.Context, id string, from, to, atNS int64) (bool, error) {
+	res, err := d.w.ExecContext(ctx, `
+		UPDATE uploads SET received_bytes = ?, received_at_ns = ?
+		WHERE id = ? AND received_bytes = ? AND state = 'receiving'`, to, atNS, id, from)
+	if err != nil {
+		return false, fmt.Errorf("db: advancing upload: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("db: advancing upload: %w", err)
+	}
+	return n == 1, nil
+}
+
+// TouchUploadReceived records that bytes arrived for a receiving session
+// at atNS without being kept, moving the time only forward.
+func (d *DB) TouchUploadReceived(ctx context.Context, id string, atNS int64) error {
+	_, err := d.w.ExecContext(ctx, `
+		UPDATE uploads SET received_at_ns = MAX(received_at_ns, ?)
+		WHERE id = ? AND state = 'receiving'`, atNS, id)
+	if err != nil {
+		return fmt.Errorf("db: touching upload: %w", err)
 	}
 	return nil
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -6,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../providers.dart';
 import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -13,6 +16,7 @@ import '../shell/shell_messages.dart';
 import 'add_to_library.dart';
 import 'audio_drop_area.dart';
 import 'file_picker_port.dart';
+import 'upload_phase.dart';
 import 'uploads_controller.dart';
 
 /// The caller's upload sessions, the quota header, and drag-and-drop.
@@ -125,44 +129,74 @@ class UploadsScreen extends ConsumerWidget {
   ) {
     final quota = state.quota;
     final l10n = context.l10n;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        if (quota != null) _QuotaHeader(quota: quota),
-        const SizedBox(height: WaxSpace.s24),
-        if (state.uploads.isEmpty)
-          EmptyState(
-            glyph: WaxIcons.add,
-            title: l10n.uploadsEmptyTitle,
-            message: canUpload
-                ? l10n.uploadsEmptyMessage
-                : l10n.uploadsEmptyNoPermission,
-          )
-        else ...<Widget>[
-          for (final group in _grouped(state))
-            _BatchGroup(
-              key: group.key,
-              group: group,
-              failed: state.failed,
-              onRetry: (id) => _retry(l10n, ref, id),
-              onDiscard: (upload) => _discard(context, ref, upload),
-            ),
-          if (state.hasMore) ...<Widget>[
-            const SizedBox(height: WaxSpace.s16),
-            WaxButton(
-              label: state.loadingMore
-                  ? l10n.commonLoading
-                  : l10n.uploadsLoadMore,
-              kind: WaxButtonKind.tonal,
-              icon: WaxIcons.caretDown,
-              semanticsId: SemanticsIds.uploadsMore,
-              onPressed: state.loadingMore
-                  ? null
-                  : () => ref.read(uploadsProvider.notifier).loadMore(),
-            ),
+    final live = ref.watch(liveTransfersProvider);
+    final creates = ref.watch(uploadCreatesProvider);
+    UploadPhase phaseOf(UploadSession upload) => uploadPhaseOf(
+      upload,
+      live[upload.id],
+      creating: creates.mayHaveOpened(upload.id),
+    );
+    // When each row sent from elsewhere would have gone a whole window
+    // without the server taking a byte, if nothing more arrived: that row
+    // is read again then, alone, so one nobody is sending any more is
+    // offered for discard only once a read says so.
+    final clock = ref.read(monotonicClockProvider);
+    final quiet = <String, Duration>{
+      for (final upload in state.uploads)
+        if (phaseOf(upload) is UploadElsewhere)
+          if (state.readAt[upload.id] case final read?)
+            upload.id: read + uploadIdleWindow - upload.idle,
+    };
+    return _ReadAgainAt(
+      at: quiet.isEmpty ? null : quiet.values.reduce((a, b) => a < b ? a : b),
+      clock: clock,
+      onDue: (due) {
+        unawaited(
+          ref.read(uploadsProvider.notifier).readAgain([
+            for (final MapEntry(key: id, value: at) in quiet.entries)
+              if (at <= due) id,
+          ]),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          if (quota != null) _QuotaHeader(quota: quota),
+          const SizedBox(height: WaxSpace.s24),
+          if (state.uploads.isEmpty)
+            EmptyState(
+              glyph: WaxIcons.add,
+              title: l10n.uploadsEmptyTitle,
+              message: canUpload
+                  ? l10n.uploadsEmptyMessage
+                  : l10n.uploadsEmptyNoPermission,
+            )
+          else ...<Widget>[
+            for (final group in _grouped(state))
+              _BatchGroup(
+                key: group.key,
+                group: group,
+                phaseOf: phaseOf,
+                onRetry: (id) => _retry(l10n, ref, id),
+                onDiscard: (upload) => _discard(context, ref, upload),
+              ),
+            if (state.hasMore) ...<Widget>[
+              const SizedBox(height: WaxSpace.s16),
+              WaxButton(
+                label: state.loadingMore
+                    ? l10n.commonLoading
+                    : l10n.uploadsLoadMore,
+                kind: WaxButtonKind.tonal,
+                icon: WaxIcons.caretDown,
+                semanticsId: SemanticsIds.uploadsMore,
+                onPressed: state.loadingMore
+                    ? null
+                    : () => ref.read(uploadsProvider.notifier).loadMore(),
+              ),
+            ],
           ],
         ],
-      ],
+      ),
     );
   }
 
@@ -190,6 +224,72 @@ class UploadsScreen extends ConsumerWidget {
   }
 }
 
+/// Calls [onDue] at [at] on [clock], a monotonic span, for as long as it
+/// stands: whether a session another device was sending is still being
+/// sent is a question only a fresh read answers. A read that changes
+/// nothing (it failed) is asked for again every [_again]. [onDue] gets the
+/// span on [clock] that counts as due, [_early] past now.
+class _ReadAgainAt extends StatefulWidget {
+  const _ReadAgainAt({
+    required this.at,
+    required this.clock,
+    required this.onDue,
+    required this.child,
+  });
+
+  final Duration? at;
+  final Duration Function() clock;
+  final void Function(Duration due) onDue;
+  final Widget child;
+
+  static const _again = Duration(seconds: 30);
+
+  /// How far short of [at] a fire can land on [clock]: the VM rounds a
+  /// timer's delay down to a whole millisecond, and a browser's clock is
+  /// coarser still.
+  static const _early = Duration(milliseconds: 50);
+
+  @override
+  State<_ReadAgainAt> createState() => _ReadAgainAtState();
+}
+
+class _ReadAgainAtState extends State<_ReadAgainAt> {
+  Timer? _due;
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  @override
+  void didUpdateWidget(_ReadAgainAt old) {
+    super.didUpdateWidget(old);
+    if (old.at != widget.at) _arm();
+  }
+
+  void _arm() {
+    _due?.cancel();
+    final at = widget.at;
+    _due = at == null ? null : Timer(at - widget.clock(), _fire);
+  }
+
+  void _fire() {
+    if (!mounted) return;
+    widget.onDue(widget.clock() + _ReadAgainAt._early);
+    _due = Timer(_ReadAgainAt._again, _fire);
+  }
+
+  @override
+  void dispose() {
+    _due?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 /// One upload batch, or a solo session standing alone.
 class _Batch {
   const _Batch({required this.id, required this.uploads});
@@ -213,13 +313,13 @@ class _BatchGroup extends StatelessWidget {
   const _BatchGroup({
     super.key,
     required this.group,
-    required this.failed,
+    required this.phaseOf,
     required this.onRetry,
     required this.onDiscard,
   });
 
   final _Batch group;
-  final Set<String> failed;
+  final UploadPhase Function(UploadSession upload) phaseOf;
   final void Function(String id) onRetry;
   final void Function(UploadSession upload) onDiscard;
 
@@ -260,7 +360,7 @@ class _BatchGroup extends StatelessWidget {
             _UploadRow(
               key: ValueKey(SemanticsIds.uploadRow(upload.id)),
               upload: upload,
-              failed: failed.contains(upload.id),
+              phase: phaseOf(upload),
               onRetry: () => onRetry(upload.id),
               onDiscard: () => onDiscard(upload),
             ),
@@ -319,16 +419,9 @@ class _QuotaHeader extends StatelessWidget {
             ),
             if (fraction != null) ...<Widget>[
               const SizedBox(height: WaxSpace.s8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(WaxRadius.r6),
-                child: LinearProgressIndicator(
-                  value: fraction,
-                  minHeight: 6,
-                  backgroundColor: colors.surface3,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    fraction >= 1 ? colors.error : colors.accent,
-                  ),
-                ),
+              WaxProgressBar(
+                value: fraction,
+                tone: fraction >= 1 ? colors.error : null,
               ),
             ],
             const SizedBox(height: WaxSpace.s8),
@@ -349,13 +442,13 @@ class _UploadRow extends StatelessWidget {
   const _UploadRow({
     super.key,
     required this.upload,
-    required this.failed,
+    required this.phase,
     required this.onRetry,
     required this.onDiscard,
   });
 
   final UploadSession upload;
-  final bool failed;
+  final UploadPhase phase;
   final VoidCallback onRetry;
   final VoidCallback onDiscard;
 
@@ -384,8 +477,19 @@ class _UploadRow extends StatelessWidget {
     final l10n = context.l10n;
     final duplicate = upload.duplicate;
     final reviewEntryId = upload.reviewEntryId;
-    final receiving = upload.state == 'receiving';
-    final discardable = receiving || upload.state == 'staged';
+    final phase = this.phase;
+    final discardable = switch (phase) {
+      // Discarding one sent from elsewhere would fail that upload.
+      UploadSealing() || UploadStarting() || UploadElsewhere() => false,
+      UploadSettled(:final state) => state == 'staged',
+      UploadSending() || UploadStalled() || UploadInterrupted() => true,
+    };
+    Widget status(Widget child) => Semantics(
+      identifier: SemanticsIds.uploadPhase(upload.id),
+      container: true,
+      child: child,
+    );
+    final caption = WaxType.caption.copyWith(color: colors.textSecondary);
     return Semantics(
       identifier: SemanticsIds.uploadRow(upload.id),
       container: true,
@@ -415,14 +519,21 @@ class _UploadRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: WaxSpace.s8),
-                if (failed)
-                  Text(
-                    l10n.uploadsTransferFailed,
-                    style: WaxType.label.copyWith(color: colors.error),
-                  )
-                else
-                  CodecChip(upload.state),
-                if (failed)
+                switch (phase) {
+                  UploadStalled() => status(
+                    Text(
+                      l10n.uploadsTransferFailed,
+                      style: WaxType.label.copyWith(color: colors.error),
+                    ),
+                  ),
+                  UploadSettled(:final state) => status(CodecChip(state)),
+                  UploadInterrupted() => const SizedBox.shrink(),
+                  UploadSending() ||
+                  UploadStarting() ||
+                  UploadElsewhere() ||
+                  UploadSealing() => CodecChip(upload.state),
+                },
+                if (phase is UploadStalled)
                   WaxIconButton(
                     glyph: WaxIcons.refresh,
                     label: l10n.uploadsRetry,
@@ -440,29 +551,44 @@ class _UploadRow extends StatelessWidget {
                   ),
               ],
             ),
-            if (receiving && !failed) ...<Widget>[
+            if (switch (phase) {
+                  UploadSending(:final sent, :final total, :final retrying) => (
+                    sent,
+                    total,
+                    retrying,
+                  ),
+                  UploadStarting(:final total) => (0, total, false),
+                  UploadElsewhere(:final received, :final total) => (
+                    received,
+                    total,
+                    false,
+                  ),
+                  _ => null,
+                }
+                case (final sent, final total, final retrying)) ...<Widget>[
               const SizedBox(height: WaxSpace.s8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(WaxRadius.r6),
-                child: LinearProgressIndicator(
-                  value: upload.sizeBytes == 0
-                      ? null
-                      : upload.receivedBytes / upload.sizeBytes,
-                  minHeight: 4,
-                  backgroundColor: colors.surface3,
-                  valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
-                ),
-              ),
+              WaxProgressBar(value: total == 0 ? null : sent / total),
               const SizedBox(height: WaxSpace.s4),
-              Text(
-                upload.sizeBytes == 0
-                    ? l10n.uploadsReceiving
-                    : l10n.uploadsReceivedOf(
-                        upload.receivedBytes * 100 ~/ upload.sizeBytes,
-                        l10n.formatBytes(upload.sizeBytes),
-                      ),
-                style: WaxType.caption.copyWith(color: colors.textSecondary),
+              status(
+                Text(switch ((retrying, total)) {
+                  (true, _) => l10n.uploadsReconnecting,
+                  (false, 0) => l10n.uploadsReceiving,
+                  (false, _) => l10n.uploadsReceivedOf(
+                    sent * 100 ~/ total,
+                    l10n.formatBytes(total),
+                  ),
+                }, style: caption),
               ),
+            ],
+            if (phase is UploadSealing) ...<Widget>[
+              const SizedBox(height: WaxSpace.s8),
+              const WaxProgressBar(value: 1),
+              const SizedBox(height: WaxSpace.s4),
+              status(Text(l10n.uploadsFinishing, style: caption)),
+            ],
+            if (phase is UploadInterrupted) ...<Widget>[
+              const SizedBox(height: WaxSpace.s4),
+              status(Text(l10n.uploadsInterrupted, style: caption)),
             ],
             if (duplicate != null) ...<Widget>[
               const SizedBox(height: WaxSpace.s8),

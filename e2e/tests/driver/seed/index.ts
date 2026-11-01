@@ -276,10 +276,20 @@ export class Seed {
     const held = await this.api.get('/radio/stations');
     const already = (held.stations ?? []).find((s) => s.name === name);
     if (already !== undefined) return already.pid;
-    const made = await this.api.post('/radio/stations', {
+    const made = await this.api.raw.post('/radio/stations', {
       data: { name, streamUrl, ...(logoUrl === undefined ? {} : { logoUrl }) },
     });
-    return made.pid;
+    if (made.ok()) return ((await made.json()) as { pid: string }).pid;
+    // Tests run in parallel against one stack, and tests that share a
+    // station seed it alike: another worker can make it between the read
+    // above and this create, which the library then refuses as a second
+    // station on the same stream. Theirs is the one to use.
+    if (made.status() === 409) {
+      const now = await this.api.get('/radio/stations');
+      const theirs = (now.stations ?? []).find((s) => s.name === name);
+      if (theirs !== undefined) return theirs.pid;
+    }
+    throw new Error(`POST /radio/stations answered ${made.status()}: ${await made.text()}`);
   }
 
   /// A song kept off the air, as the heart keeps it.

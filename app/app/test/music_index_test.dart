@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +18,7 @@ import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -53,6 +55,67 @@ ItemSummary _track(
   artUrl: artUrl,
 );
 
+/// A picker whose folder is one album of two files.
+class _FolderPicker implements FilePickerPort {
+  static PickedAudioFile _file(String name) {
+    final bytes = Uint8List.fromList(List<int>.filled(8, 7));
+    return PickedAudioFile(
+      name: name,
+      relativeDir: 'Album',
+      size: bytes.length,
+      openRead: ([int? start, int? end]) => Stream.value(
+        Uint8List.sublistView(bytes, start ?? 0, end ?? bytes.length),
+      ),
+    );
+  }
+
+  @override
+  bool get canPickFolders => true;
+
+  @override
+  Future<List<PickedAudioFile>> pickAudioFiles({
+    String audioLabel = '',
+    String anyLabel = '',
+    UploadFormatSets formats = const UploadFormatSets(),
+  }) async => [_file('01.flac')];
+
+  @override
+  Future<FolderPick> pickAudioFolder({
+    UploadFormatSets formats = const UploadFormatSets(),
+  }) async => FolderPick(files: [_file('01.flac'), _file('02.flac')]);
+
+  @override
+  Future<PickedAudioFile?> pickFile({
+    required Set<String> extensions,
+    required String label,
+    String anyLabel = '',
+  }) async => null;
+}
+
+const _uploader = SessionState(
+  authenticated: true,
+  user: WaxDeckUser(
+    id: 'us-01JZX5N8QW3F4V9T2B7KDUPLOAD',
+    username: 'uploader',
+    roles: <String>['member'],
+    uploadEnabled: true,
+  ),
+);
+
+/// Picks the album folder from the add sheet and confirms, answering that
+/// the dialog never asked what the files are.
+Future<void> _uploadFolderFromSheet(WidgetTester tester) async {
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addUploadFolder));
+  await tester.pumpAndSettle();
+  expect(
+    find.bySemanticsIdentifier(SemanticsIds.uploadMediaType),
+    findsNothing,
+    reason: 'the hub said what the files are',
+  );
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm));
+  await tester.pumpAndSettle();
+}
+
 /// Overridden rather than reached through the real controller, which
 /// waits on a session a widget test's container has nobody signed in to.
 class _StubPrefs extends PrefsController {
@@ -72,6 +135,7 @@ Future<ProviderContainer> _pump(
   bool engine = false,
   Prefs? prefs,
   FakeArtworkStore? artwork,
+  FilePickerPort? picker,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -86,6 +150,7 @@ Future<ProviderContainer> _pump(
       if (prefs != null)
         prefsControllerProvider.overrideWith(() => _StubPrefs(prefs)),
       if (artwork != null) artworkStoreProvider.overrideWithValue(artwork),
+      if (picker != null) filePickerProvider.overrideWithValue(picker),
     ],
   );
   addTearDown(container.dispose);
@@ -1078,18 +1143,17 @@ void main() {
     }
   });
 
-  testWidgets('an uploader gets the add every other hub has', (tester) async {
+  testWidgets('an uploader gets the add every other hub has, as music', (
+    tester,
+  ) async {
     final repository = FakeRepository(items: <ItemSummary>[_track('Coastal')])
-      ..sessionState = const SessionState(
-        authenticated: true,
-        user: WaxDeckUser(
-          id: 'us-01JZX5N8QW3F4V9T2B7KDUPLOAD',
-          username: 'uploader',
-          roles: <String>['member'],
-          uploadEnabled: true,
-        ),
-      );
-    await _pump(tester, const MusicHubScreen(), repository);
+      ..sessionState = _uploader;
+    await _pump(
+      tester,
+      const MusicHubScreen(),
+      repository,
+      picker: _FolderPicker(),
+    );
 
     // A library with something in it: the first-run invitation that used
     // to carry the only add is long gone by here.
@@ -1098,6 +1162,29 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.musicAdd));
     await tester.pumpAndSettle();
     expect(find.bySemanticsIdentifier(SemanticsIds.addFromUrl), findsOneWidget);
+    await _uploadFolderFromSheet(tester);
+    expect(repository.batchesById.values.single.mediaType, MediaType.music);
+  });
+
+  testWidgets('the empty hub\'s invitation adds music too', (tester) async {
+    final repository = FakeRepository()..sessionState = _uploader;
+    await _pump(
+      tester,
+      const MusicHubScreen(),
+      repository,
+      picker: _FolderPicker(),
+    );
+    expect(find.text('No music yet'), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(EmptyState),
+        matching: find.text('Add to library'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _uploadFolderFromSheet(tester);
+    expect(repository.batchesById.values.single.mediaType, MediaType.music);
   });
 
   testWidgets('a listener without the upload right gets no add', (

@@ -251,7 +251,19 @@ const _secondary = <WaxNavEntry>[
   ),
 ];
 
-DeckBarActions _deckActions() => DeckBarActions(
+/// [_music] with the end timecode's span switch named, as a book's bar is.
+const _spanned = NowPlayingData(
+  title: 'Salt Harbour',
+  subtitle: 'Nightjar',
+  position: Duration(minutes: 2, seconds: 41),
+  duration: Duration(minutes: 4, seconds: 5),
+  playing: true,
+  starred: true,
+  volume: 0.6,
+  spanLabel: 'Show the whole book',
+);
+
+DeckBarActions _deckActions({VoidCallback? onSpanToggle}) => DeckBarActions(
   onPlayPause: () {},
   onNext: () {},
   onPrevious: () {},
@@ -266,6 +278,7 @@ DeckBarActions _deckActions() => DeckBarActions(
   onMute: () {},
   onMore: () {},
   onExpand: () {},
+  onSpanToggle: onSpanToggle,
 );
 
 final _position = ValueNotifier<Duration>(const Duration(seconds: 30));
@@ -981,9 +994,9 @@ final List<_Scenario> _scenarios = <_Scenario>[
       () => SizedBox(
         width: sizeClass == WaxSizeClass.wide ? 1600 : 420,
         child: DeckBar(
-          now: _music,
+          now: _spanned,
           sizeClass: sizeClass,
-          actions: _deckActions(),
+          actions: _deckActions(onSpanToggle: () {}),
         ),
       ),
     ),
