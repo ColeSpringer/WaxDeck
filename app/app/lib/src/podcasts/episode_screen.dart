@@ -12,11 +12,13 @@ import '../player/session_registry.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../sharing/share_dialog.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'credits.dart';
 import 'episode_actions.dart';
+import 'episode_fetch.dart';
 import 'podcasts_controller.dart';
 import 'show_screen.dart';
 
@@ -86,23 +88,16 @@ class EpisodeScreen extends ConsumerWidget {
       ),
       actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
-        switch (detail) {
-          AsyncData(:final value) => SliverToBoxAdapter(
+        AsyncSliverFace<EpisodeDetail>(
+          state: detail,
+          errorTitle: l10n.podcastEpisodeLoadError,
+          onRetry: () => ref.invalidate(episodeDetailProvider(pid)),
+          skeleton: SkeletonShape.detail,
+          skeletonFills: true,
+          builder: (context, value) => SliverToBoxAdapter(
             child: _EpisodeBody(episode: value, showPid: showPid),
           ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.podcastEpisodeLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(episodeDetailProvider(pid)),
-            ),
-          ),
-          _ => const SliverFillRemaining(
-            hasScrollBody: false,
-            child: SkeletonShapes(shape: SkeletonShape.detail),
-          ),
-        },
+        ),
       ],
     );
   }
@@ -276,17 +271,18 @@ class _Hero extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   if (episode.artist != null)
-                    WaxTappable(
-                      label: context.l10n.podcastGoToShow(episode.artist!),
+                    WaxButton(
+                      label: episode.artist!,
+                      spokenLabel: context.l10n.podcastGoToShow(
+                        episode.artist!,
+                      ),
+                      kind: WaxButtonKind.inline,
+                      // One line, as the player's show line: one look for
+                      // the one link.
+                      maxLines: 1,
                       // The show is a real location, so its name here is
                       // the way back to it rather than a caption.
                       onPressed: () => context.go(WaxRoute.show(show)),
-                      child: Text(
-                        episode.artist!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: WaxType.overline.copyWith(color: colors.accent),
-                      ),
                     ),
                   const SizedBox(height: WaxSpace.s4),
                   Text(
@@ -333,12 +329,9 @@ class _ActionBar extends ConsumerWidget {
     final resuming = progress.inProgress;
     final l10n = context.l10n;
 
-    return Wrap(
-      spacing: WaxSpace.s8,
-      runSpacing: WaxSpace.s8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: <Widget>[
-        WaxButton(
+    return WaxActionBar(
+      actions: <WaxAction>[
+        WaxAction(
           label: playable
               ? (resuming
                     ? l10n.podcastResume(
@@ -346,42 +339,30 @@ class _ActionBar extends ConsumerWidget {
                       )
                     : l10n.podcastPlay)
               : l10n.podcastFetchToPlay,
-          icon: playable ? WaxIcons.play : WaxIcons.downloads,
+          glyph: playable ? WaxIcons.play : WaxIcons.downloads,
           semanticsId: SemanticsIds.episodePlay,
+          emphasis: WaxActionEmphasis.primary,
           onPressed: () => unawaited(
             actions.play(context, episode, positionMs: progress.positionMs),
           ),
         ),
-        WaxButton(
+        WaxAction(
           label: l10n.podcastAddToQueue,
-          kind: WaxButtonKind.tonal,
-          icon: WaxIcons.addToQueue,
+          glyph: WaxIcons.addToQueue,
           semanticsId: SemanticsIds.episodeQueue,
           onPressed: playable ? () => actions.enqueue(context, episode) : null,
         ),
-        if (episode.downloaded)
-          WaxButton(
-            label: l10n.podcastRemoveDownload,
-            kind: WaxButtonKind.tonal,
-            icon: WaxIcons.offline,
-            semanticsId: SemanticsIds.episodeRemove(episode.pid),
-            onPressed: () =>
-                unawaited(actions.removeDownload(context, episode.pid)),
-          )
-        else if (episode.fetchState == null || episode.fetchState == 'failed')
-          WaxButton(
-            label: l10n.podcastDownload,
-            kind: WaxButtonKind.tonal,
-            icon: WaxIcons.downloads,
-            semanticsId: SemanticsIds.episodeFetch(episode.pid),
-            onPressed: () => unawaited(actions.fetch(context, episode.pid)),
-          )
-        else
-          CodecChip(l10n.podcastQueuedForDownload),
-        WaxButton(
+        episodeFetchWaxAction(
+          l10n,
+          episode.pid,
+          episodeFetchOf(episode),
+          onFetch: () => unawaited(actions.fetch(context, episode.pid)),
+          onRemove: () =>
+              unawaited(actions.removeDownload(context, episode.pid)),
+        ),
+        WaxAction(
           label: progress.played ? l10n.podcastPlayed : l10n.podcastMarkPlayed,
-          kind: WaxButtonKind.tonal,
-          icon: WaxIcons.check,
+          glyph: WaxIcons.check,
           semanticsId: SemanticsIds.episodeMarkPlayed,
           onPressed: progress.played
               ? null
@@ -389,10 +370,9 @@ class _ActionBar extends ConsumerWidget {
                   actions.markPlayed(context, episode, progressKey),
                 ),
         ),
-        WaxButton(
+        WaxAction(
           label: l10n.podcastShare,
-          kind: WaxButtonKind.tonal,
-          icon: WaxIcons.share,
+          glyph: WaxIcons.share,
           semanticsId: SemanticsIds.episodeShare,
           // The share dialog offers a start-at-timestamp when it is
           // handed one, and the position worth offering is the live
@@ -406,8 +386,6 @@ class _ActionBar extends ConsumerWidget {
             ),
           ),
         ),
-        if (episode.fetchError != null)
-          CodecChip(l10n.podcastFetchFailed(episode.fetchError!)),
       ],
     );
   }
@@ -440,33 +418,30 @@ class _CueRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    return WaxTappable(
+    return WaxInkTappable(
       semanticsId: semanticsId,
       label: context.l10n.podcastCueSpoken(text, stamp),
       onPressed: onTap,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              SizedBox(
-                width: 64,
-                child: Text(
-                  stamp,
-                  style: WaxType.monoTime.copyWith(color: colors.textTertiary),
-                ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SizedBox(
+              width: 64,
+              child: Text(
+                stamp,
+                style: WaxType.monoTime.copyWith(color: colors.textTertiary),
               ),
-              const SizedBox(width: WaxSpace.s8),
-              Expanded(
-                child: Text(
-                  text,
-                  style: WaxType.body.copyWith(color: colors.textPrimary),
-                ),
+            ),
+            const SizedBox(width: WaxSpace.s8),
+            Expanded(
+              child: Text(
+                text,
+                style: WaxType.body.copyWith(color: colors.textPrimary),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -530,66 +505,54 @@ class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Semantics(
-      identifier: SemanticsIds.transcriptOpen,
-      child: ExpansionTile(
-        key: const Key(SemanticsIds.transcriptOpen),
-        tilePadding: EdgeInsets.zero,
-        title: Text(
-          l10n.podcastTranscript,
-          style: WaxType.headline.copyWith(
-            color: WaxColors.of(context).textPrimary,
-          ),
-        ),
-        onExpansionChanged: _onExpanded,
-        children: <Widget>[
-          FutureBuilder<Transcript>(
-            future: _loading,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                final error = snapshot.error;
-                return Padding(
-                  padding: const EdgeInsets.all(WaxSpace.s8),
-                  child: Text(
-                    error is WaxDeckApiException
-                        ? explainError(l10n, error)
-                        : l10n.podcastTranscriptError,
-                  ),
-                );
-              }
-              final transcript = snapshot.data;
-              if (transcript == null) {
-                return const Padding(
-                  padding: EdgeInsets.all(WaxSpace.s8),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              return Column(
-                children: <Widget>[
-                  for (final (i, cue) in transcript.cues.indexed)
-                    _CueRow(
-                      semanticsId: SemanticsIds.transcriptCue(i),
-                      stamp: formatCueTimestamp(cue.startMs),
-                      text: cue.speaker == null
-                          ? cue.text
-                          : l10n.podcastTranscriptSpeaker(
-                              cue.speaker!,
-                              cue.text,
-                            ),
-                      onTap: () => seekLiveOrReport(
-                        context,
-                        ref,
-                        widget.pid,
-                        cue.startMs,
-                        PodcastCue.cue,
-                      ),
-                    ),
-                ],
+    return WaxDisclosure(
+      semanticsId: SemanticsIds.transcriptOpen,
+      title: l10n.podcastTranscript,
+      onExpansionChanged: _onExpanded,
+      children: <Widget>[
+        FutureBuilder<Transcript>(
+          future: _loading,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              final error = snapshot.error;
+              return Padding(
+                padding: const EdgeInsets.all(WaxSpace.s8),
+                child: Text(
+                  error is WaxDeckApiException
+                      ? explainError(l10n, error)
+                      : l10n.podcastTranscriptError,
+                ),
               );
-            },
-          ),
-        ],
-      ),
+            }
+            final transcript = snapshot.data;
+            if (transcript == null) {
+              return const Padding(
+                padding: EdgeInsets.all(WaxSpace.s8),
+                child: SkeletonShapes(shape: SkeletonShape.list, count: 3),
+              );
+            }
+            return Column(
+              children: <Widget>[
+                for (final (i, cue) in transcript.cues.indexed)
+                  _CueRow(
+                    semanticsId: SemanticsIds.transcriptCue(i),
+                    stamp: formatCueTimestamp(cue.startMs),
+                    text: cue.speaker == null
+                        ? cue.text
+                        : l10n.podcastTranscriptSpeaker(cue.speaker!, cue.text),
+                    onTap: () => seekLiveOrReport(
+                      context,
+                      ref,
+                      widget.pid,
+                      cue.startMs,
+                      PodcastCue.cue,
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }

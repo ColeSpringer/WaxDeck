@@ -150,8 +150,8 @@ class _PersonalRecap extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Wrap(
-                    spacing: 24,
-                    runSpacing: 12,
+                    spacing: WaxSpace.s24,
+                    runSpacing: WaxSpace.s12,
                     children: [
                       StatFigure(
                         key: const Key('yir-total'),
@@ -227,16 +227,12 @@ class _PersonalRecap extends ConsumerWidget {
                   _ShareCardsDoor(data: ShareCardData.personal(l10n, value)),
                 ],
               ),
-      AsyncError(:final error) => _RecapError(
+      AsyncValue(:final error?) => _RecapError(
         error: error,
+        retrying: recap.isLoading,
         onRetry: () => ref.invalidate(yearInReviewProvider(year)),
       ),
-      _ => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(WaxSpace.s24),
-          child: CircularProgressIndicator(),
-        ),
-      ),
+      _ => const SkeletonShapes(shape: SkeletonShape.list),
     };
   }
 }
@@ -258,8 +254,8 @@ class _ServerRecap extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Wrap(
-                    spacing: 24,
-                    runSpacing: 12,
+                    spacing: WaxSpace.s24,
+                    runSpacing: WaxSpace.s12,
                     children: [
                       StatFigure(
                         key: const Key('yir-participants'),
@@ -296,16 +292,12 @@ class _ServerRecap extends ConsumerWidget {
                   _ShareCardsDoor(data: ShareCardData.server(l10n, value)),
                 ],
               ),
-      AsyncError(:final error) => _RecapError(
+      AsyncValue(:final error?) => _RecapError(
         error: error,
+        retrying: recap.isLoading,
         onRetry: () => ref.invalidate(serverYearInReviewProvider(year)),
       ),
-      _ => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(WaxSpace.s24),
-          child: CircularProgressIndicator(),
-        ),
-      ),
+      _ => const SkeletonShapes(shape: SkeletonShape.list),
     };
   }
 }
@@ -379,10 +371,17 @@ class _NothingPlayed extends StatelessWidget {
 }
 
 class _RecapError extends StatelessWidget {
-  const _RecapError({required this.error, required this.onRetry});
+  const _RecapError({
+    required this.error,
+    required this.onRetry,
+    this.retrying = false,
+  });
 
   final Object error;
   final VoidCallback onRetry;
+
+  /// Riverpod is still retrying: the retry is already running.
+  final bool retrying;
 
   @override
   Widget build(BuildContext context) {
@@ -399,7 +398,12 @@ class _RecapError extends StatelessWidget {
           const SizedBox(height: WaxSpace.s4),
           Text(context.explain(error), textAlign: TextAlign.center),
           const SizedBox(height: WaxSpace.s12),
-          OutlinedButton(onPressed: onRetry, child: Text(l10n.commonRetry)),
+          WaxButton(
+            label: l10n.commonRetry,
+            kind: WaxButtonKind.tonal,
+            busy: retrying,
+            onPressed: onRetry,
+          ),
         ],
       ),
     );

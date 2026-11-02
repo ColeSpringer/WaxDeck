@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import 'connect_providers.dart';
 
@@ -14,6 +15,7 @@ import 'connect_providers.dart';
 final castPreflightProvider =
     FutureProvider.autoDispose<List<CastPreflightBase>>(
       (ref) => ref.watch(repositoryProvider).getCastPreflight(),
+      retry: retryUnlessRefused,
     );
 
 /// Opens the connection check.
@@ -118,10 +120,10 @@ class _CastPreflightSheet extends ConsumerWidget {
                     ),
                   ),
                 ],
-                AsyncError(:final error) => <Widget>[
-                  ErrorState(
+                AsyncValue(hasError: true) => <Widget>[
+                  AsyncFailureCard.from(
+                    bases,
                     title: l10n.devicesCheckError,
-                    message: context.explain(error),
                     onRetry: () => ref.invalidate(castPreflightProvider),
                     retrySemanticsId: SemanticsIds.preflightRetry,
                   ),
@@ -215,7 +217,7 @@ class _DeviceTestsState extends ConsumerState<_DeviceTests> {
         // round trip that had not landed.
         ...switch (endpoints) {
           AsyncData(:final value) => _devices(context, value),
-          AsyncError(:final error) => <Widget>[
+          AsyncValue(:final error?) => <Widget>[
             _Detail(text: context.explain(error), tone: _DetailTone.warning),
           ],
           _ => const <Widget>[SkeletonShapes(shape: SkeletonShape.list)],

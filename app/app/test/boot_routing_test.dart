@@ -27,9 +27,18 @@ void main() {
     await tester.pumpWidget(_app(repo));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('setup-username')), findsOneWidget);
-    expect(find.byKey(const Key('setup-submit')), findsOneWidget);
-    expect(find.byKey(const Key('login-username')), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.setupUsername),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.setupSubmit),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+      findsNothing,
+    );
   });
 
   testWidgets('routes to login once accounts exist', (tester) async {
@@ -37,8 +46,14 @@ void main() {
     await tester.pumpWidget(_app(repo));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('login-username')), findsOneWidget);
-    expect(find.byKey(const Key('setup-username')), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.setupUsername),
+      findsNothing,
+    );
   });
 
   testWidgets('an unconfigured native launch lands on the connect gate', (
@@ -59,10 +74,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const Key(SemanticsIds.connectServerAddress)),
+      find.bySemanticsIdentifier(SemanticsIds.connectServerAddress),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('login-username')), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+      findsNothing,
+    );
   });
 
   testWidgets('setup submits and lands signed in', (tester) async {
@@ -74,22 +92,28 @@ void main() {
     await tester.pumpWidget(_app(repo, store: store));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const Key('setup-username')), 'admin');
     await tester.enterText(
-      find.byKey(const Key('setup-password')),
+      find.bySemanticsIdentifier(SemanticsIds.setupUsername),
+      'admin',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.setupPassword),
       'wax-setup-pass',
     );
     await tester.enterText(
-      find.byKey(const Key('setup-confirm')),
+      find.bySemanticsIdentifier(SemanticsIds.setupConfirm),
       'wax-setup-pass',
     );
-    await tester.tap(find.byKey(const Key('setup-submit')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.setupSubmit));
     await tester.pumpAndSettle();
 
     expect(repo.bootstrapCalls, hasLength(1));
     expect(repo.bootstrapCalls.single.username, 'admin');
     expect(repo.bootstrapCalls.single.password, 'wax-setup-pass');
-    expect(find.byKey(const Key('setup-username')), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.setupUsername),
+      findsNothing,
+    );
     // Landed on home, with the library on its shelves. `findsWidgets`
     // rather than `findsOneWidget`: the shelves overlap by construction,
     // so a fresh unplayed track is on Recently added and on Never played
@@ -105,10 +129,19 @@ void main() {
     await tester.pumpWidget(_app(repo));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const Key('setup-username')), 'admin');
-    await tester.enterText(find.byKey(const Key('setup-password')), 'short');
-    await tester.enterText(find.byKey(const Key('setup-confirm')), 'short');
-    await tester.tap(find.byKey(const Key('setup-submit')));
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.setupUsername),
+      'admin',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.setupPassword),
+      'short',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.setupConfirm),
+      'short',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.setupSubmit));
     await tester.pump();
 
     expect(find.text('Use at least 8 characters'), findsOneWidget);
@@ -122,16 +155,19 @@ void main() {
     await tester.pumpWidget(_app(repo));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const Key('setup-username')), 'admin');
     await tester.enterText(
-      find.byKey(const Key('setup-password')),
+      find.bySemanticsIdentifier(SemanticsIds.setupUsername),
+      'admin',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.setupPassword),
       'wax-setup-pass',
     );
     await tester.enterText(
-      find.byKey(const Key('setup-confirm')),
+      find.bySemanticsIdentifier(SemanticsIds.setupConfirm),
       'wax-other-pass',
     );
-    await tester.tap(find.byKey(const Key('setup-submit')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.setupSubmit));
     await tester.pump();
 
     expect(find.text('Passwords do not match'), findsOneWidget);

@@ -196,9 +196,8 @@ class _RadioSavedIdentifySheetState
                 ),
               )
             else if (entries == null)
-              const Padding(
-                padding: EdgeInsets.all(WaxSpace.s16),
-                child: Center(child: CircularProgressIndicator()),
+              const Flexible(
+                child: SkeletonShapes(shape: SkeletonShape.list, count: 3),
               )
             else if (entries.isEmpty)
               Padding(

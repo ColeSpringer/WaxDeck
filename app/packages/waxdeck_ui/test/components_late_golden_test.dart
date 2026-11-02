@@ -493,20 +493,35 @@ void main() {
                         'Recorded over four winter nights in a '
                         'converted boathouse, and mixed the following '
                         'spring.',
-                    actions: <Widget>[
-                      WaxButton(
+                    actions: <WaxAction>[
+                      WaxAction(
                         label: 'Play',
-                        icon: WaxIcons.play,
+                        semanticsId: 'play',
+                        glyph: WaxIcons.play,
+                        emphasis: WaxActionEmphasis.primary,
                         onPressed: () {},
                       ),
-                      WaxButton(
+                      WaxAction(
                         label: 'Shuffle',
-                        kind: WaxButtonKind.tonal,
-                        icon: WaxIcons.shuffle,
+                        semanticsId: 'shuffle',
+                        glyph: WaxIcons.shuffle,
                         onPressed: () {},
                       ),
+                      WaxAction(
+                        label: 'Downloaded',
+                        semanticsId: 'download',
+                        glyph: WaxIcons.downloads,
+                        state: const WaxActionState.done(),
+                      ),
+                    ],
+                    trailing: <Widget>[
                       StarButton(starred: true, onChanged: (_) {}),
                     ],
+                    overflow: WaxIconButton(
+                      glyph: WaxIcons.more,
+                      label: 'More',
+                      onPressed: () {},
+                    ),
                   ),
                 ),
               ),
@@ -530,10 +545,17 @@ void main() {
                   artworkCaption: 'From the Cover Art Archive',
                   shape: ArtworkShape.portrait,
                   domain: WaxDomain.audiobooks,
-                  actions: <Widget>[
-                    WaxButton(
+                  link: EntityHeaderLink(
+                    label: 'Book 2 of The Tide Almanac',
+                    semanticsId: 'series',
+                    onPressed: () {},
+                  ),
+                  actions: <WaxAction>[
+                    WaxAction(
                       label: 'Resume',
-                      icon: WaxIcons.play,
+                      semanticsId: 'resume',
+                      glyph: WaxIcons.play,
+                      emphasis: WaxActionEmphasis.primary,
                       onPressed: () {},
                     ),
                   ],
@@ -1373,5 +1395,75 @@ void main() {
         ],
       ),
     );
+
+    goldenTest(
+      'a Load more footer: ready, pressed over its ghost, and a scroll\'s '
+      'ghost alone',
+      fileName: 'load_more_footer',
+      // The pressed state is the footer's own, so it is reached by a
+      // press rather than handed in.
+      pumpBeforeTest: (tester) async {
+        final presses = find.descendant(
+          of: find.byType(_PressedFooter),
+          matching: find.byType(WaxButton),
+        );
+        for (var i = 0; i < presses.evaluate().length; i++) {
+          await tester.tap(presses.at(i));
+        }
+        // Past the press's ink, which is not the state on show.
+        for (var i = 0; i < 30; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        await _pumpAnimated(tester);
+      },
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            for (final (name, footer) in <(String, Widget)>[
+              (
+                'ready',
+                LoadMoreFooter(
+                  label: 'Load more episodes',
+                  loading: false,
+                  onLoadMore: () {},
+                ),
+              ),
+              ('pressed', const _PressedFooter()),
+              (
+                'scrolled',
+                LoadMoreFooter(
+                  label: 'Load more episodes',
+                  loading: true,
+                  onLoadMore: () {},
+                ),
+              ),
+            ])
+              GoldenTestScenario(
+                name: '${variant.name} $name',
+                child: _themed(variant, SizedBox(width: 320, child: footer)),
+              ),
+        ],
+      ),
+    );
   });
+}
+
+/// A footer whose press starts a page that never lands.
+class _PressedFooter extends StatefulWidget {
+  const _PressedFooter();
+
+  @override
+  State<_PressedFooter> createState() => _PressedFooterState();
+}
+
+class _PressedFooterState extends State<_PressedFooter> {
+  var _loading = false;
+
+  @override
+  Widget build(BuildContext context) => LoadMoreFooter(
+    label: 'Load more episodes',
+    loading: _loading,
+    onLoadMore: () => setState(() => _loading = true),
+  );
 }

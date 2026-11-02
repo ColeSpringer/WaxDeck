@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
@@ -32,9 +33,9 @@ class SchedulesScreen extends ConsumerWidget {
           const EdgeInsets.only(bottom: WaxSpace.s32),
         ),
         child: switch (schedules) {
-          AsyncError(:final error) => ErrorState(
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            schedules,
             title: l10n.adminSchedulesLoadError,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(schedulesProvider),
           ),
           AsyncData(:final value) => Column(
@@ -225,7 +226,8 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
                   label: l10n.commonSave,
                   kind: WaxButtonKind.tonal,
                   semanticsId: SemanticsIds.scheduleSave(kind),
-                  onPressed: _busy ? null : _save,
+                  busy: _busy,
+                  onPressed: _save,
                 ),
               ],
             ),

@@ -182,14 +182,20 @@ Future<void> _run(WidgetTester tester) async {
       child: const WaxDeckApp(),
     ),
   );
-  await _pumpUntilFound(tester, find.byKey(const Key('login-username')));
+  await _pumpUntilFound(
+    tester,
+    find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+  );
 
-  await tester.enterText(find.byKey(const Key('login-username')), 'admin');
   await tester.enterText(
-    find.byKey(const Key('login-password')),
+    find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+    'admin',
+  );
+  await tester.enterText(
+    find.bySemanticsIdentifier(SemanticsIds.loginPassword),
     'wax-e2e-pass',
   );
-  await tester.tap(find.byKey(const Key('login-submit')));
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.loginSubmit));
 
   // Home draws its shelves; a music card plays what it is about rather
   // than opening a screen, which is what starts a session.

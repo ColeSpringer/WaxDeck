@@ -19,6 +19,7 @@ import 'direction_glyph.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'row_nodes.dart';
+import 'wax_finders.dart';
 
 /// A picker resolving to fixed reader-backed files, mirroring the web
 /// port's lazy-reference shape.
@@ -210,6 +211,24 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.uploadsMore),
       up: false,
     );
+  });
+
+  testWidgets('a pressed Load more stays, busy, over the ghost row', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..uploadsNextCursor = 'more';
+    repo.uploadsById['up-1'] = testUpload('up-1', fileName: 'one.flac');
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    repo.listUploadsGate = Completer<void>();
+    await expectLoadMoreHolds(
+      tester,
+      waxControl<WaxButton>(SemanticsIds.uploadsMore),
+    );
+    repo.listUploadsGate!.complete();
+    repo.listUploadsGate = null;
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a refresh redraws the sessions it already has', (tester) async {

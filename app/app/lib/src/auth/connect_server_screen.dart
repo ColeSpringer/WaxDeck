@@ -140,21 +140,15 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
               children: [
                 WaxBrandBlock(tagline: l10n.authServerConnectTagline),
                 const SizedBox(height: WaxSpace.s32),
-                Semantics(
-                  identifier: SemanticsIds.connectServerAddress,
-                  child: TextField(
-                    key: const Key(SemanticsIds.connectServerAddress),
-                    controller: _address,
-                    autofocus: true,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    decoration: InputDecoration(
-                      labelText: l10n.authServerAddressLabel,
-                      hintText: l10n.authServerAddressHint,
-                      border: const OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _connect(),
-                  ),
+                WaxTextField(
+                  semanticsId: SemanticsIds.connectServerAddress,
+                  controller: _address,
+                  label: l10n.authServerAddressLabel,
+                  hint: l10n.authServerAddressHint,
+                  autofocus: true,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  onSubmitted: (_) => _connect(),
                 ),
                 const SizedBox(height: WaxSpace.s24),
                 if (_error != null) ...[
@@ -169,19 +163,12 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
                   ),
                   const SizedBox(height: WaxSpace.s16),
                 ],
-                Semantics(
-                  identifier: SemanticsIds.connectServerSubmit,
-                  child: FilledButton(
-                    key: const Key(SemanticsIds.connectServerSubmit),
-                    onPressed: _probing || _forgetting ? null : _connect,
-                    child: _probing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(l10n.authServerConnect),
-                  ),
+                WaxButton(
+                  semanticsId: SemanticsIds.connectServerSubmit,
+                  label: l10n.authServerConnect,
+                  expand: true,
+                  busy: _probing,
+                  onPressed: _probing || _forgetting ? null : _connect,
                 ),
                 if (stored != null) ...[
                   const SizedBox(height: WaxSpace.s8),

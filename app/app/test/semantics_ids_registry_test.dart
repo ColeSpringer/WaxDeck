@@ -49,6 +49,63 @@ void main() {
       );
     });
 
+    // The same rule for the tests: a finder that types an identifier
+    // the registry generates goes stale silently on a rename, one literal
+    // at a time. A finder string is a generated id when it equals a fixed
+    // one or fits a parameterised one's shape; a Key compares against the
+    // fixed ones only, since plain widget keys share their prefixes.
+    test('no test types an identifier the registry generates', () {
+      // Each exempt file types identifiers on purpose, and says why.
+      const exempt = <String, String>{
+        // This file pins the frozen vocabulary by its literal values.
+        'test/semantics_ids_registry_test.dart': 'the vocabulary itself',
+      };
+      final registry = _registry();
+      final offenders = <String>[];
+      for (final root in <String>['test', 'integration_test']) {
+        final files = Directory(root)
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.dart'))
+            .where((f) => !exempt.containsKey(f.path));
+        for (final file in files) {
+          for (final (:line, :id) in _typedIdentifiers(
+            file.readAsStringSync(),
+            registry,
+          )) {
+            offenders.add('${file.path}:$line $id');
+          }
+        }
+      }
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            'Use the SemanticsIds constant for each of these, or add the '
+            'file to the exemptions with the reason it must type one:\n'
+            '${offenders.join('\n')}',
+      );
+    });
+
+    test('the guard sees a finder that the formatter split across lines', () {
+      const source = '''
+final a = find.bySemanticsIdentifier(
+  'login-username',
+);
+final b = waxControl<WaxButton>(
+  'user-row-us-3',
+);
+final c = find.byKey(const Key(
+  'login-submit',
+));
+''';
+      expect(_typedIdentifiers(source, _registry()).toList(), [
+        (line: 1, id: 'login-username'),
+        (line: 4, id: 'user-row-us-3'),
+        (line: 7, id: 'login-submit'),
+      ]);
+    });
+
     test('every generated identifier is unique', () {
       final files = Directory('../semantics-ids')
           .listSync()
@@ -76,4 +133,55 @@ void main() {
       expect(SemanticsIds.item('tr-01'), 'item-tr-01');
     });
   });
+}
+
+/// The registry's fixed identifiers, and a shape for each parameterised
+/// one.
+({Set<String> fixed, List<RegExp> shaped}) _registry() {
+  final fixed = <String>{};
+  final shaped = <RegExp>[];
+  for (final file in Directory(
+    '../semantics-ids',
+  ).listSync().whereType<File>().where((f) => f.path.endsWith('.json'))) {
+    final source = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    for (final id
+        in (source['ids']! as Map<String, dynamic>).values.cast<String>()) {
+      if (!id.contains('{')) {
+        fixed.add(id);
+        continue;
+      }
+      final parts = id.split(RegExp(r'\{[A-Za-z]+\}'));
+      shaped.add(RegExp('^${parts.map(RegExp.escape).join('.+')}\$'));
+    }
+  }
+  return (fixed: fixed, shaped: shaped);
+}
+
+/// Every generated identifier [source] types: a finder string that is a
+/// fixed id or fits a parameterised one's shape, and a `Key` string that
+/// is a fixed id (plain widget keys share the shapes' prefixes), with
+/// the line each one starts on.
+Iterable<({int line, String id})> _typedIdentifiers(
+  String source,
+  ({Set<String> fixed, List<RegExp> shaped}) registry,
+) sync* {
+  final finder = RegExp(
+    r"(?:bySemanticsIdentifier|waxControl<[^>]*>)\(\s*'([^'$\\]+)'",
+  );
+  final key = RegExp(r"Key\(\s*'([^'$\\]+)',?\s*\)");
+  // Matched over the whole source, so a call the formatter broke after
+  // its bracket still reads as one; the line is where the call starts.
+  int lineOf(int offset) =>
+      '\n'.allMatches(source.substring(0, offset)).length + 1;
+  final hits = <({int at, String id})>[
+    for (final m in finder.allMatches(source))
+      if (registry.fixed.contains(m[1]) ||
+          registry.shaped.any((shape) => shape.hasMatch(m[1]!)))
+        (at: m.start, id: m[1]!),
+    for (final m in key.allMatches(source))
+      if (registry.fixed.contains(m[1])) (at: m.start, id: m[1]!),
+  ]..sort((a, b) => a.at.compareTo(b.at));
+  for (final hit in hits) {
+    yield (line: lineOf(hit.at), id: hit.id);
+  }
 }

@@ -80,141 +80,129 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.authRequestAccount)),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(WaxSpace.s24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: _pending
-                ? Semantics(
-                    identifier: SemanticsIds.signupResult,
-                    child: Column(
-                      key: const Key(SemanticsIds.signupResult),
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const WaxIcon(WaxIcons.hourglass, size: 48),
-                        const SizedBox(height: WaxSpace.s16),
-                        Text(
-                          l10n.authRequestReceived,
-                          style: WaxType.titleEntity.copyWith(
-                            color: colors.textPrimary,
-                          ),
+    // Built here, once a build, and handed to the layout builder below,
+    // which runs on every scroll frame: a widget it is handed whole is
+    // not built again.
+    final body = Padding(
+      padding: const EdgeInsets.all(WaxSpace.s24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: _pending
+            ? Semantics(
+                identifier: SemanticsIds.signupResult,
+                child: Column(
+                  key: const Key(SemanticsIds.signupResult),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const WaxIcon(WaxIcons.hourglass, size: 48),
+                    const SizedBox(height: WaxSpace.s16),
+                    Text(
+                      l10n.authRequestReceived,
+                      style: WaxType.titleEntity.copyWith(
+                        color: colors.textPrimary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: WaxSpace.s8),
+                    Text(l10n.authRequestPending, textAlign: TextAlign.center),
+                    const SizedBox(height: WaxSpace.s24),
+                    WaxButton(
+                      label: l10n.authBackToSignIn,
+                      kind: WaxButtonKind.tonal,
+                      onPressed: () => context.leave(fallback: WaxRoute.login),
+                    ),
+                  ],
+                ),
+              )
+            : Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    WaxTextField(
+                      semanticsId: SemanticsIds.signupUsername,
+                      controller: _username,
+                      label: l10n.authUsername,
+                      autofillHints: const [AutofillHints.newUsername],
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? l10n.authChooseUsername
+                          : null,
+                    ),
+                    const SizedBox(height: WaxSpace.s16),
+                    WaxTextField(
+                      semanticsId: SemanticsIds.signupPassword,
+                      controller: _password,
+                      label: l10n.authPassword,
+                      obscureText: true,
+                      autofillHints: const [AutofillHints.newPassword],
+                      validator: (value) => (value == null || value.isEmpty)
+                          ? l10n.authChoosePassword
+                          : null,
+                    ),
+                    const SizedBox(height: WaxSpace.s16),
+                    WaxTextField(
+                      key: const Key('signup-display-name'),
+                      controller: _displayName,
+                      label: l10n.authDisplayName,
+                    ),
+                    const SizedBox(height: WaxSpace.s16),
+                    WaxTextField(
+                      semanticsId: SemanticsIds.signupInviteToken,
+                      controller: _inviteToken,
+                      label: l10n.authInviteToken,
+                      helperText: l10n.authInviteHelp,
+                      onSubmitted: (_) => _submit(),
+                    ),
+                    const SizedBox(height: WaxSpace.s24),
+                    if (_error != null) ...[
+                      Semantics(
+                        identifier: SemanticsIds.signupError,
+                        child: Text(
+                          _error!,
+                          key: const Key(SemanticsIds.signupError),
+                          style: WaxType.body.copyWith(color: colors.error),
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: WaxSpace.s8),
-                        Text(
-                          l10n.authRequestPending,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: WaxSpace.s24),
-                        OutlinedButton(
-                          onPressed: () =>
-                              context.leave(fallback: WaxRoute.login),
-                          child: Text(l10n.authBackToSignIn),
-                        ),
-                      ],
+                      ),
+                      const SizedBox(height: WaxSpace.s16),
+                    ],
+                    WaxButton(
+                      semanticsId: SemanticsIds.signupSubmit,
+                      label: l10n.authRequestSubmit,
+                      expand: true,
+                      busy: _submitting,
+                      onPressed: _submitting ? null : _submit,
                     ),
-                  )
-                : Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Semantics(
-                          identifier: SemanticsIds.signupUsername,
-                          child: TextFormField(
-                            key: const Key(SemanticsIds.signupUsername),
-                            controller: _username,
-                            autofillHints: const [AutofillHints.newUsername],
-                            decoration: InputDecoration(
-                              labelText: l10n.authUsername,
-                              border: const OutlineInputBorder(),
-                            ),
-                            validator: (value) =>
-                                (value == null || value.trim().isEmpty)
-                                ? l10n.authChooseUsername
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(height: WaxSpace.s16),
-                        Semantics(
-                          identifier: SemanticsIds.signupPassword,
-                          child: TextFormField(
-                            key: const Key(SemanticsIds.signupPassword),
-                            controller: _password,
-                            obscureText: true,
-                            autofillHints: const [AutofillHints.newPassword],
-                            decoration: InputDecoration(
-                              labelText: l10n.authPassword,
-                              border: const OutlineInputBorder(),
-                            ),
-                            validator: (value) =>
-                                (value == null || value.isEmpty)
-                                ? l10n.authChoosePassword
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(height: WaxSpace.s16),
-                        TextFormField(
-                          key: const Key('signup-display-name'),
-                          controller: _displayName,
-                          decoration: InputDecoration(
-                            labelText: l10n.authDisplayName,
-                            border: const OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: WaxSpace.s16),
-                        Semantics(
-                          identifier: SemanticsIds.signupInviteToken,
-                          child: TextFormField(
-                            key: const Key(SemanticsIds.signupInviteToken),
-                            controller: _inviteToken,
-                            decoration: InputDecoration(
-                              labelText: l10n.authInviteToken,
-                              helperText: l10n.authInviteHelp,
-                              border: const OutlineInputBorder(),
-                            ),
-                            onFieldSubmitted: (_) => _submit(),
-                          ),
-                        ),
-                        const SizedBox(height: WaxSpace.s24),
-                        if (_error != null) ...[
-                          Semantics(
-                            identifier: SemanticsIds.signupError,
-                            child: Text(
-                              _error!,
-                              key: const Key(SemanticsIds.signupError),
-                              style: WaxType.body.copyWith(color: colors.error),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          const SizedBox(height: WaxSpace.s16),
-                        ],
-                        Semantics(
-                          identifier: SemanticsIds.signupSubmit,
-                          child: FilledButton(
-                            key: const Key(SemanticsIds.signupSubmit),
-                            onPressed: _submitting ? null : _submit,
-                            child: _submitting
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text(l10n.authRequestSubmit),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
+                ),
+              ),
+      ),
+    );
+    return WaxScaffold(
+      title: l10n.authRequestAccount,
+      largeTitle: false,
+      onBack: () => context.leave(fallback: WaxRoute.login),
+      // Centred in what the bar leaves, as the sign-in form it came from
+      // is, and scrolling once a short window cannot hold it. Measured
+      // off the viewport rather than SliverFillRemaining's intrinsic
+      // height, which asks the form at the page's width, not its own
+      // narrower one, and so comes up short where a line wraps.
+      slivers: <Widget>[
+        SliverLayoutBuilder(
+          builder: (context, constraints) => SliverToBoxAdapter(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight:
+                    constraints.viewportMainAxisExtent -
+                    constraints.precedingScrollExtent,
+              ),
+              child: Center(child: body),
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }

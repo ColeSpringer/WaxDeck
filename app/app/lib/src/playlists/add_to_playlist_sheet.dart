@@ -221,16 +221,15 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
                   },
                 ),
               ),
-              AsyncError() => Padding(
+              AsyncValue(hasError: true) => Padding(
                 padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
                 child: Text(
                   l10n.playlistsLoadErrorSentence,
                   style: WaxType.bodySmall.copyWith(color: colors.error),
                 ),
               ),
-              _ => const Padding(
-                padding: EdgeInsets.all(WaxSpace.s16),
-                child: Center(child: CircularProgressIndicator()),
+              _ => const Flexible(
+                child: SkeletonShapes(shape: SkeletonShape.list, count: 3),
               ),
             },
             const SizedBox(height: WaxSpace.s8),

@@ -51,17 +51,15 @@ class NotificationsScreen extends ConsumerWidget {
         title: Text(l10n.bellClearTitle),
         content: WaxProse(l10n.bellClearConfirm),
         actions: <Widget>[
-          TextButton(
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.commonCancel),
           ),
-          Semantics(
-            identifier: SemanticsIds.notificationsClearConfirm,
-            container: true,
-            child: FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(l10n.bellClear),
-            ),
+          WaxButton(
+            label: l10n.bellClear,
+            semanticsId: SemanticsIds.notificationsClearConfirm,
+            onPressed: () => Navigator.of(context).pop(true),
           ),
         ],
       ),

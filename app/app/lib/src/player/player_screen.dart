@@ -117,7 +117,7 @@ class PlayerScreen extends ConsumerWidget {
     // Offered on exactly the face that draws the row, which is the one
     // arm of `_body` below holding both a session and an item: a
     // station has taken the engine, a failed start draws a retry, and a
-    // resolving entry draws a spinner - all three still name an item,
+    // resolving entry draws a skeleton - all three still name an item,
     // and none of them is a surface to be offered an editor from.
     final editing = switch (ref.watch(nowPlayingSlotProvider)) {
       ItemSlot(:final now) when now.error == null && now.session != null =>
@@ -236,6 +236,9 @@ class PlayerScreen extends ConsumerWidget {
             // it again: without this the failure is where playback stops
             // until something rebuilds the queue.
             onRetry: ref.read(nowPlayingProvider.notifier).resume,
+            // A start that failed, not a read: nothing asks again on its
+            // own, so the press is the only retry there is.
+            retrying: false,
             semanticsId: SemanticsIds.playerSurface,
             retrySemanticsId: SemanticsIds.playerRetry,
           ),
@@ -244,7 +247,7 @@ class PlayerScreen extends ConsumerWidget {
         // why it does not flash. A start occupies the state with an
         // entry and no session for as long as the resolve and the load
         // take, and reading that window as "not playing yet" swapped
-        // this branch for a spinner on every advance - a widget-type
+        // this branch for the skeleton on every advance - a widget-type
         // change, so the face, its hero, its ticker and its artwork
         // were torn down and rebuilt each time. The face tolerates a
         // session-less state instead, and stays the same element.
@@ -370,12 +373,12 @@ void leaveWith(GoRouter? router) {
 /// Both halves of what it draws are nullable, and for the same reason.
 /// A start publishes the entry first and the session only once the load
 /// lands, so a face that demanded a session would be replaced by a
-/// spinner on every advance - a different widget type, which tears down
+/// skeleton on every advance - a different widget type, which tears down
 /// the hero, the ticker and the artwork it was holding. The summary is
 /// normally in hand from the preload's own resolve; when it is not, the
 /// last one is held rather than dropped, so the face persists for the
 /// frames a fetch takes instead of blinking. A face with no summary yet
-/// draws the spinner itself, which is the cold open and the one case
+/// draws the skeleton shell, which is the cold open and the one case
 /// where there is genuinely nothing to show.
 class PlayerFace extends ConsumerStatefulWidget {
   const PlayerFace({
@@ -394,7 +397,7 @@ class PlayerFace extends ConsumerStatefulWidget {
   /// Null only until the summary resolves. [_shown] is what is drawn.
   final ItemSummary? item;
 
-  /// Drawn by the spinner shell, which has no item to derive one from.
+  /// Drawn by the skeleton shell, which has no item to derive one from.
   final WaxDomain domain;
 
   @override
@@ -600,12 +603,12 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   Widget build(BuildContext context) {
     // Nothing has ever resolved here, which is the cold open. Every
     // other pass has a summary to hold, so this is the only state that
-    // draws a spinner - and it is a shell rather than a face, so the
+    // draws a skeleton - and it is a shell rather than a face, so the
     // hero is never built with nothing in it.
     if (_shown == null) {
       return _PlayerShell(
         domain: widget.domain,
-        child: const Center(child: CircularProgressIndicator()),
+        child: const SkeletonShapes(shape: SkeletonShape.detail),
       );
     }
     // The two standing modes plus where the queue came from, and nothing
@@ -636,8 +639,8 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
         ref.watch(mayCurateItemProvider(_item.pid)).value ?? false;
     // Where the cover under the hero came from, for the mark under it.
     // Affordable here for the same reason as the read above: one item,
-    // the one on screen, and Phase 4's `ArtProvenance` made the server
-    // side of it a row lookup rather than an image decode. It is
+    // the one on screen, and the server's `ArtProvenance` makes that a
+    // row lookup rather than an image decode. It is
     // deliberately not on `ItemSummary`, so no list row pays for it.
     final artSource = ref
         .watch(itemArtRolesProvider(_item.pid))
@@ -721,9 +724,9 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
                   _artCount,
                 )
               : null,
-          // The show an episode is from, above its title and tappable
-          // (5.3). Books and tracks name their maker under the title
-          // instead, which is what the subtitle already is.
+          // The show an episode is from, above its title and tappable.
+          // Books and tracks name their maker under the title instead,
+          // which is what the subtitle already is.
           titleOverline: _episode == null
               ? null
               : ShowOverline(episode: _episode!),
@@ -1076,7 +1079,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
         // record is what the control is for, and it is about the device
         // rather than the medium.
         SleepTimerButton(session: _session),
-        // Only where somebody asked for it (5.6). The verb is in the
+        // Only where somebody asked for it. The verb is in the
         // overflow for everybody; this is the row for the listener who
         // takes the same phone to the same car every morning.
         if (carMode)
@@ -1176,155 +1179,148 @@ class _UpNextPeek extends ConsumerWidget {
       if (remaining > 0) l10n.playerLeftCount(remaining),
     ].join(', ');
 
-    return WaxTappable(
+    return WaxInkTappable(
       semanticsId: SemanticsIds.playerUpNext,
       label: spoken,
+      color: colors.veil,
       borderRadius: WaxRadius.sheetTop,
       onPressed: () => openQueue(context, ref, overShell: true),
-      // Ink outside, InkWell in: the scaffold's only Material is
-      // transparent, so a splash under an opaquely decorated Container
-      // paints beneath it and never appears. Ink puts the decoration
-      // into the Material instead, which is what the splash draws on.
-      child: Ink(
+      child: DecoratedBox(
         decoration: BoxDecoration(
-          color: colors.veil,
           borderRadius: WaxRadius.sheetTop,
           border: Border(top: BorderSide(color: colors.hairline)),
         ),
-        child: InkWell(
-          onTap: () => openQueue(context, ref, overShell: true),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              WaxSpace.s16,
-              WaxSpace.s8,
-              WaxSpace.s16,
-              WaxSpace.s16,
-            ),
-            child: Column(
-              // Left, like the header row above it and like every other
-              // block on this screen. Centring was the Column's default
-              // rather than a decision, and it put the track's name in
-              // the middle of the peek under a heading pinned to the
-              // left - two alignments in a strip four lines tall.
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                // The one thing that is centred, and now says so: it is
-                // a grab handle, and a handle belongs in the middle of
-                // what it drags.
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: WaxSpace.s8),
-                    decoration: BoxDecoration(
-                      color: colors.textTertiary,
-                      borderRadius: WaxRadius.pill,
-                    ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            WaxSpace.s16,
+            WaxSpace.s8,
+            WaxSpace.s16,
+            WaxSpace.s16,
+          ),
+          child: Column(
+            // Left, like the header row above it and like every other
+            // block on this screen. Centring was the Column's default
+            // rather than a decision, and it put the track's name in
+            // the middle of the peek under a heading pinned to the
+            // left - two alignments in a strip four lines tall.
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // The one thing that is centred, and now says so: it is
+              // a grab handle, and a handle belongs in the middle of
+              // what it drags.
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: WaxSpace.s8),
+                  decoration: BoxDecoration(
+                    color: colors.textTertiary,
+                    borderRadius: WaxRadius.pill,
                   ),
                 ),
-                Row(
-                  children: <Widget>[
-                    // The cover of what is coming leads the strip,
-                    // spanning both text lines beside the name it
-                    // repeats - where the eye lands first, next to the
-                    // words that spell it out. A fixed box whether or
-                    // not the item has resolved: skipping the cell
-                    // while it loads would shove both text lines
-                    // sideways the moment the cover arrives.
-                    SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: item == null
-                          ? null
-                          : ArtworkImage(
-                              size: 40,
-                              artwork: waxArtwork(
-                                ref.watch(artworkStoreProvider),
-                                item.artUrl,
-                              ),
-                              monogram: item.title,
-                              shape: waxShapeOf(item.mediaType),
-                              domain: waxDomainOf(item.mediaType),
+              ),
+              Row(
+                children: <Widget>[
+                  // The cover of what is coming leads the strip,
+                  // spanning both text lines beside the name it
+                  // repeats - where the eye lands first, next to the
+                  // words that spell it out. A fixed box whether or
+                  // not the item has resolved: skipping the cell
+                  // while it loads would shove both text lines
+                  // sideways the moment the cover arrives.
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: item == null
+                        ? null
+                        : ArtworkImage(
+                            size: 40,
+                            artwork: waxArtwork(
+                              ref.watch(artworkStoreProvider),
+                              item.artUrl,
                             ),
-                    ),
-                    const SizedBox(width: WaxSpace.s12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              // Expanded, and the count keeps itself
-                              // whole: the pair lost the cover's width,
-                              // and a letter-spaced overline beside a
-                              // localized count has to give somewhere
-                              // on a narrow window at a large scale.
-                              Expanded(
-                                child: Text(
-                                  l10n.playerUpNext,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: WaxType.overline.copyWith(
-                                    color: colors.textTertiary,
-                                  ),
+                            monogram: item.title,
+                            shape: waxShapeOf(item.mediaType),
+                            domain: waxDomainOf(item.mediaType),
+                          ),
+                  ),
+                  const SizedBox(width: WaxSpace.s12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            // Expanded, and the count keeps itself
+                            // whole: the pair lost the cover's width,
+                            // and a letter-spaced overline beside a
+                            // localized count has to give somewhere
+                            // on a narrow window at a large scale.
+                            Expanded(
+                              child: Text(
+                                l10n.playerUpNext,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: WaxType.overline.copyWith(
+                                  color: colors.textTertiary,
                                 ),
                               ),
-                              if (remaining > 0)
-                                Text(
-                                  l10n.playerLeftCount(remaining),
+                            ),
+                            if (remaining > 0)
+                              Text(
+                                l10n.playerLeftCount(remaining),
+                                style: WaxType.caption.copyWith(
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: WaxSpace.s4),
+                        // Title and artist as one paragraph rather
+                        // than a row of two. A row strands the artist
+                        // at the far edge if the title is Expanded,
+                        // and splits the width down the middle if
+                        // both are Flexible - a flex child is capped
+                        // at its share and hands nothing back, so a
+                        // short artist leaves a hole the title was
+                        // truncated to make. One line lays out left
+                        // to right and runs out at the end, which is
+                        // where an ellipsis belongs.
+                        Text.rich(
+                          TextSpan(
+                            children: <InlineSpan>[
+                              TextSpan(
+                                text:
+                                    item?.title ??
+                                    context.l10n.commonLoadingTitle,
+                                style: WaxType.body.copyWith(
+                                  color: colors.textPrimary,
+                                ),
+                              ),
+                              if (item?.artist != null) ...<InlineSpan>[
+                                const WidgetSpan(
+                                  child: SizedBox(width: WaxSpace.s8),
+                                ),
+                                TextSpan(
+                                  text: item!.artist!,
                                   style: WaxType.caption.copyWith(
                                     color: colors.textSecondary,
                                   ),
                                 ),
+                              ],
                             ],
                           ),
-                          const SizedBox(height: WaxSpace.s4),
-                          // Title and artist as one paragraph rather
-                          // than a row of two. A row strands the artist
-                          // at the far edge if the title is Expanded,
-                          // and splits the width down the middle if
-                          // both are Flexible - a flex child is capped
-                          // at its share and hands nothing back, so a
-                          // short artist leaves a hole the title was
-                          // truncated to make. One line lays out left
-                          // to right and runs out at the end, which is
-                          // where an ellipsis belongs.
-                          Text.rich(
-                            TextSpan(
-                              children: <InlineSpan>[
-                                TextSpan(
-                                  text:
-                                      item?.title ??
-                                      context.l10n.commonLoadingTitle,
-                                  style: WaxType.body.copyWith(
-                                    color: colors.textPrimary,
-                                  ),
-                                ),
-                                if (item?.artist != null) ...<InlineSpan>[
-                                  const WidgetSpan(
-                                    child: SizedBox(width: WaxSpace.s8),
-                                  ),
-                                  TextSpan(
-                                    text: item!.artist!,
-                                    style: WaxType.caption.copyWith(
-                                      color: colors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -1532,7 +1528,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                   Navigator.of(context).pop();
                 },
               ),
-              const Divider(height: WaxSpace.s16),
+              const WaxHairline(extent: WaxSpace.s16),
             ],
             for (final minutes in const [5, 15, 30, 60])
               WaxOptionRow(
@@ -1569,36 +1565,28 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: Semantics(
-                      identifier: SemanticsIds.sleepTimerCustomField,
-                      textField: true,
-                      child: TextField(
-                        key: const Key(SemanticsIds.sleepTimerCustomField),
-                        controller: _custom,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: l10n.playerTimerCustom,
-                        ),
-                      ),
+                    child: WaxTextField(
+                      label: l10n.playerTimerCustom,
+                      semanticsId: SemanticsIds.sleepTimerCustomField,
+                      controller: _custom,
+                      keyboardType: TextInputType.number,
                     ),
                   ),
                   const SizedBox(width: WaxSpace.s8),
-                  Semantics(
-                    identifier: SemanticsIds.sleepTimerCustomStart,
-                    label: l10n.playerTimerCustomStart,
-                    button: true,
-                    child: TextButton(
-                      key: const Key(SemanticsIds.sleepTimerCustomStart),
-                      onPressed: () {
-                        final minutes = int.tryParse(_custom.text.trim());
-                        if (minutes != null && minutes > 0) {
-                          _startMinutes(minutes);
-                        }
-                      },
-                      child: Text(l10n.playerStart),
-                    ),
+                  WaxButton(
+                    label: l10n.playerStart,
+                    spokenLabel: l10n.playerTimerCustomStart,
+                    kind: WaxButtonKind.text,
+                    semanticsId: SemanticsIds.sleepTimerCustomStart,
+                    onPressed: () {
+                      final minutes = int.tryParse(_custom.text.trim());
+                      if (minutes != null && minutes > 0) {
+                        _startMinutes(minutes);
+                      }
+                    },
                   ),
                 ],
               ),

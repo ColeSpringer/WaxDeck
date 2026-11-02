@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
+import '../shell/in_flight.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'playlist_import.dart';
@@ -30,12 +31,13 @@ class _PlaylistSyncSheet extends ConsumerStatefulWidget {
   ConsumerState<_PlaylistSyncSheet> createState() => _PlaylistSyncSheetState();
 }
 
-class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
+/// Keyed by the semantics id of the button whose work is in flight.
+class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet>
+    with InFlight<_PlaylistSyncSheet, String> {
   final _url = TextEditingController();
   final _payload = TextEditingController();
   String _mode = 'mirror';
   int _intervalHours = 6;
-  bool _busy = false;
   // Which form an unbound playlist is being bound through. A bound one
   // reads its arm off the binding instead.
   bool _liveArm = true;
@@ -126,13 +128,10 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
   Future<void> _run(
     Future<void> Function() action, {
     required bool refusal,
-  }) async {
+    required String by,
+  }) {
     final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
-    setState(() {
-      _busy = true;
-      _refusal = null;
-    });
     void refused(String message) {
       if (mounted) {
         setState(() => _refusal = message);
@@ -141,18 +140,19 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
       }
     }
 
-    try {
-      await action();
-    } on FormatException catch (e) {
-      // A pasted export the parser could not read. Its own sentence,
-      // for the same reason a server refusal keeps the server's: the
-      // subject is what somebody just typed.
-      refused(e.message);
-    } on Object catch (e) {
-      refused(refusal ? explainRefusal(l10n, e) : explainError(l10n, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    return runAs(by, () async {
+      setState(() => _refusal = null);
+      try {
+        await action();
+      } on FormatException catch (e) {
+        // A pasted export the parser could not read. Its own sentence,
+        // for the same reason a server refusal keeps the server's: the
+        // subject is what somebody just typed.
+        refused(e.message);
+      } on Object catch (e) {
+        refused(refusal ? explainRefusal(l10n, e) : explainError(l10n, e));
+      }
+    });
   }
 
   /// The body Save and Preview both send, so the dry run is always of
@@ -181,13 +181,52 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
     return (url: null, source: _source.wire, payload: payload, refs: null);
   }
 
-  Future<void> _save(PlaylistSource? bound) => _run(refusal: true, () async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    final l10n = context.l10n;
-    final body = _body(bound, l10n);
-    await ref
-        .read(playlistSyncProvider(widget.pid).notifier)
-        .bind(
+  Future<void> _save(PlaylistSource? bound) =>
+      _run(refusal: true, by: SemanticsIds.playlistSyncSave, () async {
+        final messenger = ref.read(shellMessengerProvider.notifier);
+        final l10n = context.l10n;
+        final body = _body(bound, l10n);
+        await ref
+            .read(playlistSyncProvider(widget.pid).notifier)
+            .bind(
+              mode: _mode,
+              url: body.url,
+              source: body.source,
+              payload: body.payload,
+              refs: body.refs,
+              intervalHours: _live(bound) ? _intervalHours : null,
+            );
+        // What is stored now, so a second save that only moves the mode is
+        // a settings-only one: the seed never ran for a binding made here.
+        _seededUrl = _url.text;
+        messenger.show(l10n.playlistSyncSaved);
+      });
+
+  Future<void> _syncNow() =>
+      _run(refusal: true, by: SemanticsIds.playlistSyncNow, () async {
+        final messenger = ref.read(shellMessengerProvider.notifier);
+        final l10n = context.l10n;
+        await ref.read(playlistSyncProvider(widget.pid).notifier).syncNow();
+        messenger.show(l10n.playlistSyncQueued);
+      });
+
+  Future<void> _unbind() =>
+      _run(refusal: false, by: SemanticsIds.playlistSyncUnbind, () async {
+        final messenger = ref.read(shellMessengerProvider.notifier);
+        final l10n = context.l10n;
+        final navigator = Navigator.of(context);
+        await ref.read(playlistSyncProvider(widget.pid).notifier).unbind();
+        messenger.show(l10n.playlistSyncUnbound);
+        if (navigator.mounted) navigator.pop();
+      });
+
+  Future<void> _preview(PlaylistSource? bound) =>
+      _run(refusal: true, by: SemanticsIds.playlistSyncPreview, () async {
+        final notifier = ref.read(playlistSyncProvider(widget.pid).notifier);
+        final body = _body(bound, context.l10n);
+        // Exactly what Save would send, which is what makes this a dry run
+        // rather than a second question.
+        final preview = await notifier.preview(
           mode: _mode,
           url: body.url,
           source: body.source,
@@ -195,44 +234,9 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
           refs: body.refs,
           intervalHours: _live(bound) ? _intervalHours : null,
         );
-    // What is stored now, so a second save that only moves the mode is
-    // a settings-only one: the seed never ran for a binding made here.
-    _seededUrl = _url.text;
-    messenger.show(l10n.playlistSyncSaved);
-  });
-
-  Future<void> _syncNow() => _run(refusal: true, () async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    final l10n = context.l10n;
-    await ref.read(playlistSyncProvider(widget.pid).notifier).syncNow();
-    messenger.show(l10n.playlistSyncQueued);
-  });
-
-  Future<void> _unbind() => _run(refusal: false, () async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    final l10n = context.l10n;
-    final navigator = Navigator.of(context);
-    await ref.read(playlistSyncProvider(widget.pid).notifier).unbind();
-    messenger.show(l10n.playlistSyncUnbound);
-    if (navigator.mounted) navigator.pop();
-  });
-
-  Future<void> _preview(PlaylistSource? bound) => _run(refusal: true, () async {
-    final notifier = ref.read(playlistSyncProvider(widget.pid).notifier);
-    final body = _body(bound, context.l10n);
-    // Exactly what Save would send, which is what makes this a dry run
-    // rather than a second question.
-    final preview = await notifier.preview(
-      mode: _mode,
-      url: body.url,
-      source: body.source,
-      payload: body.payload,
-      refs: body.refs,
-      intervalHours: _live(bound) ? _intervalHours : null,
-    );
-    if (!mounted) return;
-    await _showPreviewDialog(context, preview);
-  });
+        if (!mounted) return;
+        await whileAsking(() => _showPreviewDialog(context, preview));
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -276,7 +280,7 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
               // this provider does not retry, so a failure is final.
               // Drawing the unbound form over either is a Save that
               // rewrites a binding this sheet never saw.
-              if (async case AsyncError(:final error)) ...<Widget>[
+              if (async case AsyncValue(:final error?)) ...<Widget>[
                 WaxBanner(
                   message: context.explain(error),
                   tone: WaxBannerTone.caution,
@@ -285,41 +289,51 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
                 WaxButton(
                   label: l10n.playlistSyncRetryRead,
                   kind: WaxButtonKind.tonal,
+                  busy: async.isLoading,
                   onPressed: () =>
                       ref.invalidate(playlistSyncProvider(widget.pid)),
                 ),
               ] else if (!async.hasValue) ...<Widget>[
-                const Padding(
-                  padding: EdgeInsets.all(WaxSpace.s16),
-                  child: Center(child: CircularProgressIndicator()),
+                const Flexible(
+                  child: SkeletonShapes(shape: SkeletonShape.list, count: 3),
                 ),
               ] else ...<Widget>[
                 // The first question, and only where it is still open: a
                 // binding already answered it, and offering the other arm
                 // over a stored one would be a way to lose it by accident.
                 if (bound == null) ...<Widget>[
-                  WaxChoice<bool>(
-                    value: _liveArm,
-                    options: const <bool>[true, false],
-                    labelFor: (arm) => arm
-                        ? l10n.playlistSyncArmLive
-                        : l10n.playlistSyncArmMatched,
+                  WaxSegmented(
                     label: l10n.playlistSyncArmLabel,
                     semanticsId: SemanticsIds.playlistSyncArm,
-                    optionSemanticsIdFor: (arm) =>
-                        SemanticsIds.playlistSyncArmOption(
-                          arm ? 'live' : 'matched',
+                    segments: <WaxSegment>[
+                      WaxSegment(
+                        name: 'live',
+                        label: l10n.playlistSyncArmLive,
+                        semanticsId: SemanticsIds.playlistSyncArmOption('live'),
+                      ),
+                      WaxSegment(
+                        name: 'matched',
+                        label: l10n.playlistSyncArmMatched,
+                        semanticsId: SemanticsIds.playlistSyncArmOption(
+                          'matched',
                         ),
-                    onChanged: _busy
+                      ),
+                    ],
+                    selected: _liveArm ? 'live' : 'matched',
+                    onSelect: busy
                         ? null
-                        : (arm) => setState(() {
-                            _liveArm = arm;
-                            // mirror-trash is a live-only mode, so an arm
-                            // switch cannot leave the form holding it.
-                            if (!arm && _mode == 'mirror-trash') {
-                              _mode = 'mirror';
-                            }
-                          }),
+                        : (name) {
+                            final arm = name == 'live';
+                            setState(() {
+                              _liveArm = arm;
+                              // mirror-trash is a live-only mode, so an
+                              // arm switch cannot leave the form
+                              // holding it.
+                              if (!arm && _mode == 'mirror-trash') {
+                                _mode = 'mirror';
+                              }
+                            });
+                          },
                   ),
                   const SizedBox(height: WaxSpace.s12),
                 ],
@@ -340,7 +354,7 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
                     semanticsId: SemanticsIds.playlistSyncSource,
                     optionSemanticsIdFor: (source) =>
                         SemanticsIds.playlistSyncSourceOption(source.wire),
-                    onChanged: _busy
+                    onChanged: busy
                         ? null
                         : (source) => setState(() => _source = source),
                   ),
@@ -375,7 +389,7 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
                   label: l10n.playlistSyncModeLabel,
                   semanticsId: SemanticsIds.playlistSyncMode,
                   optionSemanticsIdFor: SemanticsIds.playlistSyncModeOption,
-                  onChanged: _busy
+                  onChanged: busy
                       ? null
                       : (mode) => setState(() => _mode = mode),
                 ),
@@ -394,7 +408,7 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
                     semanticsId: SemanticsIds.playlistSyncInterval,
                     optionSemanticsIdFor: (hours) =>
                         SemanticsIds.playlistSyncIntervalOption(hours),
-                    onChanged: _busy
+                    onChanged: busy
                         ? null
                         : (hours) => setState(() => _intervalHours = hours),
                   ),
@@ -432,28 +446,30 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
                       label: l10n.playlistSyncPreviewButton,
                       kind: WaxButtonKind.tonal,
                       semanticsId: SemanticsIds.playlistSyncPreview,
-                      onPressed: _busy
-                          ? null
-                          : () => unawaited(_preview(bound)),
+                      busy: busyBy(SemanticsIds.playlistSyncPreview),
+                      onPressed: busy ? null : () => unawaited(_preview(bound)),
                     ),
                     WaxButton(
                       label: l10n.playlistSyncSave,
                       semanticsId: SemanticsIds.playlistSyncSave,
-                      onPressed: _busy ? null : () => unawaited(_save(bound)),
+                      busy: busyBy(SemanticsIds.playlistSyncSave),
+                      onPressed: busy ? null : () => unawaited(_save(bound)),
                     ),
                     if (bound != null)
                       WaxButton(
                         label: l10n.playlistSyncNow,
                         kind: WaxButtonKind.tonal,
                         semanticsId: SemanticsIds.playlistSyncNow,
-                        onPressed: _busy ? null : () => unawaited(_syncNow()),
+                        busy: busyBy(SemanticsIds.playlistSyncNow),
+                        onPressed: busy ? null : () => unawaited(_syncNow()),
                       ),
                     if (bound != null)
                       WaxButton(
                         label: l10n.playlistSyncUnbind,
                         kind: WaxButtonKind.text,
                         semanticsId: SemanticsIds.playlistSyncUnbind,
-                        onPressed: _busy ? null : () => unawaited(_unbind()),
+                        busy: busyBy(SemanticsIds.playlistSyncUnbind),
+                        onPressed: busy ? null : () => unawaited(_unbind()),
                       ),
                   ],
                 ),
@@ -546,9 +562,10 @@ Future<void> _showPreviewDialog(
           ),
         ),
         actions: <Widget>[
-          TextButton(
+          WaxButton(
+            label: MaterialLocalizations.of(context).okButtonLabel,
+            kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(MaterialLocalizations.of(context).okButtonLabel),
           ),
         ],
       );

@@ -893,6 +893,10 @@ void main() {
     // The floor is not a dead end.
     final start = find.bySemanticsIdentifier(SemanticsIds.indexRailStart);
     expect(start, findsOneWidget);
+    expect(
+      find.ancestor(of: start, matching: find.byType(WaxInkTappable)),
+      findsOneWidget,
+    );
 
     await tester.tap(start);
     await tester.pumpAndSettle();

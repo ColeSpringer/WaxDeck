@@ -11,6 +11,7 @@ import '../music/album_detail.dart';
 import '../music/entity_facts.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -207,11 +208,11 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
         padding: const EdgeInsets.all(WaxSpace.s16),
         child: _body(album),
       ),
-      AsyncValue(hasError: true, error: final Object error) => Padding(
+      AsyncValue(hasError: true) => Padding(
         padding: const EdgeInsets.all(WaxSpace.s16),
-        child: ErrorState(
+        child: AsyncFailureCard.from(
+          async,
           title: l10n.musicAlbumLoadError,
-          message: context.explain(error),
           onRetry: () => ref.invalidate(albumDetailProvider(widget.pid)),
         ),
       ),

@@ -1157,36 +1157,32 @@ class RemovableChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    return WaxTappable(
+    return WaxInkTappable(
       semanticsId: semanticsId,
       label: label,
+      color: colors.surface2,
       borderRadius: WaxRadius.pill,
       onPressed: onRemove,
-      child: Ink(
+      child: DecoratedBox(
         decoration: BoxDecoration(
-          color: colors.surface2,
           borderRadius: WaxRadius.pill,
           border: Border.all(color: colors.hairline),
         ),
-        child: InkWell(
-          borderRadius: WaxRadius.pill,
-          onTap: onRemove,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: WaxSpace.s12,
-              vertical: WaxSpace.s8,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  text,
-                  style: WaxType.caption.copyWith(color: colors.textPrimary),
-                ),
-                const SizedBox(width: WaxSpace.s4),
-                WaxIcon(WaxIcons.close, size: 14, color: colors.textTertiary),
-              ],
-            ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: WaxSpace.s12,
+            vertical: WaxSpace.s8,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                text,
+                style: WaxType.caption.copyWith(color: colors.textPrimary),
+              ),
+              const SizedBox(width: WaxSpace.s4),
+              WaxIcon(WaxIcons.close, size: 14, color: colors.textTertiary),
+            ],
           ),
         ),
       ),
@@ -1415,37 +1411,34 @@ class _OptionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    return WaxTappable(
+    return WaxInkTappable(
       semanticsId: semanticsId,
       label: text,
       selected: selected,
       onPressed: onPressed,
-      child: InkWell(
-        onTap: onPressed,
-        child: Padding(
-          padding: EdgeInsetsDirectional.only(
-            start: child ? WaxSpace.s32 : WaxSpace.s16,
-            end: WaxSpace.s16,
-            top: WaxSpace.s8,
-            bottom: WaxSpace.s8,
-          ),
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  text,
-                  style: WaxType.body.copyWith(color: colors.textPrimary),
-                ),
+      child: Padding(
+        padding: EdgeInsetsDirectional.only(
+          start: child ? WaxSpace.s32 : WaxSpace.s16,
+          end: WaxSpace.s16,
+          top: WaxSpace.s8,
+          bottom: WaxSpace.s8,
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                text,
+                style: WaxType.body.copyWith(color: colors.textPrimary),
               ),
-              if (selected)
-                WaxIcon(
-                  WaxIcons.check,
-                  size: 16,
-                  color: colors.accent,
-                  active: true,
-                ),
-            ],
-          ),
+            ),
+            if (selected)
+              WaxIcon(
+                WaxIcons.check,
+                size: 16,
+                color: colors.accent,
+                active: true,
+              ),
+          ],
         ),
       ),
     );
@@ -1829,13 +1822,20 @@ class MetadataSaveBar extends StatelessWidget {
     required this.count,
     required this.busy,
     required this.onSave,
+    this.saving = false,
     this.writeBackFailures = const [],
     this.onDismissFailures,
     this.saveSemanticsId = SemanticsIds.metadataSave,
   });
 
   final int count;
+
+  /// A write is in flight, the save or another: nothing more is sent.
   final bool busy;
+
+  /// The write in flight is the save itself, which the button draws.
+  final bool saving;
+
   final VoidCallback onSave;
   final List<WriteBackFailure> writeBackFailures;
   final VoidCallback? onDismissFailures;
@@ -1913,6 +1913,7 @@ class MetadataSaveBar extends StatelessWidget {
                         : l10n.metadataSaveChanges(count),
                     icon: WaxIcons.check,
                     semanticsId: saveSemanticsId,
+                    busy: saving,
                     onPressed: count == 0 || busy ? null : onSave,
                   ),
                 ),

@@ -186,4 +186,50 @@ void main() {
       expect(fill(), colors.error, reason: '$value');
     }
   });
+
+  group('an empty bar in a parent that measures its content', () {
+    testWidgets('sits in a loose intrinsic-width column', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: _theme,
+          localizationsDelegates: waxLocalizationsDelegates,
+          supportedLocales: WaxLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: Center(
+              child: IntrinsicWidth(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[Text('Marking'), WaxProgressBar(value: 0)],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(WaxProgressBar), findsOneWidget);
+    });
+
+    testWidgets('sits in a dialog\'s content', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: _theme,
+          localizationsDelegates: waxLocalizationsDelegates,
+          supportedLocales: WaxLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[Text('Marking'), WaxProgressBar(value: 0)],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(WaxProgressBar), findsOneWidget);
+    });
+  });
 }

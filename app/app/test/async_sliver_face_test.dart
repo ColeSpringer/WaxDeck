@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/shell/async_box_face.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -216,5 +217,84 @@ void main() {
     await _resolve(tester, const <String>[]);
     expect(find.text('Nothing here'), findsNothing);
     expect(find.byType(SkeletonShapes), findsNothing);
+  });
+
+  group('a failure card read off the state', () {
+    Future<void> card(WidgetTester tester, AsyncValue<Object?> state) =>
+        tester.pumpWidget(
+          localizedHost(
+            Scaffold(
+              body: AsyncFailureCard.from(
+                state,
+                title: 'Could not load',
+                onRetry: () {},
+                retrySemanticsId: 'retry',
+                detail: 'On port 4420',
+              ),
+            ),
+          ),
+        );
+
+    WaxButton? retry(WidgetTester tester) => tester
+        .widgetList<WaxButton>(find.widgetWithText(WaxButton, 'Try again'))
+        .firstOrNull;
+
+    testWidgets('offers a live Try again for a read that failed', (
+      tester,
+    ) async {
+      await card(
+        tester,
+        AsyncValue<int>.error(Exception('x'), StackTrace.empty),
+      );
+      expect(retry(tester)!.busy, isFalse);
+      expect(retry(tester)!.semanticsId, 'retry');
+      expect(find.text('On port 4420'), findsOneWidget);
+    });
+
+    testWidgets('draws it busy while the read is asking again', (tester) async {
+      _Rows.next = Completer<List<String>>();
+      await tester.pumpWidget(
+        ProviderScope(
+          child: localizedHost(
+            Scaffold(
+              body: Consumer(
+                builder: (context, ref, _) {
+                  final rows = ref.watch(_rowsProvider);
+                  return rows.hasError
+                      ? AsyncFailureCard.from(
+                          rows,
+                          title: 'Could not load',
+                          onRetry: () => ref.invalidate(_rowsProvider),
+                        )
+                      : const SizedBox.shrink();
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await _fail(tester);
+      expect(retry(tester)!.busy, isFalse);
+
+      _Rows.next = Completer<List<String>>();
+      ProviderScope.containerOf(
+        tester.element(find.byType(Consumer)),
+      ).invalidate(_rowsProvider);
+      await tester.pump();
+      expect(retry(tester)!.busy, isTrue);
+      await _resolve(tester, const <String>[]);
+    });
+
+    testWidgets('offers none for a thing that is gone', (tester) async {
+      await card(
+        tester,
+        const AsyncValue<int>.error(
+          WaxDeckApiException(code: 'not-found', message: 'gone'),
+          StackTrace.empty,
+        ),
+      );
+      expect(retry(tester), isNull);
+      expect(find.text('That is not here any more.'), findsOneWidget);
+    });
   });
 }

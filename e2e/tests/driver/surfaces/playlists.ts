@@ -255,10 +255,6 @@ export class Playlists extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.playlistSyncChip));
   }
 
-  syncArm(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.playlistSyncArm));
-  }
-
   syncSource(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.playlistSyncSource));
   }
@@ -279,18 +275,18 @@ export class Playlists extends Surface {
   /// the format, paste, save. The bound-state verbs are what "saved"
   /// looks like.
   ///
-  /// The arm pick settles on the source chooser, which the live arm
-  /// does not draw. The format pick settles on nothing, deliberately:
+  /// The arm is two segments, so the pick is one click that settles on
+  /// the source chooser, which the live arm does not draw. The format
+  /// pick settles on nothing, deliberately:
   /// `chooseFromMenu` treats a visible `settled` as "already done" and
   /// returns without picking, and every control this pick reveals is on
   /// screen before it - so the menu closing is the only honest signal
   /// that the row was taken.
   async bindExport(source: string, payload: string): Promise<void> {
     const page = this.ctx.page;
-    await chooseFromMenu(
-      this.syncArm(),
+    await clickThrough(
       page.locator(sem(SemanticsIds.playlistSyncArmOption('matched'))),
-      { settled: this.syncSource() },
+      this.syncSource(),
     );
     await chooseFromMenu(
       this.syncSource(),

@@ -353,94 +353,96 @@ class _Header extends ConsumerWidget {
       artwork: ref
           .watch(artworkStoreProvider)
           .source(ref.watch(repositoryProvider).artUrlFor(pid)),
-      actions: <Widget>[
-        WaxButton(
+      actions: <WaxAction>[
+        WaxAction(
           label: context.l10n.musicPlay,
-          icon: WaxIcons.play,
+          glyph: WaxIcons.play,
+          emphasis: WaxActionEmphasis.primary,
           onPressed: tracks.isEmpty ? null : play,
           semanticsId: SemanticsIds.entityPlay,
         ),
-        WaxButton(
+        WaxAction(
           label: context.l10n.musicShuffle,
-          kind: WaxButtonKind.tonal,
-          icon: WaxIcons.shuffle,
+          glyph: WaxIcons.shuffle,
           onPressed: tracks.isEmpty ? null : () => play(shuffle: true),
           semanticsId: SemanticsIds.entityShuffle,
         ),
-        EntityStarRatingRow(pid: pid, label: context.l10n.libraryKindAlbum),
-        WaxMenuButton<String>(
-          semanticsId: SemanticsIds.entityOverflow,
-          items: <WaxMenuItem<String>>[
-            pinMenuItem<String>(
-              context,
-              ref,
-              pid,
-              value: 'pin',
-              semanticsId: SemanticsIds.entityPin,
-            ),
-            WaxMenuItem<String>(
-              value: 'mix',
-              label: context.l10n.playerInstantMix,
-              glyph: WaxIcons.waveform,
-              semanticsId: SemanticsIds.entityInstantMix,
-            ),
-            WaxMenuItem<String>(
-              value: 'share',
-              label: context.l10n.libraryMenuShareAlbum,
-              glyph: WaxIcons.share,
-              semanticsId: SemanticsIds.entityShare,
-            ),
-            // Administrators only, like every other editing door: the
-            // entity edit endpoint answers 403 to anyone else, and a row
-            // that opens a form nobody can save is worse than no row.
-            if (isAdmin)
-              WaxMenuItem<String>(
-                value: 'edit',
-                label: context.l10n.musicAlbumEditDetails,
-                glyph: WaxIcons.edit,
-                semanticsId: SemanticsIds.albumEditDetails,
-              ),
-            // Each track is gated per item on the server, so the door is
-            // the item editor's: an uploader may turn an album of their
-            // own uploads into one book.
-            if (tracks.isNotEmpty && mayOfferItemEdit(ref))
-              WaxMenuItem<String>(
-                value: 'kind',
-                label: context.l10n.libraryKindAlbumToBook,
-                glyph: WaxIcons.audiobooks,
-                semanticsId: SemanticsIds.itemMenuKindAlbum,
-              ),
-            if (tracks.isNotEmpty && canDeleteItems(ref))
-              WaxMenuItem<String>(
-                value: 'delete',
-                label: context.l10n.libraryDeleteFilesMenu,
-                glyph: WaxIcons.delete,
-                semanticsId: SemanticsIds.itemMenuDelete,
-              ),
-          ],
-          // Every value named, none inferred: the last arm used to be
-          // "anything else opens the editor", which would hand the
-          // admin-gated door to whatever value drifts in next.
-          onSelected: (choice) {
-            switch (choice) {
-              case 'pin':
-                unawaited(togglePin(context, ref, pid, label: facts.title));
-              case 'mix':
-                unawaited(
-                  showInstantMixSheet(context, (pid: pid, title: facts.title)),
-                );
-              case 'share':
-                unawaited(showShareLinkDialog(context, pid: pid));
-              case 'edit':
-                unawaited(context.push(WaxRoute.metadata(pid)));
-              case 'kind':
-                unawaited(_toBook(context, ref));
-              case 'delete':
-                unawaited(_delete(context, ref));
-            }
-          },
-        ),
       ],
+      trailing: <Widget>[
+        EntityStarRatingRow(pid: pid, label: context.l10n.libraryKindAlbum),
+      ],
+      overflow: WaxMenuButton<String>(
+        semanticsId: SemanticsIds.entityOverflow,
+        items: <WaxMenuItem<String>>[
+          pinMenuItem<String>(
+            context,
+            ref,
+            pid,
+            value: 'pin',
+            semanticsId: SemanticsIds.entityPin,
+          ),
+          WaxMenuItem<String>(
+            value: 'mix',
+            label: context.l10n.playerInstantMix,
+            glyph: WaxIcons.waveform,
+            semanticsId: SemanticsIds.entityInstantMix,
+          ),
+          WaxMenuItem<String>(
+            value: 'share',
+            label: context.l10n.libraryMenuShareAlbum,
+            glyph: WaxIcons.share,
+            semanticsId: SemanticsIds.entityShare,
+          ),
+          // Administrators only, like every other editing door: the
+          // entity edit endpoint answers 403 to anyone else, and a row
+          // that opens a form nobody can save is worse than no row.
+          if (isAdmin)
+            WaxMenuItem<String>(
+              value: 'edit',
+              label: context.l10n.musicAlbumEditDetails,
+              glyph: WaxIcons.edit,
+              semanticsId: SemanticsIds.albumEditDetails,
+            ),
+          // Each track is gated per item on the server, so the door is
+          // the item editor's: an uploader may turn an album of their
+          // own uploads into one book.
+          if (tracks.isNotEmpty && mayOfferItemEdit(ref))
+            WaxMenuItem<String>(
+              value: 'kind',
+              label: context.l10n.libraryKindAlbumToBook,
+              glyph: WaxIcons.audiobooks,
+              semanticsId: SemanticsIds.itemMenuKindAlbum,
+            ),
+          if (tracks.isNotEmpty && canDeleteItems(ref))
+            WaxMenuItem<String>(
+              value: 'delete',
+              label: context.l10n.libraryDeleteFilesMenu,
+              glyph: WaxIcons.delete,
+              semanticsId: SemanticsIds.itemMenuDelete,
+            ),
+        ],
+        // Every value named, none inferred: the last arm used to be
+        // "anything else opens the editor", which would hand the
+        // admin-gated door to whatever value drifts in next.
+        onSelected: (choice) {
+          switch (choice) {
+            case 'pin':
+              unawaited(togglePin(context, ref, pid, label: facts.title));
+            case 'mix':
+              unawaited(
+                showInstantMixSheet(context, (pid: pid, title: facts.title)),
+              );
+            case 'share':
+              unawaited(showShareLinkDialog(context, pid: pid));
+            case 'edit':
+              unawaited(context.push(WaxRoute.metadata(pid)));
+            case 'kind':
+              unawaited(_toBook(context, ref));
+            case 'delete':
+              unawaited(_delete(context, ref));
+          }
+        },
+      ),
     );
   }
 }

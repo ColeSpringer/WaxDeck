@@ -1,6 +1,7 @@
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -908,6 +909,34 @@ void main() {
   });
 
   group('player scaffold', () {
+    testWidgets('a wrapped overline link lines up with the centred title', (
+      tester,
+    ) async {
+      const show =
+          'My Favorite Murder with Karen Kilgariff and Georgia Hardstark';
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 360,
+          height: 760,
+          child: PlayerScaffold(
+            now: _podcast,
+            titleOverline: WaxButton(
+              label: show,
+              kind: WaxButtonKind.inline,
+              onPressed: () {},
+            ),
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: null,
+          ),
+        ),
+        size: const Size(360, 760),
+      );
+      final link = tester.renderObject<RenderParagraph>(find.text(show));
+      expect(link.size.height, greaterThan(link.preferredLineHeight * 1.5));
+      expect(link.textAlign, TextAlign.center);
+    });
+
     // A live face has nothing to seek, and the slot drawn empty was a
     // gap in the middle of the face. Null takes it out with its own gap,
     // leaving the title block's gap to the transport.

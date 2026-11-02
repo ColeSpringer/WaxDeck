@@ -259,7 +259,7 @@ class JobRow extends StatelessWidget {
                   ],
                   if (job.state == 'running') ...<Widget>[
                     const SizedBox(height: WaxSpace.s8),
-                    LinearProgressIndicator(value: job.progress),
+                    WaxProgressBar(value: job.progress),
                   ],
                   if (error != null) ...<Widget>[
                     const SizedBox(height: WaxSpace.s4),

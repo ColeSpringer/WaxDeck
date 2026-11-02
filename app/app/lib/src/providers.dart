@@ -135,7 +135,10 @@ final urlOpenerProvider = Provider<UrlOpenerPort>(
 /// What this device's connection costs, wrapped so widget code never
 /// touches connectivity_plus. Read by the two wifi-only settings.
 final connectivityProvider = Provider<ConnectivityPort>(
-  (ref) => createConnectivityPort(),
+  // No platform channel answers under flutter test, and a stream the
+  // plugin cannot open reports an error into the test.
+  (ref) =>
+      inFlutterTest ? const UnmeteredConnectivity() : createConnectivityPort(),
 );
 
 /// Whether this is a machine somebody walks away from.

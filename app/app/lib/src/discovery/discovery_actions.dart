@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -194,13 +195,18 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
               children: [
                 Text(l10n.discoveryFamiliar),
                 Expanded(
-                  child: Semantics(
-                    identifier: SemanticsIds.mixAdventurousness,
-                    label: l10n.discoveryAdventurousness,
-                    child: Slider(
-                      key: const Key(SemanticsIds.mixAdventurousness),
-                      value: _adventurousness,
-                      onChanged: (v) => setState(() => _adventurousness = v),
+                  child: LayoutBuilder(
+                    builder: (context, box) => Center(
+                      child: WaxSlider(
+                        value: _adventurousness,
+                        label: l10n.discoveryAdventurousness,
+                        semanticsId: SemanticsIds.mixAdventurousness,
+                        trackWidth: math.max(
+                          WaxSpace.s48,
+                          box.maxWidth - 2 * WaxSlider.defaultEndSlop,
+                        ),
+                        onChanged: (v) => setState(() => _adventurousness = v),
+                      ),
                     ),
                   ),
                 ),
@@ -208,15 +214,11 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
               ],
             ),
             const SizedBox(height: WaxSpace.s8),
-            Semantics(
-              identifier: SemanticsIds.instantMixRun,
+            WaxButton(
               label: l10n.discoveryMixAction,
-              button: true,
-              child: FilledButton(
-                key: const Key(SemanticsIds.instantMixRun),
-                onPressed: _busy ? null : _mix,
-                child: Text(l10n.discoveryMixAction),
-              ),
+              semanticsId: SemanticsIds.instantMixRun,
+              busy: _busy,
+              onPressed: _mix,
             ),
           ],
         ),

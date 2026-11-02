@@ -12,6 +12,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'wax_finders.dart';
 
 const _coverage = EnrichmentCoverage(
   artists: CoverageCount(enriched: 12, total: 40),
@@ -338,6 +339,17 @@ void main() {
     expect(find.text('3 of 0'), findsNothing);
     expect(find.text('0 of 90'), findsOneWidget);
     expect(find.text('7 looked up, none found'), findsOneWidget);
+  });
+
+  testWidgets('a captioned coverage tile is as tall as a bare one', (
+    tester,
+  ) async {
+    await _pump(tester);
+    Size tileOf(String label) => tester.getSize(
+      find.ancestor(of: find.text(label), matching: find.byType(StatTile)),
+    );
+    expect(find.text('7 looked up, none found'), findsOneWidget);
+    expect(tileOf('Lyrics').height, tileOf('Artists').height);
   });
 
   testWidgets('lyrics nobody has looked up yet carry no caption', (
@@ -814,9 +826,7 @@ void main() {
 
     await _tap(tester, SemanticsIds.enrichmentRun);
     WaxButton run() => tester.widget<WaxButton>(
-      find.byWidgetPredicate(
-        (w) => w is WaxButton && w.semanticsId == SemanticsIds.enrichmentRun,
-      ),
+      waxControl<WaxButton>(SemanticsIds.enrichmentRun),
     );
     expect(run().busy, isTrue);
 

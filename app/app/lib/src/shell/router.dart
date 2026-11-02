@@ -1012,21 +1012,21 @@ class _NotFoundScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.shellNotFoundTitle)),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(context.l10n.shellNotFoundBody),
-            const SizedBox(height: WaxSpace.s12),
-            FilledButton(
-              onPressed: () => context.go(WaxRoute.home),
-              child: Text(context.l10n.shellNotFoundAction),
-            ),
-          ],
+    final l10n = context.l10n;
+    return WaxScaffold(
+      title: l10n.shellNotFoundTitle,
+      largeTitle: false,
+      onBack: () => context.leave(),
+      slivers: <Widget>[
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: EmptyState(
+            title: l10n.shellNotFoundBody,
+            actionLabel: l10n.shellNotFoundAction,
+            onAction: () => context.go(WaxRoute.home),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

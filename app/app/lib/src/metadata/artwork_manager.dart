@@ -8,6 +8,7 @@ import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/in_flight.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import '../uploads/audio_drop_area.dart';
@@ -145,10 +146,18 @@ final entityArtLockProvider = FutureProvider.autoDispose
           ref.watch(repositoryProvider).getEntityArtworkLock(key.type, key.pid),
     );
 
-class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
-  /// The slot with a request in flight, so its own controls disable
-  /// rather than the whole grid going dead.
-  String? _busyRole;
+/// What a slot's request in flight is doing, so the control that
+/// started it draws busy.
+enum _ArtAction { set, clear, pin }
+
+/// One request at a time, keyed by its slot and what it does: that
+/// control draws busy, its slot dims, and every other control waits.
+class _ArtworkManagerState extends ConsumerState<ArtworkManager>
+    with InFlight<ArtworkManager, ({String role, _ArtAction action})> {
+  /// What [slot]'s request in flight is doing, or null.
+  _ArtAction? _workOn(ArtSlot slot) => _ArtAction.values
+      .where((action) => busyBy((role: slot.role, action: action)))
+      .firstOrNull;
 
   String _urlFor(ArtSlot slot) =>
       ref.read(repositoryProvider).artUrlFor(widget.pid, role: slot.role);
@@ -194,42 +203,41 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
       messenger.show(l10n.artworkUnreadable(file.name));
       return;
     }
-    setState(() => _busyRole = slot.role);
-    try {
-      // Whole in memory, unlike an upload: the endpoint takes one body.
-      final builder = BytesBuilder(copy: false);
-      await for (final chunk in openRead()) {
-        builder.add(chunk);
+    await runAs((role: slot.role, action: _ArtAction.set), () async {
+      try {
+        // Whole in memory, unlike an upload: the endpoint takes one body.
+        final builder = BytesBuilder(copy: false);
+        await for (final chunk in openRead()) {
+          builder.add(chunk);
+        }
+        final bytes = builder.takeBytes();
+        final repository = ref.read(repositoryProvider);
+        final entity = widget.entityType;
+        final writeBack = widget.writeBack && slot == ArtSlot.front;
+        final result = entity == null
+            ? await repository.setItemArtwork(
+                widget.pid,
+                bytes: bytes,
+                role: slot.role,
+                writeBack: writeBack,
+              )
+            : await repository.setEntityArtwork(
+                entity,
+                widget.pid,
+                bytes: bytes,
+                role: slot.role,
+                writeBack: writeBack,
+              );
+        await _refresh(slot);
+        messenger.show(
+          result.writeBackFailures.isEmpty
+              ? l10n.artworkReplaced(slot.labelOf(l10n))
+              : l10n.artworkReplacedTagsFailed(slot.labelOf(l10n)),
+        );
+      } on WaxDeckApiException catch (e) {
+        messenger.show(explainError(l10n, e));
       }
-      final bytes = builder.takeBytes();
-      final repository = ref.read(repositoryProvider);
-      final entity = widget.entityType;
-      final writeBack = widget.writeBack && slot == ArtSlot.front;
-      final result = entity == null
-          ? await repository.setItemArtwork(
-              widget.pid,
-              bytes: bytes,
-              role: slot.role,
-              writeBack: writeBack,
-            )
-          : await repository.setEntityArtwork(
-              entity,
-              widget.pid,
-              bytes: bytes,
-              role: slot.role,
-              writeBack: writeBack,
-            );
-      await _refresh(slot);
-      messenger.show(
-        result.writeBackFailures.isEmpty
-            ? l10n.artworkReplaced(slot.labelOf(l10n))
-            : l10n.artworkReplacedTagsFailed(slot.labelOf(l10n)),
-      );
-    } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
-    } finally {
-      if (mounted) setState(() => _busyRole = null);
-    }
+    });
   }
 
   Future<void> _clear(ArtSlot slot) async {
@@ -246,28 +254,27 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
       confirmSemanticsId: SemanticsIds.confirmAccept,
       cancelSemanticsId: SemanticsIds.confirmCancel,
     );
-    if (!confirmed) return;
+    if (!confirmed || !mounted) return;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    setState(() => _busyRole = slot.role);
-    try {
-      final repository = ref.read(repositoryProvider);
-      final entity = widget.entityType;
-      if (entity == null) {
-        await repository.clearItemArtwork(widget.pid, role: slot.role);
-      } else {
-        await repository.clearEntityArtwork(
-          entity,
-          widget.pid,
-          role: slot.role,
-        );
+    await runAs((role: slot.role, action: _ArtAction.clear), () async {
+      try {
+        final repository = ref.read(repositoryProvider);
+        final entity = widget.entityType;
+        if (entity == null) {
+          await repository.clearItemArtwork(widget.pid, role: slot.role);
+        } else {
+          await repository.clearEntityArtwork(
+            entity,
+            widget.pid,
+            role: slot.role,
+          );
+        }
+        await _refresh(slot);
+        messenger.show(l10n.artworkCleared(slot.labelOf(l10n)));
+      } on WaxDeckApiException catch (e) {
+        messenger.show(explainError(l10n, e));
       }
-      await _refresh(slot);
-      messenger.show(l10n.artworkCleared(slot.labelOf(l10n)));
-    } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
-    } finally {
-      if (mounted) setState(() => _busyRole = null);
-    }
+    });
   }
 
   /// The store's own eviction is the cache bust: it notes the URL as
@@ -312,45 +319,46 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
     final entity = widget.entityType;
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    setState(() => _busyRole = slot.role);
-    try {
-      final repository = ref.read(repositoryProvider);
-      if (entity == null) {
-        await repository.setItemLocks(
-          widget.pid,
-          fields: <String>[front ? 'art' : 'art.${slot.role}'],
-          locked: locked,
-        );
-      } else {
-        await repository.setEntityArtworkLock(
-          entity,
-          widget.pid,
-          role: slot.role,
-          locked: locked,
-        );
+    await runAs((role: slot.role, action: _ArtAction.pin), () async {
+      try {
+        final repository = ref.read(repositoryProvider);
+        if (entity == null) {
+          await repository.setItemLocks(
+            widget.pid,
+            fields: <String>[front ? 'art' : 'art.${slot.role}'],
+            locked: locked,
+          );
+        } else {
+          await repository.setEntityArtworkLock(
+            entity,
+            widget.pid,
+            role: slot.role,
+            locked: locked,
+          );
+        }
+        // Guarded like _refresh beside it: the pin may have been written
+        // while this screen was being left, and invalidating through a
+        // disposed ref throws. It escapes rather than surfacing, because
+        // the switch takes this as a void callback and discards the
+        // future.
+        if (!mounted) return;
+        if (entity != null) {
+          ref.invalidate(
+            entityArtLockProvider((type: entity, pid: widget.pid)),
+          );
+        }
+        ref.invalidate(itemArtRolesProvider(widget.pid));
+        widget.onChanged?.call();
+        messenger.show(switch ((front, locked)) {
+          (true, true) => l10n.artworkLockPinned,
+          (true, false) => l10n.artworkLockUnpinned,
+          (false, true) => l10n.artworkSlotPinned(slot.labelOf(l10n)),
+          (false, false) => l10n.artworkSlotUnpinned(slot.labelOf(l10n)),
+        });
+      } on WaxDeckApiException catch (e) {
+        if (mounted) messenger.show(explainError(l10n, e));
       }
-      // Guarded like _refresh beside it: the pin may have been written
-      // while this screen was being left, and invalidating through a
-      // disposed ref throws. It escapes rather than surfacing, because
-      // the switch takes this as a void callback and discards the
-      // future.
-      if (!mounted) return;
-      if (entity != null) {
-        ref.invalidate(entityArtLockProvider((type: entity, pid: widget.pid)));
-      }
-      ref.invalidate(itemArtRolesProvider(widget.pid));
-      widget.onChanged?.call();
-      messenger.show(switch ((front, locked)) {
-        (true, true) => l10n.artworkLockPinned,
-        (true, false) => l10n.artworkLockUnpinned,
-        (false, true) => l10n.artworkSlotPinned(slot.labelOf(l10n)),
-        (false, false) => l10n.artworkSlotUnpinned(slot.labelOf(l10n)),
-      });
-    } on WaxDeckApiException catch (e) {
-      if (mounted) messenger.show(explainError(l10n, e));
-    } finally {
-      if (mounted) setState(() => _busyRole = null);
-    }
+    });
   }
 
   @override
@@ -399,7 +407,8 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
                 // only one an inherited picture can appear in.
                 resolved: slot == ArtSlot.front ? roles.value?.artSource : null,
                 artUrl: _urlFor(slot),
-                busy: _busyRole == slot.role,
+                working: _workOn(slot),
+                waiting: busy,
                 canPick: picker != null,
                 domain: widget.domain,
                 // Null on the front, whose pin is the whole-artwork one
@@ -468,7 +477,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
                   // while the read is in flight or after it failed -
                   // and a tap in that window would write the state the
                   // switch is only guessing at.
-                  onChanged: _busyRole != null || !known ? null : _setLock,
+                  onChanged: busy || !known ? null : _setLock,
                 ),
               );
             },
@@ -486,7 +495,8 @@ class _SlotTile extends ConsumerWidget {
     required this.inherited,
     required this.resolved,
     required this.artUrl,
-    required this.busy,
+    required this.working,
+    required this.waiting,
     required this.canPick,
     required this.domain,
     required this.locked,
@@ -514,7 +524,15 @@ class _SlotTile extends ConsumerWidget {
   final ArtSource? resolved;
 
   final String artUrl;
-  final bool busy;
+
+  /// What this slot's request in flight is doing: that control draws
+  /// busy and the tile dims under the scrim.
+  final _ArtAction? working;
+
+  /// A request is in flight somewhere on the grid, so no control here
+  /// takes a press but the one that started it.
+  final bool waiting;
+
   final bool canPick;
   final WaxDomain domain;
 
@@ -578,6 +596,11 @@ class _SlotTile extends ConsumerWidget {
     return inherited ? artSourceLabelWithBorrow(l10n, resolved) : null;
   }
 
+  /// Whether [action]'s control is live: nothing in flight, or this is
+  /// the control whose work it is, which keeps its press (and focus)
+  /// while it draws busy.
+  bool _live(_ArtAction action) => !waiting || working == action;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
@@ -597,7 +620,7 @@ class _SlotTile extends ConsumerWidget {
       identifier: SemanticsIds.artSlot(slot.role),
       container: true,
       child: AudioDropArea(
-        enabled: !busy,
+        enabled: !waiting,
         formats: () async => const UploadFormatSets.only(kArtworkExtensions),
         hint: l10n.artworkDropHint(slot.inlineOf(l10n)),
         semanticsId: SemanticsIds.artSlotDrop(slot.role),
@@ -620,17 +643,10 @@ class _SlotTile extends ConsumerWidget {
                       source == null ? state : '$state, $source',
                     ),
                   ),
-                  if (busy)
+                  if (working != null)
                     Positioned.fill(
                       child: ColoredBox(
                         color: colors.scrim.withValues(alpha: 0.6),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
                       ),
                     ),
                 ],
@@ -653,7 +669,8 @@ class _SlotTile extends ConsumerWidget {
                         : l10n.artworkSetSlot(slot.inlineOf(l10n)),
                     size: 16,
                     semanticsId: SemanticsIds.artSlotSet(slot.role),
-                    onPressed: busy || !canPick ? null : onPick,
+                    busy: working == _ArtAction.set,
+                    onPressed: _live(_ArtAction.set) && canPick ? onPick : null,
                   ),
                   WaxIconButton(
                     glyph: WaxIcons.delete,
@@ -666,7 +683,10 @@ class _SlotTile extends ConsumerWidget {
                     // empty slot holds nothing either - clearing it
                     // again would do nothing at all, and the pin comes
                     // off through the field's own lock, not here.
-                    onPressed: busy || !holdsImage ? null : onClear,
+                    busy: working == _ArtAction.clear,
+                    onPressed: _live(_ArtAction.clear) && holdsImage
+                        ? onClear
+                        : null,
                   ),
                   if (locked case final pinned?)
                     WaxIconButton(
@@ -676,7 +696,10 @@ class _SlotTile extends ConsumerWidget {
                           : l10n.artworkPinSlot(slot.inlineOf(l10n)),
                       size: 16,
                       semanticsId: SemanticsIds.artLockRole(slot.role),
-                      onPressed: busy ? null : () => onTogglePin(!pinned),
+                      busy: working == _ArtAction.pin,
+                      onPressed: _live(_ArtAction.pin)
+                          ? () => onTogglePin(!pinned)
+                          : null,
                     ),
                 ],
               ),

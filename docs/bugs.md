@@ -4,12 +4,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [10-16-26] - In general, there is too much explanatory text when visuals and intuitive UI design should suffice.
 
-[10-23-26] Inconsistent button sizing when downloading. See screenshot wide_download.png
-
-[10-23-26] Inconsistent sizing under Admin console page. See inconsistent_admin.png.
-
-[10-23-26] In general, need a more consistent UI experience.
-
 [10-23-26] The books section doesn't appear until you upload a book. Inconsistent with the other sections that will always show even if empty (which is what we want since you can go to a section and upload files specfiic to that section. doing it on home requires you to select what youre uploading)
 
 [10-23-26] In the books section home page, if you click the play button of an audiobook it brings it to the informational page and doesnt just start playing. There is a play button that appears. Even when you pause and attempt to yout the continue listening function is goes to the informational page instead of just resuming where you left off. We need a way for people to be able to just play the book or to go to the informational page if they want. Currently the always have to go to the informatinal page before they can start/resume the book.
@@ -36,4 +30,4 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [10-31-26] The mouse on web (probably desktop too) doesn't change to the hand selection when you run it over parts of the minimized dock to bring it to full screen. In full screen it correctly does this when you run your mouse over blank areas that allow you to click to minimize full screen to just the dock. On a related note, the area that you are allowed to click when minimized to go full screen only appears to be from the very far left up until the current time in the song you are playing. Any blank area beyond that to the far right you cant click to full screen.
 
-[10-31-26] Switching theme appearances is very laggy. Or maybe it just doesn't update at a high frame rate so it just looks laggy? Either way its not pleasant visually.
+[10-31-26] Switching theme appearances is very laggy. Or maybe it just doesn't update at a high frame rate so it just looks laggy? Either way the transition is not pleasant visually.

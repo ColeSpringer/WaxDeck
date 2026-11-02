@@ -73,22 +73,47 @@ class LocalPartAt {
   final LocalPart part;
 }
 
+/// Why an item's download gave up.
+enum DownloadFailure {
+  /// The server no longer has it (not found, or gone).
+  gone,
+
+  /// The server refused it: forbidden, or a URL still refused once
+  /// renewed.
+  refused,
+
+  /// The connection or anything else cut it short; trying again may work.
+  interrupted,
+}
+
 /// Progress of one item's download, 0..1 across all its files.
 class DownloadProgress {
   const DownloadProgress({
     required this.pid,
     required this.fraction,
     required this.complete,
-    this.failed = false,
+    this.failure,
+    this.stopped = false,
+    this.paused = false,
   });
 
   final String pid;
   final double fraction;
   final bool complete;
 
-  /// A file of this item failed or was canceled; waiting for
-  /// [complete] alone would wait forever.
-  final bool failed;
+  /// Why the item gave up, when it did; waiting for [complete] alone
+  /// would wait forever.
+  final DownloadFailure? failure;
+
+  bool get failed => failure != null;
+
+  /// Its transfers ended with nothing kept, by a cancel or a removal, or
+  /// there was nothing to fetch: neither complete nor a failure.
+  final bool stopped;
+
+  /// Held by [DownloadManagerPort.pause], its bytes kept. The event a
+  /// resume sends carries the same [fraction] with this false.
+  final bool paused;
 }
 
 /// What one downloaded or downloading item looks like to the manager
@@ -104,6 +129,7 @@ class DownloadedItem {
     required this.files,
     required this.complete,
     this.paused = false,
+    this.active = false,
   });
 
   final String pid;
@@ -120,6 +146,13 @@ class DownloadedItem {
 
   /// Held by [DownloadManagerPort.pause], which outlives a restart.
   final bool paused;
+
+  /// The manager is moving it, or will on its own: queued, running,
+  /// waiting out a retry or held by the transfer gate. False for rows
+  /// nothing will move (a pause, a not-found that parked it, rows left
+  /// with no transfer), which only a new [DownloadManagerPort.download]
+  /// takes up again.
+  final bool active;
 }
 
 /// The WaxDeck-owned downloads interface (the community plugin stays
@@ -159,6 +192,9 @@ abstract interface class DownloadManagerPort {
   /// No free-space figure beside it: nothing in Dart answers how much room
   /// a volume has left. Recorded in deferred work.
   Future<List<DownloadedItem>> stored();
+
+  /// [pid]'s entry in [stored], or null where the device holds none of it.
+  Future<DownloadedItem?> storedItem(String pid);
 
   /// Stops an item's transfers and drops what of it landed, records
   /// included: a half-downloaded item is not a downloaded item.

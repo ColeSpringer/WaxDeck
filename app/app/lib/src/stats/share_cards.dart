@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
+import '../shell/in_flight.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'share_card_export.dart';
@@ -127,15 +128,14 @@ class _ShareCardSheet extends ConsumerStatefulWidget {
   ConsumerState<_ShareCardSheet> createState() => _ShareCardSheetState();
 }
 
-class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
+/// Keyed by the shape being exported, whose own button draws busy while
+/// the other waits for it.
+class _ShareCardSheetState extends ConsumerState<_ShareCardSheet>
+    with InFlight<_ShareCardSheet, ShareCardFormat> {
   /// One boundary per shape, inside the preview that paints it.
   final Map<ShareCardFormat, GlobalKey> _boundaries = {
     for (final format in ShareCardFormat.values) format: GlobalKey(),
   };
-
-  /// The shape being exported right now, so its own button reads as
-  /// busy while the other stays live.
-  ShareCardFormat? _rendering;
 
   /// The covers, by artist name, once they are fetched AND decoded.
   var _covers = const <String, ImageProvider>{};
@@ -231,47 +231,46 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
         ShareCardFailure.noDestination => l10n.statsCardNoDestination,
       };
 
-  Future<void> _export(ShareCardFormat format) async {
+  Future<void> _export(ShareCardFormat format) {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final exporter = ref.read(shareCardExporterProvider);
-    setState(() => _rendering = format);
-    try {
-      // Bounded, because offline honesty beats a spinner that never
-      // ends: a card with monograms is the designed state, and waiting
-      // forever for a cover is not.
-      await _fetchingCovers?.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      );
-      if (!mounted) return;
-      final png = await _renderPng(format);
-      if (png == null) {
-        messenger.show(l10n.statsCardDrawFailed);
-        return;
+    return runAs(format, () async {
+      try {
+        // Bounded, because offline honesty beats a spinner that never
+        // ends: a card with monograms is the designed state, and waiting
+        // forever for a cover is not.
+        await _fetchingCovers?.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {},
+        );
+        if (!mounted) return;
+        final png = await _renderPng(format);
+        if (png == null) {
+          messenger.show(l10n.statsCardDrawFailed);
+          return;
+        }
+        final outcome = await exporter.export(
+          png: png,
+          fileName: 'waxdeck-${widget.data.year}-${format.name}.png',
+          subject: l10n.statsCardSubject(widget.data.year),
+        );
+        messenger.show(switch (outcome) {
+          ShareCardShared() => l10n.statsCardShared,
+          ShareCardSaved(:final where) => l10n.statsCardSaved(where),
+          ShareCardFailed(:final kind, :final detail) => _failureMessage(
+            l10n,
+            kind,
+            detail,
+          ),
+        });
+      } on Object {
+        // A raster that would not encode, a platform directory that does
+        // not exist: this is a button, and it has to say so rather than
+        // going quiet and un-busying.
+        messenger.show(l10n.statsCardExportFailed);
       }
-      final outcome = await exporter.export(
-        png: png,
-        fileName: 'waxdeck-${widget.data.year}-${format.name}.png',
-        subject: l10n.statsCardSubject(widget.data.year),
-      );
-      messenger.show(switch (outcome) {
-        ShareCardShared() => l10n.statsCardShared,
-        ShareCardSaved(:final where) => l10n.statsCardSaved(where),
-        ShareCardFailed(:final kind, :final detail) => _failureMessage(
-          l10n,
-          kind,
-          detail,
-        ),
-      });
-    } on Object {
-      // A raster that would not encode, a platform directory that does
-      // not exist: this is a button, and it has to say so rather than
-      // going quiet and un-busying.
-      messenger.show(l10n.statsCardExportFailed);
-    } finally {
-      if (mounted) setState(() => _rendering = null);
-    }
+    });
   }
 
   /// Encodes the card the preview is already painting. The boundary
@@ -336,8 +335,8 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet> {
                           data: widget.data,
                           covers: _covers,
                           boundaryKey: _boundaries[format]!,
-                          busy: _rendering == format,
-                          onExport: exporter.canExport
+                          busy: busyBy(format),
+                          onExport: exporter.canExport && !busy
                               ? () => _export(format)
                               : null,
                         ),
@@ -432,7 +431,8 @@ class _Preview extends StatelessWidget {
             kind: WaxButtonKind.tonal,
             expand: true,
             semanticsId: SemanticsIds.shareCardExport(format.name),
-            onPressed: busy ? null : onExport,
+            busy: busy,
+            onPressed: onExport,
           ),
           Text(
             format.blurbOf(context.l10n),

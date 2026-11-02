@@ -6,10 +6,27 @@ import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
+import 'action_bar.dart';
 import 'artwork.dart';
 import 'backdrop.dart';
+import 'controls.dart';
 import 'prose.dart';
 import 'view_data.dart';
+
+/// A navigation link under an [EntityHeader]'s subtitle, as plain data:
+/// the series a book belongs to, not an action on the book.
+@immutable
+class EntityHeaderLink {
+  const EntityHeaderLink({
+    required this.label,
+    required this.semanticsId,
+    required this.onPressed,
+  });
+
+  final String label;
+  final String semanticsId;
+  final VoidCallback onPressed;
+}
 
 /// The head of a detail page: album, artist, show, book, playlist.
 ///
@@ -27,7 +44,10 @@ class EntityHeader extends StatelessWidget {
     this.shape = ArtworkShape.square,
     this.domain = WaxDomain.music,
     this.palette,
-    this.actions = const <Widget>[],
+    this.link,
+    this.actions = const <WaxAction>[],
+    this.trailing = const <Widget>[],
+    this.overflow,
     this.description,
     this.semanticsId,
     super.key,
@@ -53,8 +73,17 @@ class EntityHeader extends StatelessWidget {
   final WaxDomain domain;
   final WaxPalette? palette;
 
-  /// Play, shuffle, star, download, overflow.
-  final List<Widget> actions;
+  /// A link to where this belongs, drawn under [subtitle].
+  final EntityHeaderLink? link;
+
+  /// Play, shuffle, download: the pills of the header's action bar.
+  final List<WaxAction> actions;
+
+  /// Icon clusters after the pills, such as a star and a rating.
+  final List<Widget> trailing;
+
+  /// The overflow menu, last in the bar.
+  final Widget? overflow;
 
   final String? description;
 
@@ -116,6 +145,21 @@ class EntityHeader extends StatelessWidget {
               style: WaxType.body.copyWith(color: colors.textSecondary),
             ),
           ),
+        if (link != null)
+          Padding(
+            padding: const EdgeInsets.only(top: WaxSpace.s4),
+            // The button's label takes the ambient alignment, so a link
+            // that wraps lines up with the text around it.
+            child: DefaultTextStyle.merge(
+              textAlign: stacked ? TextAlign.center : TextAlign.start,
+              child: WaxButton(
+                label: link!.label,
+                kind: WaxButtonKind.inline,
+                semanticsId: link!.semanticsId,
+                onPressed: link!.onPressed,
+              ),
+            ),
+          ),
         if (metadata != null)
           Padding(
             padding: const EdgeInsets.only(top: WaxSpace.s4),
@@ -141,15 +185,14 @@ class EntityHeader extends StatelessWidget {
               ),
             ),
           ),
-        if (actions.isNotEmpty)
+        if (actions.isNotEmpty || trailing.isNotEmpty || overflow != null)
           Padding(
             padding: const EdgeInsets.only(top: WaxSpace.s16),
-            child: Wrap(
-              spacing: WaxSpace.s8,
-              runSpacing: WaxSpace.s8,
+            child: WaxActionBar(
+              actions: actions,
+              trailing: trailing,
+              overflow: overflow,
               alignment: stacked ? WrapAlignment.center : WrapAlignment.start,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: actions,
             ),
           ),
       ],

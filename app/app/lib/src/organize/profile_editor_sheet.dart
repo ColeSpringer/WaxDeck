@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/in_flight.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'organize_screen.dart';
@@ -35,7 +36,11 @@ class _ProfileEditorSheet extends ConsumerStatefulWidget {
       _ProfileEditorSheetState();
 }
 
-class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
+/// The sheet's two writes, each drawn on its own button.
+enum _ProfileWork { save, delete }
+
+class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet>
+    with InFlight<_ProfileEditorSheet, _ProfileWork> {
   late final _name = TextEditingController(text: widget.profile?.name ?? '');
   // What the profile sets itself; an empty field inherits, its hint says what.
   late final _music = TextEditingController(
@@ -65,7 +70,6 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
 
   /// Numbers the sample requests, so only the newest answer lands.
   var _sampleRequest = 0;
-  var _busy = false;
 
   bool get _editing => widget.profile != null;
 
@@ -129,29 +133,26 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
     // The sheet can be dismissed before the answer; the container outlives it.
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = container.read(shellMessengerProvider.notifier);
-    setState(() {
-      _busy = true;
-      _refusal = null;
+    await runAs(_ProfileWork.save, () async {
+      setState(() => _refusal = null);
+      try {
+        await container
+            .read(repositoryProvider)
+            .putOrganizeProfile(
+              name,
+              musicTemplate: _music.text,
+              audiobookTemplate: _audiobook.text,
+              podcastTemplate: _podcast.text,
+              tagWrite: _tagWrite,
+              compilationFolder: _compilationFolder,
+            );
+        container.invalidate(organizeProfilesProvider);
+        messenger.show(l10n.organizeProfileSaved(name));
+        if (mounted) Navigator.of(context).pop();
+      } on WaxDeckApiException catch (error) {
+        _refused(messenger, explainRefusal(l10n, error));
+      }
     });
-    try {
-      await container
-          .read(repositoryProvider)
-          .putOrganizeProfile(
-            name,
-            musicTemplate: _music.text,
-            audiobookTemplate: _audiobook.text,
-            podcastTemplate: _podcast.text,
-            tagWrite: _tagWrite,
-            compilationFolder: _compilationFolder,
-          );
-      container.invalidate(organizeProfilesProvider);
-      messenger.show(l10n.organizeProfileSaved(name));
-      if (mounted) Navigator.of(context).pop();
-    } on WaxDeckApiException catch (error) {
-      _refused(messenger, explainRefusal(l10n, error));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _delete(String name) async {
@@ -179,21 +180,18 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() {
-      _busy = true;
-      _refusal = null;
+    await runAs(_ProfileWork.delete, () async {
+      setState(() => _refusal = null);
+      try {
+        await container.read(repositoryProvider).deleteOrganizeProfile(name);
+        container.invalidate(organizeProfilesProvider);
+        messenger.show(l10n.organizeProfileDeleted(name));
+        if (mounted) Navigator.of(context).pop();
+      } on WaxDeckApiException catch (error) {
+        // A library still laid out by it: the server names which.
+        _refused(messenger, explainRefusal(l10n, error));
+      }
     });
-    try {
-      await container.read(repositoryProvider).deleteOrganizeProfile(name);
-      container.invalidate(organizeProfilesProvider);
-      messenger.show(l10n.organizeProfileDeleted(name));
-      if (mounted) Navigator.of(context).pop();
-    } on WaxDeckApiException catch (error) {
-      // A library still laid out by it: the server names which.
-      _refused(messenger, explainRefusal(l10n, error));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   @override
@@ -371,14 +369,15 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet> {
                       semanticsId: SemanticsIds.organizeProfileDelete(
                         profile.name,
                       ),
-                      onPressed: _busy ? null : () => _delete(profile.name),
+                      busy: busyBy(_ProfileWork.delete),
+                      onPressed: busy ? null : () => _delete(profile.name),
                     ),
                   const Spacer(),
                   WaxButton(
                     label: l10n.organizeProfileSave,
                     semanticsId: SemanticsIds.organizeProfileSave,
-                    busy: _busy,
-                    onPressed: _busy || typed.isEmpty || taken
+                    busy: busyBy(_ProfileWork.save),
+                    onPressed: busy || typed.isEmpty || taken
                         ? null
                         : () => unawaited(_save()),
                   ),

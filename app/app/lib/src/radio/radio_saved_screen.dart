@@ -7,6 +7,7 @@ import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../providers.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -64,7 +65,6 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
   @override
   Widget build(BuildContext context) {
     final saved = ref.watch(radioSavedProvider);
-    final rows = saved.value?.songs ?? const <RadioSavedSong>[];
     final l10n = context.l10n;
 
     return WaxScaffold(
@@ -74,8 +74,12 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
       semanticsId: SemanticsIds.radioSaved,
       onBack: () => context.leave(fallback: WaxRoute.radio),
       slivers: <Widget>[
-        switch (saved) {
-          AsyncData() when rows.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<RadioSavedState>(
+          state: saved,
+          errorTitle: l10n.radioSavedLoadError,
+          onRetry: () => ref.invalidate(radioSavedProvider),
+          isEmpty: (value) => value.songs.isEmpty,
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.radioSavedEmptyTitle,
@@ -83,25 +87,12 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
               glyph: WaxIcons.heart,
             ),
           ),
-          AsyncData() => _SavedList(rows: rows, onRemove: _remove),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.radioSavedLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(radioSavedProvider),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.list),
-          ),
-        },
+          builder: (context, value) =>
+              _SavedList(rows: value.songs, onRemove: _remove),
+        ),
         if (saved.value?.loadingMore ?? false)
           const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(WaxSpace.s16),
-              child: Center(child: CircularProgressIndicator()),
-            ),
+            child: SkeletonShapes(shape: SkeletonShape.list, count: 1),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],

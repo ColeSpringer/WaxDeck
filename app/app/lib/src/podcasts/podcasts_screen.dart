@@ -406,41 +406,36 @@ class _FolderGroupState extends State<_FolderGroup> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           if (widget.expandable)
-            WaxTappable(
+            WaxInkTappable(
               semanticsId: SemanticsIds.podcastFolder(widget.name),
               label: context.l10n.podcastFolderSpoken(widget.name, count),
-              selected: _open,
+              expanded: _open,
               onPressed: () => setState(() => _open = !_open),
-              // WaxTappable adds semantics, focus, and a ring, and no
-              // gesture of its own, so the row carries the tap.
-              child: InkWell(
-                onTap: () => setState(() => _open = !_open),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
-                  child: Row(
-                    children: <Widget>[
-                      WaxIcon(
-                        _open ? WaxIcons.collapse : WaxIcons.forward,
-                        size: 16,
-                        color: WaxColors.of(context).textSecondary,
-                      ),
-                      const SizedBox(width: WaxSpace.s8),
-                      Expanded(
-                        child: Text(
-                          widget.name,
-                          style: WaxType.headline.copyWith(
-                            color: WaxColors.of(context).textPrimary,
-                          ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
+                child: Row(
+                  children: <Widget>[
+                    WaxIcon(
+                      _open ? WaxIcons.collapse : WaxIcons.forward,
+                      size: 16,
+                      color: WaxColors.of(context).textSecondary,
+                    ),
+                    const SizedBox(width: WaxSpace.s8),
+                    Expanded(
+                      child: Text(
+                        widget.name,
+                        style: WaxType.headline.copyWith(
+                          color: WaxColors.of(context).textPrimary,
                         ),
                       ),
-                      Text(
-                        '$count',
-                        style: WaxType.monoData.copyWith(
-                          color: WaxColors.of(context).textTertiary,
-                        ),
+                    ),
+                    Text(
+                      '$count',
+                      style: WaxType.monoData.copyWith(
+                        color: WaxColors.of(context).textTertiary,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             )

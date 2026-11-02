@@ -163,7 +163,7 @@ class _CatalogShell extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(),
+          const WaxHairline(),
           Padding(
             padding: const EdgeInsets.all(WaxSpace.s12),
             child: Column(
@@ -196,12 +196,15 @@ class _CatalogShell extends StatelessWidget {
                   'TEXT SCALE ${textScale.toStringAsFixed(1)}',
                   style: WaxType.overline.copyWith(color: colors.textTertiary),
                 ),
-                Slider(
-                  value: textScale,
-                  min: 1,
-                  max: 2,
-                  divisions: 4,
-                  onChanged: onTextScale,
+                WaxSlider(
+                  value: textScale - 1,
+                  label: 'Text scale',
+                  step: 0.25,
+                  trackWidth: 160,
+                  valueLabel: (level) =>
+                      '${(1 + (level * 4).round() / 4).toStringAsFixed(2)}x',
+                  onChanged: (level) =>
+                      onTextScale(1 + (level * 4).round() / 4),
                 ),
               ],
             ),

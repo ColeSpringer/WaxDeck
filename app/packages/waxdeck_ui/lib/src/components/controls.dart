@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:material_ui/material_ui.dart';
 
 import '../icons/wax_icon.dart';
@@ -344,6 +345,7 @@ class WaxInkTappable extends StatelessWidget {
     this.surface,
     this.tooltip,
     this.tooltipOnLongPress = false,
+    this.onLongPress,
     super.key,
   });
 
@@ -355,6 +357,11 @@ class WaxInkTappable extends StatelessWidget {
 
   /// Null disables it, which is reported as well as drawn.
   final VoidCallback? onPressed;
+
+  /// A press held down, for a row whose long press is a second way in,
+  /// such as starting a selection. Taken only while [onPressed] is set: a
+  /// disabled row takes no long press either.
+  final VoidCallback? onLongPress;
 
   final Widget child;
   final String? semanticsId;
@@ -400,6 +407,7 @@ class WaxInkTappable extends StatelessWidget {
       borderRadius: borderRadius,
       child: InkWell(
         onTap: onPressed,
+        onLongPress: onPressed == null ? null : onLongPress,
         borderRadius: borderRadius,
         child: child,
       ),
@@ -426,7 +434,8 @@ enum WaxButtonKind {
   /// line up with the paragraph it belongs to - a link a note refers
   /// to, the control that unfolds the rest of one. The vertical touch
   /// target stays, because a link in a column of text is still
-  /// something a thumb has to hit.
+  /// something a thumb has to hit. A label that wraps takes the ambient
+  /// [DefaultTextStyle]'s alignment, so it lines up as the column does.
   inline,
 
   /// Deletes and revokes. Never the default focus target.
@@ -459,10 +468,15 @@ class WaxButton extends StatelessWidget {
     this.progress,
     this.status = false,
     this.detail,
+    this.maxLines,
     super.key,
   }) : assert(
          progress == null ? !(busy && status) : !busy && !status,
          'busy, progress and status are one state at a time',
+       ),
+       assert(
+         maxLines == null || kind == WaxButtonKind.inline,
+         'only a link takes a line cap: a pill label wraps',
        );
 
   final String label;
@@ -503,8 +517,14 @@ class WaxButton extends StatelessWidget {
   final bool status;
 
   /// What the label leaves out, such as why the action failed: a
-  /// tooltip on hover or long press, and read after the name.
+  /// tooltip on hover, keyboard focus or long press, and read after the
+  /// name.
   final String? detail;
+
+  /// The most lines an [WaxButtonKind.inline] link draws before it ends
+  /// in an ellipsis, for a link that must not outgrow the lines around
+  /// it. The touch target stays, and the whole label is still spoken.
+  final int? maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -593,9 +613,18 @@ class WaxButton extends StatelessWidget {
       ),
     };
 
+    // A link is part of the prose around it, so a wrapped one lines up
+    // as that text does. Read here: the Material below resets it.
+    final align = kind == WaxButtonKind.inline
+        ? DefaultTextStyle.of(context).textAlign
+        : null;
+
     Widget face(Color ink, {Color? ground}) {
       final text = Text(
         label,
+        textAlign: align,
+        maxLines: maxLines,
+        overflow: maxLines == null ? null : TextOverflow.ellipsis,
         // A wrapped label is as wide as its longest line, so the row
         // can centre it.
         textWidthBasis: TextWidthBasis.longestLine,
@@ -750,6 +779,7 @@ class WaxPill extends StatelessWidget {
     this.mono = false,
     this.surface,
     this.semanticsId,
+    this.busy = false,
     super.key,
   });
 
@@ -765,9 +795,13 @@ class WaxPill extends StatelessWidget {
   /// for it, so its width does not follow the value.
   final String? reserve;
 
-  /// Null disables it, which is what a control with a round trip in
-  /// flight is.
+  /// Null disables it.
   final VoidCallback? onPressed;
+
+  /// Work this pill started is in flight, as [WaxButton.busy]: it takes
+  /// no press, keeps the live colours and its focus, is announced as
+  /// working, and draws a [WaxSpinner] in its word's room.
+  final bool busy;
 
   final bool selected;
 
@@ -786,17 +820,26 @@ class WaxPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final drawn = text ?? label;
-    final enabled = onPressed != null;
+    // Busy keeps the live colours: working, not unavailable.
+    final live = onPressed != null || busy;
     final foreground = selected
         ? colors.onAccentContainer
-        : (enabled ? colors.textSecondary : colors.textDisabled);
+        : (live ? colors.textSecondary : colors.textDisabled);
     final style = (mono ? WaxType.monoData : WaxType.caption).copyWith(
       color: foreground,
     );
+    final word = switch (reserve) {
+      final room? => ReservedSize(
+        reserve: Text(room, style: style),
+        child: Text(drawn, style: style),
+      ),
+      null => Text(drawn, style: style),
+    };
     return WaxTappable(
       semanticsId: semanticsId,
       label: label,
       selected: selected,
+      busy: busy,
       borderRadius: WaxRadius.pill,
       onPressed: onPressed,
       child: Ink(
@@ -815,13 +858,23 @@ class WaxPill extends StatelessWidget {
               horizontal: WaxSpace.s12,
               vertical: WaxSpace.s8,
             ),
-            child: switch (reserve) {
-              final room? => ReservedSize(
-                reserve: Text(room, style: style),
-                child: Text(drawn, style: style),
-              ),
-              null => Text(drawn, style: style),
-            },
+            // The spinner at a glyph's size, held to the word's line so
+            // a pill going busy keeps its height as well as its width.
+            child: busy
+                ? ReservedSize(
+                    reserve: word,
+                    child: WaxSpinner(
+                      color: foreground,
+                      size: math.min(
+                        16,
+                        MediaQuery.textScalerOf(
+                              context,
+                            ).scale(style.fontSize ?? 16) *
+                            (style.height ?? 1),
+                      ),
+                    ),
+                  )
+                : word,
           ),
         ),
       ),
@@ -843,6 +896,7 @@ class WaxIconButton extends StatelessWidget {
     this.badge,
     this.busy = false,
     this.status = false,
+    this.detail,
     super.key,
   }) : assert(!(busy && status), 'busy and status are one state at a time');
 
@@ -872,6 +926,11 @@ class WaxIconButton extends StatelessWidget {
   /// reader, and drawn lit, in [color] or accent while [active] and in
   /// secondary ink while not.
   final bool status;
+
+  /// What the label leaves out, such as why the action failed: the
+  /// tooltip's second line, on hover, focus or long press, and read after
+  /// the name.
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -928,9 +987,14 @@ class WaxIconButton extends StatelessWidget {
       onPressed: status ? null : onPressed,
       busy: busy,
       inert: status,
+      hint: detail,
+      // With a detail the tappable's own tooltip carries both lines and
+      // opens on focus too, as a pill's detail does.
+      tooltip: detail == null ? null : '$label\n$detail',
+      tooltipOnLongPress: true,
       semanticsId: semanticsId,
       borderRadius: WaxRadius.pill,
-      child: WaxTooltip(message: label, child: pad),
+      child: detail == null ? WaxTooltip(message: label, child: pad) : pad,
     );
   }
 }
@@ -1316,7 +1380,10 @@ class _TrackGesturesState extends State<_TrackGestures> {
 ///
 /// A semantic slider, so a screen reader can set it: increase and
 /// decrease step by [step], and the announced value is a percentage,
-/// which is what a level is.
+/// which is what a level is, unless [valueLabel] spells it another way.
+///
+/// It is one Tab stop with the focus ring, and Left or Down and Right or Up
+/// step it by [step], as increase and decrease do for a reader.
 ///
 /// [onMute] is optional and is what the glyph does. Without it the glyph
 /// is decoration and says the level rather than offering to silence it -
@@ -1335,6 +1402,7 @@ class WaxSlider extends StatefulWidget {
     this.trackWidth = 96,
     this.endSlop = defaultEndSlop,
     this.balanced = false,
+    this.valueLabel,
     this.semanticsId,
     this.muteSemanticsId,
     super.key,
@@ -1363,6 +1431,11 @@ class WaxSlider extends StatefulWidget {
   /// cluster and wants no such gap, which is why this is a caller's
   /// answer rather than the component's.
   final bool balanced;
+
+  /// Spells a level for a screen reader where a percentage is the wrong
+  /// unit, such as a speed whose 0 to 1 is a span of rates. Null reads
+  /// the share.
+  final String Function(double value)? valueLabel;
 
   /// How far the gesture surface extends past each end of the drawn
   /// track. A level is grabbed at its ends more than anywhere else -
@@ -1426,6 +1499,9 @@ class _WaxSliderState extends State<WaxSlider> {
   /// back. Cleared when the gesture ends.
   double? _dragValue;
 
+  final FocusNode _focus = FocusNode(debugLabel: 'wax-slider');
+  bool _focused = false;
+
   /// Latched when the gesture is abandoned (a scroll won the arena),
   /// so the raw glide events that keep arriving under the scroll stop
   /// painting the knob along with it. Reset by the next press.
@@ -1455,6 +1531,7 @@ class _WaxSliderState extends State<WaxSlider> {
   @override
   void dispose() {
     _hovered.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -1482,7 +1559,8 @@ class _WaxSliderState extends State<WaxSlider> {
   /// separate mute with a level behind it still sets [WaxSlider.muted].
   bool get _muted => widget.muted || _value == 0;
 
-  String _announce(double value) => context.waxL10n.spellPercent(value);
+  String _announce(double value) =>
+      widget.valueLabel?.call(value) ?? context.waxL10n.spellPercent(value);
 
   double _stepped(double delta) => (_value + delta).clamp(0.0, 1.0);
 
@@ -1593,32 +1671,59 @@ class _WaxSliderState extends State<WaxSlider> {
       decreasedValue: _announce(_stepped(-widget.step)),
       onIncrease: enabled ? () => _nudge(widget.step) : null,
       onDecrease: enabled ? () => _nudge(-widget.step) : null,
-      child: ExcludeSemantics(
-        child: _TrackGestures(
-          enabled: enabled,
-          width: widget.trackWidth + 2 * widget.endSlop,
-          inset: widget.endSlop,
-          onPress: _press,
-          onGlide: _glide,
-          onDrag: _drag,
-          onCommit: _commit,
-          onAbandon: _abandon,
-          onHover: (over) {
-            _hovered.value = over;
-          },
-          child: SizedBox(
-            width: double.infinity,
-            // The touch target, not the drawn track: a 4 px bar is
-            // unhittable, and the paint is centred inside this.
-            height: WaxSpace.touchTarget,
-            child: CustomPaint(
-              painter: _LevelPainter(
-                fraction: _value,
-                inset: widget.endSlop,
-                track: colors.hairline,
-                fill: enabled ? colors.accent : colors.textDisabled,
-                knob: enabled ? colors.accent : colors.textDisabled,
-                hovered: _hovered,
+      focusable: enabled,
+      focused: enabled ? _focused : null,
+      onFocus: enabled ? _focus.requestFocus : null,
+      child: FocusableActionDetector(
+        enabled: enabled,
+        focusNode: _focus,
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.arrowLeft): _SliderStepIntent(-1),
+          SingleActivator(LogicalKeyboardKey.arrowDown): _SliderStepIntent(-1),
+          SingleActivator(LogicalKeyboardKey.arrowRight): _SliderStepIntent(1),
+          SingleActivator(LogicalKeyboardKey.arrowUp): _SliderStepIntent(1),
+        },
+        actions: <Type, Action<Intent>>{
+          _SliderStepIntent: CallbackAction<_SliderStepIntent>(
+            onInvoke: (intent) {
+              _nudge(intent.direction * widget.step);
+              return null;
+            },
+          ),
+        },
+        child: WaxFocusRing(
+          focused: _focused,
+          borderRadius: WaxRadius.pill,
+          surface: colors.canvas,
+          child: ExcludeSemantics(
+            child: _TrackGestures(
+              enabled: enabled,
+              width: widget.trackWidth + 2 * widget.endSlop,
+              inset: widget.endSlop,
+              onPress: _press,
+              onGlide: _glide,
+              onDrag: _drag,
+              onCommit: _commit,
+              onAbandon: _abandon,
+              onHover: (over) {
+                _hovered.value = over;
+              },
+              child: SizedBox(
+                width: double.infinity,
+                // The touch target, not the drawn track: a 4 px bar is
+                // unhittable, and the paint is centred inside this.
+                height: WaxSpace.touchTarget,
+                child: CustomPaint(
+                  painter: _LevelPainter(
+                    fraction: _value,
+                    inset: widget.endSlop,
+                    track: colors.hairline,
+                    fill: enabled ? colors.accent : colors.textDisabled,
+                    knob: enabled ? colors.accent : colors.textDisabled,
+                    hovered: _hovered,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1667,6 +1772,13 @@ class _WaxSliderState extends State<WaxSlider> {
       ],
     );
   }
+}
+
+/// One arrow-key step on a [WaxSlider]: [direction] is -1 or 1.
+class _SliderStepIntent extends Intent {
+  const _SliderStepIntent(this.direction);
+
+  final double direction;
 }
 
 class _LevelPainter extends CustomPainter {

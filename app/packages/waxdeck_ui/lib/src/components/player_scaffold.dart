@@ -976,7 +976,12 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
       if (widget.titleOverline != null)
         Padding(
           padding: const EdgeInsets.only(bottom: WaxSpace.s4),
-          child: widget.titleOverline!,
+          // An inline link here takes the block's alignment, so a long
+          // show name wraps in line with the title under it.
+          child: DefaultTextStyle.merge(
+            textAlign: alignStart ? TextAlign.start : TextAlign.center,
+            child: widget.titleOverline!,
+          ),
         ),
       Text(
         widget.now.title,

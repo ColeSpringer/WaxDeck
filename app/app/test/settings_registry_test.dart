@@ -647,7 +647,9 @@ void main() {
     final viewport =
         Offset.zero & tester.view.physicalSize / tester.view.devicePixelRatio;
     // A row far enough down the Playback section to start below the fold.
-    final row = find.bySemanticsIdentifier('setting-replay-gain').first;
+    final row = find
+        .bySemanticsIdentifier(SemanticsIds.setting('replay-gain'))
+        .first;
 
     await goTo('replay-gain');
     expect(tester.getRect(row).overlaps(viewport), isTrue);
@@ -700,6 +702,9 @@ void main() {
 
     // The section is up, showing its first rows, with nothing said about
     // the id that named nothing.
-    expect(find.bySemanticsIdentifier('setting-skip-back'), findsWidgets);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.setting('skip-back')),
+      findsWidgets,
+    );
   });
 }

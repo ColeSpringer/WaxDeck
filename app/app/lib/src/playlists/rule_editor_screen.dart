@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -8,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -363,6 +363,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         WaxButton(
           label: l10n.commonSave,
           semanticsId: SemanticsIds.ruleSave,
+          busy: _busy,
           onPressed: _busy || _unsupported || _limitInvalid
               ? null
               : () => unawaited(_save()),
@@ -384,40 +385,33 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             ),
           )
         else
-          switch (vocabulary) {
-            AsyncData(:final value) when twoPane => SliverFillRemaining(
-              hasScrollBody: true,
-              child: _TwoPane(
-                tree: _tree(value, twoPane: true),
-                preview: _PreviewPane(preview: _preview),
-              ),
-            ),
-            AsyncData(:final value) => SliverList.list(
-              children: <Widget>[
-                _tree(value, twoPane: false),
-                _PreviewPane(
-                  preview: _preview,
-                  showCount: false,
-                  padding: sizeClass.gutter.add(
-                    const EdgeInsets.symmetric(vertical: WaxSpace.s12),
+          AsyncSliverFace<RuleFields>(
+            state: vocabulary,
+            errorTitle: l10n.playlistRuleVocabularyError,
+            onRetry: () => ref.invalidate(ruleFieldsProvider),
+            skeletonFills: true,
+            builder: (context, value) => twoPane
+                ? SliverFillRemaining(
+                    hasScrollBody: true,
+                    child: _TwoPane(
+                      tree: _tree(value, twoPane: true),
+                      preview: _PreviewPane(preview: _preview),
+                    ),
+                  )
+                : SliverList.list(
+                    children: <Widget>[
+                      _tree(value, twoPane: false),
+                      _PreviewPane(
+                        preview: _preview,
+                        showCount: false,
+                        padding: sizeClass.gutter.add(
+                          const EdgeInsets.symmetric(vertical: WaxSpace.s12),
+                        ),
+                      ),
+                      const SizedBox(height: WaxSpace.s24),
+                    ],
                   ),
-                ),
-                const SizedBox(height: WaxSpace.s24),
-              ],
-            ),
-            AsyncError(:final error) => SliverFillRemaining(
-              hasScrollBody: false,
-              child: ErrorState(
-                title: l10n.playlistRuleVocabularyError,
-                message: context.explain(error),
-                onRetry: () => ref.invalidate(ruleFieldsProvider),
-              ),
-            ),
-            _ => const SliverFillRemaining(
-              hasScrollBody: false,
-              child: SkeletonShapes(shape: SkeletonShape.list),
-            ),
-          },
+          ),
       ],
     );
   }
@@ -585,58 +579,48 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
       runSpacing: WaxSpace.s8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
-        SizedBox(
-          width: 200,
-          child: _Picker<String>(
-            semanticsId: SemanticsIds.ruleField(index),
-            label: l10n.playlistRuleFieldPicker,
-            value: condition.field,
-            entries: <DropdownMenuEntry<String>>[
-              for (final field in fields)
-                DropdownMenuEntry<String>(
-                  value: field,
-                  label: counts[field] == null
-                      ? ruleFieldLabel(l10n, field)
-                      : l10n.playlistRuleFieldWithCount(
-                          ruleFieldLabel(l10n, field),
-                          counts[field]!,
-                        ),
-                ),
-            ],
-            onSelected: (field) {
-              condition.field = field;
-              condition.op = ruleFieldOps(vocabulary, field).first;
+        _Picker<String>(
+          semanticsId: SemanticsIds.ruleField(index),
+          label: l10n.playlistRuleFieldPicker,
+          value: condition.field,
+          options: <_Option<String>>[
+            for (final field in fields)
+              (
+                value: field,
+                label: counts[field] == null
+                    ? ruleFieldLabel(l10n, field)
+                    : l10n.playlistRuleFieldWithCount(
+                        ruleFieldLabel(l10n, field),
+                        counts[field]!,
+                      ),
+              ),
+          ],
+          onSelected: (field) {
+            condition.field = field;
+            condition.op = ruleFieldOps(vocabulary, field).first;
+            condition.value = '';
+            condition.valueHigh = '';
+            _changed();
+          },
+        ),
+        _Picker<String>(
+          semanticsId: SemanticsIds.ruleOp(index),
+          label: l10n.playlistRuleOpPicker,
+          value: condition.op,
+          options: <_Option<String>>[
+            for (final op in ops) (value: op, label: ruleOpLabel(l10n, op)),
+          ],
+          onSelected: (op) {
+            // A relative value is a day count, an absolute one a
+            // timestamp; crossing clears rather than keeping a shape.
+            if (ruleRelativeOps.contains(op) !=
+                ruleRelativeOps.contains(condition.op)) {
               condition.value = '';
               condition.valueHigh = '';
-              _changed();
-            },
-          ),
-        ),
-        SizedBox(
-          width: 160,
-          child: _Picker<String>(
-            semanticsId: SemanticsIds.ruleOp(index),
-            label: l10n.playlistRuleOpPicker,
-            value: condition.op,
-            entries: <DropdownMenuEntry<String>>[
-              for (final op in ops)
-                DropdownMenuEntry<String>(
-                  value: op,
-                  label: ruleOpLabel(l10n, op),
-                ),
-            ],
-            onSelected: (op) {
-              // A relative value is a day count, an absolute one a
-              // timestamp; crossing clears rather than keeping a shape.
-              if (ruleRelativeOps.contains(op) !=
-                  ruleRelativeOps.contains(condition.op)) {
-                condition.value = '';
-                condition.valueHigh = '';
-              }
-              condition.op = op;
-              _changed();
-            },
-          ),
+            }
+            condition.op = op;
+            _changed();
+          },
         ),
         _valueEditor(vocabulary, condition, parent, index),
         WaxIconButton(
@@ -668,50 +652,35 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         // Normalised, not just displayed: a fresh condition's empty
         // value would save as neither yes nor no.
         if (condition.value != 'false') condition.value = 'true';
-        return SizedBox(
-          width: 140,
-          child: _Picker<String>(
-            semanticsId: SemanticsIds.ruleValue(index),
-            label: l10n.playlistRuleValuePicker,
-            value: condition.value,
-            entries: <DropdownMenuEntry<String>>[
-              DropdownMenuEntry<String>(
-                value: 'true',
-                label: l10n.playlistRuleYes,
-              ),
-              DropdownMenuEntry<String>(
-                value: 'false',
-                label: l10n.playlistRuleNo,
-              ),
-            ],
-            onSelected: (value) {
-              condition.value = value;
-              _changed();
-            },
-          ),
+        return WaxSegmented(
+          semanticsId: SemanticsIds.ruleValue(index),
+          label: l10n.playlistRuleValuePicker,
+          segments: <WaxSegment>[
+            WaxSegment(name: 'true', label: l10n.playlistRuleYes),
+            WaxSegment(name: 'false', label: l10n.playlistRuleNo),
+          ],
+          selected: condition.value,
+          onSelect: (value) {
+            condition.value = value;
+            _changed();
+          },
         );
       case 'mediaType':
         const kinds = <String>['music', 'podcast', 'audiobook'];
         // A media type this client does not know has no picker entry.
         if (!kinds.contains(condition.value)) condition.value = kinds.first;
-        return SizedBox(
-          width: 160,
-          child: _Picker<String>(
-            semanticsId: SemanticsIds.ruleValue(index),
-            label: l10n.playlistRuleValuePicker,
-            value: condition.value,
-            entries: <DropdownMenuEntry<String>>[
-              for (final kind in kinds)
-                DropdownMenuEntry<String>(
-                  value: kind,
-                  label: l10n.playlistRuleMediaType(kind),
-                ),
-            ],
-            onSelected: (value) {
-              condition.value = value;
-              _changed();
-            },
-          ),
+        return WaxSegmented(
+          semanticsId: SemanticsIds.ruleValue(index),
+          label: l10n.playlistRuleValuePicker,
+          segments: <WaxSegment>[
+            for (final kind in kinds)
+              WaxSegment(name: kind, label: l10n.playlistRuleMediaType(kind)),
+          ],
+          selected: condition.value,
+          onSelect: (value) {
+            condition.value = value;
+            _changed();
+          },
         );
       case 'playlist':
         // Static lists only, and every one this caller can see - their
@@ -742,26 +711,19 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
           condition.value = lists.first.pid;
         }
         final known = lists.any((pl) => pl.pid == condition.value);
-        return SizedBox(
-          width: 200,
-          child: _Picker<String>(
-            semanticsId: SemanticsIds.ruleValue(index),
-            label: l10n.playlistRuleValuePicker,
-            value: condition.value,
-            entries: <DropdownMenuEntry<String>>[
-              for (final pl in lists)
-                DropdownMenuEntry<String>(value: pl.pid, label: pl.name),
-              if (!known)
-                DropdownMenuEntry<String>(
-                  value: condition.value,
-                  label: l10n.playlistRuleUnavailableList,
-                ),
-            ],
-            onSelected: (value) {
-              condition.value = value;
-              _changed();
-            },
-          ),
+        return _Picker<String>(
+          semanticsId: SemanticsIds.ruleValue(index),
+          label: l10n.playlistRuleValuePicker,
+          value: condition.value,
+          options: <_Option<String>>[
+            for (final pl in lists) (value: pl.pid, label: pl.name),
+            if (!known)
+              (value: condition.value, label: l10n.playlistRuleUnavailableList),
+          ],
+          onSelected: (value) {
+            condition.value = value;
+            _changed();
+          },
         );
       case 'date' when ruleRelativeOps.contains(condition.op):
         return _RangeOrSingle(
@@ -874,24 +836,24 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
               child: Row(
                 children: <Widget>[
                   Expanded(
-                    child: _Picker<String>(
-                      semanticsId: SemanticsIds.ruleSortField(i),
-                      label: l10n.playlistRuleFieldPicker,
-                      // Corrected rather than drawn over: a sort on a
-                      // field this vocabulary no longer offers would
-                      // otherwise show an order the save does not send.
-                      value: _sortField(sortable, i),
-                      entries: <DropdownMenuEntry<String>>[
-                        for (final field in sortable)
-                          DropdownMenuEntry<String>(
-                            value: field,
-                            label: ruleFieldLabel(l10n, field),
-                          ),
-                      ],
-                      onSelected: (field) {
-                        _sorts[i].field = field;
-                        _changed();
-                      },
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: _Picker<String>(
+                        semanticsId: SemanticsIds.ruleSortField(i),
+                        label: l10n.playlistRuleFieldPicker,
+                        // Corrected rather than drawn over: a sort on a
+                        // field this vocabulary no longer offers would
+                        // otherwise show an order the save does not send.
+                        value: _sortField(sortable, i),
+                        options: <_Option<String>>[
+                          for (final field in sortable)
+                            (value: field, label: ruleFieldLabel(l10n, field)),
+                        ],
+                        onSelected: (field) {
+                          _sorts[i].field = field;
+                          _changed();
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(width: WaxSpace.s8),
@@ -967,41 +929,26 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             runSpacing: WaxSpace.s8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
-              SizedBox(
-                width: 180,
-                child: _Picker<String>(
-                  semanticsId: SemanticsIds.ruleLimitMode,
-                  label: l10n.playlistRuleLimitTake,
-                  value: _limitMode,
-                  entries: <DropdownMenuEntry<String>>[
-                    DropdownMenuEntry<String>(
-                      value: '',
-                      label: l10n.playlistRuleLimitByCount,
-                    ),
-                    DropdownMenuEntry<String>(
-                      value: 'random',
-                      label: l10n.playlistRuleLimitAtRandom,
-                    ),
-                    DropdownMenuEntry<String>(
-                      value: 'minutes',
-                      label: l10n.playlistRuleLimitByMinutes,
-                    ),
-                    DropdownMenuEntry<String>(
-                      value: 'megabytes',
-                      label: l10n.playlistRuleLimitBySize,
-                    ),
-                  ],
-                  onSelected: (mode) {
-                    setState(() {
-                      _limitMode = mode;
-                      if (_limitMode.isEmpty) _limitSeed = 0;
-                      // A mode whose order the draw supplies cannot also
-                      // carry a sort order; drop any staged sorts.
-                      if (_sortsBlocked) _sorts.clear();
-                    });
-                    _schedulePreview();
-                  },
-                ),
+              _Picker<String>(
+                semanticsId: SemanticsIds.ruleLimitMode,
+                label: l10n.playlistRuleLimitTake,
+                value: _limitMode,
+                options: <_Option<String>>[
+                  (value: '', label: l10n.playlistRuleLimitByCount),
+                  (value: 'random', label: l10n.playlistRuleLimitAtRandom),
+                  (value: 'minutes', label: l10n.playlistRuleLimitByMinutes),
+                  (value: 'megabytes', label: l10n.playlistRuleLimitBySize),
+                ],
+                onSelected: (mode) {
+                  setState(() {
+                    _limitMode = mode;
+                    if (_limitMode.isEmpty) _limitSeed = 0;
+                    // A mode whose order the draw supplies cannot also
+                    // carry a sort order; drop any staged sorts.
+                    if (_sortsBlocked) _sorts.clear();
+                  });
+                  _schedulePreview();
+                },
               ),
               SizedBox(
                 width: 140,
@@ -1056,14 +1003,13 @@ class _TwoPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         // Each pane scrolls itself: a long tree must not push the count
         // off screen.
         Expanded(child: SingleChildScrollView(child: tree)),
-        VerticalDivider(width: 1, color: colors.hairline),
+        const WaxHairline.vertical(),
         SizedBox(
           width: WaxShellMetrics.rightPanelWidth,
           child: SingleChildScrollView(child: preview),
@@ -1210,46 +1156,36 @@ class _Card extends StatelessWidget {
   }
 }
 
-/// A labelled value picker. Material's, annotated: the design system
-/// has no picker, and a field list of thirty is not a chip row.
+/// One choice in a [_Picker].
+typedef _Option<T> = ({T value, String label});
+
+/// A labelled value picker: the current choice drawn closed, the rest in a
+/// menu. A field list of thirty is not a chip row.
 class _Picker<T> extends StatelessWidget {
   const _Picker({
     required this.label,
     required this.value,
-    required this.entries,
+    required this.options,
     required this.onSelected,
     required this.semanticsId,
   });
 
   final String label;
   final T value;
-  final List<DropdownMenuEntry<T>> entries;
+  final List<_Option<T>> options;
   final ValueChanged<T> onSelected;
   final String semanticsId;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    identifier: semanticsId,
-    // On the web the menu drops its field from the semantics tree, and the
-    // picker's name and choice with it; elsewhere the field says both.
-    label: kIsWeb ? label : null,
-    value: kIsWeb
-        ? entries.where((entry) => entry.value == value).firstOrNull?.label
-        : null,
-    child: DropdownMenu<T>(
-      // The locale is part of the key: DropdownMenu rewrites its own
-      // field only when `initialSelection` changes, so new entry labels
-      // leave the closed field reading the old language.
-      key: Key('$semanticsId-${context.l10n.localeName}'),
-      initialSelection: value,
-      label: Text(label),
-      expandedInsets: EdgeInsets.zero,
-      requestFocusOnTap: false,
-      dropdownMenuEntries: entries,
-      onSelected: (chosen) {
-        if (chosen != null) onSelected(chosen);
-      },
-    ),
+  Widget build(BuildContext context) => WaxChoice<T>(
+    label: label,
+    value: value,
+    options: <T>[for (final option in options) option.value],
+    labelFor: (chosen) =>
+        options.where((option) => option.value == chosen).firstOrNull?.label ??
+        '$chosen',
+    onChanged: onSelected,
+    semanticsId: semanticsId,
   );
 }
 

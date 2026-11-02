@@ -180,20 +180,14 @@ class UploadsScreen extends ConsumerWidget {
                 onRetry: (id) => _retry(l10n, ref, id),
                 onDiscard: (upload) => _discard(context, ref, upload),
               ),
-            if (state.hasMore) ...<Widget>[
-              const SizedBox(height: WaxSpace.s16),
-              WaxButton(
-                label: state.loadingMore
-                    ? l10n.commonLoading
-                    : l10n.uploadsLoadMore,
-                kind: WaxButtonKind.tonal,
-                icon: WaxIcons.caretDown,
+            if (state.hasMore)
+              LoadMoreFooter(
+                label: l10n.uploadsLoadMore,
+                loading: state.loadingMore,
                 semanticsId: SemanticsIds.uploadsMore,
-                onPressed: state.loadingMore
-                    ? null
-                    : () => ref.read(uploadsProvider.notifier).loadMore(),
+                padding: const EdgeInsets.only(top: WaxSpace.s16),
+                onLoadMore: () => ref.read(uploadsProvider.notifier).loadMore(),
               ),
-            ],
           ],
         ],
       ),

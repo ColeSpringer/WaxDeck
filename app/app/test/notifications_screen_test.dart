@@ -158,6 +158,13 @@ void main() {
     // device, so the first tap is not the decision.
     await tester.tap(_byId(SemanticsIds.notificationsClear));
     await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(WaxButton),
+      ),
+      findsNWidgets(2),
+    );
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(container.read(notificationsViewProvider).rows, hasLength(1));

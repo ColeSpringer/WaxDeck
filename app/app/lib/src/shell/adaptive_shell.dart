@@ -416,7 +416,7 @@ enum WaxAccountVerb {
 /// What the chrome offers this session, in one declaration.
 ///
 /// The shell frame is not the only thing that draws it: the account menu
-/// lives in each tab root's own top app bar below rail width (3.2), and
+/// lives in each tab root's own top app bar below rail width, and
 /// there it is the only route to the destinations that are not domains.
 /// Two places computing "which targets is this account allowed, and what
 /// does its menu carry" would be two places to get role gating wrong, so

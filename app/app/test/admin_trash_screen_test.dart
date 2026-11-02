@@ -11,6 +11,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'wax_finders.dart';
 
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
@@ -56,15 +57,26 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsIdentifier('trash-row-ts-1'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.trashRow('ts-1')),
+      findsOneWidget,
+    );
     expect(find.text('2.0 MB'), findsWidgets);
     expect(find.text('delete'), findsWidgets);
     expect(find.text('music'), findsWidgets, reason: 'the library column');
-    expect(find.bySemanticsIdentifier('trash-row-ts-2'), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.trashRow('ts-2')),
+      findsNothing,
+    );
 
-    await tester.tap(find.bySemanticsIdentifier('trash-include-restored'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.trashIncludeRestored),
+    );
     await tester.pumpAndSettle();
-    expect(find.bySemanticsIdentifier('trash-row-ts-2'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.trashRow('ts-2')),
+      findsOneWidget,
+    );
     expect(find.text('restored'), findsOneWidget);
   });
 
@@ -95,11 +107,16 @@ void main() {
     await tester.pumpWidget(_host(repo, container));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsIdentifier('trash-restore-ts-1'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.trashRestore('ts-1')),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.restoreTrashCalls, ['ts-1']);
-    expect(find.bySemanticsIdentifier('trash-row-ts-1'), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.trashRow('ts-1')),
+      findsNothing,
+    );
     expect(
       shellMessageText(container.read(shellMessengerProvider)),
       startsWith('Restored Music/'),
@@ -115,14 +132,24 @@ void main() {
     await tester.pumpWidget(_host(repo, container));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsIdentifier('trash-purge-ts-1'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.trashPurge('ts-1')),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsIdentifier('trash-purge-confirm'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.trashPurgeConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.purgeTrashCalls, ['ts-1']);
-    expect(find.bySemanticsIdentifier('trash-row-ts-1'), findsNothing);
-    expect(find.bySemanticsIdentifier('trash-row-ts-2'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.trashRow('ts-1')),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.trashRow('ts-2')),
+      findsOneWidget,
+    );
     expect(
       shellMessageText(container.read(shellMessengerProvider)),
       contains('reclaimed 2.0 MB'),
@@ -138,7 +165,7 @@ void main() {
     await tester.pumpWidget(_host(repo, container));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsIdentifier('trash-empty'));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.trashEmpty));
     await tester.pumpAndSettle();
 
     // Emptying takes the typed word now: the confirm stays disabled
@@ -174,7 +201,7 @@ void main() {
     await tester.pumpWidget(_host(repo, container));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsIdentifier('trash-empty'));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.trashEmpty));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.confirmField),
@@ -252,7 +279,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsIdentifier('trash-empty'));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.trashEmpty));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.confirmField),
@@ -262,9 +289,7 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
     await tester.pumpAndSettle();
     WaxButton empty() => tester.widget<WaxButton>(
-      find.byWidgetPredicate(
-        (w) => w is WaxButton && w.semanticsId == SemanticsIds.trashEmpty,
-      ),
+      waxControl<WaxButton>(SemanticsIds.trashEmpty),
     );
     expect(empty().busy, isTrue);
 

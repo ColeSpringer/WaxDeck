@@ -44,7 +44,7 @@ class SettingsSectionScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final sizeClass = WaxSizeClass.of(context);
-    final isAdmin = ref.watch(isAdminProvider);
+    final admin = ref.watch(adminAccessProvider);
     return WaxScaffold(
       title: section.titleOf(l10n),
       largeTitle: false,
@@ -76,14 +76,17 @@ class SettingsSectionScreen extends ConsumerWidget {
                   // from the list and from search, so arriving here at all
                   // means a hand-typed URL or a role that changed under an
                   // open tab.
-                  SettingsSection.server =>
-                    isAdmin
-                        ? const _ServerBody()
-                        : EmptyState(
-                            title: l10n.settingsServerAdminOnlyTitle,
-                            message: l10n.settingsServerAdminOnlyMessage,
-                            glyph: WaxIcons.admin,
-                          ),
+                  SettingsSection.server => switch (admin) {
+                    AdminAccess.granted => const _ServerBody(),
+                    AdminAccess.resolving => const SkeletonShapes(
+                      shape: SkeletonShape.list,
+                    ),
+                    AdminAccess.refused => EmptyState(
+                      title: l10n.settingsServerAdminOnlyTitle,
+                      message: l10n.settingsServerAdminOnlyMessage,
+                      glyph: WaxIcons.admin,
+                    ),
+                  },
                 },
               ),
             ),
@@ -759,7 +762,7 @@ class _LibraryAccessRow extends ConsumerWidget {
           value.libraryAccess.libraryPids.length,
         ),
       },
-      AsyncError() => l10n.settingsLibraryAccessError,
+      AsyncValue(hasError: true) => l10n.settingsLibraryAccessError,
       _ => l10n.settingsLibraryAccessChecking,
     };
     return SettingAnchor(

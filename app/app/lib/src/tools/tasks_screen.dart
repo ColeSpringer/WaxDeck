@@ -488,8 +488,9 @@ class _TaskRow extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
             children: <Widget>[
               for (final item in items)
-                InkWell(
-                  onTap: () {
+                WaxInkTappable(
+                  label: item.title,
+                  onPressed: () {
                     Navigator.of(sheetContext).pop();
                     openHomeItem(context, ref, item, PlayProgress.none);
                   },
@@ -588,9 +589,8 @@ class _TaskRow extends ConsumerWidget {
       if (task.itemPid != null) task.itemPid!,
       if (produced.isNotEmpty) l10n.toolsProduced(produced.join(', ')),
     ].join(' · ');
-    // A region, not one merged button: the row carries its own dismiss
-    // control, and a tappable that swallowed descendant semantics would
-    // erase it (the reason the upload rows are shaped this way too).
+    // A region, not one merged button: a raw InkWell on purpose, since the
+    // row's dismiss and show-all controls cannot live inside a merged node.
     return Semantics(
       identifier: SemanticsIds.taskRow(task.id),
       container: true,
@@ -632,7 +632,7 @@ class _TaskRow extends ConsumerWidget {
                     ],
                     if (running) ...<Widget>[
                       const SizedBox(height: WaxSpace.s8),
-                      LinearProgressIndicator(
+                      WaxProgressBar(
                         value: task.progressPct == null
                             ? null
                             : task.progressPct! / 100,

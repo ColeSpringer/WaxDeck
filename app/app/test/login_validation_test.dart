@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/login_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -20,7 +21,7 @@ void main() {
     final repo = FakeRepository();
     await tester.pumpWidget(_host(repo));
 
-    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.loginSubmit));
     await tester.pump();
 
     expect(find.text('Enter a username'), findsOneWidget);
@@ -32,8 +33,11 @@ void main() {
     final repo = FakeRepository();
     await tester.pumpWidget(_host(repo));
 
-    await tester.enterText(find.byKey(const Key('login-username')), 'admin');
-    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+      'admin',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.loginSubmit));
     await tester.pump();
 
     expect(find.text('Enter a username'), findsNothing);
@@ -55,13 +59,19 @@ void main() {
       );
     await tester.pumpWidget(_host(repo));
 
-    await tester.enterText(find.byKey(const Key('login-username')), 'admin');
-    await tester.enterText(find.byKey(const Key('login-password')), 'nope');
-    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+      'admin',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.loginPassword),
+      'nope',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.loginSubmit));
     await tester.pumpAndSettle();
 
     expect(repo.loginCalls, hasLength(1));
-    expect(find.byKey(const Key('login-error')), findsOneWidget);
+    expect(find.byKey(const Key(SemanticsIds.loginError)), findsOneWidget);
     expect(
       find.text('That username and password do not go together.'),
       findsOneWidget,

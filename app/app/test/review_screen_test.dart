@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,6 +48,78 @@ Finder _row(String id) =>
     find.bySemanticsIdentifier(SemanticsIds.reviewRow(id));
 
 void main() {
+  testWidgets('a failed queue draws Try again busy while it retries', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..reviewError = const WaxDeckApiException(
+        code: 'internal',
+        message: 'down',
+        statusCode: 500,
+      );
+    await _pump(tester, _host(_container(repo)));
+    await tester.pump();
+    // Every retry from here on waits, as on a server that has gone away.
+    repo.reviewQueueGate = Completer<void>();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    final retry = find.widgetWithText(WaxButton, 'Try again');
+    expect(retry, findsOneWidget);
+    expect(tester.widget<WaxButton>(retry).busy, isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the next page of the queue is a ghost row that fits its slot', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..reviewEntries = [
+        for (var i = 0; i <= ReviewQueueController.pageSize; i++)
+          testReviewEntry('rv-$i'),
+      ];
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    final rowHeight = tester.getSize(_row('rv-0')).height;
+    repo.reviewQueueGate = Completer<void>();
+    final loading = container.read(reviewQueueProvider.notifier).loadMore();
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.byType(SkeletonShapes),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    // The slot is the list's fixed row extent, which is what the real
+    // rows measure: the ghost stands exactly where one of them would.
+    expect(
+      tester.getSize(find.byType(SkeletonShapes)).height,
+      moreOrLessEquals(rowHeight),
+    );
+    expect(find.byType(WaxSpinner), findsNothing);
+    expect(tester.takeException(), isNull);
+    repo.reviewQueueGate!.complete();
+    await loading;
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the queue loading ghost fits a short window', (tester) async {
+    tester.view.physicalSize = const Size(900, 240);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository()..reviewEntries = [testReviewEntry('rv-1')];
+    repo.reviewQueueGate = Completer<void>();
+    await tester.pumpWidget(_host(_container(repo)));
+    await tester.pump();
+
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    repo.reviewQueueGate!.complete();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('the Decided chip counts reverted and discarded entries', (
     tester,
   ) async {
@@ -97,10 +171,7 @@ void main() {
     );
     final identifyingRow = _row('rv-2');
     expect(
-      find.descendant(
-        of: identifyingRow,
-        matching: find.byType(CircularProgressIndicator),
-      ),
+      find.descendant(of: identifyingRow, matching: find.byType(WaxSpinner)),
       findsOneWidget,
     );
     expect(

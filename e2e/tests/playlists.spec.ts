@@ -480,10 +480,9 @@ test('a pasted NSP document is checked, then imports as a rule', async ({ app })
 
   // And the editor draws both, which it cannot for a field it does not know.
   await clickThrough(app.playlists.control(SemanticsIds.playlistEditRule), app.playlists.ruleSave());
-  // Exact, so a Flutter that stops dropping the field's own semantics
-  // on the web, and so names the picker twice, fails here.
-  await expect(app.playlists.ruleField(0)).toHaveAccessibleName('Field Starred');
-  await expect(app.playlists.ruleField(1)).toHaveAccessibleName('Field Duration ms');
+  // Exact: the picker is named once, its label then its value.
+  await expect(app.playlists.ruleField(0)).toHaveAccessibleName('Field, Starred');
+  await expect(app.playlists.ruleField(1)).toHaveAccessibleName('Field, Duration ms');
 
   // An older WaxDeck export named the star `starred`, which NSP does not.
   await app.nav.enter('playlists');

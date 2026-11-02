@@ -15,6 +15,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'row_nodes.dart';
+import 'wax_finders.dart';
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -96,10 +97,7 @@ FakeRepository _repo() {
 /// The Fix control of one rule.
 WaxIconButton _fixButton(WidgetTester tester, String rule) =>
     tester.widget<WaxIconButton>(
-      find.byWidgetPredicate(
-        (w) =>
-            w is WaxIconButton && w.semanticsId == SemanticsIds.healthFix(rule),
-      ),
+      waxControl<WaxIconButton>(SemanticsIds.healthFix(rule)),
     );
 
 /// Types the word a destructive confirmation asks for, then accepts.
@@ -393,6 +391,10 @@ void main() {
     expect(blocked, findsOneWidget);
     expect(tester.getSemantics(blocked).label, reason);
     expect(find.text(reason), findsOneWidget);
+    expect(
+      find.descendant(of: blocked, matching: find.byType(WaxTooltip)),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a fix that writes files is blocked on a read-only server', (
@@ -468,9 +470,7 @@ void main() {
     final repo = _repo();
     await _pump(tester, _host(_container(repo)));
     WaxIconButton sweep() => tester.widget<WaxIconButton>(
-      find.byWidgetPredicate(
-        (w) => w is WaxIconButton && w.semanticsId == SemanticsIds.healthSweep,
-      ),
+      waxControl<WaxIconButton>(SemanticsIds.healthSweep),
     );
 
     // The request lands, and the summary that says so is still on its way.
@@ -508,9 +508,7 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     final sweep = tester.widget<WaxIconButton>(
-      find.byWidgetPredicate(
-        (w) => w is WaxIconButton && w.semanticsId == SemanticsIds.healthSweep,
-      ),
+      waxControl<WaxIconButton>(SemanticsIds.healthSweep),
     );
     expect(sweep.busy, isTrue);
   });
@@ -983,6 +981,55 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.healthIssueFix('tr-5')),
       findsNothing,
     );
+  });
+
+  testWidgets('the next page of issues is one ghost row in line with them', (
+    tester,
+  ) async {
+    _reducedMotion(tester);
+    final repo = _repo()
+      ..healthSummary = _pathSummary()
+      ..healthIssues = [
+        for (var i = 0; i <= HealthIssuesController.pageSize; i++)
+          HealthIssue(
+            pid: 'tr-$i',
+            title: 'Stray $i',
+            mediaType: MediaType.music,
+            rules: const ['path-mismatch'],
+          ),
+      ];
+    final container = _container(repo);
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
+      ),
+    );
+
+    final row = tester
+        .getTopLeft(
+          find.bySemanticsIdentifier(SemanticsIds.healthIssue('tr-0')),
+        )
+        .dx;
+    repo.listHealthIssuesMoreGate = Completer<void>();
+    final loading = container
+        .read(healthIssuesProvider('path-mismatch').notifier)
+        .loadMore();
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.byType(SkeletonShapes),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(find.byType(WaxSpinner), findsNothing);
+    // The ghost stands where a row stands, edge to edge with it.
+    expect(tester.getTopLeft(find.byType(SkeletonShapes)).dx, row);
+    repo.listHealthIssuesMoreGate!.complete();
+    await loading;
+    await tester.pumpAndSettle();
   });
 
   testWidgets('an issue row moves one item behind a confirmation', (

@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
+import '../shell/in_flight.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'radio_controller.dart';
@@ -146,7 +147,13 @@ class _StationDialog extends ConsumerStatefulWidget {
   ConsumerState<_StationDialog> createState() => _StationDialogState();
 }
 
-class _StationDialogState extends ConsumerState<_StationDialog> {
+/// The dialog's waits: the search's on the search button, the save's on
+/// the confirm, a row's add on nothing pressed.
+enum _StationWork { search, save, add }
+
+/// One wait at a time, keyed by which. The mode can change mid-wait.
+class _StationDialogState extends ConsumerState<_StationDialog>
+    with InFlight<_StationDialog, _StationWork> {
   late final TextEditingController _search = TextEditingController();
   late final TextEditingController _name = TextEditingController(
     text: widget.editing?.name ?? '',
@@ -163,7 +170,6 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
 
   /// Editing a station has nothing to search for, so it opens on the form.
   late bool _manual = widget.editing != null;
-  bool _busy = false;
 
   /// Whether the optional fields are showing. Open when editing, where
   /// they hold the station's existing values.
@@ -188,32 +194,30 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
 
   Future<void> _runSearch() async {
     final query = _search.text.trim();
-    if (query.length < 2 || _busy) return;
+    if (query.length < 2) return;
     final l10n = context.l10n;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final results = await ref
-          .read(repositoryProvider)
-          .searchRadioDirectory(query, limit: 15);
-      if (mounted) setState(() => _results = results);
-    } on WaxDeckApiException catch (e) {
-      if (mounted) {
-        // The way out manual entry leaves open, said with the failure that
-        // implies it rather than beside every message this slot shows.
-        setState(
-          () => _error = l10n.radioSearchFailedHint(explainError(l10n, e)),
-        );
+    await runAs(_StationWork.search, () async {
+      setState(() => _error = null);
+      try {
+        final results = await ref
+            .read(repositoryProvider)
+            .searchRadioDirectory(query, limit: 15);
+        if (mounted) setState(() => _results = results);
+      } on WaxDeckApiException catch (e) {
+        if (mounted) {
+          // The way out manual entry leaves open, said with the failure
+          // that implies it rather than beside every message this slot
+          // shows.
+          setState(
+            () => _error = l10n.radioSearchFailedHint(explainError(l10n, e)),
+          );
+        }
       }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    });
   }
 
   Future<void> _save() async {
-    if (_busy) return;
+    if (busy) return;
     final url = _url.text.trim();
     final l10n = context.l10n;
     if (url.isEmpty) {
@@ -238,68 +242,58 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
       return;
     }
     final name = typed.isEmpty ? stationNameFromUrl(url) : typed;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
     final navigator = Navigator.of(context);
     final editing = widget.editing;
     final homepage = _homepage.text.trim();
     final logo = _logo.text.trim();
-    try {
-      if (editing != null) {
-        await ref
-            .read(radioStationsProvider.notifier)
-            .edit(
-              editing.pid,
-              name: name,
-              streamUrl: url,
-              homepageUrl: homepage.isEmpty ? null : homepage,
-              logoUrl: logo.isEmpty ? null : logo,
-            );
-      } else {
-        await ref
-            .read(radioStationsProvider.notifier)
-            .add(
-              name: name,
-              streamUrl: url,
-              homepageUrl: homepage.isEmpty ? null : homepage,
-              logoUrl: logo.isEmpty ? null : logo,
-            );
+    await runAs(_StationWork.save, () async {
+      setState(() => _error = null);
+      try {
+        if (editing != null) {
+          await ref
+              .read(radioStationsProvider.notifier)
+              .edit(
+                editing.pid,
+                name: name,
+                streamUrl: url,
+                homepageUrl: homepage.isEmpty ? null : homepage,
+                logoUrl: logo.isEmpty ? null : logo,
+              );
+        } else {
+          await ref
+              .read(radioStationsProvider.notifier)
+              .add(
+                name: name,
+                streamUrl: url,
+                homepageUrl: homepage.isEmpty ? null : homepage,
+                logoUrl: logo.isEmpty ? null : logo,
+              );
+        }
+        // Only while this dialog is still up. A save outlives a dialog
+        // somebody dismissed while it was in flight, and popping a
+        // captured navigator then takes whatever is on top instead - the
+        // screen underneath.
+        if (mounted) navigator.pop();
+      } on WaxDeckApiException catch (e) {
+        // Inline, not a snackbar: this dialog stays open on a refusal,
+        // and a snackbar would render behind it. The server's words,
+        // which name the station a duplicate URL clashes with.
+        if (mounted) setState(() => _error = explainRefusal(l10n, e));
       }
-      // Only while this dialog is still up. A save outlives a dialog
-      // somebody dismissed while it was in flight, and popping a
-      // captured navigator then takes whatever is on top instead - the
-      // screen underneath.
-      if (mounted) navigator.pop();
-    } on WaxDeckApiException catch (e) {
-      // Inline, not a snackbar: this dialog stays open on a refusal,
-      // and a snackbar would render behind it. The server's words,
-      // which name the station a duplicate URL clashes with.
-      if (mounted) setState(() => _error = explainRefusal(l10n, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    });
   }
 
-  Future<void> _addFromDirectory(RadioDirectoryEntry entry) async {
-    if (_busy) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
+  Future<void> _addFromDirectory(RadioDirectoryEntry entry) {
     final navigator = Navigator.of(context);
-    final refusal = await addDirectoryStation(context, ref, entry);
-    if (refusal == null) {
-      if (mounted) navigator.pop();
-      return;
-    }
-    if (mounted) {
-      setState(() {
-        _error = refusal;
-        _busy = false;
-      });
-    }
+    return runAs(_StationWork.add, () async {
+      setState(() => _error = null);
+      final refusal = await addDirectoryStation(context, ref, entry);
+      if (refusal == null) {
+        if (mounted) navigator.pop();
+        return;
+      }
+      if (mounted) setState(() => _error = refusal);
+    });
   }
 
   @override
@@ -347,7 +341,8 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
             label: _editing ? l10n.radioSaveChanges : l10n.radioAddConfirm,
             kind: WaxButtonKind.filled,
             semanticsId: SemanticsIds.radioAddConfirm,
-            onPressed: _busy ? null : () => unawaited(_save()),
+            busy: busyBy(_StationWork.save),
+            onPressed: busy ? null : () => unawaited(_save()),
           ),
       ],
     );
@@ -373,7 +368,8 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
       kind: WaxButtonKind.tonal,
       icon: WaxIcons.search,
       semanticsId: SemanticsIds.radioSearchRun,
-      onPressed: _busy ? null : () => unawaited(_runSearch()),
+      busy: busyBy(_StationWork.search),
+      onPressed: busy ? null : () => unawaited(_runSearch()),
     ),
     if (_error != null)
       Padding(
@@ -401,7 +397,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
                     subtitle: describeDirectoryEntry(l10n, entry),
                     glyph: WaxIcons.radio,
                     semanticsId: SemanticsIds.radioAddDirectory(index),
-                    onTap: _busy
+                    onTap: busy
                         ? null
                         : () => unawaited(_addFromDirectory(entry)),
                   );

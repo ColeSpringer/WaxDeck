@@ -26,6 +26,7 @@ import 'disclosure_glyph.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
+import 'wax_finders.dart';
 
 RadioStation _station(
   String pid, {
@@ -72,10 +73,9 @@ ProviderContainer _container(
   FakeArtworkStore? artwork,
   List<Override> extra = const <Override>[],
 
-  /// Riverpod retries a failed provider on a backoff of its own, which
-  /// leaves a timer pending past the end of a test that is *about* the
-  /// failure. Those tests turn it off so the error state holds still;
-  /// everything else keeps the real behaviour.
+  /// Turns off the container's retry, so a failure holds still. A
+  /// provider with its own retry setting keeps it: that wins over the
+  /// container's.
   bool retryFailures = true,
 }) {
   final container = ProviderContainer(
@@ -698,6 +698,30 @@ void main() {
     );
   });
 
+  testWidgets('a search still running does not spin the URL form\'s Add', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repo = _repo()..directoryGate = gate;
+    await _pumpHub(tester, _container(repo));
+
+    await tester.tap(_byId(SemanticsIds.radioAdd));
+    await tester.pumpAndSettle();
+    await tester.enterText(_byId(SemanticsIds.radioSearchField), 'jazz');
+    await tester.tap(_byId(SemanticsIds.radioSearchRun));
+    await tester.pump();
+    // Switched to the other way of adding while the search runs.
+    await tester.tap(find.text('By URL'));
+    await tester.pump();
+
+    final add = tester.widget<WaxButton>(
+      waxControl<WaxButton>(SemanticsIds.radioAddConfirm),
+    );
+    expect(add.busy, isFalse, reason: 'the search is not its work');
+    gate.complete();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('an unreachable directory names the way round it', (
     tester,
   ) async {
@@ -1156,6 +1180,38 @@ void main() {
         find.textContaining('only your own stations are listed'),
         findsOneWidget,
       );
+      // The directory's own retry policy outranks the container's, and a
+      // directory that is down is not a refusal: let its backoff run out.
+      await tester.pump(const Duration(minutes: 1));
+    });
+
+    testWidgets('a silent directory\'s Retry is busy while it retries', (
+      tester,
+    ) async {
+      final repo = _repo()
+        ..directoryError = const WaxDeckApiException(
+          code: 'directory-unavailable',
+          message: 'the station directory could not be reached',
+        );
+      await pumpSearch(tester, _container(repo));
+
+      await tester.tap(_byId(SemanticsIds.searchFilter('radio')));
+      await tester.pumpAndSettle();
+      await tester.enterText(_byId(SemanticsIds.searchField), 'jazz');
+      await tester.pump(SearchQuery.debounce);
+      await tester.pump();
+      // Every retry from here on waits, as on a directory that is gone.
+      repo.directoryGate = Completer<void>();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+
+      final retry = find.descendant(
+        of: find.byType(WaxBanner),
+        matching: find.byType(WaxButton),
+      );
+      expect(retry, findsOneWidget);
+      expect(tester.widget<WaxButton>(retry).busy, isTrue);
+      await tester.pumpWidget(const SizedBox());
     });
 
     testWidgets('with nothing typed it says what typing will do', (

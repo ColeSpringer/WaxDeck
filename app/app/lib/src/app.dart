@@ -160,7 +160,7 @@ class _BootGateState extends ConsumerState<_BootGate> {
       probing = bootstrap.isLoading && !bootstrap.hasValue;
     }
     if (probing) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: WaxWordmark()));
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_started) setState(() => _started = true);

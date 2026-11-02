@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
@@ -41,6 +44,61 @@ Widget _host(FakeRepository repo, FakeEngine engine, Widget home) =>
     );
 
 void main() {
+  group('a failed episode read', () {
+    // A removed episode is final: it is asked once, and a Try again under
+    // it could only answer the same. A dropped connection still retries.
+    testWidgets('a removed episode is final, says so, and offers no retry', (
+      tester,
+    ) async {
+      final repo = FakeRepository();
+      await tester.pumpWidget(
+        _host(repo, FakeEngine(), const EpisodeScreen(pid: episodePid)),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('That is not here any more.'), findsOneWidget);
+      expect(find.widgetWithText(WaxButton, 'Try again'), findsNothing);
+      expect(repo.getEpisodeCalls, hasLength(1), reason: 'not retried');
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a dropped read still retries, drawn busy', (tester) async {
+      final repo = _EpisodeDown();
+      await tester.pumpWidget(
+        _host(repo, FakeEngine(), const EpisodeScreen(pid: episodePid)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+
+      final retry = find.widgetWithText(WaxButton, 'Try again');
+      expect(tester.widget<WaxButton>(retry).busy, isTrue);
+      expect(repo.getEpisodeCalls.length, greaterThan(1));
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
+  testWidgets('a transcript on its way draws ghost rows, not a spinner', (
+    tester,
+  ) async {
+    final repo = _repo()..getTranscriptGate = Completer<void>();
+    await tester.pumpWidget(
+      _host(repo, FakeEngine(), const EpisodeScreen(pid: episodePid)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Transcript'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(find.byType(WaxSpinner), findsNothing);
+    repo.getTranscriptGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(SkeletonShapes), findsNothing);
+  });
+
   testWidgets('the transcript lazy-loads on expand and shows cues', (
     tester,
   ) async {
@@ -52,6 +110,7 @@ void main() {
 
     // Nothing fetched until the section expands.
     expect(find.text('Welcome back to the inn'), findsNothing);
+    expect(find.byType(WaxDisclosure), findsOneWidget);
     await tester.tap(find.text('Transcript'));
     await tester.pumpAndSettle();
 
@@ -198,6 +257,38 @@ void main() {
     expect(find.byType(ShowScreen), findsOneWidget);
   });
 
+  testWidgets('a long show name over the episode keeps to one line', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const name =
+        'The Prancing Pony Hour of Tales Told Late by the Fire at Bree';
+    final repo = _repo()
+      ..episodesByShow[showPid] = <EpisodeSummary>[
+        testEpisode(episodePid, artist: name),
+      ];
+    await tester.pumpWidget(
+      _host(
+        repo,
+        FakeEngine(),
+        const EpisodeScreen(pid: episodePid, showPid: showPid),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final link = find.ancestor(
+      of: find.text(name),
+      matching: find.byType(WaxButton),
+    );
+    expect(tester.widget<WaxButton>(link).kind, WaxButtonKind.inline);
+    final line = tester.renderObject<RenderParagraph>(find.text(name));
+    expect(line.maxLines, 1);
+    expect(line.didExceedMaxLines, isTrue);
+    expect(tester.getSize(link).height, WaxSpace.touchTarget);
+  });
+
   testWidgets('the action bar queues and marks played', (tester) async {
     tester.view.physicalSize = const Size(1000, 2000);
     tester.view.devicePixelRatio = 1;
@@ -279,4 +370,159 @@ void main() {
       isNull,
     );
   });
+
+  testWidgets('a queued fetch is a status pill in the bar, not a chip', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository()
+      ..addSubscription(testShow(showPid))
+      ..episodesByShow[showPid] = <EpisodeSummary>[
+        testEpisode(episodePid, downloaded: false, fetchState: 'queued'),
+      ];
+    await tester.pumpWidget(
+      _host(
+        repo,
+        FakeEngine(),
+        const EpisodeScreen(pid: episodePid, showPid: showPid),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CodecChip), findsNothing);
+    Finder pill(String label) =>
+        find.ancestor(of: find.text(label), matching: find.byType(WaxButton));
+    expect(pill('Queued for download'), findsOneWidget);
+    // A state to read, in the one bar beside the verbs.
+    expect(
+      tester.widget<WaxButton>(pill('Queued for download')).status,
+      isTrue,
+    );
+    expect(
+      find.ancestor(
+        of: pill('Queued for download'),
+        matching: find.byType(WaxActionBar),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(of: pill('Share'), matching: find.byType(WaxActionBar)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a failed fetch is one retry pill carrying the reason', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository()
+      ..addSubscription(testShow(showPid))
+      ..episodesByShow[showPid] = <EpisodeSummary>[
+        testEpisode(
+          episodePid,
+          downloaded: false,
+          fetchState: 'failed',
+          fetchError: 'the host refused',
+        ),
+      ];
+    await tester.pumpWidget(
+      _host(
+        repo,
+        FakeEngine(),
+        const EpisodeScreen(pid: episodePid, showPid: showPid),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CodecChip), findsNothing);
+    expect(find.text('Retry download'), findsOneWidget);
+    expect(find.textContaining('the host refused'), findsNothing);
+    final withReason = find.byWidgetPredicate(
+      (w) => w is WaxButton && (w.detail ?? '').contains('the host refused'),
+    );
+    expect(withReason, findsOneWidget);
+    expect(
+      tester.widget<WaxButton>(withReason).semanticsId,
+      SemanticsIds.episodeFetch(episodePid),
+    );
+  });
+
+  testWidgets('pressing the retry pill queues the fetch and the slot reads '
+      'queued', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository()
+      ..addSubscription(testShow(showPid))
+      ..episodesByShow[showPid] = <EpisodeSummary>[
+        testEpisode(
+          episodePid,
+          downloaded: false,
+          fetchState: 'failed',
+          fetchError: 'the host refused',
+        ),
+      ];
+    await tester.pumpWidget(
+      _host(
+        repo,
+        FakeEngine(),
+        const EpisodeScreen(pid: episodePid, showPid: showPid),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.episodeFetch(episodePid)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.fetchEpisodeCalls, <String>[episodePid]);
+    expect(find.text('Queued for download'), findsOneWidget);
+    expect(find.text('Retry download'), findsNothing);
+  });
+
+  testWidgets('tapping the show name goes to the show', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(_repo()),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+        ],
+        child: routedHost(
+          const EpisodeScreen(pid: episodePid, showPid: showPid),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final link = find.ancestor(
+      of: find.text('Barliman Butterbur'),
+      matching: find.byType(WaxButton),
+    );
+    expect(tester.getSize(link).height, WaxSpace.touchTarget);
+    await tester.tap(find.text('Barliman Butterbur'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ShowScreen), findsOneWidget);
+    expect(find.byType(EpisodeScreen), findsNothing);
+  });
+}
+
+/// Drops the first episode read and holds every retry, as a connection
+/// that has gone away does.
+class _EpisodeDown extends FakeRepository {
+  @override
+  Future<EpisodeDetail> getEpisode(String pid) async {
+    getEpisodeCalls.add(pid);
+    if (getEpisodeCalls.length > 1) await Completer<void>().future;
+    throw const WaxDeckApiException(
+      code: 'internal',
+      message: 'down',
+      statusCode: 500,
+    );
+  }
 }

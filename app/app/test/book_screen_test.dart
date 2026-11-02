@@ -1,21 +1,29 @@
 import 'dart:async';
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_controller.dart';
+import 'package:waxdeck/src/l10n/formats.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
 import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'entity_header_bar.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'row_finders.dart';
+import 'wax_finders.dart';
 
 const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 
@@ -173,6 +181,94 @@ void main() {
     expect(_byId(SemanticsIds.chapter(1)), findsOneWidget);
   });
 
+  testWidgets('the header row is one action bar, and the series is a link', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..books[bookPid] = testBook(
+        bookPid,
+        series: 'Harbour Chronicles',
+        seriesPid: 'sr-01JZX5N8QW3F4V9T2B7KDSERIE1',
+        seriesSequence: '2',
+      );
+    await tester.pumpWidget(_host(repo, FakeEngine()));
+    await tester.pumpAndSettle();
+
+    expectHeaderOnActionBar();
+    for (final id in <String>[
+      SemanticsIds.bookResume,
+      SemanticsIds.bookSettingsOpen,
+      SemanticsIds.bookOverflow,
+    ]) {
+      expect(inActionBar(id), findsOneWidget, reason: id);
+    }
+    expect(
+      inActionBar(SemanticsIds.bookSeriesLink),
+      findsNothing,
+      reason: 'a navigation link is not an action',
+    );
+    expect(_byId(SemanticsIds.bookSeriesLink), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(EntityHeader),
+        matching: find.text('Book 2 of Harbour Chronicles'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the download is a pill in the bar, and pressing it starts it', (
+    tester,
+  ) async {
+    const cover = '/api/v1/items/$bookPid/art';
+    final downloads = FakeDownloads();
+    addTearDown(downloads.dispose);
+    final artwork = FakeArtworkStore();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(
+            FakeRepository()..books[bookPid] = testBook(bookPid, artUrl: cover),
+          ),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+          downloadManagerProvider.overrideWithValue(downloads),
+          artworkStoreProvider.overrideWithValue(artwork),
+        ],
+        child: routedHost(const BookScreen(pid: bookPid)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expectHeaderOnActionBar();
+    final pill = find.descendant(
+      of: find.byType(WaxActionBar),
+      matching: waxControl<WaxButton>(SemanticsIds.bookDownload),
+    );
+    expect(pill, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(EntityHeader),
+        matching: waxControl<WaxIconButton>(SemanticsIds.bookDownload),
+      ),
+      findsNothing,
+      reason: 'the icon circle is gone from the header',
+    );
+
+    await tester.tap(pill);
+    await tester.pump();
+    expect(downloads.downloaded, <String>[bookPid]);
+
+    downloads.byPid[bookPid] = testLocal('/downloads/book.m4b');
+    downloads.emit(
+      const DownloadProgress(pid: bookPid, fraction: 1, complete: true),
+    );
+    await tester.pumpAndSettle();
+    expect(artwork.pinnedUrls, <String, String?>{
+      bookPid: cover,
+    }, reason: 'the start verb carries the book cover to the artwork store');
+  });
+
   testWidgets('the header says how long the book is', (tester) async {
     await tester.pumpWidget(_host(_repo(), FakeEngine()));
     await tester.pumpAndSettle();
@@ -258,11 +354,35 @@ void main() {
     await tester.pumpWidget(_host(repo, FakeEngine()));
     await tester.pumpAndSettle();
 
+    final semantics = tester.ensureSemantics();
     await _tap(tester, SemanticsIds.bookSettingsOpen);
     await tester.tap(
       find.descendant(
         of: find.byKey(const Key('book-settings-trim')),
         matching: find.byType(WaxSwitch),
+      ),
+    );
+    await tester.pump();
+    // The reader hears a speed, and one step moves it by 0.05 (not by 0.05
+    // of the slider's 0..1 span).
+    expect(find.byType(WaxSlider), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(
+            find.bySemanticsIdentifier(SemanticsIds.bookSettingsSpeed),
+          )
+          .value,
+      AppLocalizationsEn().formatSpeed(1.0),
+    );
+    tester.binding.performSemanticsAction(
+      SemanticsActionEvent(
+        type: SemanticsAction.increase,
+        nodeId: tester
+            .getSemantics(
+              find.bySemanticsIdentifier(SemanticsIds.bookSettingsSpeed),
+            )
+            .id,
+        viewId: tester.view.viewId,
       ),
     );
     await tester.pump();
@@ -272,7 +392,8 @@ void main() {
     final saved = repo.putBookSettingsCalls.single;
     expect(saved.pid, bookPid);
     expect(saved.settings.trimSilence, isTrue);
-    expect(saved.settings.speed, closeTo(1.0, 0.001));
+    expect(saved.settings.speed, closeTo(1.05, 0.001));
+    semantics.dispose();
   });
 
   testWidgets('a multi-file book says so, and a single-file one does not', (
@@ -308,6 +429,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Bree Press'), findsNothing);
+    expect(find.byType(WaxDisclosure), findsOneWidget);
     await _tap(tester, SemanticsIds.bookEdition);
     expect(find.text('Bree Press'), findsOneWidget);
     expect(find.text('9780000000001'), findsOneWidget);
@@ -808,7 +930,9 @@ void main() {
       await _tap(tester, SemanticsIds.itemMenuDelete);
       expect(repo.deleteItemsCalls.single.pids, [bookPid]);
       expect(repo.deleteItemsCalls.single.dryRun, isTrue);
-      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+      );
       await tester.pumpAndSettle();
 
       expect(repo.deleteItemsCalls.last.dryRun, isFalse);
@@ -830,7 +954,9 @@ void main() {
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.itemMenuDelete);
-      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+      );
       await tester.pumpAndSettle();
 
       expect(repo.deleteItemsCalls.last.dryRun, isFalse);

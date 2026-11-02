@@ -61,6 +61,28 @@ void main() {
       semantics.dispose();
     });
 
+    testWidgets('an action in flight draws busy and takes no press', (
+      tester,
+    ) async {
+      var presses = 0;
+      await _pump(
+        tester,
+        WaxBanner(
+          message: 'The directory could not be searched.',
+          tone: WaxBannerTone.caution,
+          actionLabel: 'Retry',
+          actionBusy: true,
+          onAction: () => presses++,
+        ),
+      );
+      final action = find.widgetWithText(WaxButton, 'Retry');
+      expect(tester.widget<WaxButton>(action).busy, isTrue);
+      expect(find.byType(WaxSpinner), findsOneWidget);
+      await tester.tap(action);
+      await tester.pump();
+      expect(presses, 0);
+    });
+
     testWidgets('offers a dismiss only where one is honest', (tester) async {
       await _pump(
         tester,

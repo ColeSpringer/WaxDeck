@@ -11,6 +11,7 @@ import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'player_host.dart';
@@ -332,6 +333,10 @@ void main() {
     await rig.openSheet(tester);
 
     final row = find.bySemanticsIdentifier(SemanticsIds.playerBookmark(0));
+    expect(
+      find.ancestor(of: row, matching: find.byType(WaxInkTappable)),
+      findsOneWidget,
+    );
     expect(tester.getSemantics(row).label, contains('the riddle'));
     expect(_state(0), findsNothing);
     await rig.harness.endPlayback(tester);

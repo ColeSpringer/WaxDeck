@@ -1647,6 +1647,12 @@ abstract class AppLocalizations {
   /// **'No invites yet'**
   String get adminInvitesEmpty;
 
+  /// Title of the error state when the invites tab could not read the invites.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the invites'**
+  String get adminInvitesLoadError;
+
   /// Header of the libraries table's column holding each library's menu, and the label of that row on a library's card.
   ///
   /// In en, this message translates to:
@@ -2186,6 +2192,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Server URL'**
   String get adminMigrateServerUrlLabel;
+
+  /// Accessible name of the control that picks which kind of server or service to import from.
+  ///
+  /// In en, this message translates to:
+  /// **'Import from'**
+  String get adminMigrateSourceLabel;
 
   /// One of the sources WaxDeck can import from: the zip Spotify hands somebody who asks for their data. Spotify stays as it is; the words beside it do not.
   ///
@@ -3663,6 +3675,12 @@ abstract class AppLocalizations {
   /// **'No accounts'**
   String get adminUsersEmptyTitle;
 
+  /// Title of the error state when the users tab could not read the accounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the accounts'**
+  String get adminUsersLoadError;
+
   /// An account in the table when it has a display name as well as a username.
   ///
   /// In en, this message translates to:
@@ -3704,6 +3722,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Requested {date}'**
   String adminUsersRequestedOn(String date);
+
+  /// Title of the error state when the requests tab could not read the pending signup requests.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the signup requests'**
+  String get adminUsersRequestsLoadError;
 
   /// State of an account that can sign in. Describes the account, so it agrees with the word for an account in this language.
   ///
@@ -5253,12 +5277,6 @@ abstract class AppLocalizations {
   /// **'Load more books'**
   String get booksLoadMore;
 
-  /// The load-more button while a page is on its way.
-  ///
-  /// In en, this message translates to:
-  /// **'Loading...'**
-  String get booksLoadingMore;
-
   /// Accessible name of the audiobook hub's overflow menu.
   ///
   /// In en, this message translates to:
@@ -5841,6 +5859,24 @@ abstract class AppLocalizations {
   /// **'Similar to {title}'**
   String discoverySimilarTitle(String title);
 
+  /// Label of the download pill while the transfer runs; {percent} is how much has arrived. Spanish puts a space before the percent sign.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {percent}%'**
+  String downloadsActionDownloading(int percent);
+
+  /// Label of the download control while the transfer waits for the device to be on wifi, because the download-on-wifi-only setting is on and the connection is mobile data.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for wifi'**
+  String get downloadsActionHeld;
+
+  /// Label of a download control after its download failed, either to this device or on the server (a podcast episode the server fetches); pressing it tries the download again.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry download'**
+  String get downloadsActionRetry;
+
   /// Accessible name of the control that stops one transfer. {title} is what is being downloaded.
   ///
   /// In en, this message translates to:
@@ -5913,11 +5949,35 @@ abstract class AppLocalizations {
   /// **'Nothing downloaded'**
   String get downloadsEmptyTitle;
 
+  /// Why a download gave up: the server no longer has the item. Shown on hover and focus of the retry control.
+  ///
+  /// In en, this message translates to:
+  /// **'No longer on the server'**
+  String get downloadsFailedGone;
+
+  /// Why a download gave up: the connection dropped or something else cut it short. Shown on hover and focus of the retry control.
+  ///
+  /// In en, this message translates to:
+  /// **'The transfer was interrupted'**
+  String get downloadsFailedInterrupted;
+
+  /// Why a download gave up: the server would not hand the file over. Shown on hover and focus of the retry control.
+  ///
+  /// In en, this message translates to:
+  /// **'The server refused the download'**
+  String get downloadsFailedRefused;
+
   /// Overline over one medium's downloads, saying how many.
   ///
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 item} other{{count} items}}'**
   String downloadsGroupItems(int count);
+
+  /// Why a download is waiting: names the download-on-wifi-only setting that holds it. Shown on hover and focus of the waiting download control, and read after its name.
+  ///
+  /// In en, this message translates to:
+  /// **'Download on wifi only is on'**
+  String get downloadsHeldForWifi;
 
   /// Overline over the running downloads, saying how many.
   ///
@@ -13618,10 +13678,10 @@ abstract class AppLocalizations {
   /// **'Fetch {title} to the server'**
   String podcastFetchEpisode(String title);
 
-  /// Chip on an episode whose server-side fetch failed. {reason} is the server's own diagnostic.
+  /// Sentence read as the detail of the retry action on an episode whose server-side fetch failed. {reason} is the server's own diagnostic.
   ///
   /// In en, this message translates to:
-  /// **'Last fetch failed: {reason}'**
+  /// **'The server could not fetch this episode: {reason}'**
   String podcastFetchFailed(String reason);
 
   /// Play button on an episode whose feed named no audio, so the server has to hold it first.
@@ -13749,12 +13809,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Load more episodes'**
   String get podcastLoadMore;
-
-  /// The load-more button while a page is on its way.
-  ///
-  /// In en, this message translates to:
-  /// **'Loading...'**
-  String get podcastLoadingMore;
 
   /// How far back the mark-older dialog reaches: the whole backlog.
   ///

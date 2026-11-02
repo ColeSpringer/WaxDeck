@@ -11,6 +11,7 @@ import '../shell/async_sliver_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'downloads_controller.dart';
+import 'wifi_only_gate.dart';
 
 /// What this overflow can do.
 enum _DownloadsAction { removeFinished, refreshStale }
@@ -228,8 +229,9 @@ class _Transfers extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
-    final store = ref.watch(artworkStoreProvider);
     final l10n = context.l10n;
+    // Read once for every row: the gate is one answer for all of them.
+    final gateShut = ref.watch(transfersHeldProvider).value ?? false;
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: sizeClass.gutter.horizontal / 2,
@@ -242,34 +244,13 @@ class _Transfers extends ConsumerWidget {
             overline: l10n.downloadsInFlight(entries.length),
           ),
           for (final entry in entries)
-            MediaListRow(
+            // Keyed: it holds whether this transfer is paused, and unkeyed
+            // state follows position, not pid.
+            _TransferRow(
               key: ValueKey(SemanticsIds.downloadRow(entry.pid)),
-              data: MediaTileData(
-                title: entry.title,
-                subtitle: entry.subtitle,
-                artwork: store.source(entry.item?.artUrl),
-                domain: _domainOf(entry.mediaType),
-                shape: _shapeOf(entry.mediaType),
-                // The progress bar under the row, which is the sliver
-                // MediaListRow already draws for a resume position.
-                progress: fractions[entry.pid] ?? 0,
-                trailingText: l10n.formatBytes(entry.record.sizeBytes),
-                semanticsId: SemanticsIds.downloadRow(entry.pid),
-              ),
-              actions: <Widget>[
-                // Keyed: it holds whether this transfer is parked, and
-                // unkeyed state follows position, not pid.
-                _PauseButton(key: ValueKey(entry.pid), entry: entry),
-                WaxIconButton(
-                  glyph: WaxIcons.close,
-                  label: l10n.downloadsCancel(entry.title),
-                  size: 18,
-                  semanticsId: SemanticsIds.downloadCancel(entry.pid),
-                  onPressed: () => unawaited(
-                    ref.read(downloadsProvider.notifier).cancel(entry.pid),
-                  ),
-                ),
-              ],
+              entry: entry,
+              fraction: fractions[entry.pid] ?? 0,
+              gateShut: gateShut,
             ),
           const SizedBox(height: WaxSpace.s16),
         ],
@@ -278,23 +259,30 @@ class _Transfers extends ConsumerWidget {
   }
 }
 
-/// Pause, and resume once paused. Its own state so the control turns at
-/// the tap, not at the next reload; it starts from the pause the records
-/// keep across a restart.
-class _PauseButton extends ConsumerStatefulWidget {
-  const _PauseButton({required this.entry, super.key});
+/// One transfer, with pause (resume once paused) and cancel. Its pause is
+/// its own state so the control turns at the tap, not at the next reload;
+/// it starts from the pause the records keep across a restart.
+class _TransferRow extends ConsumerStatefulWidget {
+  const _TransferRow({
+    required this.entry,
+    required this.fraction,
+    required this.gateShut,
+    super.key,
+  });
 
   final DownloadEntry entry;
+  final double fraction;
+  final bool gateShut;
 
   @override
-  ConsumerState<_PauseButton> createState() => _PauseButtonState();
+  ConsumerState<_TransferRow> createState() => _TransferRowState();
 }
 
-class _PauseButtonState extends ConsumerState<_PauseButton> {
+class _TransferRowState extends ConsumerState<_TransferRow> {
   late var _paused = widget.entry.record.paused;
 
   @override
-  void didUpdateWidget(_PauseButton old) {
+  void didUpdateWidget(_TransferRow old) {
     super.didUpdateWidget(old);
     final paused = widget.entry.record.paused;
     if (paused != old.entry.record.paused) _paused = paused;
@@ -302,18 +290,58 @@ class _PauseButtonState extends ConsumerState<_PauseButton> {
 
   @override
   Widget build(BuildContext context) {
-    final pid = widget.entry.pid;
+    final entry = widget.entry;
+    final pid = entry.pid;
+    final store = ref.watch(artworkStoreProvider);
     final l10n = context.l10n;
-    return WaxIconButton(
-      glyph: _paused ? WaxIcons.play : WaxIcons.pause,
-      label: _paused
-          ? l10n.downloadsResume(widget.entry.title)
-          : l10n.downloadsPause(widget.entry.title),
-      size: 18,
-      semanticsId: _paused
-          ? SemanticsIds.downloadResume(pid)
-          : SemanticsIds.downloadPause(pid),
-      onPressed: () => unawaited(_toggle(pid)),
+    // Held by the wifi-only gate, read the way the book's pill and the
+    // player's icon read it, and said the same way.
+    final held = heldForWifi(
+      gateShut: widget.gateShut,
+      paused: _paused,
+      active: entry.record.active,
+    );
+    return MediaListRow(
+      data: MediaTileData(
+        title: entry.title,
+        subtitle: entry.subtitle,
+        artwork: store.source(entry.item?.artUrl),
+        domain: _domainOf(entry.mediaType),
+        shape: _shapeOf(entry.mediaType),
+        // The progress bar under the row, which is the sliver
+        // MediaListRow already draws for a resume position.
+        progress: widget.fraction,
+        trailingText: l10n.formatBytes(entry.record.sizeBytes),
+        trailingDetail: held ? l10n.downloadsActionHeld : null,
+        trailingDetailSpoken: held
+            ? context.waxL10n.statesSpoken(
+                l10n.downloadsActionHeld,
+                l10n.downloadsHeldForWifi,
+              )
+            : null,
+        semanticsId: SemanticsIds.downloadRow(pid),
+      ),
+      actions: <Widget>[
+        WaxIconButton(
+          glyph: _paused ? WaxIcons.play : WaxIcons.pause,
+          label: _paused
+              ? l10n.downloadsResume(entry.title)
+              : l10n.downloadsPause(entry.title),
+          size: 18,
+          semanticsId: _paused
+              ? SemanticsIds.downloadResume(pid)
+              : SemanticsIds.downloadPause(pid),
+          onPressed: () => unawaited(_toggle(pid)),
+        ),
+        WaxIconButton(
+          glyph: WaxIcons.close,
+          label: l10n.downloadsCancel(entry.title),
+          size: 18,
+          semanticsId: SemanticsIds.downloadCancel(pid),
+          onPressed: () =>
+              unawaited(ref.read(downloadsProvider.notifier).cancel(pid)),
+        ),
+      ],
     );
   }
 

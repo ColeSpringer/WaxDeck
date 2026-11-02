@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/async_box_face.dart';
 import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -235,9 +236,9 @@ class TrashScreen extends ConsumerWidget {
                         onPurge: () => _purge(context, ref, entry),
                       ),
               ),
-              AsyncError(:final error) => ErrorState(
+              AsyncValue(hasError: true) => AsyncFailureCard.from(
+                trash,
                 title: l10n.adminTrashLoadError,
-                message: context.explain(error),
                 onRetry: () => ref.invalidate(trashProvider),
               ),
               _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -317,9 +318,9 @@ class _ArtworkCacheCard extends ConsumerWidget {
           const SizedBox(height: WaxSpace.s16),
           switch (cache) {
             AsyncData(:final value) => _CacheFigures(report: value),
-            AsyncError(:final error) => ErrorState(
+            AsyncValue(hasError: true) => AsyncFailureCard.from(
+              cache,
               title: l10n.adminThumbsTitle,
-              message: context.explain(error),
               onRetry: () => ref.invalidate(thumbnailCacheProvider),
             ),
             _ => const SkeletonShapes(shape: SkeletonShape.list),

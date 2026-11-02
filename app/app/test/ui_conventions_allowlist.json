@@ -6,7 +6,6 @@
     "prose-slot-args": 2
   },
   "../packages/waxdeck_ui/example/lib/main.dart": {
-    "material-misc": 2,
     "prose-slot-args": 5
   },
   "../packages/waxdeck_ui/example/lib/pages/components_page.dart": {
@@ -18,39 +17,25 @@
   "../packages/waxdeck_ui/lib/src/components/wordmark.dart": {
     "hardcoded-copy": 2
   },
-  "lib/src/admin/admin_console.dart": {
-    "material-misc": 1,
-    "raw-ink": 1
-  },
   "lib/src/admin/admin_shares_screen.dart": {
-    "material-progress": 1,
     "prose-slot-args": 1
   },
   "lib/src/admin/audit_screen.dart": {
-    "material-progress": 1,
-    "prose-slot-args": 1,
-    "raw-ink": 1
+    "prose-slot-args": 1
   },
   "lib/src/admin/backups_screen.dart": {
-    "material-button": 7,
-    "material-misc": 1,
-    "material-progress": 2,
     "prose-slot-args": 2
   },
   "lib/src/admin/enrichment_screen.dart": {
     "prose-slot-args": 16
   },
   "lib/src/admin/genres_screen.dart": {
-    "prose-slot-args": 3,
-    "raw-ink": 1
+    "prose-slot-args": 3
   },
   "lib/src/admin/libraries_screen.dart": {
     "prose-slot-args": 6
   },
   "lib/src/admin/migrate_screen.dart": {
-    "material-button": 2,
-    "material-misc": 2,
-    "material-text-field": 4,
     "prose-slot-args": 7
   },
   "lib/src/admin/schedules_screen.dart": {
@@ -63,50 +48,21 @@
     "prose-slot-args": 2
   },
   "lib/src/admin/user_edit_screen.dart": {
-    "material-button": 6,
-    "material-text-field": 1,
     "prose-slot-args": 15
   },
   "lib/src/admin/users_screen.dart": {
-    "material-button": 10,
-    "material-progress": 3,
-    "material-text-field": 3,
     "prose-slot-args": 7
   },
   "lib/src/app.dart": {
-    "hardcoded-copy": 1,
-    "material-progress": 1
-  },
-  "lib/src/auth/connect_server_screen.dart": {
-    "material-button": 1,
-    "material-progress": 1,
-    "material-text-field": 1
-  },
-  "lib/src/auth/login_screen.dart": {
-    "material-button": 4,
-    "material-misc": 2,
-    "material-progress": 1,
-    "material-text-field": 2
-  },
-  "lib/src/auth/setup_screen.dart": {
-    "material-button": 2,
-    "material-progress": 1,
-    "material-text-field": 4
+    "hardcoded-copy": 1
   },
   "lib/src/auth/signup_screen.dart": {
-    "material-button": 2,
-    "material-progress": 1,
-    "material-text-field": 4,
     "prose-slot-args": 1
   },
   "lib/src/books/book_screen.dart": {
-    "material-button": 2,
-    "material-list-tile": 1,
-    "material-misc": 1,
     "prose-slot-args": 4
   },
   "lib/src/books/books_screen.dart": {
-    "material-progress": 1,
     "prose-slot-args": 3
   },
   "lib/src/books/series_index_screen.dart": {
@@ -125,7 +81,6 @@
     "hardcoded-copy": 1
   },
   "lib/src/connect/device_picker.dart": {
-    "material-button": 3,
     "prose-slot-args": 1
   },
   "lib/src/connect/remote_screen.dart": {
@@ -137,10 +92,6 @@
   "lib/src/diagnostics/defect_log_screen.dart": {
     "hardcoded-copy": 3,
     "prose-slot-args": 1
-  },
-  "lib/src/discovery/discovery_actions.dart": {
-    "material-button": 1,
-    "material-misc": 1
   },
   "lib/src/discovery/track_list_screen.dart": {
     "prose-slot-args": 1
@@ -158,8 +109,6 @@
     "prose-slot-args": 2
   },
   "lib/src/health/health_screen.dart": {
-    "material-misc": 1,
-    "material-progress": 1,
     "prose-slot-args": 7
   },
   "lib/src/home/home_screen.dart": {
@@ -169,7 +118,6 @@
     "prose-slot-args": 1
   },
   "lib/src/library/item_delete.dart": {
-    "material-button": 4,
     "prose-slot-args": 2
   },
   "lib/src/library/item_detach.dart": {
@@ -185,7 +133,6 @@
     "prose-slot-args": 14
   },
   "lib/src/metadata/artwork_manager.dart": {
-    "material-progress": 1,
     "prose-slot-args": 2
   },
   "lib/src/metadata/bulk_pane.dart": {
@@ -198,15 +145,12 @@
     "prose-slot-args": 8
   },
   "lib/src/metadata/metadata_form.dart": {
-    "prose-slot-args": 2,
-    "raw-ink": 2
+    "prose-slot-args": 2
   },
   "lib/src/metadata/metadata_screen.dart": {
-    "prose-slot-args": 8,
-    "raw-ink": 1
+    "prose-slot-args": 8
   },
   "lib/src/metadata/release_workbench.dart": {
-    "material-progress": 1,
     "prose-slot-args": 1
   },
   "lib/src/metadata/rename_section.dart": {
@@ -219,20 +163,15 @@
     "prose-slot-args": 1
   },
   "lib/src/music/index_screen.dart": {
-    "material-progress": 1,
-    "prose-slot-args": 1,
-    "raw-ink": 1
+    "prose-slot-args": 1
   },
   "lib/src/music/listing_screen.dart": {
-    "material-progress": 1,
     "prose-slot-args": 1
   },
   "lib/src/music/music_hub_screen.dart": {
-    "prose-slot-args": 1,
-    "raw-ink": 2
+    "prose-slot-args": 1
   },
   "lib/src/notifications/notifications_screen.dart": {
-    "material-button": 2,
     "prose-slot-args": 1
   },
   "lib/src/organize/organize_screen.dart": {
@@ -241,112 +180,62 @@
   "lib/src/organize/profile_editor_sheet.dart": {
     "prose-slot-args": 2
   },
-  "lib/src/player/bookmarks.dart": {
-    "material-progress": 1,
-    "raw-ink": 1
-  },
   "lib/src/player/car_mode_screen.dart": {
     "prose-slot-args": 1
   },
   "lib/src/player/lyrics.dart": {
-    "material-progress": 1,
     "prose-slot-args": 3
   },
   "lib/src/player/player_screen.dart": {
-    "material-button": 1,
-    "material-misc": 1,
-    "material-progress": 1,
-    "material-text-field": 1,
-    "prose-slot-args": 2,
-    "raw-ink": 1
-  },
-  "lib/src/player/spoken_face.dart": {
-    "material-progress": 1,
-    "raw-ink": 2
-  },
-  "lib/src/player/visualizer_screen.dart": {
-    "material-progress": 1,
     "prose-slot-args": 2
   },
-  "lib/src/playlists/add_to_playlist_sheet.dart": {
-    "material-progress": 1
+  "lib/src/player/visualizer_screen.dart": {
+    "prose-slot-args": 2
   },
   "lib/src/playlists/playlist_create.dart": {
     "prose-slot-args": 1
   },
   "lib/src/playlists/playlist_import.dart": {
-    "material-text-field": 1,
     "prose-slot-args": 2
   },
   "lib/src/playlists/playlist_screen.dart": {
     "prose-slot-args": 1
   },
-  "lib/src/playlists/playlist_sync_sheet.dart": {
-    "material-button": 1,
-    "material-progress": 1
-  },
   "lib/src/playlists/playlists_screen.dart": {
     "prose-slot-args": 1
   },
   "lib/src/playlists/rule_editor_screen.dart": {
-    "material-misc": 14,
     "prose-slot-args": 2
   },
   "lib/src/podcasts/add_podcast.dart": {
-    "material-text-field": 1,
     "prose-slot-args": 1
   },
-  "lib/src/podcasts/episode_screen.dart": {
-    "material-list-tile": 1,
-    "material-progress": 1,
-    "raw-ink": 1
-  },
-  "lib/src/podcasts/mark_older_played_dialog.dart": {
-    "material-progress": 1
-  },
   "lib/src/podcasts/podcasts_screen.dart": {
-    "prose-slot-args": 1,
-    "raw-ink": 1
-  },
-  "lib/src/podcasts/show_notes.dart": {
-    "material-misc": 1
+    "prose-slot-args": 1
   },
   "lib/src/podcasts/show_screen.dart": {
-    "material-progress": 1,
     "prose-slot-args": 2
   },
   "lib/src/podcasts/subscription_settings_sheet.dart": {
-    "material-misc": 1,
-    "material-text-field": 5,
     "prose-slot-args": 7
   },
   "lib/src/queue/queue_view.dart": {
-    "prose-slot-args": 1,
-    "raw-ink": 1
-  },
-  "lib/src/queue/session_history.dart": {
-    "raw-ink": 1
+    "prose-slot-args": 1
   },
   "lib/src/radio/radio_saved_menu.dart": {
-    "material-progress": 1,
     "prose-slot-args": 2
   },
   "lib/src/radio/radio_saved_screen.dart": {
-    "material-progress": 1,
     "prose-slot-args": 1
   },
   "lib/src/radio/radio_screen.dart": {
     "prose-slot-args": 1
   },
   "lib/src/review/review_entry_screen.dart": {
-    "material-progress": 2,
-    "prose-slot-args": 2,
-    "raw-ink": 1
+    "prose-slot-args": 2
   },
   "lib/src/review/review_screen.dart": {
-    "material-progress": 2,
-    "prose-slot-args": 2,
-    "raw-ink": 1
+    "prose-slot-args": 2
   },
   "lib/src/search/search_screen.dart": {
     "prose-slot-args": 8
@@ -356,16 +245,9 @@
     "prose-slot-args": 1
   },
   "lib/src/settings/integrations_sections.dart": {
-    "material-button": 14,
-    "material-misc": 2,
-    "material-progress": 5,
-    "material-text-field": 9,
     "prose-slot-args": 12
   },
   "lib/src/settings/listening_sections.dart": {
-    "material-button": 2,
-    "material-progress": 1,
-    "material-text-field": 1,
     "prose-slot-args": 2
   },
   "lib/src/settings/settings_screen.dart": {
@@ -378,17 +260,12 @@
     "prose-slot-args": 3
   },
   "lib/src/sharing/shares_screen.dart": {
-    "material-progress": 1,
     "prose-slot-args": 1
   },
   "lib/src/shell/forbidden_page.dart": {
     "prose-slot-args": 1
   },
-  "lib/src/shell/router.dart": {
-    "material-button": 1
-  },
   "lib/src/stats/listen_log_screen.dart": {
-    "material-progress": 1,
     "prose-slot-args": 1
   },
   "lib/src/stats/share_cards.dart": {
@@ -397,18 +274,9 @@
   "lib/src/stats/stats_screen.dart": {
     "prose-slot-args": 4
   },
-  "lib/src/stats/year_in_review_screen.dart": {
-    "material-button": 1,
-    "material-progress": 2,
-    "raw-spacing": 4
-  },
-  "lib/src/tools/job_rows.dart": {
-    "material-progress": 1
-  },
   "lib/src/tools/tasks_screen.dart": {
-    "material-progress": 1,
     "prose-slot-args": 1,
-    "raw-ink": 2
+    "raw-ink": 1
   },
   "lib/src/uploads/add_to_library.dart": {
     "prose-slot-args": 2

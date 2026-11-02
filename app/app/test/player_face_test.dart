@@ -34,6 +34,7 @@ import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _first = 'tr-01JZX5N8QW3F4V9T2B7KDMUSIC1';
 const _second = 'tr-01JZX5N8QW3F4V9T2B7KDMUSIC2';
@@ -329,6 +330,10 @@ void main() {
 
       // The cover leads the strip, left of the words that repeat it.
       final peek = find.bySemanticsIdentifier(SemanticsIds.playerUpNext);
+      expect(
+        find.ancestor(of: peek, matching: find.byType(WaxInkTappable)),
+        findsOneWidget,
+      );
       final cover = find.descendant(
         of: peek,
         matching: find.byType(ArtworkImage),
@@ -1075,9 +1080,7 @@ void main() {
       );
       harness.play([first, second]);
       await pumpPlayerInto(tester, harness);
-      final control = find.byWidgetPredicate(
-        (w) => w is WaxTappable && w.semanticsId == SemanticsIds.playerArtwork,
-      );
+      final control = waxControl<WaxTappable>(SemanticsIds.playerArtwork);
       final before = tester.state(control);
 
       await harness.playback.next();
@@ -1185,6 +1188,28 @@ void main() {
 
       await show(onOther);
       expect(_caption(tester), startsWith('Front cover'));
+    });
+
+    testWidgets('the cold open ghosts within a short window', (tester) async {
+      tester.view.physicalSize = const Size(400, 140);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final container = playbackContainer(
+        repo: _albumRepo([_albumTrack(_first, 'Salt Harbour')]),
+        engine: FakeEngine(),
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: localizedHost(
+            const Scaffold(body: PlayerFace(session: null, item: null)),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('the next track starts at its front cover', (tester) async {

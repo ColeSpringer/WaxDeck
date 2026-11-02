@@ -1,6 +1,24 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "downloadsActionDownloading": "Downloading {percent}%",
+  "@downloadsActionDownloading": {
+    "description": "Label of the download pill while the transfer runs; {percent} is how much has arrived. Spanish puts a space before the percent sign.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "downloadsActionHeld": "Waiting for wifi",
+  "@downloadsActionHeld": {
+    "description": "Label of the download control while the transfer waits for the device to be on wifi, because the download-on-wifi-only setting is on and the connection is mobile data."
+  },
+  "downloadsActionRetry": "Retry download",
+  "@downloadsActionRetry": {
+    "description": "Label of a download control after its download failed, either to this device or on the server (a podcast episode the server fetches); pressing it tries the download again."
+  },
   "downloadsCancel": "Cancel {title}",
   "@downloadsCancel": {
     "description": "Accessible name of the control that stops one transfer. {title} is what is being downloaded.",
@@ -71,6 +89,18 @@
   "@downloadsEmptyTitle": {
     "description": "Empty state of the downloads screen."
   },
+  "downloadsFailedGone": "No longer on the server",
+  "@downloadsFailedGone": {
+    "description": "Why a download gave up: the server no longer has the item. Shown on hover and focus of the retry control."
+  },
+  "downloadsFailedInterrupted": "The transfer was interrupted",
+  "@downloadsFailedInterrupted": {
+    "description": "Why a download gave up: the connection dropped or something else cut it short. Shown on hover and focus of the retry control."
+  },
+  "downloadsFailedRefused": "The server refused the download",
+  "@downloadsFailedRefused": {
+    "description": "Why a download gave up: the server would not hand the file over. Shown on hover and focus of the retry control."
+  },
   "downloadsGroupItems": "{count, plural, =1{1 item} other{{count} items}}",
   "@downloadsGroupItems": {
     "description": "Overline over one medium's downloads, saying how many.",
@@ -80,6 +110,10 @@
         "example": "12"
       }
     }
+  },
+  "downloadsHeldForWifi": "Download on wifi only is on",
+  "@downloadsHeldForWifi": {
+    "description": "Why a download is waiting: names the download-on-wifi-only setting that holds it. Shown on hover and focus of the waiting download control, and read after its name."
   },
   "downloadsInFlight": "{count, plural, =1{1 in flight} other{{count} in flight}}",
   "@downloadsInFlight": {

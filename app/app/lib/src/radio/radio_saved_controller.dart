@@ -168,4 +168,5 @@ class RadioSavedController extends AsyncNotifier<RadioSavedState> {
 final radioSavedProvider =
     AsyncNotifierProvider.autoDispose<RadioSavedController, RadioSavedState>(
       RadioSavedController.new,
+      retry: retryUnlessRefused,
     );

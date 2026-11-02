@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/in_flight.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'podcasts_controller.dart';
@@ -59,6 +60,7 @@ class PodcastDirectoryRow extends StatelessWidget {
     required this.index,
     required this.onSubscribe,
     this.rowSemanticsId,
+    this.subscribing = false,
     super.key,
   });
 
@@ -70,6 +72,9 @@ class PodcastDirectoryRow extends StatelessWidget {
 
   /// Null disables the button, for a surface already busy with one.
   final VoidCallback? onSubscribe;
+
+  /// This row's subscribe is the one in flight.
+  final bool subscribing;
 
   /// The row's own identifier, where the surface has one for it. The
   /// button keeps its own either way, being a control beside the row
@@ -89,6 +94,7 @@ class PodcastDirectoryRow extends StatelessWidget {
         kind: WaxButtonKind.tonal,
         icon: WaxIcons.add,
         semanticsId: SemanticsIds.podcastSearchSubscribe(index),
+        busy: subscribing,
         onPressed: onSubscribe,
       ),
     );
@@ -112,7 +118,13 @@ class SubscribeDialog extends ConsumerStatefulWidget {
   ConsumerState<SubscribeDialog> createState() => _SubscribeDialogState();
 }
 
-class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
+/// The dialog's two waits that are not a directory row's.
+enum _Wait { search, url }
+
+/// One wait at a time, keyed by a [_Wait] or by the feed URL of the
+/// directory row whose subscribe is in flight.
+class _SubscribeDialogState extends ConsumerState<SubscribeDialog>
+    with InFlight<SubscribeDialog, Object> {
   final _searchController = TextEditingController();
   final _urlController = TextEditingController();
 
@@ -123,7 +135,6 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
   /// went on landing in the search box.
   final _urlFocus = FocusNode();
   var _sourceType = 'rss';
-  var _busy = false;
 
   /// Whether the URL path is showing. Opened by hand, or by a directory
   /// that will not answer - there being nothing else left to try.
@@ -161,90 +172,72 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
     // single-character title is a whole word in Chinese or Japanese, and
     // a run button that answers a real query by doing nothing at all -
     // no spinner, no rows, no sentence - reads as broken.
-    if (query.isEmpty || _busy) return;
+    if (query.isEmpty) return;
     final l10n = context.l10n;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final results = await ref
-          .read(repositoryProvider)
-          .searchPodcastDirectory(query, limit: 15);
-      if (mounted) setState(() => _matches = results);
-    } on WaxDeckApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          // The way out, said with the failure that implies it - and
-          // opened, because a directory that will not answer leaves the
-          // feed URL as the only way through.
-          _error = l10n.podcastSearchFailedHint(explainError(l10n, e));
-          _byUrl = true;
-          // The rows an earlier search found are not an answer to this
-          // one, and left above "could not search" they read as one.
-          _matches = null;
-        });
+    await runAs(_Wait.search, () async {
+      setState(() => _error = null);
+      try {
+        final results = await ref
+            .read(repositoryProvider)
+            .searchPodcastDirectory(query, limit: 15);
+        if (mounted) setState(() => _matches = results);
+      } on WaxDeckApiException catch (e) {
+        if (mounted) {
+          setState(() {
+            // The way out, said with the failure that implies it - and
+            // opened, because a directory that will not answer leaves the
+            // feed URL as the only way through.
+            _error = l10n.podcastSearchFailedHint(explainError(l10n, e));
+            _byUrl = true;
+            // The rows an earlier search found are not an answer to this
+            // one, and left above "could not search" they read as one.
+            _matches = null;
+          });
+        }
       }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    });
   }
 
-  Future<void> _subscribeToEntry(PodcastDirectoryEntry entry) async {
-    if (_busy) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
+  /// A throw nothing converts (a decode failure) still clears the wait,
+  /// or every control in the dialog would read as disabled.
+  Future<void> _subscribeToEntry(PodcastDirectoryEntry entry) {
     final navigator = Navigator.of(context);
     final route = ModalRoute.of(context);
-    var popped = false;
-    try {
+    return runAs(entry.feedUrl, () async {
+      setState(() => _error = null);
       final refusal = await subscribeToDirectoryEntry(context, ref, entry);
       if (refusal == null) {
         // Only while this dialog is still the top route: a subscribe
         // outlives a dialog dismissed while it was in flight, or still on
         // its way out, and popping then takes whatever is under it.
-        if (route?.isCurrent ?? false) {
-          navigator.pop();
-          popped = true;
-        }
+        if (route?.isCurrent ?? false) navigator.pop();
         return;
       }
       if (mounted) setState(() => _error = refusal);
-    } finally {
-      // Every other async path here clears the flag in a finally, and
-      // this one is the path that can throw something no caller
-      // converts, a decode failure. Left set, every control in the
-      // dialog reads as disabled and only Cancel works.
-      if (mounted && !popped) setState(() => _busy = false);
-    }
+    });
   }
 
   Future<void> _subscribeToUrl() async {
     final url = _urlController.text.trim();
-    if (url.isEmpty || _busy) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
+    if (url.isEmpty) return;
     final navigator = Navigator.of(context);
     final route = ModalRoute.of(context);
     final l10n = context.l10n;
-    try {
-      await ref
-          .read(subscriptionsProvider.notifier)
-          .subscribe(url: url, sourceType: _sourceType);
-      // As for a directory match: not over a dialog on its way out.
-      if (route?.isCurrent ?? false) navigator.pop();
-    } on WaxDeckApiException catch (e) {
-      // Inline rather than a snackbar, which would render behind this
-      // dialog. The URL was just typed, so the server's own words about
-      // it: "the feed's own server did not answer" names the address.
-      if (mounted) setState(() => _error = explainRefusal(l10n, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await runAs(_Wait.url, () async {
+      setState(() => _error = null);
+      try {
+        await ref
+            .read(subscriptionsProvider.notifier)
+            .subscribe(url: url, sourceType: _sourceType);
+        // As for a directory match: not over a dialog on its way out.
+        if (route?.isCurrent ?? false) navigator.pop();
+      } on WaxDeckApiException catch (e) {
+        // Inline rather than a snackbar, which would render behind this
+        // dialog. The URL was just typed, so the server's own words about
+        // it: "the feed's own server did not answer" names the address.
+        if (mounted) setState(() => _error = explainRefusal(l10n, e));
+      }
+    });
   }
 
   @override
@@ -277,7 +270,8 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
                 kind: WaxButtonKind.tonal,
                 icon: WaxIcons.search,
                 semanticsId: SemanticsIds.podcastSearchRun,
-                onPressed: _busy ? null : () => unawaited(_runSearch()),
+                busy: busyBy(_Wait.search),
+                onPressed: busy ? null : () => unawaited(_runSearch()),
               ),
               ..._resultList(l10n),
               const SizedBox(height: WaxSpace.s8),
@@ -318,7 +312,8 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
           WaxButton(
             label: l10n.podcastSubscribeAction,
             semanticsId: SemanticsIds.podcastSubscribeConfirm,
-            onPressed: _busy ? null : () => unawaited(_subscribeToUrl()),
+            busy: busyBy(_Wait.url),
+            onPressed: busy ? null : () => unawaited(_subscribeToUrl()),
           ),
       ],
     );
@@ -351,7 +346,8 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
           itemBuilder: (context, index) => PodcastDirectoryRow(
             entry: matches[index],
             index: index,
-            onSubscribe: _busy
+            subscribing: busyBy(matches[index].feedUrl),
+            onSubscribe: busy
                 ? null
                 : () => unawaited(_subscribeToEntry(matches[index])),
           ),
@@ -377,15 +373,13 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
     // No Semantics identifier wrapper: on the web it would mint a
     // second, disabled text-field node beside the real input. Tests
     // locate the field by its label, like the login form.
-    TextField(
+    WaxTextField(
       key: const Key('podcast-url-field'),
       controller: _urlController,
       focusNode: _urlFocus,
-      decoration: InputDecoration(
-        labelText: _sourceType == 'youtube'
-            ? l10n.podcastYoutubeUrlLabel
-            : l10n.podcastRssUrlLabel,
-      ),
+      label: _sourceType == 'youtube'
+          ? l10n.podcastYoutubeUrlLabel
+          : l10n.podcastRssUrlLabel,
       keyboardType: TextInputType.url,
     ),
   ];

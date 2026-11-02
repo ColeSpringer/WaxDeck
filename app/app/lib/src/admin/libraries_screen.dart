@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../organize/organize_screen.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -46,9 +47,9 @@ class LibrariesScreen extends ConsumerWidget {
           children: <Widget>[
             switch (libraries) {
               AsyncData(:final value) => _LibraryTable(libraries: value),
-              AsyncError(:final error) => ErrorState(
+              AsyncValue(hasError: true) => AsyncFailureCard.from(
+                libraries,
                 title: l10n.adminLibrariesLoadError,
-                message: context.explain(error),
                 onRetry: () => ref.invalidate(libraryCountsProvider),
               ),
               _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -831,7 +832,8 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
                 label: l10n.adminLibraryCreate,
                 icon: WaxIcons.add,
                 semanticsId: SemanticsIds.librarySubmit,
-                onPressed: _busy ? null : _create,
+                busy: _busy,
+                onPressed: _create,
               ),
               const SizedBox(height: WaxSpace.s8),
               Text(

@@ -247,7 +247,7 @@ final voiceBoostDefaultProvider = NotifierProvider<VoiceBoostDefault, bool>(
   VoiceBoostDefault.new,
 );
 
-/// Whether each spoken-word effect has explained itself once (5.3).
+/// Whether each spoken-word effect has explained itself once.
 ///
 /// Not settings, and deliberately absent from the settings registry:
 /// nothing offers these as a control, because "show me that hint again"

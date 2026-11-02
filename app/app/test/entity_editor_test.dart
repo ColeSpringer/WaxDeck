@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -317,6 +319,35 @@ void main() {
     // Only what changed: album_artist was left alone, so it stays out
     // of the write.
     expect(repo.renameEntityCalls.single.fields, {'album': 'Short Exposure'});
+  });
+
+  testWidgets('waits for the session before it refuses anyone', (tester) async {
+    final repo = _repo()..getSessionGate = Completer<void>();
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        ],
+        child: routedHost(
+          const EntityEditorScreen(entity: EditableEntity.artist, pid: _artist),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.metadataForbidden),
+      findsNothing,
+    );
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+
+    repo.getSessionGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsIdentifier(SemanticsIds.entityEditor), findsOne);
   });
 
   testWidgets('a member gets the refusal, not a form', (tester) async {

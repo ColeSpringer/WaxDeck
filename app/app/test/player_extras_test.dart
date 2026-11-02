@@ -90,7 +90,40 @@ void main() {
 
       expect(find.byType(VisualizerStage), findsNothing);
       expect(find.text('No shape to draw'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(WaxSpinner), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('draws only its frame while the shape is being read', (
+      tester,
+    ) async {
+      _phone(tester);
+      final repo = FakeRepository();
+      final container = playbackContainer(
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+      );
+      final harness = PlayerHarness(container);
+      harness.play([testItem(_pid)]);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: routedHost(const VisualizerScreen()),
+        ),
+      );
+
+      // The first frame, before the read lands: the back control and the
+      // backdrop, and neither a stage, a ring, a ghost nor the empty note.
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.visualizerClose),
+        findsOneWidget,
+      );
+      expect(find.byType(VisualizerStage), findsNothing);
+      expect(find.byType(WaxSpinner), findsNothing);
+      expect(find.byType(SkeletonShapes), findsNothing);
+      expect(find.text('No shape to draw'), findsNothing);
+      await tester.pumpAndSettle();
+      expect(find.text('No shape to draw'), findsOneWidget);
       await harness.endPlayback(tester);
     });
 

@@ -219,7 +219,7 @@ final searchResultsProvider = FutureProvider<SearchResults?>((ref) async {
   );
   if (!asks) return null;
   return ref.watch(repositoryProvider).search(query);
-});
+}, retry: retryUnlessRefused);
 
 /// Station directory matches for the current query, under the radio chip.
 ///
@@ -235,7 +235,7 @@ final radioDirectoryResultsProvider =
       final query = ref.watch(searchQueryProvider);
       if (query.length < 2) return null;
       return ref.watch(repositoryProvider).searchRadioDirectory(query);
-    });
+    }, retry: retryUnlessRefused);
 
 /// Stations already in this library whose names match, under the radio
 /// chip.
@@ -291,7 +291,7 @@ final podcastDirectoryResultsProvider =
       final query = ref.watch(searchQueryProvider);
       if (query.length < 2) return null;
       return ref.watch(repositoryProvider).searchPodcastDirectory(query);
-    });
+    }, retry: retryUnlessRefused);
 
 /// The last few queries, newest first.
 ///

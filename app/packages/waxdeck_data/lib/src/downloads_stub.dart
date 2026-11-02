@@ -44,6 +44,10 @@ class BackgroundDownloadManager implements DownloadManagerPort {
   Future<List<DownloadedItem>> stored() => throw UnsupportedError('web');
 
   @override
+  Future<DownloadedItem?> storedItem(String pid) =>
+      throw UnsupportedError('web');
+
+  @override
   Future<void> cancel(String pid) => throw UnsupportedError('web');
 
   @override

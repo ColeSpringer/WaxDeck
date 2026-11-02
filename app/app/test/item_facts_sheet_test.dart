@@ -324,7 +324,9 @@ void main() {
       find.text('The item stays in your library on its remaining files.'),
       findsOneWidget,
     );
-    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
     await tester.pumpAndSettle();
 
     final applied = repository.deleteItemFilesCalls.last;

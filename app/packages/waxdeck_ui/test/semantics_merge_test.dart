@@ -709,6 +709,23 @@ final List<_Scenario> _scenarios = <_Scenario>[
     ),
   ),
   _scenario(
+    'a Load more footer, ready and a scroll\'s page',
+    () => Column(
+      children: <Widget>[
+        LoadMoreFooter(
+          label: 'Load more episodes',
+          loading: false,
+          onLoadMore: () {},
+        ),
+        LoadMoreFooter(
+          label: 'Load more episodes',
+          loading: true,
+          onLoadMore: () {},
+        ),
+      ],
+    ),
+  ),
+  _scenario(
     'stat tiles, a grid and figures',
     () => Column(
       children: <Widget>[
@@ -951,10 +968,16 @@ final List<_Scenario> _scenarios = <_Scenario>[
       subtitle: 'Nightjar',
       metadata: '1975',
       description: 'Recorded over four winter nights.',
-      actions: <Widget>[
-        WaxButton(label: 'Play', icon: WaxIcons.play, onPressed: () {}),
-        StarButton(starred: true, onChanged: (_) {}),
+      actions: <WaxAction>[
+        WaxAction(
+          label: 'Play',
+          semanticsId: 'play',
+          glyph: WaxIcons.play,
+          emphasis: WaxActionEmphasis.primary,
+          onPressed: () {},
+        ),
       ],
+      trailing: <Widget>[StarButton(starred: true, onChanged: (_) {})],
     ),
   ),
   _scenario(

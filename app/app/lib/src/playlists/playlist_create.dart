@@ -237,7 +237,8 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
               ? l10n.playlistCreateNext
               : l10n.playlistCreateAction,
           semanticsId: SemanticsIds.playlistCreateConfirm,
-          onPressed: _busy ? null : () => unawaited(_create()),
+          busy: _busy,
+          onPressed: () => unawaited(_create()),
         ),
       ],
     );

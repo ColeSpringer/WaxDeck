@@ -1278,6 +1278,10 @@
   "@adminInvitesEmpty": {
     "description": "Empty state of the invites tab."
   },
+  "adminInvitesLoadError": "Could not load the invites",
+  "@adminInvitesLoadError": {
+    "description": "Title of the error state when the invites tab could not read the invites."
+  },
   "adminLibrariesColumnActions": "Actions",
   "@adminLibrariesColumnActions": {
     "description": "Header of the libraries table's column holding each library's menu, and the label of that row on a library's card."
@@ -1731,6 +1735,10 @@
   "adminMigrateServerUrlLabel": "Server URL",
   "@adminMigrateServerUrlLabel": {
     "description": "Field for the address of the server being imported from."
+  },
+  "adminMigrateSourceLabel": "Import from",
+  "@adminMigrateSourceLabel": {
+    "description": "Accessible name of the control that picks which kind of server or service to import from."
   },
   "adminMigrateSpotifyExport": "Spotify data export",
   "@adminMigrateSpotifyExport": {
@@ -2959,6 +2967,10 @@
   "@adminUsersEmptyTitle": {
     "description": "Empty state of the account list."
   },
+  "adminUsersLoadError": "Could not load the accounts",
+  "@adminUsersLoadError": {
+    "description": "Title of the error state when the users tab could not read the accounts."
+  },
   "adminUsersNamedAccount": "{displayName} ({username})",
   "@adminUsersNamedAccount": {
     "description": "An account in the table when it has a display name as well as a username.",
@@ -3018,6 +3030,10 @@
         "example": "Aug 12, 2026"
       }
     }
+  },
+  "adminUsersRequestsLoadError": "Could not load the signup requests",
+  "@adminUsersRequestsLoadError": {
+    "description": "Title of the error state when the requests tab could not read the pending signup requests."
   },
   "adminUsersStateActive": "Active",
   "@adminUsersStateActive": {
@@ -4332,10 +4348,6 @@
   "@booksLoadMore": {
     "description": "Button fetching the next page of the shelf, for a filter that scrolling cannot reach."
   },
-  "booksLoadingMore": "Loading...",
-  "@booksLoadingMore": {
-    "description": "The load-more button while a page is on its way."
-  },
   "booksMore": "More",
   "@booksMore": {
     "description": "Accessible name of the audiobook hub's overflow menu."
@@ -4845,6 +4857,24 @@
       }
     }
   },
+  "downloadsActionDownloading": "Downloading {percent}%",
+  "@downloadsActionDownloading": {
+    "description": "Label of the download pill while the transfer runs; {percent} is how much has arrived. Spanish puts a space before the percent sign.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "downloadsActionHeld": "Waiting for wifi",
+  "@downloadsActionHeld": {
+    "description": "Label of the download control while the transfer waits for the device to be on wifi, because the download-on-wifi-only setting is on and the connection is mobile data."
+  },
+  "downloadsActionRetry": "Retry download",
+  "@downloadsActionRetry": {
+    "description": "Label of a download control after its download failed, either to this device or on the server (a podcast episode the server fetches); pressing it tries the download again."
+  },
   "downloadsCancel": "Cancel {title}",
   "@downloadsCancel": {
     "description": "Accessible name of the control that stops one transfer. {title} is what is being downloaded.",
@@ -4915,6 +4945,18 @@
   "@downloadsEmptyTitle": {
     "description": "Empty state of the downloads screen."
   },
+  "downloadsFailedGone": "No longer on the server",
+  "@downloadsFailedGone": {
+    "description": "Why a download gave up: the server no longer has the item. Shown on hover and focus of the retry control."
+  },
+  "downloadsFailedInterrupted": "The transfer was interrupted",
+  "@downloadsFailedInterrupted": {
+    "description": "Why a download gave up: the connection dropped or something else cut it short. Shown on hover and focus of the retry control."
+  },
+  "downloadsFailedRefused": "The server refused the download",
+  "@downloadsFailedRefused": {
+    "description": "Why a download gave up: the server would not hand the file over. Shown on hover and focus of the retry control."
+  },
   "downloadsGroupItems": "{count, plural, =1{1 item} other{{count} items}}",
   "@downloadsGroupItems": {
     "description": "Overline over one medium's downloads, saying how many.",
@@ -4924,6 +4966,10 @@
         "example": "12"
       }
     }
+  },
+  "downloadsHeldForWifi": "Download on wifi only is on",
+  "@downloadsHeldForWifi": {
+    "description": "Why a download is waiting: names the download-on-wifi-only setting that holds it. Shown on hover and focus of the waiting download control, and read after its name."
   },
   "downloadsInFlight": "{count, plural, =1{1 in flight} other{{count} in flight}}",
   "@downloadsInFlight": {
@@ -11866,9 +11912,9 @@
       }
     }
   },
-  "podcastFetchFailed": "Last fetch failed: {reason}",
+  "podcastFetchFailed": "The server could not fetch this episode: {reason}",
   "@podcastFetchFailed": {
-    "description": "Chip on an episode whose server-side fetch failed. {reason} is the server's own diagnostic.",
+    "description": "Sentence read as the detail of the retry action on an episode whose server-side fetch failed. {reason} is the server's own diagnostic.",
     "placeholders": {
       "reason": {
         "type": "String",
@@ -11991,10 +12037,6 @@
   "podcastLoadMore": "Load more episodes",
   "@podcastLoadMore": {
     "description": "Button fetching the next page of a show's episodes, for a filter that scrolling cannot reach."
-  },
-  "podcastLoadingMore": "Loading...",
-  "@podcastLoadingMore": {
-    "description": "The load-more button while a page is on its way."
   },
   "podcastMarkOlderAll": "Every episode",
   "@podcastMarkOlderAll": {

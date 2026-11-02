@@ -25,6 +25,7 @@ import 'localized_host.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
+import 'wax_finders.dart';
 
 Future<void> _pump(
   WidgetTester tester,
@@ -630,6 +631,10 @@ void main() {
     // to press.
     expect(find.textContaining('Subscribe with a feed URL'), findsOneWidget);
     expect(find.byKey(const Key('podcast-url-field')), findsOneWidget);
+    expect(
+      tester.widget(find.byKey(const Key('podcast-url-field'))),
+      isA<WaxTextField>(),
+    );
   });
 
   testWidgets('the by-URL path points right closed and down open', (
@@ -881,6 +886,45 @@ void main() {
     await landWhileClosing(tester, repo, gate);
   });
 
+  testWidgets('a directory row\'s Subscribe spins while it subscribes', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..subscribeGate = gate
+      ..podcastDirectoryEntries = const <PodcastDirectoryEntry>[
+        PodcastDirectoryEntry(
+          name: 'Pipeweed Economics',
+          feedUrl: 'https://pony.example/feed.xml',
+        ),
+        PodcastDirectoryEntry(
+          name: 'Second Breakfast',
+          feedUrl: 'https://pony.example/second.xml',
+        ),
+      ];
+    await openDialogOverPage(tester, repo);
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSearchField),
+      'pipeweed',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastSearchRun));
+    await tester.pumpAndSettle();
+    final first = waxControl<WaxButton>(SemanticsIds.podcastSearchSubscribe(0));
+    final second = waxControl<WaxButton>(
+      SemanticsIds.podcastSearchSubscribe(1),
+    );
+    await tester.tap(first);
+    await tester.pump();
+
+    // The pressed row's button carries the wait; the other row's stands
+    // unavailable until it lands.
+    expect(tester.widget<WaxButton>(first).busy, isTrue);
+    expect(tester.widget<WaxButton>(second).busy, isFalse);
+    expect(tester.widget<WaxButton>(second).onPressed, isNull);
+    gate.complete();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('folders group the shows that declare one', (tester) async {
     final repo = FakeRepository()
       ..addSubscription(
@@ -917,15 +961,34 @@ void main() {
         testShow('pc-A', title: 'Alpha Show'),
         settings: const SubscriptionSettings(folder: 'Mornings'),
       );
+    final semantics = tester.ensureSemantics();
     await _pump(tester, repo);
     final folder = find.bySemanticsIdentifier(
       SemanticsIds.podcastFolder('Mornings'),
     );
 
     expectDisclosure(tester, folder, open: true);
+    // Spoken as expanded or collapsed, never as selected.
+    expect(
+      tester.getSemantics(folder),
+      isSemantics(
+        hasExpandedState: true,
+        isExpanded: true,
+        hasSelectedState: false,
+      ),
+    );
     await tester.tap(folder);
     await tester.pumpAndSettle();
     expectDisclosure(tester, folder, open: false);
+    expect(
+      tester.getSemantics(folder),
+      isSemantics(
+        hasExpandedState: true,
+        isExpanded: false,
+        hasSelectedState: false,
+      ),
+    );
+    semantics.dispose();
   });
 
   group('sortSubscriptions', () {

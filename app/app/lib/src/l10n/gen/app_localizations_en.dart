@@ -916,6 +916,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminInvitesEmpty => 'No invites yet';
 
   @override
+  String get adminInvitesLoadError => 'Could not load the invites';
+
+  @override
   String get adminLibrariesColumnActions => 'Actions';
 
   @override
@@ -1239,6 +1242,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminMigrateServerUrlLabel => 'Server URL';
+
+  @override
+  String get adminMigrateSourceLabel => 'Import from';
 
   @override
   String get adminMigrateSpotifyExport => 'Spotify data export';
@@ -2147,6 +2153,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminUsersEmptyTitle => 'No accounts';
 
   @override
+  String get adminUsersLoadError => 'Could not load the accounts';
+
+  @override
   String adminUsersNamedAccount(String displayName, String username) {
     return '$displayName ($username)';
   }
@@ -2175,6 +2184,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String adminUsersRequestedOn(String date) {
     return 'Requested $date';
   }
+
+  @override
+  String get adminUsersRequestsLoadError =>
+      'Could not load the signup requests';
 
   @override
   String get adminUsersStateActive => 'Active';
@@ -3106,9 +3119,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get booksLoadMore => 'Load more books';
 
   @override
-  String get booksLoadingMore => 'Loading...';
-
-  @override
   String get booksMore => 'More';
 
   @override
@@ -3487,6 +3497,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String downloadsActionDownloading(int percent) {
+    return 'Downloading $percent%';
+  }
+
+  @override
+  String get downloadsActionHeld => 'Waiting for wifi';
+
+  @override
+  String get downloadsActionRetry => 'Retry download';
+
+  @override
   String downloadsCancel(String title) {
     return 'Cancel $title';
   }
@@ -3530,6 +3551,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadsEmptyTitle => 'Nothing downloaded';
 
   @override
+  String get downloadsFailedGone => 'No longer on the server';
+
+  @override
+  String get downloadsFailedInterrupted => 'The transfer was interrupted';
+
+  @override
+  String get downloadsFailedRefused => 'The server refused the download';
+
+  @override
   String downloadsGroupItems(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -3539,6 +3569,9 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get downloadsHeldForWifi => 'Download on wifi only is on';
 
   @override
   String downloadsInFlight(int count) {
@@ -8823,7 +8856,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String podcastFetchFailed(String reason) {
-    return 'Last fetch failed: $reason';
+    return 'The server could not fetch this episode: $reason';
   }
 
   @override
@@ -8909,9 +8942,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get podcastLoadMore => 'Load more episodes';
-
-  @override
-  String get podcastLoadingMore => 'Loading...';
 
   @override
   String get podcastMarkOlderAll => 'Every episode';

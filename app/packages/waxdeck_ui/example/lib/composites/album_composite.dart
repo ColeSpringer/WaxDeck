@@ -24,13 +24,6 @@ class AlbumComposite extends StatelessWidget {
       title: SampleLibrary.albumTitle,
       largeTitle: false,
       onBack: () {},
-      actions: <Widget>[
-        WaxIconButton(
-          glyph: WaxIcons.more,
-          label: 'More for this album',
-          onPressed: () {},
-        ),
-      ],
       bottom: now == null
           ? null
           : DeckBar(
@@ -59,21 +52,33 @@ class AlbumComposite extends StatelessWidget {
             metadata: SampleLibrary.albumMeta,
             description: SampleLibrary.albumNote,
             artwork: art.of('Salt Harbour'),
-            actions: <Widget>[
-              WaxButton(label: 'Play', icon: WaxIcons.play, onPressed: () {}),
-              WaxButton(
-                label: 'Shuffle',
-                kind: WaxButtonKind.tonal,
-                icon: WaxIcons.shuffle,
+            actions: <WaxAction>[
+              WaxAction(
+                label: 'Play',
+                semanticsId: 'play',
+                glyph: WaxIcons.play,
+                emphasis: WaxActionEmphasis.primary,
                 onPressed: () {},
               ),
-              StarButton(starred: true, onChanged: (_) {}),
-              WaxIconButton(
+              WaxAction(
+                label: 'Shuffle',
+                semanticsId: 'shuffle',
+                glyph: WaxIcons.shuffle,
+                onPressed: () {},
+              ),
+              WaxAction(
+                label: 'Download',
+                semanticsId: 'download',
                 glyph: WaxIcons.downloads,
-                label: 'Download album',
                 onPressed: () {},
               ),
             ],
+            trailing: <Widget>[StarButton(starred: true, onChanged: (_) {})],
+            overflow: WaxIconButton(
+              glyph: WaxIcons.more,
+              label: 'More for this album',
+              onPressed: () {},
+            ),
           ),
           const SizedBox(height: WaxSpace.s16),
           for (var i = 0; i < tracks.length; i++)

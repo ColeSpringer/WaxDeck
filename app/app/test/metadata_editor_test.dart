@@ -22,6 +22,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 /// Hands back one in-memory image whatever is asked for.
 class _ImagePicker implements FilePickerPort {
@@ -181,6 +182,23 @@ void main() {
     // The four slots with nothing in them read as empty, not inherited:
     // only the front cover walks the chain.
     expect(find.text('Empty'), findsNWidgets(4));
+  });
+
+  testWidgets('the origin row is one ink press that opens the sheet', (
+    tester,
+  ) async {
+    await _pump(tester, _host(_container(_repo())));
+
+    final row = find.ancestor(
+      of: find.text(
+        'Recorded evidence of how this arrived. Tap to correct it.',
+      ),
+      matching: find.byType(WaxInkTappable),
+    );
+    expect(row, findsOneWidget);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.text('Where this came from'), findsOneWidget);
   });
 
   testWidgets('every slot says where its picture came from', (tester) async {
@@ -2618,6 +2636,49 @@ void main() {
     expect(repo.setItemLocksCalls.single.locked, isFalse);
   });
 
+  testWidgets('a busy cover slot draws its running action busy, under the '
+      'scrim', (tester) async {
+    final repo = _repo()
+      ..artRoles.add(
+        const ArtRoleInfo(role: 'back', locked: true, roleLocked: false),
+      );
+    final gate = Completer<void>();
+    repo.setItemLocksGate = gate;
+    await _pump(tester, _host(_container(repo, picker: _ImagePicker(_png()))));
+
+    final slot = find.bySemanticsIdentifier(SemanticsIds.artSlot('back'));
+    final pin = find.bySemanticsIdentifier(SemanticsIds.artLockRole('back'));
+    final set = find.bySemanticsIdentifier(SemanticsIds.artSlotSet('back'));
+    final clear = find.bySemanticsIdentifier(SemanticsIds.artSlotClear('back'));
+    await tester.ensureVisible(pin);
+    await tester.pumpAndSettle();
+    final scrim = WaxColors.of(tester.element(slot)).scrim;
+    bool dimmed() => tester
+        .widgetList<ColoredBox>(
+          find.descendant(of: slot, matching: find.byType(ColoredBox)),
+        )
+        .any((box) => box.color == scrim.withValues(alpha: 0.6));
+    Finder spinnerIn(Finder control) =>
+        find.descendant(of: control, matching: find.byType(WaxSpinner));
+    expect(dimmed(), isFalse);
+
+    await tester.tap(pin);
+    await tester.pump();
+    expect(dimmed(), isTrue);
+    expect(spinnerIn(pin), findsOneWidget);
+    expect(spinnerIn(set), findsNothing);
+    expect(spinnerIn(clear), findsNothing);
+    // The front tile's set waits for it rather than starting beside it.
+    final front = waxControl<WaxIconButton>(SemanticsIds.artSlotSet('front'));
+    expect(tester.widget<WaxIconButton>(front).onPressed, isNull);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(dimmed(), isFalse);
+    expect(spinnerIn(pin), findsNothing);
+    expect(tester.widget<WaxIconButton>(front).onPressed, isNotNull);
+  });
+
   testWidgets('an empty preview applies as the blind fetch', (tester) async {
     // "Fetch anyway" promises the one-shot: an empty-but-present
     // proposal would commit nothing and swallow the skip reasons.
@@ -2693,6 +2754,60 @@ void main() {
     // A typed stamp is the user's, at the second granularity they see.
     rows[0].startController.text = '0:11';
     expect(rows[0].startMs, 11000);
+  });
+
+  group('the save bar while a write runs', () {
+    Future<FakeRepository> edited(WidgetTester tester) async {
+      final repo = _repo();
+      await _pump(tester, _host(_container(repo)));
+      final title = find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.metadataField('title')),
+        matching: find.byType(EditableText),
+      );
+      await tester.enterText(title.first, 'New Title');
+      await tester.pumpAndSettle();
+      return repo;
+    }
+
+    WaxButton save(WidgetTester tester) => tester.widget<WaxButton>(
+      waxControl<WaxButton>(SemanticsIds.metadataSave),
+    );
+
+    testWidgets('another write leaves Save unavailable, not live', (
+      tester,
+    ) async {
+      final repo = await edited(tester);
+      final gate = repo.setItemLocksGate = Completer<void>();
+      final lock = find.bySemanticsIdentifier(SemanticsIds.fieldLock('artist'));
+      await tester.ensureVisible(lock);
+      await tester.pumpAndSettle();
+      await tester.tap(lock);
+      await tester.pump();
+
+      expect(
+        save(tester).onPressed,
+        isNull,
+        reason: 'a press would be dropped',
+      );
+      expect(save(tester).busy, isFalse, reason: 'the lock is not its work');
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(save(tester).onPressed, isNotNull);
+    });
+
+    testWidgets('its own save draws busy', (tester) async {
+      final repo = await edited(tester);
+      final gate = repo.editItemMetadataGate = Completer<void>();
+      final button = waxControl<WaxButton>(SemanticsIds.metadataSave);
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pump();
+
+      expect(save(tester).busy, isTrue);
+      gate.complete();
+      await tester.pumpAndSettle();
+    });
   });
 }
 

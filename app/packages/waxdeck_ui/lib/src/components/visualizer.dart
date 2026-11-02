@@ -215,7 +215,7 @@ class _VisualizerStageState extends State<VisualizerStage>
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
                 return GestureDetector(
-                  // The whole picture is the scrub surface (5.6): a
+                  // The whole picture is the scrub surface: a
                   // visualizer you cannot seek from is a screensaver.
                   behavior: HitTestBehavior.opaque,
                   // A tap previews on press and commits on release, so a

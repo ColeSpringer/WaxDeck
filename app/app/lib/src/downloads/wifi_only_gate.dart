@@ -75,3 +75,46 @@ final transferGateProvider = Provider<WifiOnlyGate>((ref) {
   });
   return gate;
 });
+
+/// Whether the wifi-only gate is what holds an unfinished transfer back:
+/// shut, and the transfer one the manager moves and the listener has not
+/// paused. One reading for an item's own state and for the Downloads
+/// screen's rows.
+bool heldForWifi({
+  required bool gateShut,
+  required bool paused,
+  required bool active,
+}) => gateShut && active && !paused;
+
+/// Whether the wifi-only gate holds transfers back now: one answer for
+/// every transfer, followed once however many surfaces draw one.
+///
+/// Follows the gate before asking it, so a change in between is not
+/// missed, and keeps only the latest answer: an ask that waited on the
+/// platform may come back after a newer change.
+final transfersHeldProvider = StreamProvider.autoDispose<bool>((ref) {
+  final WifiOnlyGate gate;
+  try {
+    gate = ref.watch(transferGateProvider);
+  } on Object {
+    // A gate that cannot be built holds nothing back this can name.
+    return Stream<bool>.value(false);
+  }
+  final out = StreamController<bool>();
+  var asks = 0;
+  final changes = gate.changes.listen((open) {
+    asks++;
+    out.add(!open);
+  }, onError: (Object _) {});
+  final ask = ++asks;
+  unawaited(
+    gate.isOpen().then((open) {
+      if (ask == asks && !out.isClosed) out.add(!open);
+    }, onError: (Object _) {}),
+  );
+  ref.onDispose(() {
+    unawaited(changes.cancel());
+    unawaited(out.close());
+  });
+  return out.stream.distinct();
+});

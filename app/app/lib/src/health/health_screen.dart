@@ -9,6 +9,8 @@ import '../media_view.dart';
 import '../organize/organize_labels.dart';
 import '../providers.dart';
 import '../settings/settings_registry.dart';
+import '../shell/async_box_face.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -180,9 +182,9 @@ class HealthScreen extends ConsumerWidget {
         ),
         child: switch (health) {
           AsyncData(:final value) => _body(context, ref, value, isAdmin),
-          AsyncError(:final error) => ErrorState(
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            health,
             title: l10n.healthLoadError,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(healthProvider),
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -455,7 +457,7 @@ class _RuleTable extends ConsumerWidget {
           container: true,
           label: reason,
           excludeSemantics: true,
-          child: Tooltip(
+          child: WaxTooltip(
             message: reason,
             child: Center(
               child: WaxIcon(
@@ -546,9 +548,9 @@ class _DuplicatesSection extends ConsumerWidget {
               onPressed: () => onMerge(group),
             ),
           ),
-          AsyncError(:final error) => ErrorState(
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            duplicates,
             title: l10n.healthDuplicatesError,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(duplicatesProvider),
             retrySemanticsId: SemanticsIds.duplicatesRetry,
           ),
@@ -657,9 +659,9 @@ class _UpgradesSection extends ConsumerWidget {
               onPressed: () => onResolve(group),
             ),
           ),
-          AsyncError(:final error) => ErrorState(
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            upgrades,
             title: l10n.healthUpgradesError,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(upgradesProvider),
             retrySemanticsId: SemanticsIds.upgradesRetry,
           ),
@@ -853,17 +855,21 @@ class HealthIssuesScreen extends ConsumerWidget {
         semanticsId: SemanticsIds.adminHealthRule,
         onBack: () => context.leave(fallback: WaxRoute.health),
         slivers: <Widget>[
-          switch (issues) {
-            AsyncData(:final value) when value.items.isEmpty =>
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: EmptyState(
-                  glyph: WaxIcons.success,
-                  title: context.l10n.healthIssuesEmptyTitle,
-                  message: context.l10n.healthIssuesEmptyMessage,
-                ),
+          AsyncSliverFace<HealthIssuesState>(
+            state: issues,
+            errorTitle: context.l10n.healthIssuesError,
+            onRetry: () => ref.invalidate(healthIssuesProvider(rule)),
+            skeletonFills: true,
+            isEmpty: (value) => value.items.isEmpty,
+            empty: (context, _) => SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyState(
+                glyph: WaxIcons.success,
+                title: context.l10n.healthIssuesEmptyTitle,
+                message: context.l10n.healthIssuesEmptyMessage,
               ),
-            AsyncData(:final value) => SliverPadding(
+            ),
+            builder: (context, value) => SliverPadding(
               padding: sizeClass.gutter,
               sliver: _list(
                 value,
@@ -871,19 +877,7 @@ class HealthIssuesScreen extends ConsumerWidget {
                 moving,
               ),
             ),
-            AsyncError(:final error) => SliverFillRemaining(
-              hasScrollBody: false,
-              child: ErrorState(
-                title: context.l10n.healthIssuesError,
-                message: context.explain(error),
-                onRetry: () => ref.invalidate(healthIssuesProvider(rule)),
-              ),
-            ),
-            _ => const SliverFillRemaining(
-              hasScrollBody: false,
-              child: SkeletonShapes(shape: SkeletonShape.list),
-            ),
-          },
+          ),
         ],
       ),
     );
@@ -900,16 +894,7 @@ class HealthIssuesScreen extends ConsumerWidget {
       // with it, when a fixed one drops out above it.
       findChildIndexCallback: indexByKey(state.items, _issueKey),
       itemBuilder: (context, index) => index >= state.items.length
-          ? const Padding(
-              padding: EdgeInsets.all(WaxSpace.s16),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
+          ? const SkeletonShapes(shape: SkeletonShape.list, count: 1)
           : _IssueRow(
               key: _issueKey(state.items[index]),
               issue: state.items[index],

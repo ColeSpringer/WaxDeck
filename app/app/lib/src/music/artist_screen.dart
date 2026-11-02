@@ -190,48 +190,50 @@ class _Header extends ConsumerWidget {
       artwork: ref
           .watch(artworkStoreProvider)
           .source(ref.watch(repositoryProvider).artUrlFor(pid)),
-      actions: <Widget>[
-        WaxButton(
+      actions: <WaxAction>[
+        WaxAction(
           label: l10n.musicPlay,
-          icon: WaxIcons.play,
+          glyph: WaxIcons.play,
+          emphasis: WaxActionEmphasis.primary,
           onPressed: tracks.isEmpty ? null : play,
           semanticsId: SemanticsIds.entityPlay,
         ),
-        WaxButton(
+        WaxAction(
           label: l10n.musicShuffle,
-          kind: WaxButtonKind.tonal,
-          icon: WaxIcons.shuffle,
+          glyph: WaxIcons.shuffle,
           onPressed: tracks.isEmpty ? null : () => play(shuffle: true),
           semanticsId: SemanticsIds.entityShuffle,
         ),
-        EntityStarRatingRow(pid: pid, label: l10n.libraryKindArtist),
-        WaxMenuButton<String>(
-          semanticsId: SemanticsIds.entityOverflow,
-          items: <WaxMenuItem<String>>[
-            pinMenuItem<String>(
-              context,
-              ref,
-              pid,
-              value: 'pin',
-              semanticsId: SemanticsIds.entityPin,
-            ),
-            // The entity editor's door, only for who its every save
-            // answers: sort, identifier, and picture are shared by
-            // everyone who can see the artist.
-            if (ref.watch(isAdminProvider))
-              WaxMenuItem<String>(
-                value: 'edit',
-                label: l10n.musicArtistEditMetadata,
-                glyph: WaxIcons.edit,
-                semanticsId: SemanticsIds.entityEditMetadata,
-              ),
-          ],
-          onSelected: (value) => switch (value) {
-            'edit' => context.push(WaxRoute.metadata(pid)),
-            _ => unawaited(togglePin(context, ref, pid, label: name)),
-          },
-        ),
       ],
+      trailing: <Widget>[
+        EntityStarRatingRow(pid: pid, label: l10n.libraryKindArtist),
+      ],
+      overflow: WaxMenuButton<String>(
+        semanticsId: SemanticsIds.entityOverflow,
+        items: <WaxMenuItem<String>>[
+          pinMenuItem<String>(
+            context,
+            ref,
+            pid,
+            value: 'pin',
+            semanticsId: SemanticsIds.entityPin,
+          ),
+          // The entity editor's door, only for who its every save
+          // answers: sort, identifier, and picture are shared by
+          // everyone who can see the artist.
+          if (ref.watch(isAdminProvider))
+            WaxMenuItem<String>(
+              value: 'edit',
+              label: l10n.musicArtistEditMetadata,
+              glyph: WaxIcons.edit,
+              semanticsId: SemanticsIds.entityEditMetadata,
+            ),
+        ],
+        onSelected: (value) => switch (value) {
+          'edit' => context.push(WaxRoute.metadata(pid)),
+          _ => unawaited(togglePin(context, ref, pid, label: name)),
+        },
+      ),
     );
   }
 }

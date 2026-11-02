@@ -311,4 +311,4 @@ final playlistDetailProvider =
 /// The rule vocabulary, fetched once per session and on invalidation.
 final ruleFieldsProvider = FutureProvider<RuleFields>((ref) {
   return ref.watch(repositoryProvider).getRuleFields();
-});
+}, retry: retryUnlessRefused);

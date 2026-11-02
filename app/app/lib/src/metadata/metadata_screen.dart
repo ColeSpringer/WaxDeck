@@ -9,7 +9,9 @@ import '../library/item_kind.dart';
 import '../media_view.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/forbidden_page.dart';
+import '../shell/in_flight.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -117,13 +119,13 @@ class MetadataPane extends ConsumerStatefulWidget {
   ConsumerState<MetadataPane> createState() => _MetadataPaneState();
 }
 
-class _MetadataPaneState extends ConsumerState<MetadataPane> {
+class _MetadataPaneState extends ConsumerState<MetadataPane>
+    with InFlight<MetadataPane, _Work> {
   final _draft = MetadataDraft();
 
   var _writeBack = false;
   var _lock = true;
   var _force = false;
-  var _busy = false;
 
   /// Write-back failures from the last save, rendered as a warning
   /// list beside the save bar; a partial tag write is not an error.
@@ -165,26 +167,24 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
     super.dispose();
   }
 
-  Future<void> _run(Future<void> Function() action) async {
-    if (_busy) return;
-    setState(() => _busy = true);
+  Future<void> _run(_Work work, Future<void> Function() action) {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    try {
-      await action();
-    } on WaxDeckApiException catch (e) {
-      // The server's own sentence, kept: it names which field refused,
-      // which is the whole of what an administrator needs when three
-      // were edited and one is locked. The client adds the half the
-      // server cannot know - the switch on this page that overrides it.
-      messenger.show(
-        e.code == 'field-locked'
-            ? '${e.message}. ${l10n.metadataFieldLockedHint}'
-            : explainError(l10n, e),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    return runAs(work, () async {
+      try {
+        await action();
+      } on WaxDeckApiException catch (e) {
+        // The server's own sentence, kept: it names which field refused,
+        // which is the whole of what an administrator needs when three
+        // were edited and one is locked. The client adds the half the
+        // server cannot know - the switch on this page that overrides it.
+        messenger.show(
+          e.code == 'field-locked'
+              ? '${e.message}. ${l10n.metadataFieldLockedHint}'
+              : explainError(l10n, e),
+        );
+      }
+    });
   }
 
   /// Whether write-back is offered at all: episodes never write back to
@@ -193,7 +193,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
   static bool _canWriteBack(MetadataEditorState state) =>
       state.metadata.mediaType != MediaType.podcast;
 
-  Future<void> _save(MetadataEditorState state) => _run(() async {
+  Future<void> _save(MetadataEditorState state) => _run(_Work.save, () async {
     final l10n = context.l10n;
     final changes = _draft.changes(state);
     if (changes.isEmpty) return;
@@ -239,7 +239,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
     if (picked != null) _draft.setGenres(picked);
   }
 
-  Future<void> _rematch() => _run(() async {
+  Future<void> _rematch() => _run(_Work.rematch, () async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     // Hoisted: the message outlives this screen, and a closure over its
@@ -273,34 +273,37 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
   /// writes those values rather than fetching fresh ones. An empty
   /// preview still offers the fetch - the catalog's built-ins cannot be
   /// previewed and may fill gaps the injected providers left.
-  Future<void> _enrich(MetadataEditorState state) => _run(() async {
-    final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    final controller = ref.read(
-      metadataControllerProvider(widget.pid).notifier,
-    );
-    final wants = _wantsFor(state.metadata.mediaType);
-    final preview = await controller.previewEnrich(wants);
-    if (!mounted) return;
-    final approved = await showEnrichPreviewSheet(context, preview: preview);
-    if (!approved || !mounted) return;
-    // An empty preview applies with no proposal at all: "Fetch anyway"
-    // promises the blind one-shot, and an empty-but-present proposal
-    // would commit nothing and swallow the skip reasons instead.
-    final result = await controller.enrich(
-      wants,
-      proposal: preview.isEmpty ? null : preview.proposal,
-    );
-    final parts = <String>[
-      if (result.applied.isNotEmpty)
-        l10n.metadataEnrichApplied(result.applied.join(', ')),
-      if (result.skipped.isNotEmpty)
-        l10n.metadataEnrichSkipped(result.skipped.join(', ')),
-    ];
-    messenger.show(
-      parts.isEmpty ? l10n.metadataNothingToFetch : parts.join('. '),
-    );
-  });
+  Future<void> _enrich(MetadataEditorState state) =>
+      _run(_Work.enrich, () async {
+        final l10n = context.l10n;
+        final messenger = ref.read(shellMessengerProvider.notifier);
+        final controller = ref.read(
+          metadataControllerProvider(widget.pid).notifier,
+        );
+        final wants = _wantsFor(state.metadata.mediaType);
+        final preview = await controller.previewEnrich(wants);
+        if (!mounted) return;
+        final approved = await whileAsking(
+          () => showEnrichPreviewSheet(context, preview: preview),
+        );
+        if (!approved || !mounted) return;
+        // An empty preview applies with no proposal at all: "Fetch anyway"
+        // promises the blind one-shot, and an empty-but-present proposal
+        // would commit nothing and swallow the skip reasons instead.
+        final result = await controller.enrich(
+          wants,
+          proposal: preview.isEmpty ? null : preview.proposal,
+        );
+        final parts = <String>[
+          if (result.applied.isNotEmpty)
+            l10n.metadataEnrichApplied(result.applied.join(', ')),
+          if (result.skipped.isNotEmpty)
+            l10n.metadataEnrichSkipped(result.skipped.join(', ')),
+        ];
+        messenger.show(
+          parts.isEmpty ? l10n.metadataNothingToFetch : parts.join('. '),
+        );
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -342,11 +345,11 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
               padding: padding,
               child: _body(context, value, changes!, sizeClass),
             ),
-            AsyncError(:final error) => Padding(
+            AsyncValue(hasError: true) => Padding(
               padding: padding,
-              child: ErrorState(
+              child: AsyncFailureCard.from(
+                editor,
                 title: context.l10n.metadataLoadError,
-                message: context.explain(error),
                 onRetry: () =>
                     ref.invalidate(metadataControllerProvider(widget.pid)),
               ),
@@ -360,7 +363,8 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
         if (editor case AsyncData(:final value))
           MetadataSaveBar(
             count: changes!.count,
-            busy: _busy,
+            busy: busy,
+            saving: busyBy(_Work.save),
             onSave: () => _save(value),
             writeBackFailures: _writeBackFailures,
             onDismissFailures: () =>
@@ -378,15 +382,16 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
   ) {
     final left = <Widget>[
       _fieldsSection(context, state, changes),
-      MetadataCreditsSection(state: state, draft: _draft, busy: _busy),
-      MetadataTagsSection(state: state, draft: _draft, busy: _busy),
+      MetadataCreditsSection(state: state, draft: _draft, busy: busy),
+      MetadataTagsSection(state: state, draft: _draft, busy: busy),
       if (state.metadata.mediaType == MediaType.audiobook)
         MetadataChaptersSection(
           pid: widget.pid,
           state: state,
           draft: _draft,
-          busy: _busy,
+          busy: busy,
           onToggleLock: () => _run(
+            _Work.lock,
             () => ref
                 .read(metadataControllerProvider(widget.pid).notifier)
                 .setLock('chapters', locked: !state.isLocked('chapters')),
@@ -475,8 +480,9 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
             state: state,
             draft: _draft,
             dirty: changed.containsKey(field.name),
-            busy: _busy,
+            busy: busy,
             onToggleLock: () => _run(
+              _Work.lock,
               () => ref
                   .read(metadataControllerProvider(widget.pid).notifier)
                   .setLock(field.name, locked: !state.isLocked(field.name)),
@@ -566,7 +572,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
             // Disabled while a save is in flight: a flip back to the
             // seeded value mid-save reads as untouched once the refetch
             // lands, and the second decision would be discarded.
-            onChanged: _busy ? null : (v) => _draft.setUnofficial(value: v),
+            onChanged: busy ? null : (v) => _draft.setUnofficial(value: v),
           ),
         ),
       ],
@@ -578,7 +584,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
     final l10n = context.l10n;
     // A kind change leaves for what the item became, so it waits for
     // the draft to be saved or dropped rather than discarding it.
-    final kindBlocked = _busy || !_draft.changes(state).isEmpty;
+    final kindBlocked = busy || !_draft.changes(state).isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -597,14 +603,16 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.search,
               semanticsId: SemanticsIds.metadataRematch,
-              onPressed: _busy ? null : _rematch,
+              busy: busyBy(_Work.rematch),
+              onPressed: busy ? null : _rematch,
             ),
             WaxButton(
               label: l10n.metadataFetch,
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.downloads,
               semanticsId: SemanticsIds.metadataEnrich,
-              onPressed: _busy ? null : () => _enrich(state),
+              busy: busyBy(_Work.enrich),
+              onPressed: busy ? null : () => _enrich(state),
             ),
             // What the item is, beside how it is identified: a book read
             // as music is put right here rather than by editing fields
@@ -865,20 +873,14 @@ class _OriginBlock extends StatelessWidget {
     );
     if (onEdit == null) return text;
     final radius = BorderRadius.circular(WaxRadius.r6);
-    return WaxTappable(
+    return WaxInkTappable(
       label: line,
       semanticsId: SemanticsIds.originEdit,
       onPressed: onEdit,
       borderRadius: radius,
-      // WaxTappable adds no gesture by design, so the ink is ours or
-      // the row announces as a button and answers no pointer.
-      child: InkWell(
-        onTap: onEdit,
-        borderRadius: radius,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: WaxSpace.s4),
-          child: text,
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: WaxSpace.s4),
+        child: text,
       ),
     );
   }
@@ -1038,3 +1040,6 @@ class _LyricsPreview extends StatelessWidget {
     );
   }
 }
+
+/// The editor's writes, one at a time.
+enum _Work { save, rematch, enrich, lock }

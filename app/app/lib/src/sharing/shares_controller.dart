@@ -102,6 +102,7 @@ class SharesController extends AsyncNotifier<SharesState> {
 
 final sharesProvider = AsyncNotifierProvider<SharesController, SharesState>(
   SharesController.new,
+  retry: retryUnlessRefused,
 );
 
 /// Every account's share links, for the console's oversight section.
@@ -111,6 +112,7 @@ final sharesProvider = AsyncNotifierProvider<SharesController, SharesState>(
 final adminSharesProvider =
     AsyncNotifierProvider<SharesController, SharesState>(
       () => SharesController(all: true),
+      retry: retryUnlessRefused,
     );
 
 /// Refreshes both share listings, which overlap: every row on the

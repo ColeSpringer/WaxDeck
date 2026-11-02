@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { J, T, retryCatalogBusy } from './driver';
+import { J, T, clickUntilRequested, retryCatalogBusy } from './driver';
 import { SemanticsIds } from './semantics-ids';
 
 // The podcast domain over the real stack. The feed host (feedserv)
@@ -28,7 +28,8 @@ import { SemanticsIds } from './semantics-ids';
 //       unfetch is its subject - and then plays it with no bytes there.
 //   [2] the journey's alone: unfetched as a precondition, fetched
 //       through the UI (from the hub's Latest row, then removed and
-//       fetched again from the show's row), played.
+//       fetched again from the show's row, and fetched and removed
+//       through the episode screen's own slot), played.
 //   [3] the share test's alone (sharing-stats.spec.ts): unfetched as a
 //       precondition and never fetched, so its link plays before the
 //       server holds it.
@@ -165,6 +166,34 @@ test('subscribe, fetch, and play an episode with silence trimming', async (
     if (await held()) await app.podcasts.episodeRemove(episode.pid).click({ timeout: T.step });
     expect(await held(), 'the removal should unfetch the episode').toBe(false);
   }).toPass({ timeout: T.fetch });
+
+  // The episode's own screen has the same slot: one pill through fetch and
+  // remove. The show's row underneath carries the same ids until the page
+  // transition is over, so the clicks wait for it to be gone first. The
+  // episode ends unfetched, as the next step expects.
+  await app.podcasts.openEpisodeInfo(
+    episode.pid,
+    app.podcasts.control(SemanticsIds.episodeShare),
+  );
+  await expect(app.podcasts.episode(episode.pid)).toBeHidden({ timeout: T.nav });
+  await clickUntilRequested(
+    app.page,
+    app.podcasts.episodeFetch(episode.pid),
+    (r) => r.method() === 'POST' && r.url().endsWith(`/episodes/${episode.pid}/fetch`),
+  );
+  await expect(app.podcasts.episodeRemove(episode.pid)).toBeVisible({ timeout: T.fetch });
+  await expect(async () => {
+    if (await app.podcasts.episodeRemove(episode.pid).isVisible()) {
+      await app.podcasts.episodeRemove(episode.pid).click({ timeout: T.step });
+    }
+    await expect(app.podcasts.episodeFetch(episode.pid)).toBeVisible({ timeout: T.step });
+  }).toPass({ timeout: T.fetch });
+  await app.podcasts.back(app.podcasts.unsubscribe());
+  // The leaving screen carries the same ids until the pop is over.
+  await expect(app.podcasts.control(SemanticsIds.episodeShare)).toBeHidden({
+    timeout: T.nav,
+  });
+
   await app.podcasts.episodeFetch(episode.pid).click({ timeout: T.nav });
   await expect
     .poll(

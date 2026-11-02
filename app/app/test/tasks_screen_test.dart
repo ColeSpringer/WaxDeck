@@ -114,10 +114,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(
-        of: runningRow,
-        matching: find.byType(LinearProgressIndicator),
-      ),
+      find.descendant(of: runningRow, matching: find.byType(WaxProgressBar)),
       findsOneWidget,
     );
     // A running task has nothing to dismiss.
@@ -182,7 +179,7 @@ void main() {
     expect(find.textContaining('Running'), findsNothing);
     expect(find.textContaining('100%'), findsNothing);
     expect(
-      find.descendant(of: row, matching: find.byType(LinearProgressIndicator)),
+      find.descendant(of: row, matching: find.byType(WaxProgressBar)),
       findsNothing,
       reason: 'a finished bar over a task that waits reads as done',
     );
@@ -456,7 +453,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: row, matching: find.byType(LinearProgressIndicator)),
+      find.descendant(of: row, matching: find.byType(WaxProgressBar)),
       findsNothing,
     );
     // Finished, so it says nothing of a trash it is no longer working

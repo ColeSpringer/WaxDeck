@@ -7,6 +7,7 @@ import '../l10n/l10n.dart';
 import '../music/album_detail.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'metadata_controller.dart';
@@ -232,11 +233,11 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
       identifier: SemanticsIds.workbenchBulkPane,
       child: switch (seedAsync) {
         AsyncValue(value: final seed?) => _form(seed),
-        AsyncValue(hasError: true, error: final Object error) => Padding(
+        AsyncValue(hasError: true) => Padding(
           padding: const EdgeInsets.all(WaxSpace.s16),
-          child: ErrorState(
+          child: AsyncFailureCard.from(
+            seedAsync,
             title: l10n.metadataLoadError,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(_bulkSeedProvider(_seedKey)),
           ),
         ),
@@ -312,6 +313,8 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
         MetadataSaveBar(
           count: staged.length,
           busy: _busy || widget.pids.length > metadataBulkEditCap,
+          // The save is the pane's one write.
+          saving: _busy,
           onSave: () => _save(staged),
           saveSemanticsId: SemanticsIds.workbenchBulkSave,
           writeBackFailures: _writeBackFailures,

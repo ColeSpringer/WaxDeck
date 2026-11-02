@@ -56,3 +56,33 @@ class ForbiddenPage extends StatelessWidget {
     ],
   );
 }
+
+/// What a location [ForbiddenPage] guards draws while the session that
+/// decides it is still being read: the page's frame and a ghost, so an
+/// account that may have it never sees the refusal first.
+class SessionPendingPage extends StatelessWidget {
+  const SessionPendingPage({
+    required this.pageTitle,
+    this.fallback = WaxRoute.home,
+    super.key,
+  });
+
+  /// The same bar the refusal and the screen draw, so nothing above the
+  /// content moves when the answer lands.
+  final String pageTitle;
+
+  final String fallback;
+
+  @override
+  Widget build(BuildContext context) => WaxScaffold(
+    title: pageTitle,
+    largeTitle: false,
+    onBack: () => context.leave(fallback: fallback),
+    slivers: const <Widget>[
+      SliverFillRemaining(
+        hasScrollBody: false,
+        child: SkeletonShapes(shape: SkeletonShape.list),
+      ),
+    ],
+  );
+}

@@ -27,6 +27,7 @@ class AdminSettingsController extends AsyncNotifier<AdminSettings> {
 final adminSettingsProvider =
     AsyncNotifierProvider<AdminSettingsController, AdminSettings>(
       AdminSettingsController.new,
+      retry: retryUnlessRefused,
     );
 
 /// Transcoding concurrency and bitrate ceilings.
@@ -88,6 +89,7 @@ class SchedulesController extends AsyncNotifier<List<Schedule>> {
 final schedulesProvider =
     AsyncNotifierProvider<SchedulesController, List<Schedule>>(
       SchedulesController.new,
+      retry: retryUnlessRefused,
     );
 
 /// How often the archive list is read while one is being made.
@@ -162,6 +164,7 @@ final librariesProvider = FutureProvider<List<LibraryInfo>>(
 /// library, asked for by the table that shows it.
 final libraryCountsProvider = FutureProvider<List<LibraryInfo>>(
   (ref) => ref.watch(repositoryProvider).listLibraries(counts: true),
+  retry: retryUnlessRefused,
 );
 
 /// One library's matching behavior, keyed by pid.
@@ -235,6 +238,7 @@ class GenreTreeController extends AsyncNotifier<GenreTree> {
 
 final genreTreeProvider = AsyncNotifierProvider<GenreTreeController, GenreTree>(
   GenreTreeController.new,
+  retry: retryUnlessRefused,
 );
 
 /// The staged restore, or null when none is staged.
@@ -288,6 +292,7 @@ class TrashController extends AsyncNotifier<TrashList> {
 
 final trashProvider = AsyncNotifierProvider<TrashController, TrashList>(
   TrashController.new,
+  retry: retryUnlessRefused,
 );
 
 /// The generated-thumbnail cache, with the prune acting on it.

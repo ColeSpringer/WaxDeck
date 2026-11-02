@@ -9,6 +9,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../settings/settings_registry.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/side_panel.dart';
@@ -90,30 +91,31 @@ class LyricsSurface extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final words = ref.watch(lyricsProvider(item.pid));
-    return words.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => ErrorState(
+    // A switch rather than `when`: `when` answers loading for a read that
+    // is retrying, which drew the skeleton over the failure for the whole
+    // of Riverpod's backoff.
+    return switch (words) {
+      AsyncValue(hasError: true) => AsyncFailureCard.from(
+        words,
         title: context.l10n.playerLyricsError,
-        message: context.explain(error),
         onRetry: () => ref.invalidate(lyricsProvider(item.pid)),
         semanticsId: SemanticsIds.lyricsSurface,
       ),
-      data: (lyrics) {
-        if (lyrics == null) return _Absent(pid: item.pid);
-        return LyricsView(
-          position: position,
-          lines: lyrics.lines,
-          text: lyrics.text,
-          // Only timed lines can be aimed at. An untimed block is a page
-          // of text, and a tap on a paragraph that jumped playback
-          // somewhere would be a guess wearing a control's clothes.
-          onSeek: lyrics.isSynced ? (at) => unawaited(session.seek(at)) : null,
-          semanticsId: SemanticsIds.lyricsSurface,
-          lineSemanticsId: SemanticsIds.lyricsLine,
-          followSemanticsId: SemanticsIds.lyricsFollow,
-        );
-      },
-    );
+      AsyncValue(hasValue: true, value: null) => _Absent(pid: item.pid),
+      AsyncValue(value: final lyrics?) => LyricsView(
+        position: position,
+        lines: lyrics.lines,
+        text: lyrics.text,
+        // Only timed lines can be aimed at. An untimed block is a page
+        // of text, and a tap on a paragraph that jumped playback
+        // somewhere would be a guess wearing a control's clothes.
+        onSeek: lyrics.isSynced ? (at) => unawaited(session.seek(at)) : null,
+        semanticsId: SemanticsIds.lyricsSurface,
+        lineSemanticsId: SemanticsIds.lyricsLine,
+        followSemanticsId: SemanticsIds.lyricsFollow,
+      ),
+      _ => const SkeletonShapes(shape: SkeletonShape.list, count: 4),
+    };
   }
 }
 
@@ -214,7 +216,7 @@ bool lyricsAvailable(NowPlaying now) =>
 /// Opens the lyrics wherever this caller keeps them.
 ///
 /// The panel beside the content where there is room for one and
-/// something to put it beside, an overlay otherwise (5.6). [overShell]
+/// something to put it beside, an overlay otherwise. [overShell]
 /// is the second half of that condition and the player is why it exists:
 /// `/now-playing` is a route pushed over the shell, so it covers the
 /// panel slot, and a control that lit up while the panel opened behind

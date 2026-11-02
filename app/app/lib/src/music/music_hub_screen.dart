@@ -225,49 +225,40 @@ class _IndexChip extends ConsumerWidget {
         ? null
         : ref.watch(musicIndexCountProvider(dimension)).value;
 
-    return WaxTappable(
+    return WaxInkTappable(
       semanticsId: SemanticsIds.musicTile(tile.name),
       label: count == null
           ? tile.label
           : context.l10n.musicHubTileSpoken(tile.label, count.label),
       onPressed: () => context.go(tile.location),
+      color: colors.surface1,
       borderRadius: WaxRadius.pill,
-      child: Material(
-        color: colors.surface1,
-        borderRadius: WaxRadius.pill,
-        child: InkWell(
-          onTap: () => context.go(tile.location),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: WaxSpace.s16,
+          vertical: WaxSpace.s8,
+        ),
+        decoration: BoxDecoration(
           borderRadius: WaxRadius.pill,
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: WaxSpace.s16,
-              vertical: WaxSpace.s8,
+          border: Border.all(color: colors.hairline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            WaxIcon(tile.glyph, size: 16, color: colors.accent),
+            const SizedBox(width: WaxSpace.s8),
+            Text(
+              tile.label,
+              style: WaxType.label.copyWith(color: colors.textPrimary),
             ),
-            decoration: BoxDecoration(
-              borderRadius: WaxRadius.pill,
-              border: Border.all(color: colors.hairline),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                WaxIcon(tile.glyph, size: 16, color: colors.accent),
-                const SizedBox(width: WaxSpace.s8),
-                Text(
-                  tile.label,
-                  style: WaxType.label.copyWith(color: colors.textPrimary),
-                ),
-                if (count != null) ...<Widget>[
-                  const SizedBox(width: WaxSpace.s8),
-                  Text(
-                    count.label,
-                    style: WaxType.monoData.copyWith(
-                      color: colors.textTertiary,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+            if (count != null) ...<Widget>[
+              const SizedBox(width: WaxSpace.s8),
+              Text(
+                count.label,
+                style: WaxType.monoData.copyWith(color: colors.textTertiary),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -306,54 +297,45 @@ class _IndexTile extends ConsumerWidget {
         ? null
         : ref.watch(musicIndexCountProvider(dimension)).value;
 
-    return WaxTappable(
+    return WaxInkTappable(
       semanticsId: SemanticsIds.musicTile(tile.name),
       label: count == null
           ? tile.label
           : context.l10n.musicHubTileSpoken(tile.label, count.label),
       onPressed: () => context.go(tile.location),
+      color: colors.surface1,
       borderRadius: WaxRadius.card,
-      child: Material(
-        color: colors.surface1,
-        borderRadius: WaxRadius.card,
-        child: InkWell(
-          onTap: () => context.go(tile.location),
+      child: Container(
+        padding: const EdgeInsets.all(WaxSpace.s12),
+        decoration: BoxDecoration(
           borderRadius: WaxRadius.card,
-          child: Container(
-            padding: const EdgeInsets.all(WaxSpace.s12),
-            decoration: BoxDecoration(
-              borderRadius: WaxRadius.card,
-              border: Border.all(color: colors.hairline),
-            ),
-            child: Column(
+          border: Border.all(color: colors.hairline),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            WaxIcon(tile.glyph, size: _glyph, color: colors.accent),
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                WaxIcon(tile.glyph, size: _glyph, color: colors.accent),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Text(
-                      tile.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: WaxType.titleItem.copyWith(
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                    if (count != null)
-                      Text(
-                        count.label,
-                        style: WaxType.monoData.copyWith(
-                          color: colors.textTertiary,
-                        ),
-                      ),
-                  ],
+                Text(
+                  tile.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: WaxType.titleItem.copyWith(color: colors.textPrimary),
                 ),
+                if (count != null)
+                  Text(
+                    count.label,
+                    style: WaxType.monoData.copyWith(
+                      color: colors.textTertiary,
+                    ),
+                  ),
               ],
             ),
-          ),
+          ],
         ),
       ),
     );

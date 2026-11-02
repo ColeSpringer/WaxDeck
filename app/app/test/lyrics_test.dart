@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -102,6 +104,70 @@ void main() {
 
     expect(harness.container.read(sidePanelProvider), isNull);
     expect(find.text('The tide comes in'), findsOneWidget);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a failed read shows its error while it retries', (tester) async {
+    // Not a skeleton through Riverpod's backoff: the failure is said at
+    // once, and its Try again is busy while the retry runs.
+    _wide(tester);
+    final repo = FakeRepository()
+      ..lyricsError = const WaxDeckApiException(
+        code: 'internal',
+        message: 'down',
+        statusCode: 500,
+      );
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+      item: testItem(_pid),
+      host: (player) => routedHost(player),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerLyrics));
+    await tester.pump();
+    await tester.pump();
+    // Every retry from here on waits, as on a server that has gone away.
+    repo.lyricsGate = Completer<void>();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(find.byType(ErrorState), findsOneWidget);
+    expect(find.byType(SkeletonShapes), findsNothing);
+    final retry = find.widgetWithText(WaxButton, 'Try again');
+    expect(tester.widget<WaxButton>(retry).busy, isTrue);
+    repo
+      ..lyricsError = null
+      ..lyricsGate!.complete();
+    await tester.pumpAndSettle();
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('the words wait within a short window', (tester) async {
+    _phone(tester);
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..lyrics[_pid] = _synced
+      ..lyricsGate = gate;
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+      item: testItem(_pid),
+      host: (player) => routedHost(player),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerLyrics));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    tester.view.physicalSize = const Size(400, 240);
+    await tester.pump();
+
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    tester.view.resetPhysicalSize();
+    gate.complete();
+    await tester.pumpAndSettle();
     await harness.endPlayback(tester);
   });
 

@@ -18,6 +18,7 @@ import '../shell/server_health.dart';
 import '../shell/shell_messages.dart';
 import 'credits.dart';
 import 'episode_actions.dart';
+import 'episode_fetch.dart';
 import 'episode_row.dart';
 import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
@@ -52,6 +53,9 @@ class ShowScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<ShowScreen> createState() => _ShowScreenState();
 }
+
+/// The Load more footer under the episode rows.
+const _footerKey = ValueKey<String>('episodes-load-more');
 
 class _ShowScreenState extends ConsumerState<ShowScreen> {
   var _filter = EpisodeFilterChoice.all;
@@ -112,17 +116,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         title: title,
         largeTitle: false,
         onBack: () => context.leave(fallback: WaxRoute.podcasts),
-        actions: <Widget>[
-          if (detail.value?.subscribed ?? false)
-            WaxIconButton(
-              glyph: WaxIcons.settings,
-              label: l10n.podcastSettingsTitle,
-              semanticsId: SemanticsIds.podcastSettingsOpen,
-              onPressed: () => _openSettings(context),
-            ),
-          _ShowOverflow(pid: widget.pid, episodes: loaded),
-          const SearchAction(),
-        ],
+        actions: const <Widget>[SearchAction()],
         slivers: <Widget>[
           AsyncSliverFace<PodcastDetail>(
             state: detail,
@@ -130,7 +124,11 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
             errorTitle: l10n.podcastShowLoadError,
             onRetry: () => ref.invalidate(podcastDetailProvider(widget.pid)),
             builder: (context, value) => SliverToBoxAdapter(
-              child: _ShowHeader(pid: widget.pid, detail: value),
+              child: _ShowHeader(
+                pid: widget.pid,
+                detail: value,
+                onOpenSettings: () => _openSettings(context),
+              ),
             ),
           ),
           // Gated the way the face above decides: a value carried under a
@@ -315,14 +313,10 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
                   value.items.length,
                 ),
                 glyph: WaxIcons.podcasts,
-                actionLabel: loadingMore
-                    ? l10n.podcastLoadingMore
-                    : l10n.podcastLoadMore,
-                onAction: loadingMore
-                    ? null
-                    : () => ref
-                          .read(episodesProvider(widget.pid).notifier)
-                          .loadMore(),
+                actionLabel: l10n.podcastLoadMore,
+                actionBusy: loadingMore,
+                onAction: () =>
+                    ref.read(episodesProvider(widget.pid).notifier).loadMore(),
               )
             : EmptyState(
                 title: _narrowed
@@ -357,28 +351,25 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     // Under the rows rather than beside the filters: a list long enough
     // to scroll has already paged by the time this is reached.
     final footer = loadingMore || loadMore;
+    final rows = indexByKey(visible, episodeRowKey);
     return SliverPadding(
       padding: EdgeInsets.symmetric(
         horizontal: sizeClass.gutter.horizontal / 2,
       ),
       sliver: SliverList.builder(
         itemCount: visible.length + (footer ? 1 : 0),
-        findChildIndexCallback: indexByKey(visible, episodeRowKey),
+        // Keyed like the rows, so a filter that moves it mid-page keeps
+        // the press it holds.
+        findChildIndexCallback: (key) =>
+            key == _footerKey ? (footer ? visible.length : null) : rows(key),
         itemBuilder: (context, index) {
           if (index >= visible.length) {
-            return Padding(
-              padding: const EdgeInsets.all(WaxSpace.s16),
-              child: Center(
-                child: loadingMore
-                    ? const CircularProgressIndicator()
-                    : WaxButton(
-                        label: context.l10n.podcastLoadMore,
-                        kind: WaxButtonKind.text,
-                        onPressed: () => ref
-                            .read(episodesProvider(widget.pid).notifier)
-                            .loadMore(),
-                      ),
-              ),
+            return LoadMoreFooter(
+              key: _footerKey,
+              label: context.l10n.podcastLoadMore,
+              loading: loadingMore,
+              onLoadMore: () =>
+                  ref.read(episodesProvider(widget.pid).notifier).loadMore(),
             );
           }
           final episode = visible[index];
@@ -452,7 +443,10 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     var queued = 0;
     String? failure;
     for (final episode in chosen) {
-      if (episode.downloaded || episode.fetchState == 'queued') continue;
+      if (episodeFetchOf(episode)
+          case EpisodeFetchDone() || EpisodeFetchQueued()) {
+        continue;
+      }
       try {
         await notifier.fetchEpisode(episode.pid);
         queued++;
@@ -515,45 +509,47 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
   }
 }
 
-/// The show's own actions, past the ones the bar has room for.
+/// The show's own actions, past follow and support.
 class _ShowOverflow extends ConsumerWidget {
-  const _ShowOverflow({required this.pid, required this.episodes});
+  const _ShowOverflow({required this.detail});
 
-  final String pid;
-  final List<EpisodeSummary> episodes;
+  final PodcastDetail detail;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detail = ref.watch(podcastDetailProvider(pid)).value;
+    final pid = detail.show.pid;
     return WaxMenuButton<ShowAction>(
       glyph: WaxIcons.more,
       label: context.l10n.podcastShowMore,
       semanticsId: SemanticsIds.showOverflow,
-      items: showMenuItems(
-        context,
-        ref,
-        pid,
-        subscribed: detail?.subscribed ?? false,
-      ),
+      items: showMenuItems(context, ref, pid, subscribed: detail.subscribed),
       onSelected: (action) => unawaited(
         runShowAction(
           context,
           ref,
           action,
           pid: pid,
-          title: detail?.show.title,
-          hasArtwork: detail?.show.artSource != null,
+          title: detail.show.title,
+          hasArtwork: detail.show.artSource != null,
         ),
       ),
     );
   }
 }
 
+/// Follow and Following share one place in the header's row.
+const _followSlot = #follow;
+
 class _ShowHeader extends ConsumerWidget {
-  const _ShowHeader({required this.pid, required this.detail});
+  const _ShowHeader({
+    required this.pid,
+    required this.detail,
+    required this.onOpenSettings,
+  });
 
   final String pid;
   final PodcastDetail detail;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -592,20 +588,22 @@ class _ShowHeader extends ConsumerWidget {
           // somebody replaced by hand says so.
           artworkCaption: artSourceLabelWithBorrow(l10n, show.artSource),
           artwork: ref.watch(artworkStoreProvider).source(show.artUrl),
-          actions: <Widget>[
+          actions: <WaxAction>[
             if (detail.subscribed)
-              WaxButton(
+              WaxAction(
                 label: l10n.podcastFollowing,
-                kind: WaxButtonKind.tonal,
-                icon: WaxIcons.check,
+                glyph: WaxIcons.check,
+                slot: _followSlot,
                 semanticsId: SemanticsIds.podcastUnsubscribe,
                 onPressed: () => unawaited(_unsubscribe(context, ref, guarded)),
               )
             // A server whose podcasts are off refuses the follow.
             else if (ref.watch(podcastsOnProvider))
-              WaxButton(
+              WaxAction(
                 label: l10n.podcastFollow,
-                icon: WaxIcons.add,
+                glyph: WaxIcons.add,
+                emphasis: WaxActionEmphasis.primary,
+                slot: _followSlot,
                 semanticsId: SemanticsIds.podcastSubscribe,
                 // A private show's address is its followers' alone, so it
                 // is followed by the address the listener was given.
@@ -619,16 +617,28 @@ class _ShowHeader extends ConsumerWidget {
                     : () => unawaited(guarded(notifier.subscribe)),
               ),
             if (show.funding != null)
-              WaxButton(
+              WaxAction(
                 label: show.funding!.message?.isNotEmpty ?? false
                     ? show.funding!.message!
                     : l10n.podcastSupportShow,
-                kind: WaxButtonKind.text,
-                icon: WaxIcons.star,
+                // It leaves the app, so neither the rating star nor a
+                // heart.
+                glyph: WaxIcons.openExternal,
+                semanticsId: SemanticsIds.podcastSupport,
                 onPressed: () =>
                     ref.read(urlOpenerProvider).open(show.funding!.url),
               ),
           ],
+          trailing: <Widget>[
+            if (detail.subscribed)
+              WaxIconButton(
+                glyph: WaxIcons.settings,
+                label: l10n.podcastSettingsTitle,
+                semanticsId: SemanticsIds.podcastSettingsOpen,
+                onPressed: onOpenSettings,
+              ),
+          ],
+          overflow: _ShowOverflow(detail: detail),
         ),
         if (show.refreshDisabled)
           Padding(

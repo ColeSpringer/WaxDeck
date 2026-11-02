@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -44,9 +45,9 @@ class FoldsSection extends ConsumerWidget {
                   message: l10n.adminFoldsEmptyMessage,
                 ),
               AsyncData(:final value) => _FoldGroups(state: value),
-              AsyncError(:final error) => ErrorState(
+              AsyncValue(hasError: true) => AsyncFailureCard.from(
+                folds,
                 title: l10n.adminFoldsError,
-                message: context.explain(error),
                 onRetry: () => ref.invalidate(foldsProvider),
                 retrySemanticsId: SemanticsIds.foldsRetry,
               ),
@@ -377,12 +378,12 @@ class _FoldGroups extends ConsumerWidget {
             ),
           ),
         if (state.hasMore)
-          WaxButton(
-            label: state.loadingMore ? l10n.commonLoading : l10n.healthLoadMore,
-            kind: WaxButtonKind.tonal,
-            icon: WaxIcons.caretDown,
+          LoadMoreFooter(
+            label: l10n.healthLoadMore,
+            loading: state.loadingMore,
             semanticsId: SemanticsIds.foldsMore,
-            onPressed: state.loadingMore ? null : () => _more(context, ref),
+            padding: EdgeInsets.zero,
+            onLoadMore: () => _more(context, ref),
           ),
       ],
     );

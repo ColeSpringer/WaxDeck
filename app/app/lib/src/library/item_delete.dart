@@ -239,17 +239,15 @@ class _WholeFileDialog extends StatelessWidget {
       title: Text(l10n.libraryDeleteRipTitle),
       content: WaxProse(l10n.libraryDeleteRipShared(chosen, extra)),
       actions: [
-        TextButton(
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(false),
-          child: Text(l10n.commonCancel),
         ),
-        Semantics(
-          identifier: SemanticsIds.itemDeleteRip,
-          child: FilledButton(
-            key: const Key(SemanticsIds.itemDeleteRip),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.libraryDeleteRipAction(chosen + extra)),
-          ),
+        WaxButton(
+          label: l10n.libraryDeleteRipAction(chosen + extra),
+          semanticsId: SemanticsIds.itemDeleteRip,
+          onPressed: () => Navigator.of(context).pop(true),
         ),
       ],
     );
@@ -351,21 +349,16 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
         ],
       ),
       actions: [
-        TextButton(
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        Semantics(
-          identifier: SemanticsIds.itemDeleteConfirm,
-          child: FilledButton(
-            key: const Key(SemanticsIds.itemDeleteConfirm),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.of(context).pop(_mode),
-            child: Text(l10n.libraryDeleteAction),
-          ),
+        WaxButton(
+          label: l10n.libraryDeleteAction,
+          kind: WaxButtonKind.destructive,
+          semanticsId: SemanticsIds.itemDeleteConfirm,
+          onPressed: () => Navigator.of(context).pop(_mode),
         ),
       ],
     );

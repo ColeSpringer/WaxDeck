@@ -13,6 +13,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'wax_finders.dart';
 
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
@@ -716,11 +717,7 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     final rescan = tester.widget<WaxIconButton>(
-      find.byWidgetPredicate(
-        (w) =>
-            w is WaxIconButton &&
-            w.semanticsId == SemanticsIds.libraryRescan('lb-1'),
-      ),
+      waxControl<WaxIconButton>(SemanticsIds.libraryRescan('lb-1')),
     );
     expect(rescan.busy, isTrue);
   });

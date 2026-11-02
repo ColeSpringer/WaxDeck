@@ -7,6 +7,7 @@ import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../player/play_progress.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'series_controller.dart';
@@ -27,52 +28,45 @@ class BookSeriesScreen extends ConsumerWidget {
       semanticsId: SemanticsIds.bookSeriesScreen(pid),
       onBack: () => context.leave(fallback: WaxRoute.bookSeriesIndex),
       slivers: <Widget>[
-        switch (detail) {
+        AsyncSliverFace<BookSeriesDetail>(
+          state: detail,
+          errorTitle: l10n.bookSeriesLoadError,
+          onRetry: () => ref.invalidate(bookSeriesDetailProvider(pid)),
           // A series whose every book this account cannot open reads
           // as one with none: the read answers 404 only when the whole
           // series is out of reach, so an empty list here is a grant or
           // a tag rule rather than a mistake.
-          AsyncData(:final value) when value.books.isEmpty =>
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: EmptyState(
-                title: l10n.bookSeriesNoBooks,
-                message: l10n.bookSeriesNoBooksMessage,
-                glyph: WaxIcons.audiobooks,
-              ),
+          isEmpty: (value) => value.books.isEmpty,
+          empty: (context, _) => SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              title: l10n.bookSeriesNoBooks,
+              message: l10n.bookSeriesNoBooksMessage,
+              glyph: WaxIcons.audiobooks,
             ),
-          AsyncData(:final value) => SliverMainAxisGroup(
+          ),
+          builder: (context, value) => SliverMainAxisGroup(
             slivers: <Widget>[
               SliverToBoxAdapter(child: _Header(series: value)),
               _Books(books: value.books),
             ],
           ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.bookSeriesLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(bookSeriesDetailProvider(pid)),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.list),
-          ),
-        },
+        ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
     );
   }
 }
 
-/// The series' name, and what it adds up to.
-class _Header extends StatelessWidget {
+/// The series' name, and what it adds up to. It has no verbs of its own,
+/// so the header carries no actions.
+class _Header extends ConsumerWidget {
   const _Header({required this.series});
 
   final BookSeriesDetail series;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final wax = context.waxL10n;
     // The catalog-wide count where it was answered, the visible one
@@ -84,23 +78,14 @@ class _Header extends StatelessWidget {
       if (series.totalDurationMs > 0)
         wax.spellDuration(Duration(milliseconds: series.totalDurationMs)),
     ];
-    return Padding(
-      padding: WaxSizeClass.of(context).gutter.add(
-        const EdgeInsets.only(top: WaxSpace.s8, bottom: WaxSpace.s16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(series.name, style: WaxType.titleScreen),
-          const SizedBox(height: WaxSpace.s4),
-          Text(
-            lines.join(' · '),
-            style: WaxType.caption.copyWith(
-              color: WaxColors.of(context).textSecondary,
-            ),
-          ),
-        ],
-      ),
+    return EntityHeader(
+      title: series.name,
+      metadata: lines.join(' · '),
+      domain: WaxDomain.audiobooks,
+      shape: ArtworkShape.portrait,
+      artwork: ref
+          .watch(artworkStoreProvider)
+          .source(series.books.firstOrNull?.book.artUrl),
     );
   }
 }

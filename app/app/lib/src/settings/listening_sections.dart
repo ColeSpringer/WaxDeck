@@ -76,7 +76,7 @@ class ListeningSection extends ConsumerWidget {
           trailing: const WaxIcon(WaxIcons.forward, size: 16),
           // Gone to, not pushed: the location is declared beneath
           // settings now, so `go` builds this row's own screen under
-          // it and the address bar follows the hop (8.3).
+          // it and the address bar follows the hop.
           onTap: () => context.go(WaxRoute.shares),
         ),
       ],
@@ -141,32 +141,27 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
     final l10n = context.l10n;
     return AlertDialog(
       title: Text(l10n.settingsTimezoneTitle),
-      content: TextField(
+      content: WaxTextField(
         key: const Key('timezone-field'),
         controller: _controller,
+        label: l10n.settingsTimezoneFieldLabel,
+        hint: l10n.settingsTimezoneFieldHint,
+        helperText: l10n.settingsTimezoneFieldHelp,
+        errorText: _error,
         autofocus: true,
-        decoration: InputDecoration(
-          labelText: l10n.settingsTimezoneFieldLabel,
-          hintText: l10n.settingsTimezoneFieldHint,
-          helperText: l10n.settingsTimezoneFieldHelp,
-          errorText: _error,
-        ),
         onSubmitted: (_) => _save(),
       ),
       actions: [
-        TextButton(
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        Semantics(
-          identifier: SemanticsIds.timezoneSave,
+        WaxButton(
+          semanticsId: SemanticsIds.timezoneSave,
           label: l10n.commonSave,
-          button: true,
-          child: FilledButton(
-            key: const Key(SemanticsIds.timezoneSave),
-            onPressed: _busy ? null : _save,
-            child: Text(l10n.commonSave),
-          ),
+          busy: _busy,
+          onPressed: _save,
         ),
       ],
     );
@@ -206,17 +201,12 @@ class SimilarityStatusSection extends ConsumerWidget {
                   )
                 : l10n.settingsSimilarityFallback,
           ),
-          AsyncError() => WaxOptionRow(
+          AsyncValue(hasError: true) => WaxOptionRow(
             key: const Key('similarity-status'),
             glyph: WaxIcons.errorCircle,
             title: l10n.settingsSimilarityError,
           ),
-          _ => const Center(
-            child: Padding(
-              padding: EdgeInsets.all(WaxSpace.s16),
-              child: CircularProgressIndicator(),
-            ),
-          ),
+          _ => const SkeletonShapes(shape: SkeletonShape.list, count: 1),
         },
       ],
     );

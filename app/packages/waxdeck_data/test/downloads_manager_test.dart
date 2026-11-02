@@ -1646,6 +1646,31 @@ void main() {
       expect(await db.select(db.downloadRecords).get(), hasLength(1));
     });
 
+    test('a free that leaves an item incomplete says it stopped', () async {
+      await _complete(db, tmp, _book, 0, 'ess0');
+      await _complete(db, tmp, _book, 1, 'ess1');
+      await promise(_book);
+      final seen = <DownloadProgress>[];
+      manager.progress.listen(seen.add);
+
+      await manager.freeOwed(_book);
+      await pumpEventQueue();
+
+      expect(seen.single.stopped, isTrue);
+      expect(seen.single.failed, isFalse);
+    });
+
+    test('owed nothing, it says nothing', () async {
+      await _complete(db, tmp, _book, 0, 'ess0');
+      final seen = <DownloadProgress>[];
+      manager.progress.listen(seen.add);
+
+      await manager.freeOwed(_book);
+      await pumpEventQueue();
+
+      expect(seen, isEmpty);
+    });
+
     test('a pid the mirror lists again keeps every byte', () async {
       final file = await _complete(db, tmp, _book, 0, 'ess0');
       await promise(_book);
@@ -2400,7 +2425,21 @@ void main() {
       final track = rows.firstWhere((r) => r.pid == _track);
       expect(track.complete, isFalse);
       expect(track.paused, isFalse);
+      expect(track.active, isTrue);
     });
+
+    test(
+      'reads an item a previous run left as the recovery leaves it',
+      () async {
+        await _pending(db, _book, 0);
+        repo.infoByPid[_book] = _info(_book, parts: 1);
+        final recovered = manager.recover();
+
+        expect((await manager.stored()).single.active, isTrue);
+        await recovered;
+        await manager.settled;
+      },
+    );
   });
 
   test('a record survives a schema upgrade with its duration null', () async {
@@ -2424,5 +2463,280 @@ void main() {
     final local = await manager.localFor(_book);
     expect(local!.parts.single.durationMs, isNull);
     expect(local.sequenced, isFalse);
+  });
+
+  group('endings', () {
+    Future<List<DownloadProgress>> watch() async {
+      final seen = <DownloadProgress>[];
+      manager.progress.listen(seen.add);
+      return seen;
+    }
+
+    for (final (status, reason) in <(int?, DownloadFailure)>[
+      (404, DownloadFailure.gone),
+      (410, DownloadFailure.gone),
+      (403, DownloadFailure.refused),
+      (500, DownloadFailure.interrupted),
+      (null, DownloadFailure.interrupted),
+    ]) {
+      test('a file failing with $status says why: ${reason.name}', () async {
+        repo.infoByPid[_book] = _info(_book, parts: 1);
+        await manager.download(_book);
+        final seen = await watch();
+
+        await engine.report(
+          engine.ids.single,
+          state: TransferState.failed,
+          httpStatus: status,
+        );
+
+        expect(seen.single.failure, reason);
+        expect(seen.single.failed, isTrue);
+        expect(seen.single.stopped, isFalse);
+      });
+    }
+
+    test('a URL refused past its renewals is a refusal', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      final seen = await watch();
+
+      for (var i = 0; i < 4; i++) {
+        await engine.report(
+          'task-0',
+          state: TransferState.failed,
+          httpStatus: 401,
+        );
+        await manager.settled;
+      }
+
+      expect(seen.single.failure, DownloadFailure.refused);
+    });
+
+    test('an item the server no longer has is gone', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      final seen = await watch();
+      repo.infoByPid.remove(_book);
+
+      await engine.report(
+        engine.ids.single,
+        state: TransferState.failed,
+        httpStatus: 401,
+      );
+      await manager.settled;
+
+      expect(seen.single.failure, DownloadFailure.gone);
+    });
+
+    test('a start the engine refuses is an interruption', () async {
+      engine.refuse = true;
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      final seen = await watch();
+
+      await manager.download(_book);
+      await pumpEventQueue();
+
+      expect(seen.single.failure, DownloadFailure.interrupted);
+    });
+
+    test('a cancel from the notification is a stop, not a failure', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      final seen = await watch();
+
+      await engine.report(engine.ids.single, state: TransferState.canceled);
+
+      expect(seen.single.stopped, isTrue);
+      expect(seen.single.failed, isFalse);
+      expect(seen.single.complete, isFalse);
+      expect(await db.select(db.downloadRecords).get(), isEmpty);
+    });
+
+    test('a cancel says the item stopped', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      final seen = await watch();
+
+      await manager.cancel(_book);
+      await pumpEventQueue();
+
+      expect(seen.single.stopped, isTrue);
+      expect(seen.single.failed, isFalse);
+    });
+
+    test('a removal says the item stopped', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      await completeAll(_book);
+      final seen = await watch();
+
+      await manager.remove(_book);
+      await pumpEventQueue();
+
+      expect(seen.single.stopped, isTrue);
+    });
+
+    test('removing what it does not hold says nothing', () async {
+      final seen = await watch();
+
+      await manager.remove(_book);
+      await pumpEventQueue();
+
+      expect(seen, isEmpty);
+    });
+
+    test('a refresh with nothing to fetch leaves a whole item be', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      await completeAll(_book);
+      repo.infoByPid[_book] = _info(_book, parts: 0);
+      final seen = await watch();
+
+      await manager.download(_book);
+      await pumpEventQueue();
+
+      expect(seen, isEmpty);
+      expect(await manager.isComplete(_book), isTrue);
+    });
+
+    test('an item with nothing to fetch says it stopped', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 0);
+      final seen = await watch();
+
+      await manager.download(_book);
+      await pumpEventQueue();
+
+      expect(seen.single.stopped, isTrue);
+      expect(engine.started, isEmpty);
+    });
+
+    test('nothing to fetch for an item part way drops what it held, then '
+        'says it stopped', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 2);
+      await manager.download(_book);
+      await land(engine.ids.single, 'ess0.m4b');
+      repo.infoByPid[_book] = _info(_book, parts: 0);
+      final seen = await watch();
+
+      await manager.download(_book);
+      await manager.settled;
+
+      expect(seen.single.stopped, isTrue);
+      expect(await db.select(db.downloadRecords).get(), isEmpty);
+      expect(engine.canceled, [engine.ids.last]);
+      expect(await manager.pause(_book), isFalse, reason: 'nothing held');
+    });
+  });
+
+  group('storedItem', () {
+    test('answers null for an item it does not hold', () async {
+      expect(await manager.storedItem(_book), isNull);
+    });
+
+    test("answers one item's holding as stored() lists it", () async {
+      repo.infoByPid[_book] = _info(_book, parts: 2);
+      await manager.download(_book);
+
+      final running = await manager.storedItem(_book);
+      expect(running!.pid, _book);
+      expect(running.files, 2);
+      expect(running.complete, isFalse);
+      expect(running.paused, isFalse);
+
+      await manager.pause(_book);
+      expect((await manager.storedItem(_book))!.paused, isTrue);
+
+      await manager.resume(_book);
+      await completeAll(_book);
+      expect((await manager.storedItem(_book))!.complete, isTrue);
+    });
+
+    test(
+      'an item it is moving reads active, held by the gate or not',
+      () async {
+        repo.infoByPid[_book] = _info(_book, parts: 1);
+        await manager.download(_book);
+        expect((await manager.storedItem(_book))!.active, isTrue);
+
+        await gate.move(open: false);
+        expect((await manager.storedItem(_book))!.active, isTrue);
+      },
+    );
+
+    test('a paused item does not read active', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      await manager.pause(_book);
+
+      expect((await manager.storedItem(_book))!.active, isFalse);
+    });
+
+    test('rows nothing moves do not read active', () async {
+      await _pending(db, _book, 0);
+
+      final item = await manager.storedItem(_book);
+      expect(item!.complete, isFalse);
+      expect(item.active, isFalse);
+    });
+
+    test(
+      'an item a previous run left reads active once it is picked up',
+      () async {
+        await _pending(db, _book, 0);
+        repo.infoByPid[_book] = _info(_book, parts: 1);
+        final recovered = manager.recover();
+
+        expect((await manager.storedItem(_book))!.active, isTrue);
+        await recovered;
+        await manager.settled;
+      },
+    );
+
+    test('an item a not-found parked does not read active', () async {
+      await _complete(db, tmp, _book, 0, 'ess0');
+      await _pending(db, _book, 1, server: 'http://elsewhere.test');
+      await manager.recover();
+      await manager.settled;
+
+      final item = await manager.storedItem(_book);
+      expect(item!.complete, isFalse);
+      expect(item.active, isFalse);
+    });
+  });
+
+  group('pause and resume', () {
+    test('say so on the progress stream, keeping how far it got', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 2);
+      await manager.download(_book);
+      await engine.report(engine.ids.single, fraction: 0.5);
+      final seen = <DownloadProgress>[];
+      manager.progress.listen(seen.add);
+
+      await manager.pause(_book);
+      await pumpEventQueue();
+      expect(seen.single.paused, isTrue);
+      expect(seen.single.fraction, 0.25);
+      expect(seen.single.complete, isFalse);
+      expect(seen.single.stopped, isFalse);
+
+      await manager.resume(_book);
+      await pumpEventQueue();
+      expect(seen, hasLength(2));
+      expect(seen.last.paused, isFalse);
+      expect(seen.last.fraction, 0.25);
+    });
+
+    test('a resume of an item not paused says nothing', () async {
+      repo.infoByPid[_book] = _info(_book, parts: 1);
+      await manager.download(_book);
+      final seen = <DownloadProgress>[];
+      manager.progress.listen(seen.add);
+
+      await manager.resume(_book);
+      await pumpEventQueue();
+
+      expect(seen, isEmpty);
+    });
   });
 }

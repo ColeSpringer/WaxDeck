@@ -230,6 +230,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('94%'), findsOneWidget);
+    expect(find.byType(WaxInkTappable), findsAtLeastNWidgets(2));
+    expect(find.byType(WaxProgressBar), findsWidgets);
     expect(find.text('2011, Cardinal, GB'), findsOneWidget);
 
     final firstRow = find.bySemanticsIdentifier(SemanticsIds.diffRow(0));

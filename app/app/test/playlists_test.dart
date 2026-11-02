@@ -27,10 +27,12 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'entity_header_bar.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
+import 'wax_finders.dart';
 
 const _track = ItemSummary(
   pid: 'tr-01JZX5N8QW3F4V9T2B7KD3M9R6',
@@ -189,6 +191,28 @@ void main() {
     gate.complete();
     repo.getPlaylistGate = null;
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('the header row is one action bar with the playlist menu', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    final playlist = await repo.createPlaylist(
+      name: 'Road Trip',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: playlist.pid)));
+    await tester.pumpAndSettle();
+
+    expectHeaderOnActionBar();
+    for (final id in <String>[
+      SemanticsIds.entityPlay,
+      SemanticsIds.entityShuffle,
+      SemanticsIds.playlistOverflow,
+    ]) {
+      expect(inActionBar(id), findsOneWidget, reason: id);
+    }
   });
 
   testWidgets('lists playlists and opens the detail screen', (tester) async {
@@ -1066,6 +1090,23 @@ void main() {
     expect(saved.rule!.sorts, isEmpty);
   });
 
+  testWidgets('the rule editor\'s save spins while it saves', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await tester.pumpWidget(
+      _host(repo, const RuleEditorScreen(createName: 'Saving')),
+    );
+    await tester.pumpAndSettle();
+    final gate = repo.createPlaylistGate = Completer<void>();
+    final save = waxControl<WaxButton>(SemanticsIds.ruleSave);
+    await tester.tap(save);
+    await tester.pump();
+
+    expect(tester.widget<WaxButton>(save).busy, isTrue);
+    gate.complete();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('a random limit with no count disables save', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
@@ -1092,6 +1133,42 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(saveButton().onPressed, isNotNull);
+  });
+
+  testWidgets('a sort on a field the vocabulary cannot sort still builds', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track])
+      ..ruleFields = const RuleFields(
+        fields: [
+          RuleField(
+            name: 'title',
+            kind: 'text',
+            ops: ['is'],
+            userState: false,
+            sortable: false,
+          ),
+        ],
+        tagKeys: [],
+      );
+    final stale = await repo.createPlaylist(
+      name: 'Stale sort',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'title', op: 'is', value: 'x'),
+        ]),
+        sorts: [RuleSort(field: 'title', desc: false)],
+      ),
+    );
+    await tester.pumpWidget(_host(repo, RuleEditorScreen(editing: stale)));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final picker = find.bySemanticsIdentifier(SemanticsIds.ruleSortField(0));
+    expect(picker, findsOneWidget);
+    // Outside the options it is drawn as the stored name, not dropped.
+    expect(tester.getSemantics(picker).label, 'Field, title');
   });
 
   testWidgets('a rule with an unknown limit mode opens read-only', (
@@ -1226,6 +1303,44 @@ void main() {
     expect(condition.field, 'addedAt');
     expect(condition.op, 'inTheLast');
     expect(condition.value, '30');
+  });
+
+  testWidgets('a yes-or-no and a media type are chosen from segments', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await tester.pumpWidget(
+      _host(repo, const RuleEditorScreen(createName: 'Segments')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
+    await tester.pumpAndSettle();
+    await _pick(tester, SemanticsIds.ruleField(0), 'Starred');
+    expect(find.byType(WaxSegmented), findsOneWidget);
+    // Normalised to yes on arrival; choosing no rewrites the rule.
+    await tester.tap(find.text('no'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
+    await tester.pumpAndSettle();
+    await _pick(tester, SemanticsIds.ruleField(1), 'Media type');
+    expect(find.byType(WaxSegmented), findsNWidgets(2));
+    await tester.tap(find.text('podcast'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
+    await tester.pumpAndSettle();
+
+    final saved = repo.playlistsByPid.values.singleWhere(
+      (p) => p.name == 'Segments',
+    );
+    final conditions = saved.rule!.root.nodes;
+    expect(conditions[0].field, 'starred');
+    expect(conditions[0].value, 'false');
+    expect(conditions[1].field, 'mediaType');
+    expect(conditions[1].value, 'podcast');
   });
 
   testWidgets('exports a playlist as M3U with a copy affordance', (
@@ -1951,6 +2066,43 @@ void main() {
       contains('Could not read that image'),
     );
     expect(repo.entityArtworkCalls, isEmpty);
+  });
+
+  testWidgets('the add-to-playlist sheet waits within a short window', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: const [_track])
+      ..listPlaylistsGate = gate;
+    // Opened as the app opens it, so the sheet's own height bound and
+    // its transition are what the wait has to fit.
+    await tester.pumpWidget(
+      _host(
+        repo,
+        Builder(
+          builder: (context) => Center(
+            child: WaxButton(
+              label: 'Open',
+              onPressed: () =>
+                  unawaited(showAddToPlaylistSheet(context, item: _track)),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byType(AddToPlaylistSheet), findsOneWidget);
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    gate.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('the add-to-playlist sheet marks the lists already holding it', (

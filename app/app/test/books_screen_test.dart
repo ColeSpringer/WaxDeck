@@ -20,6 +20,7 @@ import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
+import 'wax_finders.dart';
 
 /// Pids sort by ULID, which is what "recently added" reads off, so these
 /// are ordered oldest to newest deliberately.
@@ -487,6 +488,43 @@ void main() {
       expect(_order(tester), ['Volume 000']);
     });
 
+    testWidgets('a pressed Load more stays, busy, over the ghost row', (
+      tester,
+    ) async {
+      final repo = _paged()..finishedPids.add(_volume(0));
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+      await _tap(
+        tester,
+        SemanticsIds.bookFinishedFilter(BookFilter.finished.name),
+      );
+
+      repo.listItemsGate = Completer<void>();
+      final button = find.widgetWithText(WaxButton, 'Load more books');
+      final pressed = await pressWithKeyboard(tester, button);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // The button pressed stays, busy and with the keyboard on it, and
+      // the ghost of the page stands under it.
+      expect(tester.widget<WaxButton>(button).busy, isTrue);
+      expect(pressed.hasFocus, isTrue);
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(SkeletonShapes)).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(button).dy),
+      );
+      // The only spinner is the busy button's own.
+      expect(
+        find.descendant(of: button, matching: find.byType(WaxSpinner)),
+        findsOneWidget,
+      );
+      expect(find.byType(WaxSpinner), findsOneWidget);
+      repo.listItemsGate!.complete();
+      repo.listItemsGate = null;
+      await tester.pumpAndSettle();
+      expect(find.byType(SkeletonShapes), findsNothing);
+    });
+
     testWidgets('an empty filtered shelf offers a fetch before a reset', (
       tester,
     ) async {
@@ -506,6 +544,28 @@ void main() {
       // chips again.
       expect(find.text('Nothing matches'), findsOneWidget);
       expect(find.text('Show all books'), findsOneWidget);
+    });
+
+    testWidgets('the fetch an empty filtered shelf offers stays, busy, while '
+        'it pages', (tester) async {
+      final repo = _paged();
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+      await _tap(
+        tester,
+        SemanticsIds.bookFinishedFilter(BookFilter.finished.name),
+      );
+
+      repo.listItemsGate = Completer<void>();
+      final button = find.widgetWithText(WaxButton, 'Load more books');
+      final pressed = await pressWithKeyboard(tester, button);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(tester.widget<WaxButton>(button).busy, isTrue);
+      expect(pressed.hasFocus, isTrue);
+      repo.listItemsGate!.complete();
+      repo.listItemsGate = null;
+      await tester.pumpAndSettle();
     });
 
     testWidgets('one author gets no chip row at all', (tester) async {

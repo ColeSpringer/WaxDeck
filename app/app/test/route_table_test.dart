@@ -63,6 +63,7 @@ import 'package:waxdeck/src/stats/year_in_review_screen.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
 import 'package:waxdeck/src/uploads/uploads_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 
@@ -340,6 +341,7 @@ void main() {
     expect(find.byType(ReleaseWorkbench), findsNothing);
     expect(find.byType(EntityEditorScreen), findsNothing);
     expect(find.text('Not found'), findsOneWidget);
+    expect(find.widgetWithText(WaxButton, 'Go home'), findsOneWidget);
   });
 
   testWidgets('a payload route opened without one lands one level up', (

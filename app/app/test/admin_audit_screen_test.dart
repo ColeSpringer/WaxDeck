@@ -30,17 +30,37 @@ void main() {
         createdAt: DateTime.utc(2026, 7, 1),
       ),
     ];
+    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
+    expect(find.byType(WaxInkTappable), findsWidgets);
     final row = find.bySemanticsIdentifier(SemanticsIds.auditRow('au-1'));
 
     expectDisclosure(tester, row, open: false);
+    // Spoken as expanded or collapsed, never as selected.
+    expect(
+      tester.getSemantics(row),
+      isSemantics(
+        hasExpandedState: true,
+        isExpanded: false,
+        hasSelectedState: false,
+      ),
+    );
     await tester.tap(row);
     await tester.pumpAndSettle();
     expectDisclosure(tester, row, open: true);
+    expect(
+      tester.getSemantics(row),
+      isSemantics(
+        hasExpandedState: true,
+        isExpanded: true,
+        hasSelectedState: false,
+      ),
+    );
     await tester.tap(row);
     await tester.pumpAndSettle();
     expectDisclosure(tester, row, open: false);
+    semantics.dispose();
   });
 
   testWidgets('renders events and expands to the pretty detail', (
@@ -196,7 +216,10 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.enterText(find.bySemanticsIdentifier('audit-filter'), 'user.');
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.auditFilter),
+      'user.',
+    );
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
@@ -209,7 +232,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(find.bySemanticsIdentifier('audit-filter-clear'));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.auditFilterClear));
     await tester.pumpAndSettle();
     expect(
       find.bySemanticsIdentifier(SemanticsIds.auditRow('au-2')),

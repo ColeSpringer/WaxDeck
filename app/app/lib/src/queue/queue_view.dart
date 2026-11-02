@@ -644,30 +644,27 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
             WaxSpace.s8,
             WaxSpace.s4,
           ),
-          child: WaxTappable(
+          child: WaxInkTappable(
             onPressed: ref.read(queueHistoryOpenProvider.notifier).toggle,
             semanticsId: SemanticsIds.queueHistory,
             selected: showHistory,
             label: showHistory ? l10n.queueHideHistory : l10n.queueShowHistory,
-            child: InkWell(
-              onTap: ref.read(queueHistoryOpenProvider.notifier).toggle,
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      l10n.queuePreviously(played.length),
-                      style: WaxType.overline.copyWith(
-                        color: colors.textTertiary,
-                      ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    l10n.queuePreviously(played.length),
+                    style: WaxType.overline.copyWith(
+                      color: colors.textTertiary,
                     ),
                   ),
-                  WaxIcon(
-                    showHistory ? WaxIcons.collapse : WaxIcons.forward,
-                    size: 16,
-                    color: colors.textTertiary,
-                  ),
-                ],
-              ),
+                ),
+                WaxIcon(
+                  showHistory ? WaxIcons.collapse : WaxIcons.forward,
+                  size: 16,
+                  color: colors.textTertiary,
+                ),
+              ],
             ),
           ),
         ),

@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'stats_controller.dart';
@@ -85,8 +86,12 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen> {
         ),
       ],
       slivers: <Widget>[
-        switch (log) {
-          AsyncData() when entries.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<ListenLogState>(
+          state: log,
+          errorTitle: l10n.statsLogLoadError,
+          onRetry: () => ref.invalidate(listenLogProvider),
+          isEmpty: (value) => value.entries.isEmpty,
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.statsLogEmptyTitle,
@@ -94,32 +99,18 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen> {
               glyph: WaxIcons.recent,
             ),
           ),
-          AsyncData() => SliverPadding(
+          builder: (context, value) => SliverPadding(
             padding: sizeClass.gutter,
             sliver: SliverList.builder(
-              itemCount: entries.length,
+              itemCount: value.entries.length,
               itemBuilder: (context, index) =>
-                  _ListenLogRow(index: index, entry: entries[index]),
+                  _ListenLogRow(index: index, entry: value.entries[index]),
             ),
           ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.statsLogLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(listenLogProvider),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.list),
-          ),
-        },
+        ),
         if (log.value?.loadingMore ?? false)
           const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(WaxSpace.s16),
-              child: Center(child: CircularProgressIndicator()),
-            ),
+            child: SkeletonShapes(shape: SkeletonShape.list, count: 1),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],

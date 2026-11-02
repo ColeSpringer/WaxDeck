@@ -937,6 +937,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminInvitesEmpty => 'Todavía no hay invitaciones';
 
   @override
+  String get adminInvitesLoadError =>
+      'No se han podido cargar las invitaciones';
+
+  @override
   String get adminLibrariesColumnActions => 'Acciones';
 
   @override
@@ -1265,6 +1269,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminMigrateServerUrlLabel => 'URL del servidor';
+
+  @override
+  String get adminMigrateSourceLabel => 'Importar desde';
 
   @override
   String get adminMigrateSpotifyExport => 'Exportación de datos de Spotify';
@@ -2194,6 +2201,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminUsersEmptyTitle => 'No hay cuentas';
 
   @override
+  String get adminUsersLoadError => 'No se han podido cargar las cuentas';
+
+  @override
   String adminUsersNamedAccount(String displayName, String username) {
     return '$displayName ($username)';
   }
@@ -2222,6 +2232,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String adminUsersRequestedOn(String date) {
     return 'Solicitada el $date';
   }
+
+  @override
+  String get adminUsersRequestsLoadError =>
+      'No se han podido cargar las solicitudes de registro';
 
   @override
   String get adminUsersStateActive => 'Activa';
@@ -3159,9 +3173,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get booksLoadMore => 'Cargar más libros';
 
   @override
-  String get booksLoadingMore => 'Cargando...';
-
-  @override
   String get booksMore => 'Más';
 
   @override
@@ -3541,6 +3552,17 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String downloadsActionDownloading(int percent) {
+    return 'Descargando $percent %';
+  }
+
+  @override
+  String get downloadsActionHeld => 'Esperando wifi';
+
+  @override
+  String get downloadsActionRetry => 'Reintentar la descarga';
+
+  @override
   String downloadsCancel(String title) {
     return 'Cancelar $title';
   }
@@ -3584,6 +3606,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get downloadsEmptyTitle => 'No hay nada descargado';
 
   @override
+  String get downloadsFailedGone => 'Ya no está en el servidor';
+
+  @override
+  String get downloadsFailedInterrupted =>
+      'La transferencia se ha interrumpido';
+
+  @override
+  String get downloadsFailedRefused => 'El servidor ha rechazado la descarga';
+
+  @override
   String downloadsGroupItems(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -3593,6 +3625,9 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get downloadsHeldForWifi => 'Descargar solo con wifi está activado';
 
   @override
   String downloadsInFlight(int count) {
@@ -8946,7 +8981,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String podcastFetchFailed(String reason) {
-    return 'La última descarga ha fallado: $reason';
+    return 'El servidor no ha podido descargar este episodio: $reason';
   }
 
   @override
@@ -9032,9 +9067,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get podcastLoadMore => 'Cargar más episodios';
-
-  @override
-  String get podcastLoadingMore => 'Cargando...';
 
   @override
   String get podcastMarkOlderAll => 'Todos los episodios';

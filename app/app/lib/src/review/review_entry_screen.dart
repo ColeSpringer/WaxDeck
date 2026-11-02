@@ -153,11 +153,7 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
           const SizedBox(height: WaxSpace.s16),
           Row(
             children: <Widget>[
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+              const WaxSpinner(),
               const SizedBox(width: WaxSpace.s8),
               Text(
                 l10n.reviewIdentifyingLong,
@@ -696,7 +692,7 @@ class _CandidateTile extends StatelessWidget {
     final colors = WaxColors.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: WaxSpace.s8),
-      child: WaxTappable(
+      child: WaxInkTappable(
         label: context.l10n.reviewCandidateSpoken(
           candidate.title,
           candidate.artist,
@@ -705,85 +701,73 @@ class _CandidateTile extends StatelessWidget {
         selected: selected,
         borderRadius: WaxRadius.card,
         onPressed: onTap,
-        // WaxTappable adds no gesture by design, so the ink is ours or
-        // the tile announces as a button and answers no pointer.
-        child: Material(
-          color: selected ? colors.accentContainer : colors.surface1,
-          borderRadius: WaxRadius.card,
-          child: InkWell(
-            onTap: onTap,
+        color: selected ? colors.accentContainer : colors.surface1,
+        child: Container(
+          padding: const EdgeInsets.all(WaxSpace.s12),
+          decoration: BoxDecoration(
             borderRadius: WaxRadius.card,
-            child: Container(
-              padding: const EdgeInsets.all(WaxSpace.s12),
-              decoration: BoxDecoration(
-                borderRadius: WaxRadius.card,
-                border: Border.all(
-                  color: selected ? colors.accent : colors.hairline,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            border: Border.all(
+              color: selected ? colors.accent : colors.hairline,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
                 children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Text(
-                        '${candidate.similarityPct.round()}%',
-                        style: WaxType.monoData.copyWith(
-                          color: selected
-                              ? colors.onAccentContainer
-                              : colors.accent,
-                        ),
-                      ),
-                      const SizedBox(width: WaxSpace.s12),
-                      Expanded(
-                        child: Text(
-                          context.l10n.reviewCandidateTitleLine(
-                            candidate.title,
-                            candidate.artist,
-                          ),
-                          style: WaxType.titleItem.copyWith(
-                            color: selected
-                                ? colors.onAccentContainer
-                                : colors.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (selected)
-                        WaxIcon(
-                          WaxIcons.check,
-                          size: 16,
-                          color: colors.onAccentContainer,
-                        ),
-                    ],
+                  Text(
+                    '${candidate.similarityPct.round()}%',
+                    style: WaxType.monoData.copyWith(
+                      color: selected
+                          ? colors.onAccentContainer
+                          : colors.accent,
+                    ),
                   ),
-                  if (_subtitle.isNotEmpty)
-                    Text(
-                      _subtitle,
-                      style: WaxType.caption.copyWith(
+                  const SizedBox(width: WaxSpace.s12),
+                  Expanded(
+                    child: Text(
+                      context.l10n.reviewCandidateTitleLine(
+                        candidate.title,
+                        candidate.artist,
+                      ),
+                      style: WaxType.titleItem.copyWith(
                         color: selected
                             ? colors.onAccentContainer
-                            : colors.textTertiary,
+                            : colors.textPrimary,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  if (candidate.components.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: WaxSpace.s8),
-                    Wrap(
-                      spacing: WaxSpace.s16,
-                      runSpacing: WaxSpace.s4,
-                      children: <Widget>[
-                        for (final component in candidate.components)
-                          _ComponentBar(
-                            component: component,
-                            selected: selected,
-                          ),
-                      ],
+                  ),
+                  if (selected)
+                    WaxIcon(
+                      WaxIcons.check,
+                      size: 16,
+                      color: colors.onAccentContainer,
                     ),
-                  ],
                 ],
               ),
-            ),
+              if (_subtitle.isNotEmpty)
+                Text(
+                  _subtitle,
+                  style: WaxType.caption.copyWith(
+                    color: selected
+                        ? colors.onAccentContainer
+                        : colors.textTertiary,
+                  ),
+                ),
+              if (candidate.components.isNotEmpty) ...<Widget>[
+                const SizedBox(height: WaxSpace.s8),
+                Wrap(
+                  spacing: WaxSpace.s16,
+                  runSpacing: WaxSpace.s4,
+                  children: <Widget>[
+                    for (final component in candidate.components)
+                      _ComponentBar(component: component, selected: selected),
+                  ],
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -809,18 +793,7 @@ class _ComponentBar extends StatelessWidget {
       children: <Widget>[
         Text(component.name, style: WaxType.caption.copyWith(color: tint)),
         const SizedBox(width: WaxSpace.s4),
-        SizedBox(
-          width: 48,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(WaxRadius.r6),
-            child: LinearProgressIndicator(
-              value: closeness,
-              minHeight: 4,
-              backgroundColor: colors.surface3,
-              valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
-            ),
-          ),
-        ),
+        SizedBox(width: 48, child: WaxProgressBar(value: closeness)),
         const SizedBox(width: WaxSpace.s4),
         Text(
           '${(closeness * 100).round()}%',

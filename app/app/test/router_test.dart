@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/auth/signup_screen.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
@@ -94,7 +95,10 @@ void main() {
       _location(container),
       '${WaxRoute.login}?${WaxRoute.fromParam}=%2Fsettings',
     );
-    expect(find.byKey(const Key(SemanticsIds.loginUsername)), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+      findsOneWidget,
+    );
 
     await container
         .read(authControllerProvider.notifier)
@@ -145,7 +149,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_location(container), WaxRoute.login);
-    expect(find.byKey(const Key(SemanticsIds.loginUsername)), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the player route stands on its own with nothing playing', (
@@ -179,6 +186,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('That page does not exist.'), findsOneWidget);
+    // The app's own page and state, not Material's top bar.
+    expect(find.byType(WaxScaffold), findsOneWidget);
+    expect(find.byType(EmptyState), findsOneWidget);
 
     await tester.tap(find.text('Go home'));
     await tester.pumpAndSettle();
@@ -197,14 +207,14 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-      find.byKey(const Key(SemanticsIds.signupUsername)),
+      find.bySemanticsIdentifier(SemanticsIds.signupUsername),
       'pippin',
     );
     await tester.enterText(
-      find.byKey(const Key(SemanticsIds.signupPassword)),
+      find.bySemanticsIdentifier(SemanticsIds.signupPassword),
       'second-breakfast',
     );
-    await tester.tap(find.byKey(const Key(SemanticsIds.signupSubmit)));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.signupSubmit));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Back to sign-in'));
@@ -226,9 +236,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    final entering = ModalRoute.of(
-      tester.element(find.byKey(const Key(SemanticsIds.signupUsername))),
-    )!;
+    final entering = ModalRoute.of(tester.element(find.byType(SignupScreen)))!;
     expect(entering.animation!.status, AnimationStatus.forward);
     await tester.pumpAndSettle();
     expect(entering.animation!.status, AnimationStatus.completed);

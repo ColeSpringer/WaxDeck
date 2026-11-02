@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _user = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -41,6 +45,24 @@ Future<void> _show(WidgetTester tester, Key key) => tester.scrollUntilVisible(
 );
 
 void main() {
+  testWidgets('the similarity readout draws a skeleton while it loads', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 320);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = _signedInRepo()..similarityStatusGate = Completer<void>();
+    await tester.pumpWidget(_host(repo, section: SettingsSection.server));
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.byType(SkeletonShapes),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(find.byType(WaxSpinner), findsNothing);
+  });
+
   testWidgets('the shared-stats switch round-trips the opt-out', (
     tester,
   ) async {
@@ -48,9 +70,9 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await _show(tester, const Key('shared-stats-switch'));
+    await _show(tester, const Key(SemanticsIds.sharedStatsSwitch));
     final switchFinder = find.descendant(
-      of: find.byKey(const Key('shared-stats-switch')),
+      of: find.byKey(const Key(SemanticsIds.sharedStatsSwitch)),
       matching: find.byType(WaxSwitch),
     );
     // Nothing stored yet reads as included.
@@ -73,15 +95,20 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await _show(tester, const Key('timezone-edit'));
-    await tester.tap(find.byKey(const Key('timezone-edit')));
+    await _show(tester, const Key(SemanticsIds.timezoneEdit));
+    await tester.tap(find.byKey(const Key(SemanticsIds.timezoneEdit)));
     await tester.pumpAndSettle();
 
+    expect(
+      tester.widget(find.byKey(const Key('timezone-field'))),
+      isA<WaxTextField>(),
+    );
+    expect(waxControl<WaxButton>(SemanticsIds.timezoneSave), findsOneWidget);
     await tester.enterText(
       find.byKey(const Key('timezone-field')),
       'Europe/Amsterdam',
     );
-    await tester.tap(find.byKey(const Key('timezone-save')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.timezoneSave));
     await tester.pumpAndSettle();
 
     expect(repo.prefs.timezone, 'Europe/Amsterdam');
@@ -101,14 +128,14 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await _show(tester, const Key('timezone-edit'));
-    await tester.tap(find.byKey(const Key('timezone-edit')));
+    await _show(tester, const Key(SemanticsIds.timezoneEdit));
+    await tester.tap(find.byKey(const Key(SemanticsIds.timezoneEdit)));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('timezone-field')),
       'Middle/Earth',
     );
-    await tester.tap(find.byKey(const Key('timezone-save')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.timezoneSave));
     await tester.pumpAndSettle();
 
     // The dialog stays open with the validation feedback.
@@ -122,8 +149,8 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await _show(tester, const Key('open-share-links'));
-    await tester.tap(find.byKey(const Key('open-share-links')));
+    await _show(tester, const Key(SemanticsIds.openShareLinks));
+    await tester.tap(find.byKey(const Key(SemanticsIds.openShareLinks)));
     await tester.pumpAndSettle();
 
     expect(find.text('No share links yet'), findsOneWidget);
@@ -157,12 +184,12 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await _show(tester, const Key('timezone-edit'));
-    await tester.tap(find.byKey(const Key('timezone-edit')));
+    await _show(tester, const Key(SemanticsIds.timezoneEdit));
+    await tester.tap(find.byKey(const Key(SemanticsIds.timezoneEdit)));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('timezone-field')), '');
-    await tester.tap(find.byKey(const Key('timezone-save')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.timezoneSave));
     await tester.pumpAndSettle();
 
     expect(repo.prefs.timezone, isNull);

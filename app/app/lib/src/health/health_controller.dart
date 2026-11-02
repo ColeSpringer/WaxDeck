@@ -17,6 +17,7 @@ class HealthController extends AsyncNotifier<HealthSummary> {
 
 final healthProvider = AsyncNotifierProvider<HealthController, HealthSummary>(
   HealthController.new,
+  retry: retryUnlessRefused,
 );
 
 /// The rules this session has asked to fix whose request is still out.
@@ -215,7 +216,7 @@ final healthIssuesProvider =
       HealthIssuesController,
       HealthIssuesState,
       String
-    >(HealthIssuesController.new);
+    >(HealthIssuesController.new, retry: retryUnlessRefused);
 
 /// Detected duplicate clusters, with the merge action.
 class DuplicatesController extends AsyncNotifier<List<DuplicateGroup>> {

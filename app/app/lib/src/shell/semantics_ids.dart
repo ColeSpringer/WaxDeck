@@ -38,6 +38,7 @@ abstract final class SemanticsIds {
   static String backupMenu(Object id) => 'backup-menu-$id';
   static String backupMenuAction(Object action, Object id) =>
       'backup-$action-$id';
+  static const String backupRetentionRetry = 'backup-retention-retry';
   static String backupRow(Object id) => 'backup-row-$id';
   static const String confirmAccept = 'confirm-accept';
   static const String confirmCancel = 'confirm-cancel';
@@ -825,6 +826,7 @@ abstract final class SemanticsIds {
   static String podcastSort(Object name) => 'podcast-sort-$name';
   static const String podcastSubscribe = 'podcast-subscribe';
   static const String podcastSubscribeConfirm = 'podcast-subscribe-confirm';
+  static const String podcastSupport = 'podcast-support';
   static const String podcastUnsubscribe = 'podcast-unsubscribe';
   static const String selectionClear = 'selection-clear';
   static const String selectionDownload = 'selection-download';

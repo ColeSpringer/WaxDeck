@@ -27,6 +27,10 @@ class _ComponentsPageState extends State<ComponentsPage> {
   bool _notesOpen = false;
   bool _notesOverflow = false;
 
+  /// The demo footer's page, asked for and never landing until the link
+  /// under it lands it.
+  bool _paging = false;
+
   /// Where the split-pane seam below sits. The component holds no width
   /// of its own, so somewhere has to; in the app that is a stored
   /// per-device preference.
@@ -38,9 +42,15 @@ class _ComponentsPageState extends State<ComponentsPage> {
   /// catalogue's own scrubbing is what moves it.
   late final ValueNotifier<Duration> _live = ValueNotifier(_position);
 
+  /// Holds a value the validator below refuses, so its line shows.
+  final TextEditingController _address = TextEditingController(
+    text: 'waxdeck.local',
+  );
+
   @override
   void dispose() {
     _live.dispose();
+    _address.dispose();
     super.dispose();
   }
 
@@ -124,6 +134,14 @@ class _ComponentsPageState extends State<ComponentsPage> {
               label: 'Sleep timer',
               badge: '12',
               active: true,
+              onPressed: () {},
+            ),
+            // What the glyph leaves out, on hover, focus or long press.
+            WaxIconButton(
+              glyph: WaxIcons.downloads,
+              label: 'Retry download',
+              detail: 'Not enough space on this device',
+              color: colors.error,
               onPressed: () {},
             ),
           ],
@@ -236,6 +254,33 @@ class _ComponentsPageState extends State<ComponentsPage> {
           child: SearchField(hint: 'Search your library', onChanged: (_) {}),
         ),
         const SizedBox(height: WaxSpace.s12),
+        // A field a form checks, holding a value it refuses, and one that
+        // only applies while another control is on.
+        SizedBox(
+          width: 360,
+          child: Form(
+            autovalidateMode: AutovalidateMode.always,
+            child: WaxTextField(
+              label: 'Server address',
+              controller: _address,
+              autocorrect: false,
+              validator: (value) =>
+                  (value ?? '').startsWith(RegExp('https?://'))
+                  ? null
+                  : 'Start with http:// or https://',
+            ),
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        const SizedBox(
+          width: 360,
+          child: WaxTextField(
+            label: 'Only these words',
+            hint: 'Download episodes whose title has',
+            enabled: false,
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s12),
         FilterChipRow(
           chips: const <WaxFilterChip>[
             WaxFilterChip(name: 'all', label: 'All'),
@@ -335,6 +380,31 @@ class _ComponentsPageState extends State<ComponentsPage> {
           ],
         ),
         const SizedBox(height: WaxSpace.s24),
+        // The bar in its place: a book's header, where the series line is
+        // the one link in the text block and a long one wraps in line.
+        EntityHeader(
+          title: 'A History of Tides',
+          subtitle: 'Mirren Vaux',
+          metadata: 'Audiobook, 11h 42m',
+          artwork: art.of('A History of Tides'),
+          shape: ArtworkShape.portrait,
+          domain: WaxDomain.audiobooks,
+          link: EntityHeaderLink(
+            label: 'Book 3 of The Long Chronicle of the Harbour and the Sea',
+            semanticsId: 'series-link',
+            onPressed: () {},
+          ),
+          actions: <WaxAction>[
+            WaxAction(
+              label: 'Resume',
+              semanticsId: 'resume',
+              glyph: WaxIcons.play,
+              emphasis: WaxActionEmphasis.primary,
+              onPressed: () {},
+            ),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s24),
 
         const SectionHeader(overline: 'Controls', title: 'Seek bars'),
         WaxSeekBar(
@@ -384,6 +454,17 @@ class _ComponentsPageState extends State<ComponentsPage> {
           onSelect: (name) => setState(
             () => _visualizer = WaxVisualizerMode.values.byName(name),
           ),
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        // The same choice while nothing is playing: drawn, not pressable.
+        WaxSegmented(
+          label: 'Visualizer mode',
+          selected: _visualizer.name,
+          segments: <WaxSegment>[
+            for (final mode in WaxVisualizerMode.values)
+              WaxSegment(name: mode.name, label: mode.label(context.waxL10n)),
+          ],
+          onSelect: null,
         ),
         const SizedBox(height: WaxSpace.s12),
         SizedBox(
@@ -884,6 +965,79 @@ class _ComponentsPageState extends State<ComponentsPage> {
         const SkeletonShapes(shape: SkeletonShape.shelf, count: 4),
         const SizedBox(height: WaxSpace.s12),
         const SkeletonShapes(shape: SkeletonShape.list, count: 3),
+        const SizedBox(height: WaxSpace.s12),
+        // The foot of a list paged by hand: pressed, the button stays busy
+        // over the next page's ghost; a page a scroll asked for is the
+        // ghost alone, as the second one draws.
+        Wrap(
+          spacing: WaxSpace.s16,
+          runSpacing: WaxSpace.s16,
+          children: <Widget>[
+            SizedBox(
+              width: 320,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  LoadMoreFooter(
+                    label: 'Load more episodes',
+                    loading: _paging,
+                    onLoadMore: () => setState(() => _paging = true),
+                  ),
+                  WaxButton(
+                    label: 'Land the page',
+                    kind: WaxButtonKind.inline,
+                    onPressed: _paging
+                        ? () => setState(() => _paging = false)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 320,
+              child: LoadMoreFooter(
+                label: 'Load more episodes',
+                loading: true,
+                onLoadMore: () {},
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        // The same three in a box shorter than they are, as a short tab or
+        // a phone on its side gives them: the panes scroll within, the
+        // ghost is cut off at the edge, and none of them overflows.
+        Wrap(
+          spacing: WaxSpace.s16,
+          runSpacing: WaxSpace.s16,
+          children: <Widget>[
+            SizedBox(
+              width: 320,
+              height: 140,
+              child: EmptyState(
+                glyph: WaxIcons.podcasts,
+                title: 'No podcasts yet, and nothing followed to fetch',
+                actionLabel: 'Find podcasts',
+                onAction: () {},
+              ),
+            ),
+            SizedBox(
+              width: 320,
+              height: 140,
+              child: ErrorState(
+                message:
+                    "Can't reach the server. Check the address and try "
+                    'again.',
+                onRetry: () {},
+              ),
+            ),
+            const SizedBox(
+              width: 320,
+              height: 140,
+              child: SkeletonShapes(shape: SkeletonShape.list, count: 6),
+            ),
+          ],
+        ),
         const SizedBox(height: WaxSpace.s24),
 
         const SectionHeader(overline: 'Shell', title: 'Navigation chrome'),

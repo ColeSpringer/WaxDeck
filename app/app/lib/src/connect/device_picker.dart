@@ -488,22 +488,24 @@ class _DevicePickerSheet extends ConsumerWidget {
         title: Text(l10n.devicesPlayingOn(name)),
         content: WaxProse(l10n.devicesTakeOverBody),
         actions: <Widget>[
-          TextButton(
-            key: const Key(SemanticsIds.remoteLeave),
+          WaxButton(
+            label: l10n.devicesLeaveItPlaying,
+            kind: WaxButtonKind.text,
+            semanticsId: SemanticsIds.remoteLeave,
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_LeaveChoice.leave),
-            child: Text(l10n.devicesLeaveItPlaying),
           ),
-          TextButton(
-            key: const Key(SemanticsIds.remoteStopThere),
+          WaxButton(
+            label: l10n.devicesStopOn(name),
+            kind: WaxButtonKind.text,
+            semanticsId: SemanticsIds.remoteStopThere,
             onPressed: () => Navigator.of(dialogContext).pop(_LeaveChoice.stop),
-            child: Text(l10n.devicesStopOn(name)),
           ),
-          FilledButton(
-            key: const Key(SemanticsIds.remotePlayHere),
+          WaxButton(
+            label: l10n.devicesTransferHere,
+            semanticsId: SemanticsIds.remotePlayHere,
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_LeaveChoice.transfer),
-            child: Text(l10n.devicesTransferHere),
           ),
         ],
       ),

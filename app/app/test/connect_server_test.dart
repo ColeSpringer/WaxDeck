@@ -20,6 +20,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 void main() {
   const health = ServerHealth(status: 'ok', version: 'test', apiVersion: 1);
@@ -56,10 +57,12 @@ void main() {
       ),
     );
     await tester.enterText(
-      find.byKey(const Key(SemanticsIds.connectServerAddress)),
+      find.bySemanticsIdentifier(SemanticsIds.connectServerAddress),
       'wax.example.com',
     );
-    await tester.tap(find.byKey(const Key(SemanticsIds.connectServerSubmit)));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.connectServerSubmit),
+    );
     await tester.pumpAndSettle();
 
     // https was tried first and refused; http answered and won.
@@ -86,10 +89,12 @@ void main() {
       ),
     );
     await tester.enterText(
-      find.byKey(const Key(SemanticsIds.connectServerAddress)),
+      find.bySemanticsIdentifier(SemanticsIds.connectServerAddress),
       'wax.example.com',
     );
-    await tester.tap(find.byKey(const Key(SemanticsIds.connectServerSubmit)));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.connectServerSubmit),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -111,10 +116,12 @@ void main() {
       ),
     );
     await tester.enterText(
-      find.byKey(const Key(SemanticsIds.connectServerAddress)),
+      find.bySemanticsIdentifier(SemanticsIds.connectServerAddress),
       'not an address',
     );
-    await tester.tap(find.byKey(const Key(SemanticsIds.connectServerSubmit)));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.connectServerSubmit),
+    );
     await tester.pumpAndSettle();
 
     expect(probes, 0);
@@ -224,8 +231,8 @@ void main() {
       find.byKey(const Key(SemanticsIds.connectServerForget)),
       findsNothing,
     );
-    final field = tester.widget<TextField>(
-      find.byKey(const Key(SemanticsIds.connectServerAddress)),
+    final field = tester.widget<WaxTextField>(
+      waxControl<WaxTextField>(SemanticsIds.connectServerAddress),
     );
     expect(field.controller!.text, isEmpty);
   });
@@ -380,8 +387,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      final connect = tester.widget<FilledButton>(
-        find.byKey(const Key(SemanticsIds.connectServerSubmit)),
+      final connect = tester.widget<WaxButton>(
+        waxControl<WaxButton>(SemanticsIds.connectServerSubmit),
       );
       final forget = tester.widget<WaxButton>(
         find.byKey(const Key(SemanticsIds.connectServerForget)),
@@ -389,7 +396,7 @@ void main() {
       expect(connect.onPressed, isNull);
       expect(forget.onPressed, isNull);
       await tester.showKeyboard(
-        find.byKey(const Key(SemanticsIds.connectServerAddress)),
+        find.bySemanticsIdentifier(SemanticsIds.connectServerAddress),
       );
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();

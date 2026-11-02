@@ -590,6 +590,53 @@ void main() {
       expect(heights.single, greaterThan(WaxSpace.touchTarget));
     });
 
+    testWidgets('a link capped at one line ends in an ellipsis, keeps its '
+        'target and speaks the whole label', (tester) async {
+      final semantics = tester.ensureSemantics();
+      const name = 'The Exceedingly Long Name of a Show About Many Things';
+      await _pump(
+        tester,
+        SizedBox(
+          width: 160,
+          child: WaxButton(
+            label: name,
+            spokenLabel: 'Go to $name',
+            kind: WaxButtonKind.inline,
+            maxLines: 1,
+            semanticsId: 'show',
+            onPressed: () {},
+          ),
+        ),
+      );
+
+      final text = tester.widget<Text>(
+        find.descendant(of: find.byType(WaxButton), matching: find.text(name)),
+      );
+      expect(text.maxLines, 1);
+      expect(text.overflow, TextOverflow.ellipsis);
+      final line = tester.getSize(find.text(name)).height;
+      expect(line, lessThan(WaxSpace.touchTarget));
+      expect(
+        tester.getSize(find.byType(WaxButton)).height,
+        WaxSpace.touchTarget,
+      );
+      expect(
+        tester
+            .getSemantics(find.bySemanticsIdentifier('show'))
+            .getSemanticsData()
+            .label,
+        'Go to $name',
+      );
+      semantics.dispose();
+    });
+
+    test('only a link takes a line cap', () {
+      expect(
+        () => WaxButton(label: 'x', onPressed: null, maxLines: 1),
+        throwsAssertionError,
+      );
+    });
+
     test('busy, progress and status are one state at a time', () {
       expect(
         () => WaxButton(label: 'x', onPressed: null, busy: true, status: true),
@@ -1045,6 +1092,36 @@ void main() {
   });
 
   group('an ink tappable', () {
+    testWidgets('a disabled row takes no long press', (tester) async {
+      var long = 0;
+      await _pump(
+        tester,
+        WaxInkTappable(
+          label: 'Row',
+          onPressed: null,
+          onLongPress: () => long++,
+          child: const SizedBox(width: 200, height: 44, child: Text('Row')),
+        ),
+      );
+      await tester.longPress(find.byType(WaxInkTappable));
+      expect(long, 0);
+    });
+
+    testWidgets('a long press reaches its own callback', (tester) async {
+      var long = 0;
+      await _pump(
+        tester,
+        WaxInkTappable(
+          label: 'Row',
+          onPressed: () {},
+          onLongPress: () => long++,
+          child: const SizedBox(width: 200, height: 44, child: Text('Row')),
+        ),
+      );
+      await tester.longPress(find.byType(WaxInkTappable));
+      expect(long, 1);
+    });
+
     testWidgets('a pointer, a key and a reader press the one callback', (
       tester,
     ) async {
@@ -1280,6 +1357,58 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
       expect(keys, 0);
+    });
+  });
+
+  group('an icon button with a detail', () {
+    testWidgets('shows the label then the detail, and reads the detail as '
+        'its hint', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pump(
+        tester,
+        WaxIconButton(
+          glyph: WaxIcons.warning,
+          label: 'Retry download',
+          detail: 'No longer on the server',
+          semanticsId: 'retry',
+          onPressed: () {},
+        ),
+      );
+      final node = tester
+          .getSemantics(find.bySemanticsIdentifier('retry'))
+          .getSemanticsData();
+      expect(node.label, 'Retry download');
+      expect(node.hint, 'No longer on the server');
+
+      await tester.longPress(find.byType(WaxIconButton));
+      await tester.pump();
+      expect(find.text('Retry download\nNo longer on the server'), findsOne);
+      semantics.dispose();
+    });
+
+    testWidgets('without one, shows only the label and has no hint', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      await _pump(
+        tester,
+        WaxIconButton(
+          glyph: WaxIcons.downloads,
+          label: 'Download',
+          semanticsId: 'download',
+          onPressed: () {},
+        ),
+      );
+      final node = tester
+          .getSemantics(find.bySemanticsIdentifier('download'))
+          .getSemanticsData();
+      expect(node.label, 'Download');
+      expect(node.hint, isEmpty);
+
+      await tester.longPress(find.byType(WaxIconButton));
+      await tester.pump();
+      expect(find.text('Download'), findsOne);
+      semantics.dispose();
     });
   });
 }

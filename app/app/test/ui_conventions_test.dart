@@ -496,6 +496,55 @@ void main() {
       }
     });
 
+    test('error-only faces', () {
+      // A face that reads its error off AsyncError alone draws its wait
+      // through Riverpod's retry backoff: the state is AsyncLoading then,
+      // still carrying the error.
+      for (final code in [
+        'AsyncError(:final error) => ErrorState(',
+        'AsyncError() => Text(l10n.failed),',
+        'case AsyncError(:final error):',
+        'if (state case AsyncError(error: final e)) {}',
+        'AsyncError<Foo>() => x,',
+        // `when` answers loading for a read that is retrying.
+        'words.when(loading: () => a, error: (e, _) => b, data: (v) => c)',
+        'words.maybeWhen(error: (e, _) => b, orElse: () => a)',
+        'words.whenOrNull(\n  error: (e, _) => b,\n)',
+      ]) {
+        expect(count('error-only-face', code), 1, reason: code);
+      }
+      for (final code in [
+        'state = AsyncError(e, stackTrace);',
+        'return AsyncError<Foo>(error, StackTrace.current);',
+        'AsyncValue(:final error?) => ErrorState(',
+        'AsyncValue(hasError: true) => Text(l10n.failed),',
+        'words.when(skipLoadingOnReload: true, loading: () => a, '
+            'error: (e, _) => b, data: (v) => c)',
+        'when(x)',
+      ]) {
+        expect(count('error-only-face', code), 0, reason: code);
+      }
+    });
+
+    test('an error state that offers a retry says when it is retrying', () {
+      // Between Riverpod's retries the read is still failing and already
+      // asking again: a Try again drawn live there reads as dead.
+      for (final code in [
+        "ErrorState(message: m, onRetry: () => ref.invalidate(p))",
+        "ErrorState(\n  title: t,\n  message: m,\n  onRetry: retry,\n)",
+      ]) {
+        expect(count('error-state-retrying', code), 1, reason: code);
+      }
+      for (final code in [
+        "ErrorState(message: m, retrying: s.isLoading, onRetry: retry)",
+        "ErrorState(message: m, onRetry: retry, retrying: false)",
+        "ErrorState(title: t, message: m)",
+        "ErrorState(message: m, detail: Foo(onRetry: retry))",
+      ]) {
+        expect(count('error-state-retrying', code), 0, reason: code);
+      }
+    });
+
     test('prose slots', () {
       expect(count('prose-slot-args', "WaxField(help: 'a')"), 1);
       expect(count('prose-slot-args', "InputDecoration(helperText: 'a')"), 1);
@@ -1165,8 +1214,9 @@ final _rules = <_Rule>[
         "WaxHairline()), WaxHairline.vertical with the VerticalDivider's "
         'width as its extent, WaxBanner for a standing message on a card '
         '(a plain surface is surface1, hairline and WaxRadius.card), '
-        'WaxSlider, WaxTooltip, and WaxMenuButton or WaxSegmented for the '
-        'dropdown family',
+        'WaxSlider, WaxTooltip, and for the dropdown family WaxChoice (a '
+        'select that shows its value), WaxSegmented (two or three readings) '
+        'or WaxMenuButton (an icon-triggered overflow)',
   ),
   _Rule(
     name: 'raw-spacing',
@@ -1177,9 +1227,82 @@ final _rules = <_Rule>[
     ),
     fix: 'use the WaxSpace ladder',
   ),
+  _ErrorOnlyFaceRule(),
+  _ErrorStateRetryingRule(),
   _ProseSlotRule(),
   _CopyRule(),
 ];
+
+/// The error-only-face rule: an `AsyncError` pattern, and a `when` family
+/// call that does not skip loading on reload. Both hide an error that a
+/// retrying read still carries: between Riverpod's retries the state is
+/// AsyncLoading, which an `AsyncError` arm does not match and which
+/// `when` answers with its loading face.
+class _ErrorOnlyFaceRule extends _Rule {
+  _ErrorOnlyFaceRule()
+    : super(
+        name: 'error-only-face',
+        // A pattern, never a construction: a construction passes the
+        // error and the trace positionally, a pattern is empty or names
+        // fields.
+        pattern: RegExp(r'\bAsyncError(?:<[^>]*>)?\(\s*(?:\)|:|\w+\s*:)'),
+        fix:
+            'read the error off any state, as AsyncSliverFace and '
+            'AsyncBoxFace do (AsyncValue(:final error?) or '
+            "AsyncValue(hasError: true)): between Riverpod's retries a "
+            'failed read is AsyncLoading still carrying it, which an '
+            'AsyncError arm or a plain when() draws as the wait',
+      );
+
+  static final _when = RegExp(r'\.(?:when|maybeWhen|whenOrNull)\(');
+  static final _skips = RegExp(r'\bskipLoadingOnReload\s*:\s*true\b');
+
+  @override
+  Iterable<_Hit> find(String code) sync* {
+    final hits = [...super.find(code)];
+    for (final match in _when.allMatches(code)) {
+      final args = _InsetsRule.arguments(code, match.end);
+      if (args != null && !_skips.hasMatch(args)) hits.add(_Hit(match.start));
+    }
+    yield* hits..sort((a, b) => a.at.compareTo(b.at));
+  }
+}
+
+/// The retrying rule: an `ErrorState` that offers Try again and does not
+/// say whether the read is already asking again. Between Riverpod's
+/// retries the press is spent, and a live control there reads as broken.
+/// The arguments are walked, so a nested call's `onRetry` is its own.
+class _ErrorStateRetryingRule extends _Rule {
+  _ErrorStateRetryingRule()
+    : super(
+        name: 'error-state-retrying',
+        pattern: RegExp(r'\bErrorState\('),
+        fix:
+            'draw a read failure with AsyncFailureCard.from(state, ...) or a '
+            'house face, which pass retrying and drop Try again for a gone '
+            'entity; otherwise pass retrying: (false where nothing retries)',
+      );
+
+  /// App code alone: the catalogue's panes stand for no read, so there
+  /// is nothing for them to be retrying.
+  @override
+  bool appliesTo(String path) => path.startsWith('lib/');
+
+  static final _onRetry = RegExp(r'(?<![\w.])onRetry\s*:');
+  static final _retrying = RegExp(r'(?<![\w.])retrying\s*:');
+
+  @override
+  Iterable<_Hit> find(String code) sync* {
+    for (final match in pattern.allMatches(code)) {
+      final args = _InsetsRule.arguments(code, match.end);
+      if (args != null &&
+          _onRetry.hasMatch(args) &&
+          !_retrying.hasMatch(args)) {
+        yield _Hit(match.start);
+      }
+    }
+  }
+}
 
 /// The prose-slot rule: the arguments that hang a sentence under a
 /// label, and an empty state's body line.

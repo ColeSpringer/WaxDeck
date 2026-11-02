@@ -16,8 +16,9 @@ import 'routed_host.dart';
 const _series = 'sr-01JZX5N8QW3F4V9T2B7KDSERIE1';
 const _other = 'sr-01JZX5N8QW3F4V9T2B7KDSERIE2';
 
-ItemSummary _book(String pid, String title) => ItemSummary(
+ItemSummary _book(String pid, String title, {String? artUrl}) => ItemSummary(
   pid: pid,
+  artUrl: artUrl,
   mediaType: MediaType.audiobook,
   title: title,
   artist: 'Ada Author',
@@ -106,6 +107,67 @@ void main() {
     expect(find.text('1'), findsOneWidget);
     expect(find.text('1.5'), findsOneWidget);
     expect(find.text('-'), findsOneWidget);
+  });
+
+  testWidgets('the header is an entity header with no actions yet', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(_repo(), const BookSeriesScreen(pid: _series)),
+    );
+    await tester.pumpAndSettle();
+
+    final header = tester.widget<EntityHeader>(find.byType(EntityHeader));
+    expect(header.title, 'Tidewater');
+    expect(header.domain, WaxDomain.audiobooks);
+    expect(header.shape, ArtworkShape.portrait);
+    expect(header.actions, isEmpty);
+    expect(find.byType(WaxActionBar), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(EntityHeader),
+        matching: find.byType(WaxButton),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('the header wears the first listed book\'s cover', (
+    tester,
+  ) async {
+    final repo = _repo();
+    final books = repo.bookSeriesDetails[_series]!.books;
+    repo.bookSeriesDetails[_series] = BookSeriesDetail(
+      pid: _series,
+      name: 'Tidewater',
+      books: <BookSeriesEntry>[
+        BookSeriesEntry(
+          sequence: books.first.sequence,
+          book: _book(
+            books.first.book.pid,
+            books.first.book.title,
+            artUrl: '/api/v1/items/${books.first.book.pid}/art',
+          ),
+        ),
+        ...books.skip(1),
+      ],
+    );
+    await tester.pumpWidget(_host(repo, const BookSeriesScreen(pid: _series)));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<EntityHeader>(find.byType(EntityHeader)).artwork,
+      isNotNull,
+    );
+
+    await tester.pumpWidget(
+      _host(_repo(), const BookSeriesScreen(pid: _series)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<EntityHeader>(find.byType(EntityHeader)).artwork,
+      isNull,
+      reason: 'no cover reads as the monogram',
+    );
   });
 
   testWidgets('the header counts the catalog where it was told, the rows '

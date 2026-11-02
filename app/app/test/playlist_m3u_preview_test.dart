@@ -10,6 +10,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _pony = ItemSummary(
   pid: 'tr-01JZX5N8QW3F4V9T2B7KD3M9R6',
@@ -147,6 +148,33 @@ void main() {
     expect(_id(SemanticsIds.playlistM3uImport), findsNothing);
     expect(_id(SemanticsIds.playlistM3uCheck), findsOneWidget);
     expect(repo.importedM3uContents, isEmpty);
+  });
+
+  testWidgets('the check waits within a short dialog', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: const [_pony])
+      ..m3uPreview = _preview
+      ..m3uPreviewGate = gate;
+    await _paste(tester, repo);
+    tester.view.physicalSize = const Size(360, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.tap(_id(SemanticsIds.playlistM3uCheck));
+    await tester.pump();
+
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    // The dialog stays inside the window with its buttons on it: the
+    // wait shrinks to the room left, it does not push them off.
+    final window = Offset.zero & const Size(360, 300);
+    final dialog = tester.getRect(find.byType(Dialog));
+    expect(window.intersect(dialog), dialog);
+    final check = tester.getRect(_id(SemanticsIds.playlistM3uCheck));
+    expect(dialog.intersect(check), check);
+    final ghost = tester.getRect(find.byType(SkeletonShapes));
+    expect(ghost.top, greaterThanOrEqualTo(dialog.top));
+    gate.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a check answered after an edit is dropped', (tester) async {
@@ -347,11 +375,28 @@ void main() {
     const checking =
         'Checking each line of the file. A long one takes a while.';
     expect(find.text(checking), findsOneWidget);
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    // The one spinner is the pressed button's own, busy where it stood.
+    expect(
+      tester
+          .widget<WaxButton>(
+            waxControl<WaxButton>(SemanticsIds.playlistM3uCheck),
+          )
+          .busy,
+      isTrue,
+    );
+    expect(
+      find.descendant(
+        of: waxControl<WaxButton>(SemanticsIds.playlistM3uCheck),
+        matching: find.byType(WaxSpinner),
+      ),
+      findsOneWidget,
+    );
     expect(find.byType(WaxSpinner), findsOneWidget);
     gate.complete();
     await tester.pumpAndSettle();
     expect(find.text(checking), findsNothing);
-    expect(find.byType(WaxSpinner), findsNothing);
+    expect(find.byType(SkeletonShapes), findsNothing);
   });
 
   testWidgets('an import says it is running, and no second one of the file '
@@ -369,6 +414,19 @@ void main() {
     expect(
       find.text('Importing the playlist. A long file takes a while.'),
       findsOneWidget,
+    );
+    // The check's lines are already up, so the wait is on the button.
+    expect(find.byType(SkeletonShapes), findsNothing);
+    expect(
+      tester
+          .widget<WaxButton>(
+            find.ancestor(
+              of: _id(SemanticsIds.playlistM3uImport),
+              matching: find.byType(WaxButton),
+            ),
+          )
+          .busy,
+      isTrue,
     );
 
     // Given up on, opened again and checked on the same file.

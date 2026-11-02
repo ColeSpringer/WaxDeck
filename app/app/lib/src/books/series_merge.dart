@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'books_controller.dart';
@@ -144,16 +145,15 @@ Future<void> showSeriesMergeSheet(
                             child: Text(l10n.bookSeriesMergeEmpty),
                           ),
                       ],
-                      AsyncValue(hasError: true, error: final Object error) =>
-                        <Widget>[
-                          ErrorState(
-                            title: l10n.bookSeriesMergeTitle(
-                              book.series ?? loser,
-                            ),
-                            message: sheetContext.explain(error),
-                            onRetry: () => ref.invalidate(bookSeriesProvider),
+                      AsyncValue(hasError: true) => <Widget>[
+                        AsyncFailureCard.from(
+                          series,
+                          title: l10n.bookSeriesMergeTitle(
+                            book.series ?? loser,
                           ),
-                        ],
+                          onRetry: () => ref.invalidate(bookSeriesProvider),
+                        ),
+                      ],
                       _ => const <Widget>[
                         SkeletonShapes(shape: SkeletonShape.list),
                       ],

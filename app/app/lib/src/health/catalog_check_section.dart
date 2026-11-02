@@ -161,7 +161,7 @@ class CatalogCheckSection extends ConsumerWidget {
                 const SizedBox(height: WaxSpace.s16),
                 _CheckResult(check: value.counts, at: value.at),
               ],
-              AsyncError(:final error) => <Widget>[
+              AsyncValue(:final error?) => <Widget>[
                 const SizedBox(height: WaxSpace.s16),
                 Text(
                   context.explain(error),

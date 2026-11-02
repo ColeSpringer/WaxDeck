@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -165,6 +166,51 @@ void main() {
     expect(find.text('The Bree Trio'), findsOneWidget);
     expect(find.text('Prancing Pony Blues'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a recap that failed draws its retry busy while it retries', (
+    tester,
+  ) async {
+    final repo = _RecapDown();
+    await tester.pumpWidget(_host(repo));
+    await tester.pump();
+    // Past the first retry's delay: the read is loading again.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    final retry = find.widgetWithText(WaxButton, 'Retry');
+    expect(retry, findsOneWidget);
+    expect(tester.widget<WaxButton>(retry).busy, isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the recap ghost fits a short window', (tester) async {
+    tester.view.physicalSize = const Size(360, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository()..yearInReview = _recap(DateTime.now().year);
+    await tester.pumpWidget(_host(repo));
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    // Within the window's width, under the bar rather than behind it.
+    final ghost = tester.getRect(find.byType(SkeletonShapes));
+    expect(ghost.left, greaterThanOrEqualTo(0));
+    expect(ghost.right, lessThanOrEqualTo(360));
+    expect(
+      ghost.top,
+      greaterThanOrEqualTo(tester.getRect(find.byType(AppBar)).bottom),
+    );
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the recap waits behind a ghost of its list', (tester) async {
+    final repo = FakeRepository()..yearInReview = _recap(DateTime.now().year);
+    await tester.pumpWidget(_host(repo));
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+
+    await tester.pumpAndSettle();
+    expect(find.byType(SkeletonShapes), findsNothing);
+    expect(find.byKey(const Key('yir-month-chart')), findsOneWidget);
   });
 
   testWidgets('a year with more than one medium draws its split', (
@@ -488,4 +534,20 @@ extension on YearInReview {
     topGenres: topGenres,
     topShows: topShows,
   );
+}
+
+/// Fails the first recap read at once and holds every retry, as a server
+/// that has gone away does.
+class _RecapDown extends FakeRepository {
+  var _reads = 0;
+
+  @override
+  Future<YearInReview> getYearInReview({int? year}) async {
+    if (_reads++ > 0) await Completer<void>().future;
+    throw const WaxDeckApiException(
+      code: 'internal',
+      message: 'down',
+      statusCode: 500,
+    );
+  }
 }

@@ -148,12 +148,9 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
                 title: l10n.booksNothingMatchesYet,
                 message: l10n.booksNothingMatchesYetMessage(loaded.length),
                 glyph: WaxIcons.filter,
-                actionLabel: loadingMore
-                    ? l10n.booksLoadingMore
-                    : l10n.booksLoadMore,
-                onAction: loadingMore
-                    ? null
-                    : () => ref.read(booksProvider.notifier).loadMore(),
+                actionLabel: l10n.booksLoadMore,
+                actionBusy: loadingMore,
+                onAction: () => ref.read(booksProvider.notifier).loadMore(),
               ),
             ),
             false => SliverFillRemaining(
@@ -182,18 +179,12 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
               // already paged by the time this is reached.
               if (narrowed && more)
                 SliverToBoxAdapter(
-                  child: Padding(
+                  child: LoadMoreFooter(
+                    label: l10n.booksLoadMore,
+                    loading: loadingMore,
                     padding: const EdgeInsets.only(top: WaxSpace.s16),
-                    child: Center(
-                      child: loadingMore
-                          ? const CircularProgressIndicator()
-                          : WaxButton(
-                              label: l10n.booksLoadMore,
-                              kind: WaxButtonKind.text,
-                              onPressed: () =>
-                                  ref.read(booksProvider.notifier).loadMore(),
-                            ),
-                    ),
+                    onLoadMore: () =>
+                        ref.read(booksProvider.notifier).loadMore(),
                   ),
                 ),
             ],

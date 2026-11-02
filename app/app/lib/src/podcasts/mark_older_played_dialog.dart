@@ -261,7 +261,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
           ),
           if (_running) ...<Widget>[
             const SizedBox(height: WaxSpace.s16),
-            LinearProgressIndicator(
+            WaxProgressBar(
               // Indeterminate while the backlog is still being counted:
               // a bar sitting at zero over an unknown total reads as
               // stalled, and the count is a page-walk of its own.
@@ -289,7 +289,8 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
         WaxButton(
           label: l10n.podcastMarkPlayed,
           semanticsId: SemanticsIds.markOlderConfirm,
-          onPressed: _running ? null : _run,
+          busy: _running,
+          onPressed: _run,
         ),
       ],
     );

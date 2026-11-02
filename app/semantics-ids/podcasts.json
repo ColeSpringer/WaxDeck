@@ -36,6 +36,7 @@
     "podcastSort": "podcast-sort-{name}",
     "podcastSubscribe": "podcast-subscribe",
     "podcastSubscribeConfirm": "podcast-subscribe-confirm",
+    "podcastSupport": "podcast-support",
     "podcastUnsubscribe": "podcast-unsubscribe",
     "selectionClear": "selection-clear",
     "selectionDownload": "selection-download",

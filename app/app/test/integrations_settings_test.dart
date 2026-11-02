@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -10,6 +12,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'wax_finders.dart';
 
 /// The switch inside one event row. The key names the row; the control
 /// is what a tap has to land on.
@@ -37,7 +40,158 @@ FakeRepository _adminRepo() => FakeRepository(
   sessionState: const SessionState(authenticated: true, user: _admin),
 );
 
+/// A server whose credential state cannot be read: the first read fails
+/// at once and every retry waits, as on a server that has gone away.
+class _ConfigDown extends FakeRepository {
+  _ConfigDown()
+    : super(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      );
+
+  var _reads = 0;
+
+  @override
+  Future<ScrobblingAdminConfig> getScrobblingConfig() async {
+    if (_reads++ > 0) await Completer<void>().future;
+    throw const WaxDeckApiException(
+      code: 'internal',
+      message: 'down',
+      statusCode: 500,
+    );
+  }
+}
+
+/// A repository whose named reads wait on [hold], to look at a section
+/// while it loads.
+class _Holding extends FakeRepository {
+  _Holding({super.sessionState});
+
+  final hold = Completer<void>();
+  bool holdScrobblers = false;
+  bool holdAppPasswords = false;
+  bool holdCatalog = false;
+  bool holdTargets = false;
+  bool holdLastfmConfig = false;
+
+  @override
+  Future<List<Scrobbler>> listScrobblers() async {
+    if (holdScrobblers) await hold.future;
+    return super.listScrobblers();
+  }
+
+  @override
+  Future<List<AppPassword>> listAppPasswords() async {
+    if (holdAppPasswords) await hold.future;
+    return super.listAppPasswords();
+  }
+
+  @override
+  Future<List<NotifyEvent>> listNotificationEvents() async {
+    if (holdCatalog) await hold.future;
+    return super.listNotificationEvents();
+  }
+
+  @override
+  Future<List<NotificationTarget>> listMyNotificationTargets() async {
+    if (holdTargets) await hold.future;
+    return super.listMyNotificationTargets();
+  }
+
+  @override
+  Future<ScrobblingAdminConfig> getScrobblingConfig() async {
+    if (holdLastfmConfig) await hold.future;
+    return super.getScrobblingConfig();
+  }
+}
+
+/// A window shorter than the default six-row skeleton, so a ghost that
+/// does not fit its space throws an overflow here.
+void useShortWindow(WidgetTester tester) {
+  tester.view.physicalSize = const Size(800, 320);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
+
+/// Plays a dialog's entrance in full: a route fades in from nothing, and
+/// nothing unpainted is ever checked for overflow. The skeleton animates
+/// for good, so this cannot settle.
+Future<void> playDialogTransition(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
+void expectSkeletonNotSpinner() {
+  expect(find.byType(SkeletonShapes), findsOneWidget);
+  expect(find.byType(WaxSpinner), findsNothing);
+}
+
 void main() {
+  group('while loading', () {
+    testWidgets('the scrobbler slots draw a skeleton, not a spinner', (
+      tester,
+    ) async {
+      useShortWindow(tester);
+      final repo = _Holding()..holdScrobblers = true;
+      await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+      await tester.pump();
+      expectSkeletonNotSpinner();
+    });
+
+    testWidgets('the app passwords draw a skeleton, not a spinner', (
+      tester,
+    ) async {
+      useShortWindow(tester);
+      final repo = _Holding()..holdAppPasswords = true;
+      await tester.pumpWidget(_host(repo, const AppPasswordsSection()));
+      await tester.pump();
+      expectSkeletonNotSpinner();
+    });
+
+    testWidgets('the target list draws a skeleton, not a spinner', (
+      tester,
+    ) async {
+      useShortWindow(tester);
+      final repo = _Holding()..holdTargets = true;
+      await tester.pumpWidget(
+        _host(repo, const PersonalNotificationTargetsSection()),
+      );
+      await tester.pump();
+      expectSkeletonNotSpinner();
+    });
+
+    testWidgets('the editor checklist draws a skeleton, not a spinner', (
+      tester,
+    ) async {
+      useShortWindow(tester);
+      final repo = _Holding()..holdCatalog = true;
+      await tester.pumpWidget(
+        _host(repo, const PersonalNotificationTargetsSection()),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd),
+      );
+      await playDialogTransition(tester);
+      expectSkeletonNotSpinner();
+    });
+
+    testWidgets('the Last.fm credentials dialog draws a skeleton', (
+      tester,
+    ) async {
+      useShortWindow(tester);
+      final repo = _Holding(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      )..holdLastfmConfig = true;
+      await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
+      );
+      await playDialogTransition(tester);
+      expectSkeletonNotSpinner();
+    });
+  });
+
   testWidgets('connects ListenBrainz through the token dialog', (tester) async {
     final repo = FakeRepository();
     await tester.pumpWidget(_host(repo, const ScrobblingSection()));
@@ -46,20 +200,32 @@ void main() {
     expect(find.text('Needs server API credentials'), findsOneWidget);
 
     await tester.tap(
-      find.byKey(const ValueKey('scrobbler-connect-listenbrainz')),
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerConnect('listenbrainz')),
     );
     await tester.pumpAndSettle();
+    expect(
+      tester.widget(find.byKey(const Key('listenbrainz-token-field'))),
+      isA<WaxTextField>(),
+    );
+    expect(
+      waxControl<WaxButton>(SemanticsIds.listenbrainzConnectConfirm),
+      findsOneWidget,
+    );
     await tester.enterText(
       find.byKey(const Key('listenbrainz-token-field')),
       'token-123',
     );
-    await tester.tap(find.byKey(const Key('listenbrainz-connect-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.listenbrainzConnectConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Connected as listener'), findsOneWidget);
 
     await tester.tap(
-      find.byKey(const ValueKey('scrobbler-disconnect-listenbrainz')),
+      find.bySemanticsIdentifier(
+        SemanticsIds.scrobblerDisconnect('listenbrainz'),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Connected as listener'), findsNothing);
@@ -75,14 +241,16 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.byKey(const ValueKey('scrobbler-connect-listenbrainz')),
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerConnect('listenbrainz')),
     );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('listenbrainz-token-field')),
       'bad',
     );
-    await tester.tap(find.byKey(const Key('listenbrainz-connect-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.listenbrainzConnectConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -104,14 +272,16 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.byKey(const ValueKey('scrobbler-connect-listenbrainz')),
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerConnect('listenbrainz')),
     );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('listenbrainz-token-field')),
       'token',
     );
-    await tester.tap(find.byKey(const Key('listenbrainz-connect-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.listenbrainzConnectConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -182,6 +352,8 @@ void main() {
       find.byKey(const ValueKey('notify-config-token')),
       'app-token',
     );
+    await tester.ensureVisible(_eventSwitch('episode-downloaded'));
+    await tester.pumpAndSettle();
     await tester.tap(_eventSwitch('episode-downloaded'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('notify-target-save')));
@@ -411,6 +583,11 @@ void main() {
   testWidgets('the server section edits server-scope targets only', (
     tester,
   ) async {
+    // Tall enough for the whole editor, so the checklist is in reach
+    // without a scroll the focused field would pull back.
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final repo = _adminRepo();
     await tester.pumpWidget(
       _host(repo, const ServerNotificationTargetsSection()),
@@ -440,10 +617,6 @@ void main() {
       find.byKey(const ValueKey('notify-config-url')),
       'https://hooks.example.net/ops',
     );
-    // The webhook form is three fields deep, so the checklist below it
-    // is scrolled into reach rather than tapped where it used to sit.
-    await tester.ensureVisible(_eventSwitch('signup-requested'));
-    await tester.pumpAndSettle();
     await tester.tap(_eventSwitch('signup-requested'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('notify-target-save')));
@@ -452,6 +625,9 @@ void main() {
     expect(repo.serverNotificationTargets, hasLength(1));
     expect(repo.serverNotificationTargets.single.scope, 'server');
     expect(repo.serverNotificationTargets.single.kind, 'webhook');
+    expect(repo.serverNotificationTargets.single.enabledEvents, [
+      'signup-requested',
+    ]);
   });
 
   testWidgets('tests a target and edits it back through the round trip', (
@@ -481,7 +657,7 @@ void main() {
     // Editing seeds the round-tripped config and replaces it whole.
     await tester.tap(find.byKey(const ValueKey('notify-target-nt-SEED')));
     await tester.pumpAndSettle();
-    final topicField = tester.widget<TextField>(
+    final topicField = tester.widget<WaxTextField>(
       find.byKey(const ValueKey('notify-config-topic')),
     );
     expect(topicField.controller!.text, 'waxdeck');
@@ -566,9 +742,12 @@ void main() {
     await tester.pumpWidget(_host(repo, const ScrobblingSection()));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('scrobbler-setup-lastfm')), findsNothing);
-    final connect = tester.widget<TextButton>(
-      find.byKey(const ValueKey('scrobbler-connect-lastfm')),
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
+      findsNothing,
+    );
+    final connect = tester.widget<WaxButton>(
+      waxControl<WaxButton>(SemanticsIds.scrobblerConnect('lastfm')),
     );
     expect(connect.onPressed, isNull);
   });
@@ -583,11 +762,13 @@ void main() {
     // No credentials yet: the dead Connect gives way to the setup entry.
     expect(find.text('Needs server API credentials'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('scrobbler-connect-lastfm')),
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerConnect('lastfm')),
       findsNothing,
     );
 
-    await tester.tap(find.byKey(const ValueKey('scrobbler-setup-lastfm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('lastfm-api-key-field')),
@@ -597,7 +778,9 @@ void main() {
       find.byKey(const Key('lastfm-secret-field')),
       'secret-456',
     );
-    await tester.tap(find.byKey(const Key('lastfm-credentials-save')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.lastfmCredentialsSave),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.scrobblingConfig.lastfmConfigured, isTrue);
@@ -607,12 +790,12 @@ void main() {
     // The section reloads live: the row is connectable and the setup
     // moved into the small trailing gear.
     expect(find.text('Needs server API credentials'), findsNothing);
-    final connect = tester.widget<TextButton>(
-      find.byKey(const ValueKey('scrobbler-connect-lastfm')),
+    final connect = tester.widget<WaxButton>(
+      waxControl<WaxButton>(SemanticsIds.scrobblerConnect('lastfm')),
     );
     expect(connect.onPressed, isNotNull);
     expect(
-      find.byKey(const ValueKey('scrobbler-setup-lastfm')),
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
       findsOneWidget,
     );
   });
@@ -624,13 +807,17 @@ void main() {
     await tester.pumpWidget(_host(repo, const ScrobblingSection()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('scrobbler-setup-lastfm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('lastfm-api-key-field')),
       'key-123',
     );
-    await tester.tap(find.byKey(const Key('lastfm-credentials-save')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.lastfmCredentialsSave),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -638,7 +825,10 @@ void main() {
       'set both the API key and the secret, or neither',
     );
     // The dialog stays up for the correction.
-    expect(find.byKey(const Key('lastfm-credentials-save')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.lastfmCredentialsSave),
+      findsOneWidget,
+    );
     expect(repo.scrobblingConfig.lastfmConfigured, isFalse);
   });
 
@@ -663,16 +853,20 @@ void main() {
     await tester.pumpWidget(_host(repo, const ScrobblingSection()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('scrobbler-setup-lastfm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
+    );
     await tester.pumpAndSettle();
 
-    final keyField = tester.widget<TextField>(
+    final keyField = tester.widget<WaxTextField>(
       find.byKey(const Key('lastfm-api-key-field')),
     );
     expect(keyField.controller!.text, 'key-abc');
     expect(find.text('Stored sealed; never shown again'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('lastfm-credentials-clear')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.lastfmCredentialsClear),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.scrobblingConfig.lastfmConfigured, isFalse);
@@ -721,11 +915,7 @@ void main() {
     }
 
     WaxIconButton button(WidgetTester tester) => tester.widget<WaxIconButton>(
-      find.byWidgetPredicate(
-        (w) =>
-            w is WaxIconButton &&
-            w.semanticsId == SemanticsIds.notifyTargetTest('nt-T'),
-      ),
+      waxControl<WaxIconButton>(SemanticsIds.notifyTargetTest('nt-T')),
     );
 
     testWidgets('and says it was delivered', (tester) async {
@@ -782,5 +972,24 @@ void main() {
       );
       expect(button(tester).busy, isFalse);
     });
+  });
+
+  testWidgets('the credentials dialog says a failed read at once, while it '
+      'retries', (tester) async {
+    // The app's own retry left on: while an attempt runs the read is
+    // loading and still carries the last error.
+    await tester.pumpWidget(_host(_ConfigDown(), const ScrobblingSection()));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
+    );
+    await tester.pump();
+    // Past the first retry's delay: the read is loading again.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(find.text('Could not load the credential state'), findsOneWidget);
+    expect(find.byType(SkeletonShapes), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 }

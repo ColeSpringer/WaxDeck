@@ -1160,6 +1160,14 @@ void main() {
                         errorText: 'That is not a URL',
                       ),
                       const SizedBox(height: WaxSpace.s12),
+                      // Empty and disabled, which has to read as unavailable
+                      // with no typed text to dim.
+                      const WaxTextField(
+                        label: 'Only these words',
+                        hint: 'Words in the title',
+                        enabled: false,
+                      ),
+                      const SizedBox(height: WaxSpace.s12),
                       // The one shape that keeps its label to itself,
                       // beside the three that do not.
                       SearchField(

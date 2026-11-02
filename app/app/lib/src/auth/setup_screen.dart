@@ -90,68 +90,44 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: WaxSpace.s32),
-                  Semantics(
-                    identifier: SemanticsIds.setupUsername,
-                    child: TextFormField(
-                      key: const Key(SemanticsIds.setupUsername),
-                      controller: _username,
-                      autofillHints: const [AutofillHints.username],
-                      decoration: InputDecoration(
-                        labelText: l10n.authUsername,
-                        border: const OutlineInputBorder(),
-                      ),
-                      validator: (value) =>
-                          (value == null || value.trim().isEmpty)
-                          ? l10n.authEnterUsername
-                          : null,
-                    ),
+                  WaxTextField(
+                    semanticsId: SemanticsIds.setupUsername,
+                    controller: _username,
+                    label: l10n.authUsername,
+                    autofillHints: const [AutofillHints.username],
+                    validator: (value) =>
+                        (value == null || value.trim().isEmpty)
+                        ? l10n.authEnterUsername
+                        : null,
                   ),
                   const SizedBox(height: WaxSpace.s16),
-                  Semantics(
-                    identifier: SemanticsIds.setupPassword,
-                    child: TextFormField(
-                      key: const Key(SemanticsIds.setupPassword),
-                      controller: _password,
-                      obscureText: true,
-                      autofillHints: const [AutofillHints.newPassword],
-                      decoration: InputDecoration(
-                        labelText: l10n.authPassword,
-                        border: const OutlineInputBorder(),
-                      ),
-                      validator: (value) => (value == null || value.length < 8)
-                          ? l10n.authPasswordTooShort
-                          : null,
-                    ),
+                  WaxTextField(
+                    semanticsId: SemanticsIds.setupPassword,
+                    controller: _password,
+                    label: l10n.authPassword,
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.newPassword],
+                    validator: (value) => (value == null || value.length < 8)
+                        ? l10n.authPasswordTooShort
+                        : null,
                   ),
                   const SizedBox(height: WaxSpace.s16),
-                  Semantics(
-                    identifier: SemanticsIds.setupConfirm,
-                    child: TextFormField(
-                      key: const Key(SemanticsIds.setupConfirm),
-                      controller: _confirm,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: l10n.authConfirmPassword,
-                        border: const OutlineInputBorder(),
-                      ),
-                      validator: (value) => (value != _password.text)
-                          ? l10n.authPasswordsDiffer
-                          : null,
-                      onFieldSubmitted: (_) => _submit(),
-                    ),
+                  WaxTextField(
+                    semanticsId: SemanticsIds.setupConfirm,
+                    controller: _confirm,
+                    label: l10n.authConfirmPassword,
+                    obscureText: true,
+                    validator: (value) => (value != _password.text)
+                        ? l10n.authPasswordsDiffer
+                        : null,
+                    onSubmitted: (_) => _submit(),
                   ),
                   const SizedBox(height: WaxSpace.s16),
-                  Semantics(
-                    identifier: SemanticsIds.setupDisplayName,
-                    child: TextFormField(
-                      key: const Key(SemanticsIds.setupDisplayName),
-                      controller: _displayName,
-                      decoration: InputDecoration(
-                        labelText: l10n.authDisplayName,
-                        border: const OutlineInputBorder(),
-                      ),
-                      onFieldSubmitted: (_) => _submit(),
-                    ),
+                  WaxTextField(
+                    semanticsId: SemanticsIds.setupDisplayName,
+                    controller: _displayName,
+                    label: l10n.authDisplayName,
+                    onSubmitted: (_) => _submit(),
                   ),
                   const SizedBox(height: WaxSpace.s24),
                   if (_error != null) ...[
@@ -166,19 +142,12 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                     ),
                     const SizedBox(height: WaxSpace.s16),
                   ],
-                  Semantics(
-                    identifier: SemanticsIds.setupSubmit,
-                    child: FilledButton(
-                      key: const Key(SemanticsIds.setupSubmit),
-                      onPressed: _submitting ? null : _submit,
-                      child: _submitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(l10n.authCreateAccount),
-                    ),
+                  WaxButton(
+                    semanticsId: SemanticsIds.setupSubmit,
+                    label: l10n.authCreateAccount,
+                    expand: true,
+                    busy: _submitting,
+                    onPressed: _submitting ? null : _submit,
                   ),
                   // Which server this form would administer, native
                   // only, with the way back out. A typo'd address that
@@ -196,15 +165,14 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    Semantics(
-                      identifier: SemanticsIds.connectServerOpen,
-                      child: TextButton(
-                        key: const Key(SemanticsIds.connectServerOpen),
-                        onPressed: _submitting
-                            ? null
-                            : () => context.go(WaxRoute.serverConnect),
-                        child: Text(l10n.authChangeServer),
-                      ),
+                    WaxButton(
+                      semanticsId: SemanticsIds.connectServerOpen,
+                      label: l10n.authChangeServer,
+                      kind: WaxButtonKind.text,
+                      expand: true,
+                      onPressed: _submitting
+                          ? null
+                          : () => context.go(WaxRoute.serverConnect),
                     ),
                   ],
                 ],

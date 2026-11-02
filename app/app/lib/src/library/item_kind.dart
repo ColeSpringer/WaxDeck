@@ -321,15 +321,7 @@ class _SetKindDialogState extends ConsumerState<_SetKindDialog> {
       title: Text(
         _toBook ? l10n.libraryKindToBookTitle : l10n.libraryKindToMusicTitle,
       ),
-      content: _running
-          ? Row(
-              children: <Widget>[
-                const WaxSpinner(),
-                const SizedBox(width: WaxSpace.s12),
-                Expanded(child: Text(l10n.libraryKindWorking)),
-              ],
-            )
-          : _tooMany
+      content: _tooMany
           ? WaxProse(l10n.libraryKindAlbumTooLarge(kindChangeMaxItems))
           : Column(
               mainAxisSize: MainAxisSize.min,
@@ -348,14 +340,25 @@ class _SetKindDialogState extends ConsumerState<_SetKindDialog> {
                     label: l10n.metadataWriteBackTitle,
                     value: _writeBack,
                     semanticsId: SemanticsIds.kindWriteBack,
-                    onChanged: (v) => setState(() => _writeBack = v),
+                    onChanged: _running
+                        ? null
+                        : (v) => setState(() => _writeBack = v),
                   ),
                 ),
+                // The body stays while the change runs, with what it is
+                // doing under it; the confirm button carries the wait.
+                if (_running) ...<Widget>[
+                  const SizedBox(height: WaxSpace.s12),
+                  Text(
+                    l10n.libraryKindWorking,
+                    style: WaxType.bodySmall.copyWith(
+                      color: WaxColors.of(context).textSecondary,
+                    ),
+                  ),
+                ],
               ],
             ),
-      actions: _running
-          ? const <Widget>[]
-          : _tooMany
+      actions: _tooMany
           ? <Widget>[
               WaxButton(
                 label: l10n.commonClose,
@@ -364,14 +367,17 @@ class _SetKindDialogState extends ConsumerState<_SetKindDialog> {
               ),
             ]
           : <Widget>[
+              // Once started the change runs on the server whatever this
+              // dialog does, so there is nothing left to cancel.
               WaxButton(
                 label: l10n.commonCancel,
                 kind: WaxButtonKind.text,
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: _running ? null : () => Navigator.of(context).pop(),
               ),
               WaxButton(
                 label: l10n.libraryKindConfirm,
                 semanticsId: SemanticsIds.kindConfirm,
+                busy: _running,
                 onPressed: _run,
               ),
             ],

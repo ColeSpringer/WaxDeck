@@ -254,6 +254,9 @@ void main() {
 void _showPinGroup() {
   group('a pinned show that was unsubscribed', () {
     Future<void> open(WidgetTester tester, FakeRepository repo) async {
+      // The show reads but nobody follows it, which is what unsubscribed
+      // means; a show that does not read has no header to hold the menu.
+      repo.shows[_show] = testShow(_show);
       tester.view.physicalSize = const Size(900, 1800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);

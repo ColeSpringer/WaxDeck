@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -353,6 +354,75 @@ void main() {
       expect(find.bySemanticsLabel('Clear Search'), findsNothing);
     });
 
+    testWidgets('a field without hints keeps autofill on, as a bare input', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const WaxTextField(label: 'Note')));
+      final config = tester
+          .state<EditableTextState>(find.byType(EditableText))
+          .textInputConfiguration;
+      expect(config.autofillConfiguration.enabled, isTrue);
+    });
+
+    testWidgets('null autofill hints turn autofill off', (tester) async {
+      await tester.pumpWidget(
+        _host(const WaxTextField(label: 'One-time code', autofillHints: null)),
+      );
+      final config = tester
+          .state<EditableTextState>(find.byType(EditableText))
+          .textInputConfiguration;
+      expect(config.autofillConfiguration.enabled, isFalse);
+    });
+
+    testWidgets('hands autofill hints and autocorrect to the input', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const WaxTextField(
+            label: 'Address',
+            autofillHints: <String>[AutofillHints.url],
+            autocorrect: false,
+          ),
+        ),
+      );
+      final input = tester.widget<TextField>(find.byType(TextField));
+      expect(input.autofillHints, <String>[AutofillHints.url]);
+      expect(input.autocorrect, isFalse);
+    });
+
+    testWidgets('a long helper line wraps and does not widen a dialog', (
+      tester,
+    ) async {
+      Future<double> dialogWidth(String? helper) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildWaxTheme(variant: WaxThemeVariant.dark),
+            home: Scaffold(
+              body: AlertDialog(
+                content: WaxTextField(label: 'Zone', helperText: helper),
+              ),
+            ),
+          ),
+        );
+        return tester
+            .getSize(
+              find.descendant(
+                of: find.byType(AlertDialog),
+                matching: find.byType(IntrinsicWidth),
+              ),
+            )
+            .width;
+      }
+
+      final bare = await dialogWidth(null);
+      final helped = await dialogWidth(
+        'A long sentence of help that, set on one line, is far wider than '
+        'the field it sits under and would stretch the dialog around it',
+      );
+      expect(helped, bare);
+    });
+
     testWidgets('names the input itself, not a wrapper around it', (
       tester,
     ) async {
@@ -378,6 +448,279 @@ void main() {
       );
       handle.dispose();
     });
+  });
+
+  group('WaxTextField validator', () {
+    const userKey = ValueKey<String>('user');
+    const passKey = ValueKey<String>('pass');
+
+    Widget form(
+      GlobalKey<FormState> key,
+      List<TextEditingController> c, {
+      AutovalidateMode autovalidate = AutovalidateMode.disabled,
+      VoidCallback? onChanged,
+    }) => _host(
+      Form(
+        key: key,
+        autovalidateMode: autovalidate,
+        onChanged: onChanged,
+        child: Column(
+          children: <Widget>[
+            WaxTextField(
+              key: userKey,
+              label: 'Username',
+              controller: c[0],
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
+            ),
+            WaxTextField(
+              key: passKey,
+              label: 'Password',
+              controller: c[1],
+              obscureText: true,
+              validator: (v) =>
+                  (v == null || v.length < 8) ? 'Too short' : null,
+            ),
+          ],
+        ),
+      ),
+      height: 300,
+    );
+
+    Finder under(Key field, String message) =>
+        find.descendant(of: find.byKey(field), matching: find.text(message));
+
+    List<TextEditingController> controllers() {
+      final c = <TextEditingController>[
+        TextEditingController(),
+        TextEditingController(),
+      ];
+      addTearDown(() {
+        for (final e in c) {
+          e.dispose();
+        }
+      });
+      return c;
+    }
+
+    testWidgets('validate draws each message under its own field and clears', (
+      tester,
+    ) async {
+      final key = GlobalKey<FormState>();
+      final c = controllers();
+      await tester.pumpWidget(form(key, c));
+      expect(find.text('Enter a name'), findsNothing);
+
+      expect(key.currentState!.validate(), isFalse);
+      await tester.pump();
+      expect(under(userKey, 'Enter a name'), findsOneWidget);
+      expect(under(passKey, 'Too short'), findsOneWidget);
+      expect(under(userKey, 'Too short'), findsNothing);
+      expect(under(passKey, 'Enter a name'), findsNothing);
+
+      c[0].text = 'pippin';
+      expect(key.currentState!.validate(), isFalse);
+      await tester.pump();
+      expect(find.text('Enter a name'), findsNothing);
+      expect(under(passKey, 'Too short'), findsOneWidget);
+
+      c[1].text = 'hunter22hunter22';
+      expect(key.currentState!.validate(), isTrue);
+      await tester.pump();
+      expect(find.text('Too short'), findsNothing);
+    });
+
+    testWidgets('typing reports to the form and autovalidates', (tester) async {
+      final key = GlobalKey<FormState>();
+      final c = controllers();
+      var changes = 0;
+      await tester.pumpWidget(
+        form(
+          key,
+          c,
+          autovalidate: AutovalidateMode.onUserInteraction,
+          onChanged: () => changes++,
+        ),
+      );
+      expect(find.text('Too short'), findsNothing);
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(passKey),
+          matching: find.byType(EditableText),
+        ),
+        'abc',
+      );
+      await tester.pump();
+      expect(changes, greaterThan(0));
+      expect(under(passKey, 'Too short'), findsOneWidget);
+    });
+
+    testWidgets('a field without a validator ignores the form', (tester) async {
+      final key = GlobalKey<FormState>();
+      await tester.pumpWidget(
+        _host(
+          Form(
+            key: key,
+            child: const WaxTextField(label: 'Note'),
+          ),
+        ),
+      );
+      expect(key.currentState!.validate(), isTrue);
+    });
+
+    group('semantics', () {
+      /// The input's node, and whether a button sits above it.
+      ({SemanticsNode input, bool underButton}) probe(WidgetTester tester) {
+        final input = tester.getSemantics(find.byType(EditableText));
+        var underButton = false;
+        for (var n = input.parent; n != null; n = n.parent) {
+          if (n.getSemanticsData().flagsCollection.isButton) {
+            underButton = true;
+          }
+        }
+        return (input: input, underButton: underButton);
+      }
+
+      Widget single({
+        required TextEditingController controller,
+        bool validated = false,
+      }) => _host(
+        Form(
+          child: WaxTextField(
+            label: 'Username',
+            semanticsId: 'user-id',
+            controller: controller,
+            validator: validated
+                ? (v) => (v == null || v.isEmpty) ? 'Enter a name' : null
+                : null,
+          ),
+        ),
+        height: 160,
+      );
+
+      testWidgets('a validated field keeps its clear button a sibling', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        final c = TextEditingController(text: 'pippin');
+        addTearDown(c.dispose);
+        await tester.pumpWidget(single(controller: c, validated: true));
+        expect(find.bySemanticsLabel('Clear Username'), findsOneWidget);
+        final shape = probe(tester);
+        expect(shape.underButton, isFalse);
+        expect(
+          shape.input.getSemanticsData().flagsCollection.isTextField,
+          true,
+        );
+        expect(shape.input.identifier, 'user-id');
+        handle.dispose();
+      });
+
+      testWidgets('an unvalidated field has the same shape', (tester) async {
+        final handle = tester.ensureSemantics();
+        final c = TextEditingController(text: 'pippin');
+        addTearDown(c.dispose);
+        await tester.pumpWidget(single(controller: c));
+        expect(probe(tester).underButton, isFalse);
+        handle.dispose();
+      });
+
+      testWidgets('an empty invalid field reports on the input too', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        final c = TextEditingController();
+        addTearDown(c.dispose);
+        await tester.pumpWidget(single(controller: c, validated: true));
+        expect(tester.state<FormState>(find.byType(Form)).validate(), isFalse);
+        await tester.pump();
+        final node = tester.getSemantics(find.byType(EditableText));
+        expect(
+          node.getSemanticsData().validationResult,
+          SemanticsValidationResult.invalid,
+        );
+        expect(node.hint, 'Enter a name');
+        handle.dispose();
+      });
+
+      testWidgets('the invalid result stays on the input while text is held', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        final c = TextEditingController();
+        addTearDown(c.dispose);
+        await tester.pumpWidget(
+          _host(
+            Form(
+              child: WaxTextField(
+                label: 'Username',
+                controller: c,
+                validator: (v) => (v ?? '').length < 5 ? 'Too short' : null,
+              ),
+            ),
+            height: 160,
+          ),
+        );
+        c.text = 'abc';
+        await tester.pump();
+        expect(tester.state<FormState>(find.byType(Form)).validate(), isFalse);
+        await tester.pump();
+        final shape = probe(tester);
+        expect(shape.underButton, isFalse);
+        expect(
+          shape.input.getSemanticsData().validationResult,
+          SemanticsValidationResult.invalid,
+        );
+        handle.dispose();
+      });
+
+      testWidgets('an explicit error reports the field invalid, and stops '
+          'once it is gone', (tester) async {
+        final handle = tester.ensureSemantics();
+        Widget field(String? error) => _host(
+          WaxTextField(label: 'Retention', errorText: error),
+          height: 160,
+        );
+        await tester.pumpWidget(field('Too short'));
+        SemanticsData input() =>
+            tester.getSemantics(find.byType(EditableText)).getSemanticsData();
+        expect(input().validationResult, SemanticsValidationResult.invalid);
+        expect(input().hint, 'Too short');
+
+        await tester.pumpWidget(field(null));
+        expect(input().validationResult, SemanticsValidationResult.none);
+        handle.dispose();
+      });
+    });
+
+    for (final (name, before, after) in <(String, bool, bool)>[
+      ('a validator that comes', false, true),
+      ('a validator that goes', true, false),
+    ]) {
+      testWidgets('$name is refused', (tester) async {
+        // Either way the field's subtree would remount, dropping focus and
+        // the keyboard on the keystroke that flipped it.
+        Widget field({required bool validated}) => _host(
+          Form(
+            child: WaxTextField(
+              label: 'Username',
+              validator: validated ? (v) => null : null,
+            ),
+          ),
+          height: 160,
+        );
+        await tester.pumpWidget(field(validated: before));
+        await tester.pumpWidget(field(validated: after));
+        expect(
+          tester.takeException(),
+          isA<AssertionError>().having(
+            (e) => e.message,
+            'message',
+            contains('a validator must not come and go'),
+          ),
+        );
+      });
+    }
   });
 
   group('WaxSegmented', () {
@@ -435,6 +778,34 @@ void main() {
 
       await tester.tap(find.text('YouTube'));
       expect(picked, ['youtube']);
+    });
+
+    testWidgets('a null onSelect disables every segment', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const Center(
+            child: WaxSegmented(
+              label: 'Source',
+              segments: [
+                WaxSegment(name: 'rss', label: 'RSS', semanticsId: 'seg-rss'),
+                WaxSegment(name: 'youtube', label: 'YouTube'),
+              ],
+              selected: 'rss',
+              onSelect: null,
+            ),
+          ),
+          height: 120,
+        ),
+      );
+
+      final rss = tester.widget<WaxTappable>(
+        find.ancestor(of: find.text('RSS'), matching: find.byType(WaxTappable)),
+      );
+      expect(rss.onPressed, isNull);
+      expect(
+        tester.getSemantics(find.bySemanticsIdentifier('seg-rss')),
+        isSemantics(hasEnabledState: true, isEnabled: false),
+      );
     });
   });
 
@@ -1011,6 +1382,45 @@ void main() {
       );
     });
 
+    testWidgets('busy spins where its word was, live, and takes no press', (
+      tester,
+    ) async {
+      var presses = 0;
+      Future<void> pill({required bool busy}) => tester.pumpWidget(
+        _host(
+          Center(
+            child: WaxPill(
+              label: 'Voice boost',
+              busy: busy,
+              onPressed: () => presses++,
+            ),
+          ),
+          height: 80,
+        ),
+      );
+
+      await pill(busy: false);
+      final idle = tester.getSize(find.byType(WaxPill));
+      await pill(busy: true);
+
+      // The spinner stands in the word's room, so the pill keeps its size.
+      expect(find.byType(WaxSpinner), findsOneWidget);
+      expect(tester.getSize(find.byType(WaxPill)), idle);
+      // Working, not unavailable: the live ink, and said as working.
+      final colors = WaxColors.dark;
+      expect(
+        tester.widget<WaxSpinner>(find.byType(WaxSpinner)).color,
+        colors.textSecondary,
+      );
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Voice boost')),
+        isSemantics(label: 'Voice boost', value: 'Working', isButton: true),
+      );
+      await tester.tap(find.byType(WaxPill));
+      await tester.pump();
+      expect(presses, 0);
+    });
+
     testWidgets('a null press disables it in the tree, not only in ink', (
       tester,
     ) async {
@@ -1020,6 +1430,83 @@ void main() {
       expect(
         tester.getSemantics(find.bySemanticsLabel('Voice boost')),
         isSemantics(hasEnabledState: true, isEnabled: false),
+      );
+    });
+  });
+
+  group('WaxTextField enabled', () {
+    testWidgets('off takes no typing and dims the text', (tester) async {
+      final controller = TextEditingController(text: 'kept');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _host(
+          WaxTextField(
+            label: 'Only these',
+            controller: controller,
+            enabled: false,
+          ),
+        ),
+      );
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.enabled, isFalse);
+      final colors = WaxColors.of(tester.element(find.byType(TextField)));
+      expect(field.style?.color, colors.textDisabled);
+
+      // Text is held, so no clear control stands where it would be.
+      expect(find.byType(WaxIconButton), findsNothing);
+      expect(controller.text, 'kept');
+    });
+
+    testWidgets('off and empty draws its label, hint and box disabled', (
+      tester,
+    ) async {
+      // The usual disabled field holds nothing, so dimming only the typed
+      // text left it looking exactly like a live one.
+      Future<({Color label, Color? hint, BoxDecoration box})> drawn(
+        bool enabled,
+      ) async {
+        await tester.pumpWidget(
+          _host(
+            WaxTextField(
+              label: 'Only these',
+              hint: 'Words to match',
+              glyph: WaxIcons.search,
+              enabled: enabled,
+            ),
+          ),
+        );
+        final box = tester.widget<AnimatedContainer>(
+          find.ancestor(
+            of: find.byType(TextField),
+            matching: find.byType(AnimatedContainer),
+          ),
+        );
+        return (
+          label: tester.widget<Text>(find.text('Only these')).style!.color!,
+          hint: tester
+              .widget<TextField>(find.byType(TextField))
+              .decoration
+              ?.hintStyle
+              ?.color,
+          box: box.decoration! as BoxDecoration,
+        );
+      }
+
+      final colors = WaxColors.dark;
+      final live = await drawn(true);
+      final off = await drawn(false);
+      expect(live.label, isNot(colors.textDisabled));
+      expect(off.label, colors.textDisabled);
+      expect(off.hint, colors.textDisabled);
+      expect(
+        tester.widget<WaxIcon>(find.byType(WaxIcon)).color,
+        colors.textDisabled,
+      );
+      expect(
+        off.box.color,
+        isNot(live.box.color),
+        reason: 'the box steps back',
       );
     });
   });

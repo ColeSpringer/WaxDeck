@@ -154,6 +154,10 @@ func TestFileFactsAreBoundedAndCached(t *testing.T) {
 func TestTrackFactsSurviveAPlay(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
+	// While the feed still trails the fixture's scan the key is the
+	// feed's position, which every row it reads moves: sweep once it has
+	// caught up, so the play is the only thing left to move it.
+	feedCaughtUp(t, ctx, svc)
 	rows, err := svc.TrackFacts(ctx, uc)
 	if err != nil || len(rows) == 0 {
 		t.Fatalf("rows = %d (%v)", len(rows), err)
@@ -162,11 +166,9 @@ func TestTrackFactsSurviveAPlay(t *testing.T) {
 	if _, err := svc.Checkpoint(ctx, uc, rows[0].PID, 1000, nil); err != nil {
 		t.Fatal(err)
 	}
-	for deadline := time.Now().Add(10 * time.Second); svc.CatalogTailSeq() == tail; {
-		if time.Now().After(deadline) {
-			t.Fatal("the feed position never moved after a checkpoint")
-		}
-		time.Sleep(10 * time.Millisecond)
+	feedCaughtUp(t, ctx, svc)
+	if svc.CatalogTailSeq() == tail {
+		t.Fatal("the feed position never moved after a checkpoint")
 	}
 	again, err := svc.TrackFacts(ctx, uc)
 	if err != nil {

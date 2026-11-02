@@ -56,13 +56,9 @@ void main() {
 
     Finder row(String pid) =>
         find.bySemanticsIdentifier(SemanticsIds.jobRow(pid));
-    LinearProgressIndicator bar(String pid) =>
-        tester.widget<LinearProgressIndicator>(
-          find.descendant(
-            of: row(pid),
-            matching: find.byType(LinearProgressIndicator),
-          ),
-        );
+    WaxProgressBar bar(String pid) => tester.widget<WaxProgressBar>(
+      find.descendant(of: row(pid), matching: find.byType(WaxProgressBar)),
+    );
     final l10n = lookupAppLocalizations(const Locale('en'));
     expect(bar('jb-scan').value, 0.42);
     expect(

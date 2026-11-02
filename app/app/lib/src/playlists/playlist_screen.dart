@@ -59,10 +59,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
       // Pops where something pushed this, goes to the listing where
       // nothing did.
       onBack: () => context.leave(fallback: WaxRoute.playlists),
-      actions: <Widget>[
-        if (view != null) _Overflow(view: view),
-        const SearchAction(),
-      ],
+      actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
         // A permanent slot: a sliver appearing at the head of the list
         // shifts every one after it, rebuilding the add row and losing
@@ -144,21 +141,22 @@ class _Header extends ConsumerWidget {
       subtitle: playlistOwnerLine(l10n, playlist),
       metadata: _facts(l10n, context.waxL10n, view),
       artwork: waxArtwork(ref.watch(artworkStoreProvider), playlist.artUrl),
-      actions: <Widget>[
-        WaxButton(
+      actions: <WaxAction>[
+        WaxAction(
           label: l10n.playlistPlay,
-          icon: WaxIcons.play,
+          glyph: WaxIcons.play,
+          emphasis: WaxActionEmphasis.primary,
           onPressed: entries.isEmpty ? null : play,
           semanticsId: SemanticsIds.entityPlay,
         ),
-        WaxButton(
+        WaxAction(
           label: l10n.playlistShuffle,
-          kind: WaxButtonKind.tonal,
-          icon: WaxIcons.shuffle,
+          glyph: WaxIcons.shuffle,
           onPressed: entries.isEmpty ? null : () => play(shuffle: true),
           semanticsId: SemanticsIds.entityShuffle,
         ),
       ],
+      overflow: _Overflow(view: view),
     );
   }
 

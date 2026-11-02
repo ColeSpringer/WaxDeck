@@ -145,34 +145,10 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
   Future<void> _setPassword() async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    final controller = TextEditingController();
     final password = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.adminUserSetPassword),
-        content: TextField(
-          key: const Key('user-new-password'),
-          controller: controller,
-          obscureText: true,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: l10n.adminUserNewPasswordLabel,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l10n.commonCancel),
-          ),
-          FilledButton(
-            key: const Key('user-set-password-confirm'),
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: Text(l10n.adminUserSetPassword),
-          ),
-        ],
-      ),
+      builder: (_) => const _SetPasswordDialog(),
     );
-    controller.dispose();
     if (password == null || password.isEmpty) return;
     try {
       await ref
@@ -233,14 +209,16 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
         title: Text(title),
         content: WaxProse(body),
         actions: [
-          TextButton(
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.commonCancel),
           ),
-          FilledButton(
+          WaxButton(
             key: const Key('user-confirm'),
+            label: action,
+            kind: WaxButtonKind.destructive,
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(action),
           ),
         ],
       ),
@@ -476,7 +454,8 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
                   ? l10n.adminUserApproveAction
                   : l10n.commonSave,
               semanticsId: SemanticsIds.userSave,
-              onPressed: _busy ? null : _save,
+              busy: _busy,
+              onPressed: _save,
             ),
             if (!widget.approve) ...<Widget>[
               const SizedBox(height: WaxSpace.s24),
@@ -568,14 +547,16 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
         ],
       ),
       actions: <Widget>[
-        TextButton(
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        FilledButton(
+        WaxButton(
           key: const Key('user-confirm'),
+          label: l10n.adminUserDeleteAction,
+          kind: WaxButtonKind.destructive,
           onPressed: () => Navigator.of(context).pop(_playlists),
-          child: Text(l10n.adminUserDeleteAction),
         ),
       ],
     );
@@ -695,6 +676,53 @@ class _TagRuleEditorState extends State<_TagRuleEditor> {
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The new-password prompt. It owns its controller: the route is still
+/// drawing its exit when the caller gets the answer, so a controller the
+/// caller disposed would be read after that.
+class _SetPasswordDialog extends StatefulWidget {
+  const _SetPasswordDialog();
+
+  @override
+  State<_SetPasswordDialog> createState() => _SetPasswordDialogState();
+}
+
+class _SetPasswordDialogState extends State<_SetPasswordDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return AlertDialog(
+      title: Text(l10n.adminUserSetPassword),
+      content: WaxTextField(
+        key: const Key('user-new-password'),
+        controller: _controller,
+        obscureText: true,
+        autofocus: true,
+        label: l10n.adminUserNewPasswordLabel,
+      ),
+      actions: [
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        WaxButton(
+          key: const Key('user-set-password-confirm'),
+          label: l10n.adminUserSetPassword,
+          onPressed: () => Navigator.of(context).pop(_controller.text),
         ),
       ],
     );

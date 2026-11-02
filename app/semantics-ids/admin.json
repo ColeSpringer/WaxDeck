@@ -30,6 +30,7 @@
     "backupImport": "backup-import",
     "backupMenu": "backup-menu-{id}",
     "backupMenuAction": "backup-{action}-{id}",
+    "backupRetentionRetry": "backup-retention-retry",
     "backupRow": "backup-row-{id}",
     "confirmAccept": "confirm-accept",
     "confirmCancel": "confirm-cancel",

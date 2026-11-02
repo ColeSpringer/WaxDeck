@@ -16,6 +16,26 @@ final isAdminProvider = Provider<bool>((ref) {
   return user?.roles.contains('admin') ?? false;
 });
 
+/// What an administrators-only screen draws for this session.
+enum AdminAccess {
+  /// The session has not answered yet. Not a no: [isAdminProvider] reads
+  /// false here for everybody, and refusing on it showed every
+  /// administrator the refusal first.
+  resolving,
+  granted,
+  refused,
+}
+
+/// [isAdminProvider], told apart from not knowing yet, for the screens
+/// that refuse a member outright.
+final adminAccessProvider = Provider<AdminAccess>((ref) {
+  final session = ref.watch(authControllerProvider);
+  // As the boot gate reads it: a probe still out, retries included, is
+  // not an answer; a settled failure is, and it means signed out.
+  if (session.isLoading && !session.hasValue) return AdminAccess.resolving;
+  return ref.watch(isAdminProvider) ? AdminAccess.granted : AdminAccess.refused;
+});
+
 /// The settings sections, in the order the home screen lists them.
 ///
 /// Account is first because it is the one everybody opens, and Server is

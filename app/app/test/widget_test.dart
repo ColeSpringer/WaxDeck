@@ -28,9 +28,18 @@ void main() {
 
     expect(find.text('WaxDeck'), findsOneWidget);
     expect(find.text('Music, podcasts, and audiobooks'), findsOneWidget);
-    expect(find.byKey(const Key('login-username')), findsOneWidget);
-    expect(find.byKey(const Key('login-password')), findsOneWidget);
-    expect(find.byKey(const Key('login-submit')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.loginPassword),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.loginSubmit),
+      findsOneWidget,
+    );
   });
 
   testWidgets('skips login when the server already has a session', (
@@ -46,7 +55,10 @@ void main() {
     await tester.pumpWidget(_app(repo));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('login-username')), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.loginUsername),
+      findsNothing,
+    );
     // Landed on home, with the library on its shelves. `findsWidgets`
     // rather than `findsOneWidget`: the shelves overlap by construction,
     // so a fresh unplayed track is on Recently added and on Never played

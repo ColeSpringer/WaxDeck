@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/auth/oidc_flow.dart';
 import 'package:waxdeck/src/metadata/artwork_manager.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
@@ -17,9 +18,11 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'entity_header_bar.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
+import 'wax_finders.dart';
 
 const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const downloadedPid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
@@ -36,6 +39,7 @@ Future<ProviderContainer> _pump(
   WidgetTester tester,
   FakeRepository repo, {
   Size size = const Size(900, 1800),
+  UrlOpenerPort? opener,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -44,6 +48,7 @@ Future<ProviderContainer> _pump(
     overrides: [
       repositoryProvider.overrideWithValue(repo),
       audioEngineProvider.overrideWithValue(FakeEngine()),
+      if (opener != null) urlOpenerProvider.overrideWithValue(opener),
     ],
   );
   addTearDown(container.dispose);
@@ -102,6 +107,70 @@ void main() {
       ..podcastGate = null
       ..listEpisodesGate = null;
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('the header row is one action bar holding every verb', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(
+        testShow(
+          showPid,
+          funding: const PodcastFunding(url: 'https://pony.example/give'),
+        ),
+      )
+      ..episodesByShow[showPid] = <EpisodeSummary>[];
+    final opener = _Opener();
+    await _pump(tester, repo, opener: opener);
+
+    expectHeaderOnActionBar();
+    for (final id in <String>[
+      SemanticsIds.podcastUnsubscribe,
+      SemanticsIds.podcastSupport,
+      SemanticsIds.podcastSettingsOpen,
+      SemanticsIds.showOverflow,
+    ]) {
+      expect(inActionBar(id), findsOneWidget, reason: id);
+    }
+    final support = tester.widget<WaxButton>(
+      waxControl<WaxButton>(SemanticsIds.podcastSupport),
+    );
+    expect(
+      support.icon,
+      WaxIcons.openExternal,
+      reason: 'it leaves the app; the star means rating',
+    );
+
+    await tester.tap(waxControl<WaxButton>(SemanticsIds.podcastSupport));
+    await tester.pump();
+    expect(opener.opened, ['https://pony.example/give']);
+  });
+
+  testWidgets('Follow and Following are one pill that keeps its place', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..shows[showPid] = testShow(showPid)
+      ..episodesByShow[showPid] = <EpisodeSummary>[];
+    await _pump(tester, repo);
+
+    Key? keyOf(String id) =>
+        tester.widget<WaxButton>(waxControl<WaxButton>(id)).key;
+    final follow = keyOf(SemanticsIds.podcastSubscribe);
+    expect(follow, isNotNull);
+    final element = tester.element(
+      waxControl<WaxButton>(SemanticsIds.podcastSubscribe),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastSubscribe));
+    await tester.pumpAndSettle();
+
+    expect(keyOf(SemanticsIds.podcastUnsubscribe), follow);
+    expect(
+      tester.element(waxControl<WaxButton>(SemanticsIds.podcastUnsubscribe)),
+      same(element),
+      reason: 'the element survives the flip',
+    );
   });
 
   testWidgets('renders the header and the episode list', (tester) async {
@@ -526,6 +595,36 @@ void main() {
     expect(find.text('Unheard'), findsOneWidget);
   });
 
+  testWidgets('the fetch an empty filter offers stays, busy, while it pages', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..addSubscription(testShow(showPid));
+    repo.episodesByShow[showPid] = <EpisodeSummary>[
+      for (var i = 0; i < EpisodesController.pageSize; i++)
+        testEpisode('tr-old$i', showPid: showPid, title: 'Heard $i'),
+      testEpisode('tr-fresh', showPid: showPid, title: 'Unheard'),
+    ];
+    for (var i = 0; i < EpisodesController.pageSize; i++) {
+      repo.finishedPids.add('tr-old$i');
+    }
+    await _pump(tester, repo);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.showEpisodeFilter('unplayed')),
+    );
+    await tester.pumpAndSettle();
+
+    repo.listEpisodesGate = Completer<void>();
+    final button = find.widgetWithText(WaxButton, 'Load more episodes');
+    final pressed = await pressWithKeyboard(tester, button);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(tester.widget<WaxButton>(button).busy, isTrue);
+    expect(pressed.hasFocus, isTrue);
+    repo.listEpisodesGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Unheard'), findsOneWidget);
+  });
+
   testWidgets('a filter that leaves one of fifty can still reach the rest', (
     tester,
   ) async {
@@ -554,6 +653,74 @@ void main() {
     expect(find.text('Load more episodes'), findsNothing);
   });
 
+  testWidgets('a pressed Load more stays, busy, over the ghost row', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..addSubscription(testShow(showPid));
+    repo.episodesByShow[showPid] = <EpisodeSummary>[
+      for (var i = 0; i < EpisodesController.pageSize; i++)
+        testEpisode('tr-old$i', showPid: showPid, title: 'Cassette $i'),
+      testEpisode('tr-fresh', showPid: showPid, title: 'Cassette later'),
+    ];
+    await _pump(tester, repo);
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.showEpisodeSearch),
+      'sette 7',
+    );
+    await tester.pumpAndSettle();
+
+    repo.listEpisodesGate = Completer<void>();
+    final button = find.widgetWithText(WaxButton, 'Load more episodes');
+    final pressed = await pressWithKeyboard(tester, button);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(tester.widget<WaxButton>(button).busy, isTrue);
+    expect(pressed.hasFocus, isTrue);
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byType(SkeletonShapes)).dy,
+      greaterThanOrEqualTo(tester.getBottomLeft(button).dy),
+    );
+    repo.listEpisodesGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Load more episodes'), findsNothing);
+  });
+
+  testWidgets('a pressed Load more stays busy through a filter change', (
+    tester,
+  ) async {
+    // The footer moves with the rows above it, and keeps its press.
+    final repo = FakeRepository()..addSubscription(testShow(showPid));
+    repo.episodesByShow[showPid] = <EpisodeSummary>[
+      for (var i = 0; i < EpisodesController.pageSize; i++)
+        testEpisode('tr-old$i', showPid: showPid, title: 'Cassette $i'),
+      testEpisode('tr-fresh', showPid: showPid, title: 'Cassette later'),
+    ];
+    await _pump(tester, repo);
+    final search = find.bySemanticsIdentifier(SemanticsIds.showEpisodeSearch);
+    await tester.enterText(search, 'sette 7');
+    await tester.pumpAndSettle();
+
+    repo.listEpisodesGate = Completer<void>();
+    final button = find.widgetWithText(WaxButton, 'Load more episodes');
+    await pressWithKeyboard(tester, button);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.widget<WaxButton>(button).busy, isTrue);
+
+    await tester.enterText(search, 'sette 1');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.scrollUntilVisible(
+      find.byType(SkeletonShapes),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(button, findsOneWidget);
+    expect(tester.widget<WaxButton>(button).busy, isTrue);
+    repo.listEpisodesGate!.complete();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('an unnarrowed list pages by scrolling alone', (tester) async {
     final repo = FakeRepository()..addSubscription(testShow(showPid));
     repo.episodesByShow[showPid] = <EpisodeSummary>[
@@ -562,6 +729,40 @@ void main() {
     ];
     await _pump(tester, repo);
     expect(find.text('Load more episodes'), findsNothing);
+  });
+
+  testWidgets('the next page on its way is one ghost row, not a spinner', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..addSubscription(testShow(showPid));
+    repo.episodesByShow[showPid] = <EpisodeSummary>[
+      for (var i = 0; i < EpisodesController.pageSize + 5; i++)
+        testEpisode('tr-$i', showPid: showPid, title: 'Episode $i'),
+    ];
+    final container = await _pump(tester, repo);
+    final row = tester
+        .getTopLeft(find.byKey(ValueKey(SemanticsIds.episode('tr-0'))))
+        .dx;
+
+    repo.listEpisodesGate = Completer<void>();
+    final loading = container
+        .read(episodesProvider(showPid).notifier)
+        .loadMore();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.scrollUntilVisible(
+      find.byType(SkeletonShapes),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(find.byType(WaxSpinner), findsNothing);
+    // The ghost stands where a row stands, edge to edge with it.
+    expect(tester.getTopLeft(find.byType(SkeletonShapes)).dx, row);
+    repo.listEpisodesGate!.complete();
+    await loading;
+    await tester.pumpAndSettle();
   });
 
   testWidgets('paging reads the play states of the new page only', (
@@ -606,7 +807,7 @@ void main() {
     );
     await tester.pump();
     await tester.enterText(
-      find.byKey(const Key('podcast-settings-retention')),
+      find.bySemanticsIdentifier(SemanticsIds.podcastSettingsRetention),
       '5',
     );
     await tester.tap(
@@ -625,6 +826,29 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.podcastSettingsSave),
       findsNothing,
     );
+  });
+
+  testWidgets('the keyword filter is dimmed while auto-download is off', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(
+        testShow(showPid),
+        settings: const SubscriptionSettings(),
+      )
+      ..episodesByShow[showPid] = <EpisodeSummary>[testEpisode(downloadedPid)];
+    await _pump(tester, repo);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSettingsOpen),
+    );
+    await tester.pumpAndSettle();
+
+    final include = find.descendant(
+      of: find.bySemanticsIdentifier(SemanticsIds.podcastSettingsInclude),
+      matching: find.byType(TextField),
+    );
+    expect(tester.widget<TextField>(include).enabled, isFalse);
   });
 
   testWidgets('the keyword filter round-trips through the settings sheet', (
@@ -648,6 +872,11 @@ void main() {
 
     // The stored filter is what the field shows.
     expect(find.text('mailbag'), findsOneWidget);
+    expect(find.byType(WaxSlider), findsOneWidget);
+    expect(
+      tester.widget(find.byKey(const Key('podcast-settings-skip-intro'))),
+      isA<WaxTextField>(),
+    );
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.podcastSettingsExclude),
       'rerun, trailer',
@@ -710,7 +939,7 @@ void main() {
       '9000',
     );
     await tester.enterText(
-      find.byKey(const Key('podcast-settings-retention')),
+      find.bySemanticsIdentifier(SemanticsIds.podcastSettingsRetention),
       '-5',
     );
     await tester.tap(
@@ -864,6 +1093,46 @@ void main() {
 
     expect(find.bySemanticsIdentifier(SemanticsIds.showSetCover), findsNothing);
   });
+
+  testWidgets('the batch download retries failures and skips what is queued, '
+      'unknown states included', (tester) async {
+    const failedPid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0003';
+    const runningPid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0004';
+    final repo = FakeRepository()
+      ..addSubscription(testShow(showPid))
+      ..episodesByShow[showPid] = <EpisodeSummary>[
+        testEpisode(remotePid, title: 'Remote Episode', downloaded: false),
+        testEpisode(
+          failedPid,
+          title: 'Failed Episode',
+          downloaded: false,
+          fetchState: 'failed',
+        ),
+        testEpisode(
+          runningPid,
+          title: 'Running Episode',
+          downloaded: false,
+          fetchState: 'running',
+        ),
+      ];
+    await _pump(tester, repo);
+
+    await tester.longPress(
+      find.bySemanticsIdentifier(SemanticsIds.episode(remotePid)),
+    );
+    await tester.pumpAndSettle();
+    for (final pid in <String>[failedPid, runningPid]) {
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.episode(pid)));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.selectionDownload),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.fetchEpisodeCalls, <String>[remotePid, failedPid]);
+    expect(shellMessageText(raisedMessage(tester)), '2 queued for download');
+  });
 }
 
 /// A signed-in non-admin session whose podcast-curation right is the
@@ -902,4 +1171,12 @@ Future<void> _pumpAs(WidgetTester tester, FakeRepository repo) async {
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// Records what the app asked the platform to open.
+class _Opener implements UrlOpenerPort {
+  final opened = <String>[];
+
+  @override
+  Future<void> open(String url) async => opened.add(url);
 }

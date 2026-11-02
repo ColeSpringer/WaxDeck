@@ -110,11 +110,16 @@ class _WaxProgressBarState extends State<WaxProgressBar>
         child: fill,
       );
     } else {
-      bar = FractionallySizedBox(
-        alignment: AlignmentDirectional.centerStart,
-        widthFactor: value,
-        child: fill,
-      );
+      // Nothing to fill at zero: a zero width factor divides the fill's
+      // intrinsic width by zero, which an intrinsic-width parent such as a
+      // dialog's content cannot measure.
+      bar = value == 0
+          ? const SizedBox.shrink()
+          : FractionallySizedBox(
+              alignment: AlignmentDirectional.centerStart,
+              widthFactor: value,
+              child: fill,
+            );
     }
     return Semantics(
       container: true,

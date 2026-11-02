@@ -324,10 +324,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
           itemCount: state.buckets.length + (state.loadingMore ? 1 : 0),
           itemBuilder: (context, at) {
             if (at >= state.buckets.length) {
-              return const Padding(
-                padding: EdgeInsets.all(WaxSpace.s16),
-                child: Center(child: CircularProgressIndicator()),
-              );
+              return const SkeletonShapes(shape: SkeletonShape.list, count: 1);
             }
             return _BucketRow(
               dimension: dimension,
@@ -352,25 +349,24 @@ class _StartOfIndex extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    return Semantics(
-      identifier: SemanticsIds.indexRailStart,
-      button: true,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: WaxSizeClass.of(
-            context,
-          ).gutter.copyWith(top: WaxSpace.s12, bottom: WaxSpace.s12),
-          child: Row(
-            children: <Widget>[
-              WaxIcon(WaxIcons.expand, size: 16, color: colors.textTertiary),
-              const SizedBox(width: WaxSpace.s8),
-              Text(
-                context.l10n.musicIndexStartOf(dimension.name),
-                style: WaxType.caption.copyWith(color: colors.textTertiary),
-              ),
-            ],
-          ),
+    final label = context.l10n.musicIndexStartOf(dimension.name);
+    return WaxInkTappable(
+      label: label,
+      semanticsId: SemanticsIds.indexRailStart,
+      onPressed: onTap,
+      child: Padding(
+        padding: WaxSizeClass.of(
+          context,
+        ).gutter.copyWith(top: WaxSpace.s12, bottom: WaxSpace.s12),
+        child: Row(
+          children: <Widget>[
+            WaxIcon(WaxIcons.expand, size: 16, color: colors.textTertiary),
+            const SizedBox(width: WaxSpace.s8),
+            Text(
+              label,
+              style: WaxType.caption.copyWith(color: colors.textTertiary),
+            ),
+          ],
         ),
       ),
     );

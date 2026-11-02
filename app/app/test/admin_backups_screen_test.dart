@@ -1,8 +1,10 @@
-import 'localized_host.dart';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/backups_screen.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
@@ -14,6 +16,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
+import 'wax_finders.dart';
 
 /// A picker resolving pickFile to one fixed archive.
 class _ZipPicker implements FilePickerPort {
@@ -147,12 +151,19 @@ void main() {
 
     await tester.tap(find.byKey(const Key('restore-plan-done')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('restore-banner')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.restoreBanner),
+      findsOneWidget,
+    );
+    expect(find.byType(WaxBanner), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('restore-cancel')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.restoreCancel));
     await tester.pumpAndSettle();
     expect(repo.cancelStagedRestoreCalls, 1);
-    expect(find.byKey(const Key('restore-banner')), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.restoreBanner),
+      findsNothing,
+    );
   });
 
   testWidgets('a backup this server cannot open says why it did not stage', (
@@ -203,7 +214,7 @@ void main() {
     );
     await _pump(tester, repo, picker: picker);
 
-    await tester.tap(find.byKey(const Key('backup-import')));
+    await tester.tap(find.byKey(const Key(SemanticsIds.backupImport)));
     await tester.pumpAndSettle();
 
     expect(repo.importBackupByteCounts, [zipBytes.length]);
@@ -215,8 +226,8 @@ void main() {
     final repo = FakeRepository();
     await _pump(tester, repo);
 
-    expect(find.byKey(const Key('backup-import')), findsNothing);
-    expect(find.byKey(const Key('backup-create')), findsOneWidget);
+    expect(find.byKey(const Key(SemanticsIds.backupImport)), findsNothing);
+    expect(find.byKey(const Key(SemanticsIds.backupCreate)), findsOneWidget);
   });
 
   testWidgets('a running archive is read again until it is done', (
@@ -323,10 +334,211 @@ void main() {
     await _pumpStill(tester, repo);
 
     final create = tester.widget<WaxButton>(
-      find.byWidgetPredicate(
-        (w) => w is WaxButton && w.semanticsId == SemanticsIds.backupCreate,
-      ),
+      waxControl<WaxButton>(SemanticsIds.backupCreate),
     );
     expect(create.busy, isTrue);
   });
+
+  testWidgets('delete and retention are Wax controls', (tester) async {
+    final repo = FakeRepository();
+    repo.backupsById['ba-1'] = _backup('ba-1');
+    await _pump(tester, repo);
+
+    expect(
+      tester
+          .widget<WaxButton>(find.byKey(const Key('backup-retention-save')))
+          .kind,
+      WaxButtonKind.tonal,
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.backupMenu('ba-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete...'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<WaxButton>(find.byKey(const Key('backup-delete-confirm')))
+          .kind,
+      WaxButtonKind.destructive,
+    );
+  });
+
+  testWidgets('the archive list and retention wait as skeletons', (
+    tester,
+  ) async {
+    final backups = Completer<List<Backup>>();
+    final settings = Completer<void>();
+    addTearDown(() {
+      backups.complete(const []);
+      if (!settings.isCompleted) settings.complete();
+    });
+    final repo = FakeRepository();
+    await _pumpWith(tester, repo, [
+      backupsProvider.overrideWith(() => _StalledBackups(backups.future)),
+      adminSettingsProvider.overrideWith(() => _HeldSettings(settings.future)),
+    ]);
+
+    expect(find.byType(SkeletonShapes), findsNWidgets(2));
+    expect(find.byType(WaxSpinner), findsNothing);
+    expect(find.byKey(const Key('backup-keep-count')), findsNothing);
+
+    settings.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('backup-keep-count')), findsOneWidget);
+  });
+
+  testWidgets(
+    'a failed settings load shows the error and a Retry that reloads',
+    (tester) async {
+      final repo = FakeRepository();
+      final failing = _FailsOnce();
+      await _pumpWith(tester, repo, [
+        adminSettingsProvider.overrideWith(() => failing),
+      ]);
+
+      expect(find.byKey(const Key('backup-keep-count')), findsNothing);
+      final retry = find.bySemanticsIdentifier(
+        SemanticsIds.backupRetentionRetry,
+      );
+      expect(retry, findsOneWidget);
+      expect(find.byType(ErrorState), findsOneWidget);
+      // Final, so live: the press is what reloads it, not a retry of
+      // Riverpod's own.
+      expect(
+        tester
+            .widget<WaxButton>(
+              waxControl<WaxButton>(SemanticsIds.backupRetentionRetry),
+            )
+            .busy,
+        isFalse,
+      );
+      expect(failing.builds, 1);
+
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+      expect(failing.builds, 2);
+      expect(find.byKey(const Key('backup-keep-count')), findsOneWidget);
+      expect(retry, findsNothing);
+    },
+  );
+
+  // With the app's own retry on: while an attempt runs a failing read is
+  // AsyncLoading carrying the last error.
+  testWidgets('failed loads say so at once, while they retry', (tester) async {
+    _settingsReads = 0;
+    _backupsReads = 0;
+    await _pumpWith(tester, FakeRepository(), [
+      adminSettingsProvider.overrideWith(_AlwaysFailsSettings.new),
+      backupsProvider.overrideWith(_AlwaysFailsBackups.new),
+    ]);
+    // Past the first retry's delay: both reads are loading again.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.backupRetentionRetry),
+      findsOneWidget,
+    );
+    // The list's own line and the retention pane's card both explain.
+    expect(
+      find.text('The server ran into a problem it could not handle.'),
+      findsNWidgets(2),
+    );
+    expect(find.byType(SkeletonShapes), findsNothing);
+    // Unmounted inside the test, so no retry timer outlives it.
+    await tester.pumpWidget(const SizedBox());
+  });
+}
+
+Future<void> _pumpWith(
+  WidgetTester tester,
+  FakeRepository repo,
+  List<Override> overrides, {
+  Duration? Function(int, Object)? retry,
+}) async {
+  tester.view.physicalSize = const Size(1200, 4000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      retry: retry,
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        ...overrides,
+      ],
+      child: localizedHost(const BackupsScreen()),
+    ),
+  );
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
+class _StalledBackups extends BackupsController {
+  _StalledBackups(this._gate);
+
+  final Future<List<Backup>> _gate;
+
+  @override
+  Future<List<Backup>> build() => _gate;
+}
+
+class _HeldSettings extends AdminSettingsController {
+  _HeldSettings(this._gate);
+
+  final Future<void> _gate;
+
+  @override
+  Future<AdminSettings> build() async {
+    await _gate;
+    return ref.watch(repositoryProvider).getAdminSettings();
+  }
+}
+
+class _FailsOnce extends AdminSettingsController {
+  int builds = 0;
+
+  @override
+  Future<AdminSettings> build() async {
+    builds++;
+    if (builds == 1) {
+      // A refusal, so final: Riverpod does not retry it on its own.
+      throw const WaxDeckApiException(
+        code: 'forbidden',
+        message: 'settings are unavailable',
+        statusCode: 403,
+      );
+    }
+    return ref.watch(repositoryProvider).getAdminSettings();
+  }
+}
+
+const _internal = WaxDeckApiException(
+  code: 'internal',
+  message: 'unavailable',
+  statusCode: 500,
+);
+
+/// Fails at once the first time and waits on every retry, as a server
+/// that has gone away does.
+var _settingsReads = 0;
+
+class _AlwaysFailsSettings extends AdminSettingsController {
+  @override
+  Future<AdminSettings> build() async {
+    if (_settingsReads++ > 0) await Completer<void>().future;
+    throw _internal;
+  }
+}
+
+var _backupsReads = 0;
+
+class _AlwaysFailsBackups extends BackupsController {
+  @override
+  Future<List<Backup>> build() async {
+    if (_backupsReads++ > 0) await Completer<void>().future;
+    throw _internal;
+  }
 }

@@ -1,27 +1,91 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../artwork/artwork_providers.dart';
+import '../downloads/download_state.dart';
 import '../l10n/l10n.dart';
-import '../sync/sync_providers.dart';
 
-/// Downloads one item's original for offline playback, and pins its cover
-/// beside it.
+/// [state] as an entity bar's download pill, or null where this build has
+/// no download manager (web), so the caller leaves it out of the bar.
 ///
-/// Hidden on platforms with no download manager (web), which is what
-/// makes it safe to place unconditionally: a screen adds it and the
-/// control decides whether this build has anything to offer.
-///
-/// The two calls are the point. Downloading an item is a promise that it
-/// plays with the server unreachable, and an offline library of grey
-/// monograms does not keep it - so the cover comes down with the audio.
-/// Removal is the same pair from the other side, which is
-/// the downloads manager's job.
-class DownloadAction extends ConsumerStatefulWidget {
+/// [label] is the caller's own word for the ready pill; a book says what
+/// it is downloading.
+WaxAction? downloadWaxAction(
+  AppLocalizations l10n,
+  DownloadState state, {
+  required String label,
+  required String semanticsId,
+  required VoidCallback onStart,
+}) => switch (state) {
+  DownloadUnavailable() => null,
+  // The device has not answered yet: the pill's place, with no press and
+  // no state to take back.
+  DownloadChecking() => WaxAction(
+    label: label,
+    semanticsId: semanticsId,
+    glyph: WaxIcons.downloads,
+    state: const WaxActionState.status(),
+  ),
+  DownloadIdle() => WaxAction(
+    label: label,
+    semanticsId: semanticsId,
+    glyph: WaxIcons.downloads,
+    onPressed: onStart,
+  ),
+  // Held, not stalled: nothing moves until the device is on wifi.
+  DownloadTransferring(held: true) => WaxAction(
+    label: l10n.downloadsActionHeld,
+    semanticsId: semanticsId,
+    glyph: WaxIcons.downloads,
+    state: const WaxActionState.status(),
+    detail: l10n.downloadsHeldForWifi,
+  ),
+  // The pill speaks its share as its value, so the name stays put.
+  DownloadTransferring(:final fraction) => WaxAction(
+    label: l10n.downloadsActionDownloading(_percent(fraction)),
+    spokenLabel: l10n.downloadsDownloading,
+    semanticsId: semanticsId,
+    glyph: WaxIcons.downloads,
+    state: WaxActionState.progress(fraction),
+    onPressed: onStart,
+  ),
+  DownloadDone() => WaxAction(
+    label: l10n.downloadsDownloaded,
+    semanticsId: semanticsId,
+    glyph: WaxIcons.downloads,
+    state: const WaxActionState.done(),
+  ),
+  DownloadFailed() => WaxAction(
+    label: l10n.downloadsActionRetry,
+    semanticsId: semanticsId,
+    glyph: WaxIcons.downloads,
+    state: const WaxActionState.failed(),
+    detail: _why(l10n, state),
+    onPressed: onStart,
+  ),
+};
+
+/// Why [failed] gave up, in one sentence: what the request threw, else
+/// the manager's reason.
+String _why(AppLocalizations l10n, DownloadFailed failed) =>
+    switch (failed.cause) {
+      final cause? => explainError(l10n, cause),
+      null => switch (failed.reason) {
+        DownloadFailure.gone => l10n.downloadsFailedGone,
+        DownloadFailure.refused => l10n.downloadsFailedRefused,
+        DownloadFailure.interrupted => l10n.downloadsFailedInterrupted,
+      },
+    };
+
+int _percent(double fraction) =>
+    fraction.isFinite ? (fraction.clamp(0.0, 1.0) * 100).round() : 0;
+
+/// One item's download as an icon, for a header of icons such as the
+/// player's. Draws nothing where this build has no download manager
+/// (web), which is what makes it safe to place unconditionally.
+class DownloadAction extends ConsumerWidget {
   const DownloadAction({
     required this.pid,
     required this.semanticsId,
@@ -37,115 +101,63 @@ class DownloadAction extends ConsumerStatefulWidget {
 
   final String semanticsId;
 
-  /// What the control is called before anything is on disk; a book says
-  /// what it is downloading. Required, because a defaulted sentence is
-  /// one language every caller who forgets it draws in all of them.
+  /// What the control is called before anything is on disk. Required,
+  /// because a defaulted sentence is one language every caller who
+  /// forgets it draws in all of them.
   final String label;
 
   @override
-  ConsumerState<DownloadAction> createState() => _DownloadActionState();
-}
-
-class _DownloadActionState extends ConsumerState<DownloadAction> {
-  bool? _complete;
-  bool _inFlight = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _probe();
-  }
-
-  @override
-  void didUpdateWidget(DownloadAction oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.pid != widget.pid) {
-      _complete = null;
-      _probe();
-    }
-  }
-
-  Future<void> _probe() async {
-    final port = ref.read(downloadManagerProvider);
-    if (port == null) return;
-    final complete = await port.isComplete(widget.pid);
-    if (mounted) setState(() => _complete = complete);
-  }
-
-  Future<void> _download() async {
-    final port = ref.read(downloadManagerProvider);
-    if (port == null) return;
-    // Read now: the widget may be gone by the time the download is queued.
-    final sync = ref.read(syncEngineProvider);
-    setState(() => _inFlight = true);
-    try {
-      // Listen before enqueuing so a fast completion cannot slip past,
-      // and stop on failure too; waiting on the complete event alone
-      // would spin forever when a file fails.
-      final done = Completer<void>();
-      final sub = port.progress.listen((p) {
-        if (p.pid == widget.pid &&
-            (p.complete || p.failed) &&
-            !done.isCompleted) {
-          done.complete();
-        }
-      });
-      try {
-        await port.download(widget.pid);
-        // A book's marks come along, for listening where nothing answers.
-        if (widget.pid.startsWith('bk-')) unawaited(_fillMarks(sync));
-        // Everything may already be on disk (an early tap before the
-        // probe landed, or a server-side retag): nothing was enqueued,
-        // so no event will ever come.
-        if (!await port.isComplete(widget.pid)) {
-          await done.future;
-        }
-      } finally {
-        await sub.cancel();
-      }
-      // Only once the audio is actually on disk: the wait above ends on
-      // a failed transfer too, and a pinned cover for an item that
-      // cannot play is a promise about nothing.
-      if (await port.isComplete(widget.pid)) {
-        await ref
-            .read(artworkStoreProvider)
-            .pinForOffline(widget.pid, widget.artUrl);
-      }
-    } finally {
-      if (mounted) setState(() => _inFlight = false);
-      await _probe();
-    }
-  }
-
-  Future<void> _fillMarks(SyncEngine? sync) async {
-    try {
-      await sync?.fillBookmarks(widget.pid);
-    } on WaxDeckApiException {
-      // The next remint or bookmarks event fills them instead.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (ref.watch(downloadManagerProvider) == null) {
-      return const SizedBox.shrink();
-    }
-    final complete = _complete ?? false;
-    return WaxIconButton(
-      // One glyph in three states, told apart by fill and tint rather
-      // than by a second icon: the filled tick is on disk, the outline
-      // arrow is not yet, and a transfer in flight is the arrow with the
-      // control refusing a second tap.
-      glyph: complete ? WaxIcons.success : WaxIcons.downloads,
-      label: switch ((complete, _inFlight)) {
-        (true, _) => context.l10n.downloadsDownloaded,
-        (false, true) => context.l10n.downloadsDownloading,
-        (false, false) => widget.label,
-      },
-      active: complete,
-      status: complete,
-      semanticsId: widget.semanticsId,
-      onPressed: complete || _inFlight ? null : _download,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    void start() => unawaited(
+      ref.read(downloadStateProvider(pid).notifier).start(artUrl: artUrl),
     );
+    return switch (ref.watch(downloadStateProvider(pid))) {
+      DownloadUnavailable() => const SizedBox.shrink(),
+      DownloadChecking() => WaxIconButton(
+        glyph: WaxIcons.downloads,
+        label: label,
+        semanticsId: semanticsId,
+        status: true,
+        onPressed: null,
+      ),
+      DownloadIdle() => WaxIconButton(
+        glyph: WaxIcons.downloads,
+        label: label,
+        semanticsId: semanticsId,
+        onPressed: start,
+      ),
+      DownloadTransferring(held: true) => WaxIconButton(
+        glyph: WaxIcons.downloads,
+        label: l10n.downloadsActionHeld,
+        detail: l10n.downloadsHeldForWifi,
+        semanticsId: semanticsId,
+        status: true,
+        onPressed: null,
+      ),
+      // Busy rather than a null callback: working, not unavailable.
+      DownloadTransferring() => WaxIconButton(
+        glyph: WaxIcons.downloads,
+        label: l10n.downloadsDownloading,
+        semanticsId: semanticsId,
+        busy: true,
+        onPressed: start,
+      ),
+      DownloadDone() => WaxIconButton(
+        glyph: WaxIcons.success,
+        label: l10n.downloadsDownloaded,
+        semanticsId: semanticsId,
+        active: true,
+        status: true,
+        onPressed: null,
+      ),
+      final DownloadFailed failed => WaxIconButton(
+        glyph: WaxIcons.warning,
+        label: l10n.downloadsActionRetry,
+        detail: _why(l10n, failed),
+        semanticsId: semanticsId,
+        onPressed: start,
+      ),
+    };
   }
 }

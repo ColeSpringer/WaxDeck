@@ -352,4 +352,5 @@ final episodesProvider =
 final episodeDetailProvider = FutureProvider.autoDispose
     .family<EpisodeDetail, String>(
       (ref, pid) => ref.watch(repositoryProvider).getEpisode(pid),
+      retry: retryUnlessRefused,
     );

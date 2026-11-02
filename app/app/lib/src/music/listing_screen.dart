@@ -397,10 +397,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       findChildIndexCallback: indexByKey(state.items, _itemKey),
       itemBuilder: (context, index) {
         if (index >= state.items.length) {
-          return const Padding(
-            padding: EdgeInsets.all(WaxSpace.s16),
-            child: Center(child: CircularProgressIndicator()),
-          );
+          return const SkeletonShapes(shape: SkeletonShape.list, count: 1);
         }
         final item = state.items[index];
         return QueueDraggable(

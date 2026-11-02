@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../admin/admin_console.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'organize_labels.dart';
@@ -284,9 +285,9 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
         ),
         child: switch (profiles) {
           AsyncData(:final value) => _body(context, value),
-          AsyncError(:final error) => ErrorState(
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            profiles,
             title: l10n.organizeLoadError,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(organizeProfilesProvider),
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -634,10 +635,8 @@ class _ReportView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           SectionHeader(title: l10n.organizeResultTitle),
-          Wrap(
-            spacing: WaxSpace.s12,
-            runSpacing: WaxSpace.s12,
-            children: <Widget>[
+          WaxStatGrid(
+            tiles: <StatTile>[
               StatTile(label: l10n.organizeMoved, value: '${report.moved}'),
               StatTile(label: l10n.organizeSkipped, value: '${report.skipped}'),
               if (report.held > 0)
@@ -726,7 +725,7 @@ class _HistorySection extends ConsumerWidget {
               ),
             ),
         ];
-      case AsyncError(:final error):
+      case AsyncValue(:final error?):
         body = <Widget>[
           Text(
             context.explain(error),

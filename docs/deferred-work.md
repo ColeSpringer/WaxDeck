@@ -259,20 +259,6 @@ Every entry carries a gate tag saying what actually blocks it:
   `app/app/test/flutter_test_config.dart` fails any widget test that
   leaves such a change. Wanted from Flutter: compare the identifier with
   the rest.
-- `[in-repo]` **Help under a Material `TextField` cannot be selected.**
-  `WaxProse` makes the design system's help selectable, the
-  `WaxTextField` helper line included, but a field built on Material's
-  `TextField` draws `InputDecoration.helperText` inside the field's own
-  gesture detector, where it stays inert. Sixteen fields: in
-  `settings/integrations_sections.dart` the ListenBrainz token and API
-  URL, the Last.fm key and secret, the Discord application id, the app
-  password label, and the two notification fields; the timezone field in
-  `settings/listening_sections.dart`; the invite note and expiry days in
-  `admin/users_screen.dart`; the source server URL in
-  `admin/migrate_screen.dart`; sign-up's invite code; and the include,
-  exclude and retention fields in
-  `podcasts/subscription_settings_sheet.dart`. Moving each onto
-  `WaxTextField` is the fix.
 
 ## Connect and casting
 

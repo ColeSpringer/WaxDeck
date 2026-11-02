@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
@@ -39,9 +40,9 @@ class ServerSettingsScreen extends ConsumerWidget {
           // width the help sentence and the switch it belongs to drift
           // so far apart that the pair stops reading as one row.
           child: switch (settings) {
-            AsyncError(:final error) => ErrorState(
+            AsyncValue(hasError: true) => AsyncFailureCard.from(
+              settings,
               title: l10n.adminServerLoadError,
-              message: context.explain(error),
               onRetry: () => ref.invalidate(adminSettingsProvider),
             ),
             AsyncData(:final value) => Column(
@@ -262,7 +263,8 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
                   label: l10n.adminServerSaveTranscoding,
                   kind: WaxButtonKind.tonal,
                   semanticsId: SemanticsIds.transcodingSave,
-                  onPressed: _busy ? null : () => _save(limits),
+                  busy: _busy,
+                  onPressed: () => _save(limits),
                 ),
               ),
             ],
@@ -293,7 +295,7 @@ class _TranscodingActivityLine extends ConsumerWidget {
     final activity = ref.watch(transcodingActivityProvider);
     final count = activity.value?.activeSessions;
     final headline = switch (activity) {
-      AsyncError() => l10n.adminServerActivityUnknown,
+      AsyncValue(hasError: true) => l10n.adminServerActivityUnknown,
       _ when count == null => l10n.adminServerActivityReading,
       _ => l10n.adminServerActivityCount(count),
     };
@@ -453,7 +455,8 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
                 label: l10n.adminServerSaveRetention,
                 kind: WaxButtonKind.tonal,
                 semanticsId: SemanticsIds.trashRetentionSave,
-                onPressed: _busy ? null : _save,
+                busy: _busy,
+                onPressed: _save,
               ),
             ],
           ),

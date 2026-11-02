@@ -357,37 +357,28 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Semantics(
-                    identifier: SemanticsIds.migrateSource,
-                    child: DropdownButton<_MigrationSource>(
-                      key: const Key(SemanticsIds.migrateSource),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: WaxChoice<_MigrationSource>(
                       value: _source,
-                      isExpanded: true,
-                      onChanged: (selected) {
-                        if (selected != null) {
-                          setState(() {
-                            _source = selected;
-                            // The credentials go with the source they
-                            // were typed for. The controllers outlive
-                            // the change, and Jellyfin draws both a
-                            // password and a token field: a password
-                            // left over from another server would be
-                            // sent beside a fresh API key, and the
-                            // server takes the password - a login
-                            // against the wrong host, refused, with the
-                            // key never tried.
-                            _password.clear();
-                            _token.clear();
-                          });
-                        }
-                      },
-                      items: [
-                        for (final source in _MigrationSource.values)
-                          DropdownMenuItem(
-                            value: source,
-                            child: Text(source.labelOf(l10n)),
-                          ),
-                      ],
+                      options: _MigrationSource.values,
+                      labelFor: (source) => source.labelOf(l10n),
+                      label: l10n.adminMigrateSourceLabel,
+                      semanticsId: SemanticsIds.migrateSource,
+                      onChanged: (selected) => setState(() {
+                        _source = selected;
+                        // The credentials go with the source they
+                        // were typed for. The controllers outlive
+                        // the change, and Jellyfin draws both a
+                        // password and a token field: a password
+                        // left over from another server would be
+                        // sent beside a fresh API key, and the
+                        // server takes the password - a login
+                        // against the wrong host, refused, with the
+                        // key never tried.
+                        _password.clear();
+                        _token.clear();
+                      }),
                     ),
                   ),
                   const SizedBox(height: WaxSpace.s8),
@@ -404,73 +395,52 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                     ),
                   const SizedBox(height: WaxSpace.s8),
                   if (_source.usesUrl) ...[
-                    Semantics(
-                      identifier: SemanticsIds.migrateServerUrl,
-                      child: TextField(
-                        key: const Key(SemanticsIds.migrateServerUrl),
-                        controller: _serverUrl,
-                        keyboardType: TextInputType.url,
-                        decoration: InputDecoration(
-                          labelText: l10n.adminMigrateServerUrlLabel,
-                          hintText: l10n.adminMigrateServerUrlHint,
-                          helperText: _source.needsUrl
-                              ? null
-                              : l10n.adminMigrateListenBrainzServerHelp,
-                        ),
-                      ),
+                    WaxTextField(
+                      semanticsId: SemanticsIds.migrateServerUrl,
+                      controller: _serverUrl,
+                      keyboardType: TextInputType.url,
+                      label: l10n.adminMigrateServerUrlLabel,
+                      hint: l10n.adminMigrateServerUrlHint,
+                      helperText: _source.needsUrl
+                          ? null
+                          : l10n.adminMigrateListenBrainzServerHelp,
                     ),
                     const SizedBox(height: WaxSpace.s8),
                   ],
                   if (_source.usesUsername) ...[
-                    Semantics(
-                      identifier: SemanticsIds.migrateUsername,
-                      child: TextField(
-                        key: const Key(SemanticsIds.migrateUsername),
-                        controller: _username,
-                        decoration: InputDecoration(
-                          labelText: l10n.adminMigrateUsernameLabel,
-                        ),
-                      ),
+                    WaxTextField(
+                      semanticsId: SemanticsIds.migrateUsername,
+                      controller: _username,
+                      label: l10n.adminMigrateUsernameLabel,
                     ),
                     const SizedBox(height: WaxSpace.s8),
                   ],
                   if (_source.usesPassword) ...[
-                    Semantics(
-                      identifier: SemanticsIds.migratePassword,
-                      child: TextField(
-                        key: const Key(SemanticsIds.migratePassword),
-                        controller: _password,
-                        obscureText: true,
-                        decoration: InputDecoration(
-                          labelText: l10n.adminMigratePasswordLabel,
-                        ),
-                      ),
+                    WaxTextField(
+                      semanticsId: SemanticsIds.migratePassword,
+                      controller: _password,
+                      obscureText: true,
+                      label: l10n.adminMigratePasswordLabel,
                     ),
                     const SizedBox(height: WaxSpace.s8),
                   ],
                   if (_source.usesToken) ...[
-                    Semantics(
-                      identifier: SemanticsIds.migrateToken,
-                      child: TextField(
-                        key: const Key(SemanticsIds.migrateToken),
-                        controller: _token,
-                        obscureText: true,
-                        decoration: InputDecoration(
-                          labelText: l10n.adminMigrateTokenLabel,
-                        ),
-                      ),
+                    WaxTextField(
+                      semanticsId: SemanticsIds.migrateToken,
+                      controller: _token,
+                      obscureText: true,
+                      label: l10n.adminMigrateTokenLabel,
                     ),
                     const SizedBox(height: WaxSpace.s8),
                   ],
                   if (_source.usesExport) ...[
-                    Semantics(
-                      identifier: SemanticsIds.migrateExportPick,
-                      button: true,
-                      child: OutlinedButton(
-                        key: const Key(SemanticsIds.migrateExportPick),
-                        onPressed: _uploading ? null : _pickExport,
-                        child: Text(l10n.adminMigrateExportPick),
-                      ),
+                    WaxButton(
+                      semanticsId: SemanticsIds.migrateExportPick,
+                      label: l10n.adminMigrateExportPick,
+                      kind: WaxButtonKind.tonal,
+                      expand: true,
+                      busy: _uploading,
+                      onPressed: _pickExport,
                     ),
                     if (_export case final staged?)
                       Padding(
@@ -542,13 +512,12 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                     ),
                   ),
                   const SizedBox(height: WaxSpace.s16),
-                  Semantics(
-                    identifier: SemanticsIds.migrateSubmit,
-                    child: FilledButton(
-                      key: const Key(SemanticsIds.migrateSubmit),
-                      onPressed: _ready ? _submit : null,
-                      child: Text(l10n.adminMigrateSubmit),
-                    ),
+                  WaxButton(
+                    semanticsId: SemanticsIds.migrateSubmit,
+                    label: l10n.adminMigrateSubmit,
+                    expand: true,
+                    busy: _busy,
+                    onPressed: _ready ? _submit : null,
                   ),
                 ],
               ),

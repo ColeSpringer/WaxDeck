@@ -45,6 +45,7 @@ Future<void> _runSheet(WidgetTester tester, {bool adventurous = false}) async {
   await tester.pumpAndSettle();
   await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMix));
   await tester.pumpAndSettle();
+  expect(find.byType(WaxSlider), findsOneWidget);
   if (adventurous) {
     // Slide fully right for maximum adventurousness.
     await tester.drag(

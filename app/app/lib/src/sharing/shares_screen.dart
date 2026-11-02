@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -75,7 +76,6 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
   @override
   Widget build(BuildContext context) {
     final shares = ref.watch(sharesProvider);
-    final rows = shares.value?.shares ?? const <Share>[];
 
     return WaxScaffold(
       title: context.l10n.sharingTitle,
@@ -83,8 +83,12 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
       controller: _scroll,
       onBack: () => context.leave(fallback: WaxRoute.settings),
       slivers: <Widget>[
-        switch (shares) {
-          AsyncData() when rows.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<SharesState>(
+          state: shares,
+          errorTitle: context.l10n.sharingLoadError,
+          onRetry: () => ref.invalidate(sharesProvider),
+          isEmpty: (value) => value.shares.isEmpty,
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: context.l10n.sharingEmptyTitle,
@@ -93,29 +97,12 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
               semanticsId: SemanticsIds.sharesEmpty,
             ),
           ),
-          AsyncData() => ShareRows(
-            rows: rows,
-            onCopy: _copy,
-            onRevoke: _revoke,
-          ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: context.l10n.sharingLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(sharesProvider),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.list),
-          ),
-        },
+          builder: (context, value) =>
+              ShareRows(rows: value.shares, onCopy: _copy, onRevoke: _revoke),
+        ),
         if (shares.value?.loadingMore ?? false)
           const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(WaxSpace.s16),
-              child: Center(child: CircularProgressIndicator()),
-            ),
+            child: SkeletonShapes(shape: SkeletonShape.list, count: 1),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],

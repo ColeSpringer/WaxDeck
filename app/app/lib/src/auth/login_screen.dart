@@ -133,39 +133,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   // the identity is the whole content.
                   WaxBrandBlock(tagline: l10n.authTagline),
                   const SizedBox(height: WaxSpace.s32),
-                  Semantics(
-                    identifier: SemanticsIds.loginUsername,
-                    child: TextFormField(
-                      key: const Key(SemanticsIds.loginUsername),
-                      controller: _username,
-                      autofillHints: const [AutofillHints.username],
-                      decoration: InputDecoration(
-                        labelText: l10n.authUsername,
-                        border: const OutlineInputBorder(),
-                      ),
-                      validator: (value) =>
-                          (value == null || value.trim().isEmpty)
-                          ? l10n.authEnterUsername
-                          : null,
-                    ),
+                  WaxTextField(
+                    semanticsId: SemanticsIds.loginUsername,
+                    controller: _username,
+                    label: l10n.authUsername,
+                    autofillHints: const [AutofillHints.username],
+                    validator: (value) =>
+                        (value == null || value.trim().isEmpty)
+                        ? l10n.authEnterUsername
+                        : null,
                   ),
                   const SizedBox(height: WaxSpace.s16),
-                  Semantics(
-                    identifier: SemanticsIds.loginPassword,
-                    child: TextFormField(
-                      key: const Key(SemanticsIds.loginPassword),
-                      controller: _password,
-                      obscureText: true,
-                      autofillHints: const [AutofillHints.password],
-                      decoration: InputDecoration(
-                        labelText: l10n.authPassword,
-                        border: const OutlineInputBorder(),
-                      ),
-                      validator: (value) => (value == null || value.isEmpty)
-                          ? l10n.authEnterPassword
-                          : null,
-                      onFieldSubmitted: (_) => _submit(),
-                    ),
+                  WaxTextField(
+                    semanticsId: SemanticsIds.loginPassword,
+                    controller: _password,
+                    label: l10n.authPassword,
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.password],
+                    validator: (value) => (value == null || value.isEmpty)
+                        ? l10n.authEnterPassword
+                        : null,
+                    onSubmitted: (_) => _submit(),
                   ),
                   const SizedBox(height: WaxSpace.s24),
                   if (_error != null) ...[
@@ -180,40 +168,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: WaxSpace.s16),
                   ],
-                  Semantics(
-                    identifier: SemanticsIds.loginSubmit,
-                    child: FilledButton(
-                      key: const Key(SemanticsIds.loginSubmit),
-                      onPressed: _submitting ? null : _submit,
-                      child: _submitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(l10n.authLogIn),
-                    ),
+                  WaxButton(
+                    semanticsId: SemanticsIds.loginSubmit,
+                    label: l10n.authLogIn,
+                    expand: true,
+                    busy: _submitting,
+                    onPressed: _submitting ? null : _submit,
                   ),
                   const SizedBox(height: WaxSpace.s12),
                   // Open signup gets the louder wording; without it the
                   // link still serves people holding an invite token.
-                  Semantics(
-                    identifier: SemanticsIds.signupOpen,
-                    child: TextButton(
-                      key: const Key(SemanticsIds.signupOpen),
-                      onPressed: _submitting ? null : _openSignup,
-                      child: Text(
-                        signupEnabled
-                            ? l10n.authRequestAccount
-                            : l10n.authHaveInvite,
-                      ),
-                    ),
+                  WaxButton(
+                    semanticsId: SemanticsIds.signupOpen,
+                    label: signupEnabled
+                        ? l10n.authRequestAccount
+                        : l10n.authHaveInvite,
+                    kind: WaxButtonKind.text,
+                    expand: true,
+                    onPressed: _submitting ? null : _openSignup,
                   ),
                   if (oidcProviders.isNotEmpty) ...[
                     const SizedBox(height: WaxSpace.s24),
                     Row(
                       children: [
-                        const Expanded(child: Divider()),
+                        const Expanded(child: WaxHairline()),
                         Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: WaxSpace.s12,
@@ -225,23 +203,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ),
                         ),
-                        const Expanded(child: Divider()),
+                        const Expanded(child: WaxHairline()),
                       ],
                     ),
                     for (final provider in oidcProviders) ...[
                       const SizedBox(height: WaxSpace.s16),
-                      Semantics(
-                        identifier: SemanticsIds.oidcLogin(provider.id),
-                        child: OutlinedButton.icon(
-                          key: Key(SemanticsIds.oidcLogin(provider.id)),
-                          onPressed: _submitting
-                              ? null
-                              : () => _oidcSubmit(provider),
-                          icon: const WaxIcon(WaxIcons.signIn),
-                          label: Text(
-                            l10n.authContinueWith(provider.displayName),
-                          ),
-                        ),
+                      WaxButton(
+                        key: ValueKey(provider.id),
+                        semanticsId: SemanticsIds.oidcLogin(provider.id),
+                        label: l10n.authContinueWith(provider.displayName),
+                        icon: WaxIcons.signIn,
+                        kind: WaxButtonKind.tonal,
+                        expand: true,
+                        onPressed: _submitting
+                            ? null
+                            : () => _oidcSubmit(provider),
                       ),
                     ],
                   ],
@@ -259,15 +235,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    Semantics(
-                      identifier: SemanticsIds.connectServerOpen,
-                      child: TextButton(
-                        key: const Key(SemanticsIds.connectServerOpen),
-                        onPressed: _submitting
-                            ? null
-                            : () => context.go(WaxRoute.serverConnect),
-                        child: Text(l10n.authChangeServer),
-                      ),
+                    WaxButton(
+                      semanticsId: SemanticsIds.connectServerOpen,
+                      label: l10n.authChangeServer,
+                      kind: WaxButtonKind.text,
+                      expand: true,
+                      onPressed: _submitting
+                          ? null
+                          : () => context.go(WaxRoute.serverConnect),
                     ),
                   ],
                 ],

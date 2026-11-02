@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/off_tree.dart';
@@ -17,6 +16,7 @@ import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'debug_prints.dart';
 import 'fakes.dart';
@@ -189,6 +189,49 @@ void main() {
     clock.advance(const Duration(minutes: 6));
     await tester.pump(const Duration(minutes: 6));
     expect(engine.playing, isTrue);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a custom number of minutes is typed into the house field', (
+    tester,
+  ) async {
+    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+    final repo = FakeRepository(items: [testItem(pid)]);
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final clock = _FakeClock();
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+      container: _container(repo, engine, clock),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    final field = find.bySemanticsIdentifier(
+      SemanticsIds.sleepTimerCustomField,
+    );
+    expect(find.byType(WaxTextField), findsOneWidget);
+    await tester.enterText(field, '7');
+    final start = find.bySemanticsIdentifier(
+      SemanticsIds.sleepTimerCustomStart,
+    );
+    // The sheet scrolls; the field and its button sit below the presets.
+    await tester.ensureVisible(start);
+    await tester.pumpAndSettle();
+    await tester.tap(start);
+    await tester.pumpAndSettle();
+
+    // Both sides of seven: still playing at six, paused by eight.
+    clock.advance(const Duration(minutes: 6));
+    await tester.pump(const Duration(minutes: 6));
+    expect(engine.playing, isTrue);
+    clock.advance(const Duration(minutes: 2));
+    await tester.pump(const Duration(minutes: 2));
+    expect(engine.playing, isFalse);
     await harness.endPlayback(tester);
   });
 

@@ -113,7 +113,7 @@ class _Visualizer extends ConsumerStatefulWidget {
 }
 
 class _VisualizerState extends ConsumerState<_Visualizer> {
-  /// How long the chrome stays after the last input (5.6).
+  /// How long the chrome stays after the last input.
   static const Duration _linger = Duration(seconds: 3);
 
   WaxVisualizerMode _mode = WaxVisualizerMode.waveform;
@@ -170,7 +170,8 @@ class _VisualizerState extends ConsumerState<_Visualizer> {
       artUrl: item.artUrl,
       child: switch (waveform) {
         AsyncData(value: final peaks?) when peaks.isNotEmpty => _stage(peaks),
-        AsyncLoading() => const Center(child: CircularProgressIndicator()),
+        // The frame's backdrop is the surface; a stage has nothing to ghost.
+        AsyncLoading() => const SizedBox.shrink(),
         _ => EmptyState(
           glyph: WaxIcons.waveform,
           title: context.l10n.playerNoShape,

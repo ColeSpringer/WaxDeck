@@ -107,6 +107,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Libraries'), findsOneWidget);
+    expect(find.byType(WaxInkTappable), findsWidgets);
+    expect(find.byType(WaxHairline), findsOneWidget);
   });
 
   testWidgets('the console refuses an account without the role', (
@@ -136,6 +138,41 @@ void main() {
       find.bySemanticsIdentifier(AdminSection.trash.semanticsId),
       findsNothing,
       reason: 'a list of rows that all refuse is worse than one sentence',
+    );
+  });
+
+  testWidgets('waits for the session before it refuses anyone', (tester) async {
+    // Until the session answers nobody is an administrator yet, and
+    // refusing on that showed every administrator the refusal first.
+    final repo = FakeRepository()..getSessionGate = Completer<void>();
+    final container = _container(repo, user: _admin);
+    tester.view.physicalSize = const Size(1280, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(
+          const AdminConsole(
+            location: WaxRoute.trash,
+            child: SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.adminForbidden),
+      findsNothing,
+    );
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+
+    repo.getSessionGate!.complete();
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.adminConsole),
+      findsOneWidget,
     );
   });
 

@@ -22,6 +22,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -200,6 +201,21 @@ void main() {
       shellMessageText(container.read(shellMessengerProvider)),
       '"beatles" is unfolded',
     );
+  });
+
+  testWidgets('a pressed Load more stays, busy, over the ghost row', (
+    tester,
+  ) async {
+    final repo = _repo()..entityFolds = _pageAndOne();
+    await _pump(tester, repo);
+    final more = waxControl<WaxButton>(SemanticsIds.foldsMore);
+    await tester.ensureVisible(more);
+    await tester.pumpAndSettle();
+
+    repo.listEntityFoldsGate = Completer<void>();
+    await expectLoadMoreHolds(tester, more);
+    repo.listEntityFoldsGate!.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('an unfold past the first page keeps every row read', (
@@ -786,9 +802,7 @@ void main() {
       findsOneWidget,
     );
     final more = tester.widget<WaxButton>(
-      find.byWidgetPredicate(
-        (w) => w is WaxButton && w.semanticsId == SemanticsIds.foldsMore,
-      ),
+      waxControl<WaxButton>(SemanticsIds.foldsMore),
     );
     expect(more.onPressed, isNotNull, reason: 'asking again is offered');
   });

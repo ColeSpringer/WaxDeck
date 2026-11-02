@@ -155,169 +155,140 @@ class _StatusTiles extends ConsumerWidget {
     final running = jobs.where((j) => j.state == 'running').length;
     final lastBackup = backups.where((b) => b.state == 'done').firstOrNull;
 
-    return Wrap(
-      spacing: WaxSpace.s12,
-      runSpacing: WaxSpace.s12,
-      children: <Widget>[
-        _tile(
-          width: 220,
-          child: StatTile(
-            label: l10n.adminTileHealth,
-            // Warming up is not a score of zero, and drawing one would
-            // be the console's first lie to a new server.
-            value: health == null
-                ? '--'
-                : health.warmingUp
-                ? l10n.adminTileHealthWarming
-                : '${health.score.round()}',
-            caption: health == null
-                ? l10n.adminTileLoading
-                : health.warmingUp
-                ? l10n.adminTileFirstSweep
-                : l10n.adminTileChecked(
-                    health.evaluatedItems,
-                    health.totalItems,
-                  ),
-            glyph: WaxIcons.warning,
-            tone: health != null && !health.warmingUp && health.score < 80
-                ? colors.error
-                : null,
-            semanticsId: SemanticsIds.adminTile('health'),
-            onTap: () => context.go(WaxRoute.health),
-          ),
+    return WaxStatGrid(
+      tiles: <StatTile>[
+        StatTile(
+          label: l10n.adminTileHealth,
+          // Warming up is not a score of zero, and drawing one would
+          // be the console's first lie to a new server.
+          value: health == null
+              ? '--'
+              : health.warmingUp
+              ? l10n.adminTileHealthWarming
+              : '${health.score.round()}',
+          caption: health == null
+              ? l10n.adminTileLoading
+              : health.warmingUp
+              ? l10n.adminTileFirstSweep
+              : l10n.adminTileChecked(health.evaluatedItems, health.totalItems),
+          glyph: WaxIcons.warning,
+          tone: health != null && !health.warmingUp && health.score < 80
+              ? colors.error
+              : null,
+          semanticsId: SemanticsIds.adminTile('health'),
+          onTap: () => context.go(WaxRoute.health),
         ),
-        _tile(
-          width: 220,
-          child: StatTile(
-            label: l10n.adminTileReview,
-            value: review == null ? '--' : '${review.pending}',
-            caption: review == null
-                ? l10n.adminTileLoading
-                : review.identifying > 0
-                ? l10n.adminTileIdentifying(review.identifying)
-                : l10n.adminTileAlbumsToDecide,
-            glyph: WaxIcons.check,
-            semanticsId: SemanticsIds.adminTile('review'),
-            onTap: () => context.go(WaxRoute.review),
-          ),
+        StatTile(
+          label: l10n.adminTileReview,
+          value: review == null ? '--' : '${review.pending}',
+          caption: review == null
+              ? l10n.adminTileLoading
+              : review.identifying > 0
+              ? l10n.adminTileIdentifying(review.identifying)
+              : l10n.adminTileAlbumsToDecide,
+          glyph: WaxIcons.check,
+          semanticsId: SemanticsIds.adminTile('review'),
+          onTap: () => context.go(WaxRoute.review),
         ),
-        _tile(
-          width: 220,
-          child: StatTile(
-            label: l10n.adminTileJobs,
-            value: '$running',
-            caption: running == 0
-                ? l10n.adminTileNothingRunning
-                : l10n.adminTileScansAndPasses,
-            glyph: WaxIcons.refresh,
-            semanticsId: SemanticsIds.adminTile('jobs'),
-            onTap: () => context.push(WaxRoute.tasks),
-          ),
+        StatTile(
+          label: l10n.adminTileJobs,
+          value: '$running',
+          caption: running == 0
+              ? l10n.adminTileNothingRunning
+              : l10n.adminTileScansAndPasses,
+          glyph: WaxIcons.refresh,
+          semanticsId: SemanticsIds.adminTile('jobs'),
+          onTap: () => context.push(WaxRoute.tasks),
         ),
-        _tile(
-          width: 220,
-          child: StatTile(
-            label: l10n.adminTileLastBackup,
-            // When, not how big: a tile called "Last backup" is answering
-            // "did one happen", and a size answers a question nobody
-            // asked. The size is on the backups screen this doors into.
-            value: lastBackup == null
-                ? l10n.adminTileNone
-                : l10n.relativeSpaced(lastBackup.createdAt),
-            caption: lastBackup == null
-                ? l10n.adminTileNoArchive
-                // The backup schedule's own next run. Captioning this
-                // with the soonest run of any kind put "Next scan in
-                // 40 min" under the backup tile.
-                : _nextRunOf(l10n, schedules, _backupSchedule) ??
-                      l10n.adminTileNotScheduled,
-            glyph: WaxIcons.bookmark,
-            semanticsId: SemanticsIds.adminTile('backups'),
-            onTap: () => context.go(WaxRoute.backups),
-          ),
+        StatTile(
+          label: l10n.adminTileLastBackup,
+          // When, not how big: a tile called "Last backup" is answering
+          // "did one happen", and a size answers a question nobody
+          // asked. The size is on the backups screen this doors into.
+          value: lastBackup == null
+              ? l10n.adminTileNone
+              : l10n.relativeSpaced(lastBackup.createdAt),
+          caption: lastBackup == null
+              ? l10n.adminTileNoArchive
+              // The backup schedule's own next run. Captioning this
+              // with the soonest run of any kind put "Next scan in
+              // 40 min" under the backup tile.
+              : _nextRunOf(l10n, schedules, _backupSchedule) ??
+                    l10n.adminTileNotScheduled,
+          glyph: WaxIcons.bookmark,
+          semanticsId: SemanticsIds.adminTile('backups'),
+          onTap: () => context.go(WaxRoute.backups),
         ),
         // Held while its status loads, like every other tile, so the tiles
         // after it stay put: analysis is on by default. A server with it
         // off loses the slot, and so does a status that failed for good.
         if (similarity?.enabled ?? similarityStatus is! AsyncError)
-          _tile(
-            width: 220,
-            child: StatTile(
-              label: l10n.adminTileSimilarity,
-              value: similarity == null
-                  ? '--'
-                  : '${similarity.coveragePct.round()}%',
-              caption: similarity == null
-                  ? l10n.adminTileLoading
-                  : similarity.queueDepth > 0
-                  ? l10n.adminTileTracksQueued(similarity.queueDepth)
-                  : l10n.adminTileTracksEmbedded(similarity.embeddedTracks),
-              glyph: WaxIcons.stats,
-              semanticsId: SemanticsIds.adminTile('similarity'),
-            ),
-          ),
-        _tile(
-          width: 220,
-          child: StatTile(
-            label: l10n.adminTileArtworkCache,
-            value: thumbs == null ? '--' : l10n.formatBytes(thumbs.bytes),
-            // What the cache costs is only readable against what it was
-            // derived from: 40 MB is small beside 400 MB of covers and
-            // large beside 20. A cache with nothing in it has no share
-            // to state, and so does one whose sources somehow measure
-            // zero - which is a division, not a percentage.
-            caption: thumbs == null
+          StatTile(
+            label: l10n.adminTileSimilarity,
+            value: similarity == null
+                ? '--'
+                : '${similarity.coveragePct.round()}%',
+            caption: similarity == null
                 ? l10n.adminTileLoading
-                : thumbs.rows == 0 || thumbs.artSourceBytes <= 0
-                ? l10n.adminTileArtworkCacheEmpty
-                : l10n.adminTileArtworkCacheShare(
-                    (thumbs.bytes * 100 / thumbs.artSourceBytes).round(),
-                  ),
-            glyph: WaxIcons.albums,
-            semanticsId: SemanticsIds.adminTile('thumbnails'),
-            onTap: () => context.go(WaxRoute.trash),
+                : similarity.queueDepth > 0
+                ? l10n.adminTileTracksQueued(similarity.queueDepth)
+                : l10n.adminTileTracksEmbedded(similarity.embeddedTracks),
+            glyph: WaxIcons.stats,
+            semanticsId: SemanticsIds.adminTile('similarity'),
           ),
+        StatTile(
+          label: l10n.adminTileArtworkCache,
+          value: thumbs == null ? '--' : l10n.formatBytes(thumbs.bytes),
+          // What the cache costs is only readable against what it was
+          // derived from: 40 MB is small beside 400 MB of covers and
+          // large beside 20. A cache with nothing in it has no share
+          // to state, and so does one whose sources somehow measure
+          // zero - which is a division, not a percentage.
+          caption: thumbs == null
+              ? l10n.adminTileLoading
+              : thumbs.rows == 0 || thumbs.artSourceBytes <= 0
+              ? l10n.adminTileArtworkCacheEmpty
+              : l10n.adminTileArtworkCacheShare(
+                  (thumbs.bytes * 100 / thumbs.artSourceBytes).round(),
+                ),
+          glyph: WaxIcons.albums,
+          semanticsId: SemanticsIds.adminTile('thumbnails'),
+          onTap: () => context.go(WaxRoute.trash),
         ),
-        _tile(
-          width: 220,
-          child: StatTile(
-            label: l10n.adminTilePlayingNow,
-            value: '${sessions?.length ?? 0}',
-            caption: l10n.adminTileSessions,
-            glyph: WaxIcons.play,
-            semanticsId: SemanticsIds.adminTile('sessions'),
-          ),
+        StatTile(
+          label: l10n.adminTilePlayingNow,
+          value: '${sessions?.length ?? 0}',
+          caption: l10n.adminTileSessions,
+          glyph: WaxIcons.play,
+          semanticsId: SemanticsIds.adminTile('sessions'),
         ),
         // Held while health loads, like the rest; a server too old to say
         // loses the slot.
         if (!server.hasValue || streaming != null)
-          _tile(
-            width: 220,
-            child: StatTile(
-              label: l10n.adminTileStreaming,
-              value: switch (streaming) {
-                null => '--',
-                ServerStreaming(configured: false) =>
-                  l10n.adminStreamingNotConfigured,
-                ServerStreaming(connected: false) =>
-                  l10n.adminStreamingUnreachable,
-                _ => l10n.adminStreamingConnected,
-              },
-              caption: switch (streaming) {
-                null => l10n.adminTileLoading,
-                ServerStreaming(configured: true, connected: false) =>
-                  l10n.adminStreamingDirect,
-                _ => null,
-              },
-              glyph: WaxIcons.waveform,
-              tone:
-                  streaming != null &&
-                      streaming.configured &&
-                      !streaming.connected
-                  ? colors.error
-                  : null,
-              semanticsId: SemanticsIds.adminTile('streaming'),
-            ),
+          StatTile(
+            label: l10n.adminTileStreaming,
+            value: switch (streaming) {
+              null => '--',
+              ServerStreaming(configured: false) =>
+                l10n.adminStreamingNotConfigured,
+              ServerStreaming(connected: false) =>
+                l10n.adminStreamingUnreachable,
+              _ => l10n.adminStreamingConnected,
+            },
+            caption: switch (streaming) {
+              null => l10n.adminTileLoading,
+              ServerStreaming(configured: true, connected: false) =>
+                l10n.adminStreamingDirect,
+              _ => null,
+            },
+            glyph: WaxIcons.waveform,
+            tone:
+                streaming != null &&
+                    streaming.configured &&
+                    !streaming.connected
+                ? colors.error
+                : null,
+            semanticsId: SemanticsIds.adminTile('streaming'),
           ),
       ],
     );
@@ -327,9 +298,6 @@ class _StatusTiles extends ConsumerWidget {
   /// rather than typed inline: it is a wire token, and the sweep's copy
   /// rule reads a bare string in an argument as something to translate.
   static const _backupSchedule = 'backup';
-
-  Widget _tile({required double width, required Widget child}) =>
-      SizedBox(width: width, child: child);
 
   /// When one named schedule next runs, as a caption. A schedule that
   /// is off has no next run and answers null.

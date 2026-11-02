@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlist_sync_controller.dart';
+import 'package:waxdeck/src/playlists/playlist_sync_sheet.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
@@ -98,6 +101,43 @@ void main() {
     );
   });
 
+  testWidgets('the sheet waits for its read within a short window', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    )..playlistSourceGate = gate;
+    await tester.pumpWidget(
+      _host(
+        repo,
+        Scaffold(
+          body: Builder(
+            builder: (context) => WaxButton(
+              label: 'open',
+              onPressed: () =>
+                  unawaited(showPlaylistSyncSheet(context, 'pl-1')),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(360, 200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    // The form that follows is the full height of its content.
+    tester.view.resetPhysicalSize();
+    gate.complete();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('the sheet binds a URL with the picked mode and interval', (
     tester,
   ) async {
@@ -179,6 +219,48 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncModeOption('mirror')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('the arm takes no press while a preview is running', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    )..previewPlaylistSyncGate = gate;
+    final pl = await _manualPlaylist(repo);
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
+    await tester.pumpAndSettle();
+    await _openSheet(tester);
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncUrl),
+      'https://tube.example/playlist?list=PLx',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncPreview),
+    );
+    await tester.pump();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncArmOption('matched')),
+    );
+    await tester.pump();
+    // Still the live arm: the press was refused, not just ignored.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncUrl),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSemantics(
+        find.bySemanticsIdentifier(
+          SemanticsIds.playlistSyncArmOption('matched'),
+        ),
+      ),
+      isSemantics(hasEnabledState: true, isEnabled: false),
+    );
+
+    gate.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('preview dry-runs and reports what a sync would do', (
@@ -445,8 +527,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncUrl),
       findsOneWidget,
     );
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncArm));
-    await tester.pumpAndSettle();
+    expect(find.byType(WaxSegmented), findsOneWidget);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncArmOption('matched')),
     );

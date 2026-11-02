@@ -94,7 +94,6 @@ class ShowOverline extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = WaxColors.of(context);
     // The summary's own artist line is the show's name and arrives with
     // the item; the detail is watched only so a show renamed elsewhere
     // corrects itself without a reload.
@@ -102,27 +101,16 @@ class ShowOverline extends ConsumerWidget {
         ref.watch(podcastDetailProvider(episode.showPid)).value?.show.title ??
         episode.artist;
     if (name == null) return const SizedBox.shrink();
-    return WaxTappable(
+    // The episode screen's show link, drawn the same way: one look for
+    // the one link, with the touch target a thumb needs. One line, so it
+    // never outgrows the title under it.
+    return WaxButton(
+      label: name,
+      spokenLabel: context.l10n.playerGoToName(name),
+      kind: WaxButtonKind.inline,
+      maxLines: 1,
       semanticsId: SemanticsIds.playerShow,
-      label: context.l10n.playerGoToName(name),
-      borderRadius: WaxRadius.chip,
       onPressed: () => context.go(WaxRoute.show(episode.showPid)),
-      child: InkWell(
-        borderRadius: WaxRadius.chip,
-        onTap: () => context.go(WaxRoute.show(episode.showPid)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: WaxSpace.s8,
-            vertical: WaxSpace.s4,
-          ),
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: WaxType.overline.copyWith(color: colors.accent),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -323,7 +311,7 @@ class _BookSeekState extends ConsumerState<BookSeek> {
     return _starts;
   }
 
-  /// "42 percent, 6 hr 12 min left" (5.3). Percent and a span, because
+  /// "42 percent, 6 hr 12 min left". Percent and a span, because
   /// each answers a question the other does not: how far in, and how
   /// much of the evening this is.
   String? _bookProgress(WaxLocalizations l10n, Duration total, Duration at) {
@@ -555,7 +543,8 @@ class _VoiceBoostChipState extends ConsumerState<VoiceBoostChip> {
         label: context.l10n.playerVoiceBoost,
         text: context.l10n.playerVoiceBoost,
         selected: enabled,
-        onPressed: _busy ? null : () => unawaited(_toggle(!enabled)),
+        busy: _busy,
+        onPressed: () => unawaited(_toggle(!enabled)),
       ),
     );
   }
@@ -826,7 +815,7 @@ class _ChapterList extends StatelessWidget {
                         ),
                       ),
                     ),
-                  WaxTappable(
+                  WaxInkTappable(
                     semanticsId: SemanticsIds.playerChapter(chapter.index),
                     label: playing
                         ? l10n.playerChapterPlaying(chapterTitle(chapter))
@@ -835,40 +824,35 @@ class _ChapterList extends StatelessWidget {
                     onPressed: () => unawaited(
                       session.seek(Duration(milliseconds: chapter.startMs)),
                     ),
-                    child: InkWell(
-                      onTap: () => unawaited(
-                        session.seek(Duration(milliseconds: chapter.startMs)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: WaxSpace.s16,
+                        vertical: WaxSpace.s8,
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: WaxSpace.s16,
-                          vertical: WaxSpace.s8,
-                        ),
-                        child: Row(
-                          children: <Widget>[
-                            Text(
-                              formatTimecode(
-                                Duration(milliseconds: chapter.startMs),
-                              ),
-                              style: WaxType.monoTime.copyWith(
-                                color: colors.textTertiary,
+                      child: Row(
+                        children: <Widget>[
+                          Text(
+                            formatTimecode(
+                              Duration(milliseconds: chapter.startMs),
+                            ),
+                            style: WaxType.monoTime.copyWith(
+                              color: colors.textTertiary,
+                            ),
+                          ),
+                          const SizedBox(width: WaxSpace.s12),
+                          Expanded(
+                            child: Text(
+                              chapterTitle(chapter),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: WaxType.body.copyWith(
+                                color: playing
+                                    ? colors.accent
+                                    : colors.textPrimary,
                               ),
                             ),
-                            const SizedBox(width: WaxSpace.s12),
-                            Expanded(
-                              child: Text(
-                                chapterTitle(chapter),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: WaxType.body.copyWith(
-                                  color: playing
-                                      ? colors.accent
-                                      : colors.textPrimary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -939,7 +923,7 @@ class _TranscriptRegionState extends ConsumerState<_TranscriptRegion> {
         }
         final lines = snapshot.data;
         if (lines == null) {
-          return const Center(child: CircularProgressIndicator());
+          return const SkeletonShapes(shape: SkeletonShape.list, count: 4);
         }
         return LyricsView(
           position: widget.position,

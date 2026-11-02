@@ -102,7 +102,7 @@ class AboutScreen extends ConsumerWidget {
                     ),
                     // Not an error state: this page's job is to report
                     // the app's own version, and it still can.
-                    AsyncError() => MonoDetailRow(
+                    AsyncValue(hasError: true) => MonoDetailRow(
                       label: l10n.aboutVersionServer,
                       value: l10n.aboutServerUnreachable,
                     ),

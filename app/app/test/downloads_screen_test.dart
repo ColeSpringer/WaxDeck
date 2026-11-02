@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/connectivity/connectivity_port.dart';
 import 'package:waxdeck/src/downloads/downloads_controller.dart';
 import 'package:waxdeck/src/downloads/downloads_screen.dart';
+import 'package:waxdeck/src/downloads/wifi_only_gate.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
@@ -78,6 +80,7 @@ void main() {
     List<DownloadedItem> stored = const <DownloadedItem>[],
     Map<String, int> positions = const <String, int>{},
     Set<String> finished = const <String>{},
+    WifiOnlyGate? gate,
   }) async {
     downloads.setStored(stored);
     final db = await _mirror();
@@ -102,6 +105,7 @@ void main() {
           mirrorDatabaseProvider.overrideWithValue(db),
           downloadManagerProvider.overrideWithValue(downloads),
           artworkStoreProvider.overrideWithValue(artwork),
+          if (gate != null) transferGateProvider.overrideWithValue(gate),
           syncEngineProvider.overrideWithValue(
             SyncEngine(
               db: db,
@@ -529,6 +533,227 @@ void main() {
       expect(find.text('Audiobooks'), findsOneWidget);
     });
 
+    // Ended away from this screen: the notification's cancel, a sync
+    // commit's free, or the manager giving up. The row must go with it.
+    for (final (name, ending) in <(String, DownloadProgress)>[
+      (
+        'a stop from outside',
+        const DownloadProgress(
+          pid: _book,
+          fraction: 0,
+          complete: false,
+          stopped: true,
+        ),
+      ),
+      (
+        'a failure',
+        const DownloadProgress(
+          pid: _book,
+          fraction: 0,
+          complete: false,
+          failure: DownloadFailure.interrupted,
+        ),
+      ),
+    ]) {
+      testWidgets('$name reloads the list and drops the transfer', (
+        tester,
+      ) async {
+        await pump(
+          tester,
+          stored: <DownloadedItem>[
+            const DownloadedItem(
+              pid: _book,
+              sizeBytes: 4194304,
+              files: 3,
+              complete: false,
+            ),
+          ],
+        );
+        downloads.emit(
+          const DownloadProgress(pid: _book, fraction: 0.4, complete: false),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Transferring'), findsOneWidget);
+
+        downloads.setStored(const <DownloadedItem>[]);
+        downloads.emit(ending);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Transferring'), findsNothing);
+        expect(find.byType(MediaListRow), findsNothing);
+      });
+    }
+
+    testWidgets('a transfer the wifi-only gate holds reads as held', (
+      tester,
+    ) async {
+      // One state, one reading: the row says what the book's pill and the
+      // player's icon say, and stops once the gate opens.
+      final net = _Net();
+      final gate = WifiOnlyGate(connectivity: net, wifiOnly: () => true);
+      addTearDown(gate.dispose);
+      await pump(
+        tester,
+        stored: <DownloadedItem>[
+          const DownloadedItem(
+            pid: _book,
+            sizeBytes: 4194304,
+            files: 3,
+            complete: false,
+            active: true,
+          ),
+        ],
+        gate: gate,
+      );
+
+      MediaTileData row() =>
+          tester.widget<MediaListRow>(find.byType(MediaListRow).first).data;
+      expect(row().trailingDetail, 'Waiting for wifi');
+      expect(
+        row().trailingDetailSpoken,
+        'Waiting for wifi. Download on wifi only is on',
+      );
+
+      net.move(ConnectionCost.unmetered);
+      await tester.pumpAndSettle();
+      expect(row().trailingDetail, isNull);
+    });
+
+    testWidgets('every row reads the one gate, and no row asks the device', (
+      tester,
+    ) async {
+      final net = _Net();
+      final gate = WifiOnlyGate(connectivity: net, wifiOnly: () => true);
+      addTearDown(gate.dispose);
+      downloads.dispose();
+      final counting = downloads = _CountingDownloads();
+      await pump(
+        tester,
+        stored: <DownloadedItem>[
+          for (final pid in [_book, _track])
+            DownloadedItem(
+              pid: pid,
+              sizeBytes: 1024,
+              files: 1,
+              complete: false,
+              active: true,
+            ),
+        ],
+        gate: gate,
+      );
+
+      final rows = tester.widgetList<MediaListRow>(find.byType(MediaListRow));
+      expect(
+        [for (final r in rows) r.data.trailingDetail],
+        ['Waiting for wifi', 'Waiting for wifi'],
+      );
+      expect(net.asked, 1);
+      expect(counting.probes, 0);
+    });
+
+    testWidgets('a paused row is not held, and is again once resumed', (
+      tester,
+    ) async {
+      final net = _Net();
+      final gate = WifiOnlyGate(connectivity: net, wifiOnly: () => true);
+      addTearDown(gate.dispose);
+      await pump(
+        tester,
+        stored: <DownloadedItem>[
+          const DownloadedItem(
+            pid: _book,
+            sizeBytes: 4194304,
+            files: 3,
+            complete: false,
+            active: true,
+          ),
+        ],
+        gate: gate,
+      );
+      MediaTileData row() =>
+          tester.widget<MediaListRow>(find.byType(MediaListRow).first).data;
+      expect(row().trailingDetail, 'Waiting for wifi');
+
+      await _tap(tester, SemanticsIds.downloadPause(_book));
+      expect(row().trailingDetail, isNull);
+      expect(row().trailingDetailSpoken, isNull);
+
+      await _tap(tester, SemanticsIds.downloadResume(_book));
+      expect(row().trailingDetail, 'Waiting for wifi');
+    });
+
+    testWidgets('a pause keeps the bar where it was and reloads the row', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        stored: <DownloadedItem>[
+          const DownloadedItem(
+            pid: _book,
+            sizeBytes: 4194304,
+            files: 3,
+            complete: false,
+            active: true,
+          ),
+        ],
+      );
+      downloads.emit(
+        const DownloadProgress(pid: _book, fraction: 0.4, complete: false),
+      );
+      await tester.pumpAndSettle();
+
+      // Paused by something other than this screen's button.
+      downloads.setStored(<DownloadedItem>[
+        const DownloadedItem(
+          pid: _book,
+          sizeBytes: 4194304,
+          files: 3,
+          complete: false,
+          paused: true,
+        ),
+      ]);
+      downloads.emit(
+        const DownloadProgress(
+          pid: _book,
+          fraction: 0.4,
+          complete: false,
+          paused: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final row = tester.widget<MediaListRow>(find.byType(MediaListRow).first);
+      expect(row.data.progress, closeTo(0.4, 0.001));
+      expect(_byId(SemanticsIds.downloadResume(_book)), findsOneWidget);
+    });
+
+    testWidgets('a transfer nothing moves is not held, as its pill is not', (
+      tester,
+    ) async {
+      // Parked on a not-found, or rows left with no transfer: the book's
+      // pill offers the download, so the row must not say it is waiting.
+      final net = _Net();
+      final gate = WifiOnlyGate(connectivity: net, wifiOnly: () => true);
+      addTearDown(gate.dispose);
+      await pump(
+        tester,
+        stored: <DownloadedItem>[
+          const DownloadedItem(
+            pid: _book,
+            sizeBytes: 4194304,
+            files: 3,
+            complete: false,
+          ),
+        ],
+        gate: gate,
+      );
+
+      final row = tester.widget<MediaListRow>(find.byType(MediaListRow).first);
+      expect(row.data.trailingDetail, isNull);
+      expect(row.data.trailingDetailSpoken, isNull);
+    });
+
     testWidgets('a bar moves as the stream reports', (tester) async {
       await pump(
         tester,
@@ -551,4 +776,44 @@ void main() {
       expect(row.data.progress, closeTo(0.4, 0.001));
     });
   });
+}
+
+/// A connection that starts on mobile data and moves when told.
+class _Net implements ConnectivityPort {
+  ConnectionCost now = ConnectionCost.metered;
+  final _costs = StreamController<ConnectionCost>.broadcast();
+
+  /// How many times the platform was asked.
+  var asked = 0;
+
+  @override
+  Future<ConnectionCost> cost() async {
+    asked++;
+    return now;
+  }
+
+  @override
+  Stream<ConnectionCost> get costs => _costs.stream;
+
+  void move(ConnectionCost cost) {
+    now = cost;
+    _costs.add(cost);
+  }
+}
+
+/// Counts the reads a per-item download state makes of the device.
+class _CountingDownloads extends FakeDownloads {
+  var probes = 0;
+
+  @override
+  Future<DownloadedItem?> storedItem(String pid) {
+    probes++;
+    return super.storedItem(pid);
+  }
+
+  @override
+  Future<bool> isComplete(String pid) {
+    probes++;
+    return super.isComplete(pid);
+  }
 }

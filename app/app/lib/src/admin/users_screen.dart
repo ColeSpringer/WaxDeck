@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -172,8 +173,11 @@ class _UsersTab extends ConsumerWidget {
     final users = ref.watch(adminUsersProvider);
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
-    return switch (users) {
-      AsyncData(:final value) => NotificationListener<ScrollNotification>(
+    return AsyncBoxFace<UsersState>(
+      state: users,
+      errorTitle: l10n.adminUsersLoadError,
+      onRetry: () => ref.invalidate(adminUsersProvider),
+      builder: (context, value) => NotificationListener<ScrollNotification>(
         onNotification: (notification) {
           final metrics = notification.metrics;
           if (metrics.pixels >= metrics.maxScrollExtent - 400) {
@@ -255,19 +259,11 @@ class _UsersTab extends ConsumerWidget {
               ],
             ),
             if (value.loadingMore)
-              const Padding(
-                padding: EdgeInsets.all(WaxSpace.s16),
-                child: Center(child: CircularProgressIndicator()),
-              ),
+              const SkeletonShapes(shape: SkeletonShape.list, count: 1),
           ],
         ),
       ),
-      AsyncError(:final error) => _ErrorRetry(
-        error: error,
-        onRetry: () => ref.invalidate(adminUsersProvider),
-      ),
-      _ => const SkeletonShapes(shape: SkeletonShape.list),
-    };
+    );
   }
 
   /// An account with no role at all is an ordinary account, which is
@@ -326,14 +322,16 @@ class _RequestsTab extends ConsumerWidget {
         title: Text(l10n.adminUsersRejectTitle(user.username)),
         content: WaxProse(l10n.adminUsersRejectBody),
         actions: [
-          TextButton(
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.commonCancel),
           ),
-          FilledButton(
+          WaxButton(
             key: const Key('request-reject-confirm'),
+            label: l10n.adminUsersRejectAction,
+            kind: WaxButtonKind.destructive,
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.adminUsersRejectAction),
           ),
         ],
       ),
@@ -354,11 +352,13 @@ class _RequestsTab extends ConsumerWidget {
     return Semantics(
       identifier: SemanticsIds.signupRequests,
       container: true,
-      child: switch (requests) {
-        AsyncData(:final value) when value.isEmpty => Center(
-          child: Text(l10n.adminUsersNoRequests),
-        ),
-        AsyncData(:final value) => ListView(
+      child: AsyncBoxFace<List<UserAccount>>(
+        state: requests,
+        errorTitle: l10n.adminUsersRequestsLoadError,
+        onRetry: () => ref.invalidate(signupRequestsProvider),
+        isEmpty: (value) => value.isEmpty,
+        empty: (context, _) => Center(child: Text(l10n.adminUsersNoRequests)),
+        builder: (context, value) => ListView(
           padding: WaxSizeClass.of(
             context,
           ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
@@ -380,33 +380,24 @@ class _RequestsTab extends ConsumerWidget {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Semantics(
-                      identifier: SemanticsIds.requestApprove(user.id),
-                      child: TextButton(
-                        key: Key(SemanticsIds.requestApprove(user.id)),
-                        onPressed: () => _approve(context, ref, user),
-                        child: Text(l10n.adminUserApproveAction),
-                      ),
+                    WaxButton(
+                      semanticsId: SemanticsIds.requestApprove(user.id),
+                      label: l10n.adminUserApproveAction,
+                      kind: WaxButtonKind.text,
+                      onPressed: () => _approve(context, ref, user),
                     ),
-                    Semantics(
-                      identifier: SemanticsIds.requestReject(user.id),
-                      child: TextButton(
-                        key: Key(SemanticsIds.requestReject(user.id)),
-                        onPressed: () => _reject(context, ref, user),
-                        child: Text(l10n.adminUsersRejectAction),
-                      ),
+                    WaxButton(
+                      semanticsId: SemanticsIds.requestReject(user.id),
+                      label: l10n.adminUsersRejectAction,
+                      kind: WaxButtonKind.text,
+                      onPressed: () => _reject(context, ref, user),
                     ),
                   ],
                 ),
               ),
           ],
         ),
-        AsyncError(:final error) => _ErrorRetry(
-          error: error,
-          onRetry: () => ref.invalidate(signupRequestsProvider),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+      ),
     );
   }
 }
@@ -456,9 +447,9 @@ class _InvitesTab extends ConsumerWidget {
             ],
           ),
           actions: [
-            FilledButton(
+            WaxButton(
+              label: l10n.commonDone,
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.commonDone),
             ),
           ],
         ),
@@ -481,14 +472,16 @@ class _InvitesTab extends ConsumerWidget {
         title: Text(l10n.adminInviteRevokeTitle),
         content: WaxProse(l10n.adminInviteRevokeBody),
         actions: [
-          TextButton(
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.commonCancel),
           ),
-          FilledButton(
+          WaxButton(
             key: const Key('invite-revoke-confirm'),
+            label: l10n.adminInviteRevokeAction,
+            kind: WaxButtonKind.destructive,
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.adminInviteRevokeAction),
           ),
         ],
       ),
@@ -517,11 +510,13 @@ class _InvitesTab extends ConsumerWidget {
         semanticsId: SemanticsIds.inviteCreate,
         onPressed: () => _create(context, ref),
       ),
-      body: switch (invites) {
-        AsyncData(:final value) when value.isEmpty => Center(
-          child: Text(l10n.adminInvitesEmpty),
-        ),
-        AsyncData(:final value) => ListView(
+      body: AsyncBoxFace<List<Invite>>(
+        state: invites,
+        errorTitle: l10n.adminInvitesLoadError,
+        onRetry: () => ref.invalidate(invitesProvider),
+        isEmpty: (value) => value.isEmpty,
+        empty: (context, _) => Center(child: Text(l10n.adminInvitesEmpty)),
+        builder: (context, value) => ListView(
           padding: WaxSizeClass.of(
             context,
           ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
@@ -533,12 +528,7 @@ class _InvitesTab extends ConsumerWidget {
               ),
           ],
         ),
-        AsyncError(:final error) => _ErrorRetry(
-          error: error,
-          onRetry: () => ref.invalidate(invitesProvider),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+      ),
     );
   }
 }
@@ -660,13 +650,11 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
+            WaxTextField(
               key: const Key('invite-note'),
               controller: _note,
-              decoration: InputDecoration(
-                labelText: l10n.adminInviteNoteLabel,
-                helperText: l10n.adminInviteNoteHelp,
-              ),
+              label: l10n.adminInviteNoteLabel,
+              helperText: l10n.adminInviteNoteHelp,
             ),
             WaxSettingRow(
               key: const Key('invite-admin-role'),
@@ -714,61 +702,34 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
                 onChanged: (value) => setState(() => _uploadEnabled = value),
               ),
             ),
-            TextField(
+            WaxTextField(
               key: const Key('invite-max-uses'),
               controller: _maxUses,
               keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: l10n.adminInviteMaxUsesLabel,
-              ),
+              label: l10n.adminInviteMaxUsesLabel,
             ),
-            TextField(
+            WaxTextField(
               key: const Key('invite-expires-days'),
               controller: _expiresDays,
               keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: l10n.adminInviteExpiresLabel,
-                helperText: l10n.adminInviteExpiresHelp,
-              ),
+              label: l10n.adminInviteExpiresLabel,
+              helperText: l10n.adminInviteExpiresHelp,
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        FilledButton(
+        WaxButton(
           key: const Key('invite-create-confirm'),
+          label: l10n.adminInviteCreateAction,
           onPressed: _submit,
-          child: Text(l10n.adminInviteCreateAction),
         ),
       ],
-    );
-  }
-}
-
-class _ErrorRetry extends StatelessWidget {
-  const _ErrorRetry({required this.error, required this.onRetry});
-
-  final Object error;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(context.explain(error), textAlign: TextAlign.center),
-          const SizedBox(height: WaxSpace.s12),
-          OutlinedButton(
-            onPressed: onRetry,
-            child: Text(context.l10n.commonRetry),
-          ),
-        ],
-      ),
     );
   }
 }

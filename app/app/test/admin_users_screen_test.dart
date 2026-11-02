@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/users_screen.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
@@ -9,19 +13,26 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 /// The editor is a console location, and the console refuses an account
 /// without the role, so the fake has to hold an administrator's session
 /// for a row to open into anything.
-Widget _host(FakeRepository repo) {
+Widget _host(
+  FakeRepository repo, {
+  List<Override> overrides = const [],
+  Duration? Function(int, Object)? retry,
+}) {
   repo.sessionState = const SessionState(
     authenticated: true,
     user: WaxDeckUser(id: 'us-0', username: 'admin', roles: ['admin']),
   );
   return ProviderScope(
+    retry: retry,
     overrides: [
       repositoryProvider.overrideWithValue(repo),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ...overrides,
     ],
     child: routedHost(const UsersScreen()),
   );
@@ -61,7 +72,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    final adminRow = find.bySemanticsIdentifier('user-row-us-1');
+    final adminRow = find.bySemanticsIdentifier(SemanticsIds.userRow('us-1'));
     expect(adminRow, findsOneWidget);
     expect(
       find.descendant(of: adminRow, matching: find.text('admin')),
@@ -69,7 +80,9 @@ void main() {
     );
     // The state is a column of its own now rather than a chip beside
     // the name: a table row says active, pending, or disabled once.
-    final disabledRow = find.bySemanticsIdentifier('user-row-us-2');
+    final disabledRow = find.bySemanticsIdentifier(
+      SemanticsIds.userRow('us-2'),
+    );
     expect(
       find.descendant(of: disabledRow, matching: find.text('Disabled')),
       findsOneWidget,
@@ -95,16 +108,26 @@ void main() {
     await tester.tap(find.text('Requests'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('request-row-us-9')), findsOneWidget);
+    expect(
+      waxControl<WaxButton>(SemanticsIds.requestApprove('us-9')),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.byKey(const Key('request-approve-us-9')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.requestApprove('us-9')),
+    );
     await tester.pumpAndSettle();
 
     // Grant the admin role and uploads in the prefilled editor.
-    await tester.tap(find.bySemanticsIdentifier('user-admin-role'));
-    await tester.tap(find.bySemanticsIdentifier('user-upload-enabled'));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userAdminRole));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.userUploadEnabled),
+    );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.bySemanticsIdentifier('user-save'));
-    await tester.tap(find.bySemanticsIdentifier('user-save'));
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier(SemanticsIds.userSave),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userSave));
     await tester.pumpAndSettle();
 
     final call = repo.approveSignupCalls.single;
@@ -130,7 +153,9 @@ void main() {
 
     await tester.tap(find.text('Requests'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('request-reject-us-9')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.requestReject('us-9')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('request-reject-confirm')));
     await tester.pumpAndSettle();
@@ -152,7 +177,7 @@ void main() {
     await tester.tap(find.byKey(const Key('invite-create-confirm')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('invite-token')), findsOneWidget);
+    expect(find.byKey(const Key(SemanticsIds.inviteToken)), findsOneWidget);
     expect(find.text('invite-token-0'), findsOneWidget);
     expect(repo.invitesById.values.single.note, 'For Samwise');
   });
@@ -206,13 +231,15 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsIdentifier('user-row-us-3'));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userRow('us-3')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userChildPreset));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.bySemanticsIdentifier('user-save'));
-    await tester.tap(find.bySemanticsIdentifier('user-save'));
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier(SemanticsIds.userSave),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userSave));
     await tester.pumpAndSettle();
 
     final stored = repo.usersById['us-3']!;
@@ -229,4 +256,206 @@ void main() {
       contains('ITUNESADVISORY=1'),
     );
   });
+
+  testWidgets('the requests and invites tabs wait as the list they become', (
+    tester,
+  ) async {
+    final never = Completer<List<Object>>();
+    addTearDown(() => never.complete(const []));
+    await tester.pumpWidget(
+      _host(
+        FakeRepository(),
+        overrides: [
+          signupRequestsProvider.overrideWith(
+            (ref) => never.future.then((_) => <UserAccount>[]),
+          ),
+          invitesProvider.overrideWith(
+            (ref) => never.future.then((_) => <Invite>[]),
+          ),
+        ],
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+
+    await tester.tap(find.text('Requests'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(SkeletonShapes), findsWidgets);
+    expect(find.byType(WaxSpinner), findsNothing);
+
+    await tester.tap(find.text('Invites'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(SkeletonShapes), findsWidgets);
+    expect(find.byType(WaxSpinner), findsNothing);
+  });
+
+  testWidgets('a tab wait fits a short window without overflowing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 420);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final never = Completer<void>();
+    addTearDown(() => never.complete());
+    await tester.pumpWidget(
+      _host(
+        FakeRepository(),
+        overrides: [
+          signupRequestsProvider.overrideWith(
+            (ref) => never.future.then((_) => <UserAccount>[]),
+          ),
+        ],
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Requests'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(SkeletonShapes), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  // With the app's own retry left on: while an attempt runs a failing
+  // read is AsyncLoading carrying the last error, and a face that only
+  // matched AsyncError drew the skeleton for as long as the server took.
+  for (final (tab, title) in const <(String?, String)>[
+    (null, 'Could not load the accounts'),
+    ('Requests', 'Could not load the signup requests'),
+    ('Invites', 'Could not load the invites'),
+  ]) {
+    testWidgets('a failed load on ${tab ?? 'Users'} says so at once, '
+        'while it retries', (tester) async {
+      await tester.pumpWidget(_host(_DownRepository()));
+      await tester.pump();
+      if (tab != null) {
+        await tester.tap(find.text(tab));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+      // Past the first retry's delay: the read is loading again.
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+
+      expect(find.byType(ErrorState), findsOneWidget);
+      expect(find.text(title), findsOneWidget);
+      expect(find.text('down'), findsNothing, reason: 'explained, not raw');
+      expect(find.widgetWithText(WaxButton, 'Try again'), findsOneWidget);
+      // Unmounted inside the test, so no retry timer outlives it.
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('a short tab fits its error face', (tester) async {
+    tester.view.physicalSize = const Size(900, 220);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_host(_DownRepository(), retry: (_, _) => null));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ErrorState), findsOneWidget);
+  });
+
+  testWidgets('a password set from the editor reaches the server', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository();
+    repo.usersById['us-3'] = _account('us-3', username: 'merry');
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userRow('us-3')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userSetPassword));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('user-new-password')),
+        matching: find.byType(EditableText),
+      ),
+      'second-breakfast',
+    );
+    await tester.tap(find.byKey(const Key('user-set-password-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.setUserPasswordCalls, [
+      (userId: 'us-3', newPassword: 'second-breakfast'),
+    ]);
+    expect(find.byKey(const Key('user-new-password')), findsNothing);
+  });
+
+  testWidgets('the account editor confirms its actions in Wax dialogs', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository();
+    repo.usersById['us-3'] = _account('us-3', username: 'merry');
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userRow('us-3')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userSetPassword));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('user-new-password')), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is WaxTextField && w.key == const Key('user-new-password'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('user-set-password-confirm')), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is WaxButton && w.key == const Key('user-set-password-confirm'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(WaxButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.userRevokeSessions),
+    );
+    await tester.pumpAndSettle();
+    final confirm = tester.widget<WaxButton>(
+      find.byKey(const Key('user-confirm')),
+    );
+    expect(confirm.kind, WaxButtonKind.destructive);
+  });
+}
+
+/// A server that refuses every account read: each read fails at once the
+/// first time and waits on every retry, as on a server that has gone away.
+class _DownRepository extends FakeRepository {
+  final _reads = <String>{};
+
+  Future<Never> _down(String read) async {
+    if (!_reads.add(read)) await Completer<void>().future;
+    throw const WaxDeckApiException(
+      code: 'internal',
+      message: 'down',
+      statusCode: 500,
+    );
+  }
+
+  @override
+  Future<UserPage> listUsers({String? cursor, int? limit}) => _down('users');
+
+  @override
+  Future<UserPage> listSignupRequests({String? cursor, int? limit}) =>
+      _down('requests');
+
+  @override
+  Future<List<Invite>> listInvites() => _down('invites');
 }

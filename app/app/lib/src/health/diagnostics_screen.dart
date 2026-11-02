@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../admin/admin_console.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 
 /// The active per-code filter over the diagnostics list; null shows all.
@@ -142,9 +143,9 @@ class DiagnosticsScreen extends ConsumerWidget {
                 const _SummaryChips(),
                 switch (list) {
                   AsyncData(:final value) => _Table(state: value),
-                  AsyncError(:final error) => ErrorState(
+                  AsyncValue(hasError: true) => AsyncFailureCard.from(
+                    list,
                     title: l10n.healthDiagnosticsLoadError,
-                    message: context.explain(error),
                     onRetry: () => ref.invalidate(diagnosticsProvider),
                   ),
                   _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -271,18 +272,14 @@ class _Table extends ConsumerWidget {
             ),
           ],
         ),
-        if (state.hasMore) ...<Widget>[
-          const SizedBox(height: WaxSpace.s16),
-          WaxButton(
-            label: state.loadingMore ? l10n.commonLoading : l10n.healthLoadMore,
-            kind: WaxButtonKind.tonal,
-            icon: WaxIcons.caretDown,
+        if (state.hasMore)
+          LoadMoreFooter(
+            label: l10n.healthLoadMore,
+            loading: state.loadingMore,
             semanticsId: SemanticsIds.diagnosticsMore,
-            onPressed: state.loadingMore
-                ? null
-                : () => ref.read(diagnosticsProvider.notifier).loadMore(),
+            padding: const EdgeInsets.only(top: WaxSpace.s16),
+            onLoadMore: () => ref.read(diagnosticsProvider.notifier).loadMore(),
           ),
-        ],
       ],
     );
   }

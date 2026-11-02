@@ -5,6 +5,8 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
+import '../shell/in_flight.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -27,7 +29,11 @@ class GenreTreeScreen extends ConsumerStatefulWidget {
   ConsumerState<GenreTreeScreen> createState() => _GenreTreeScreenState();
 }
 
-class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
+/// The tree's two writes, for the button that started one to draw.
+enum _GenreWork { save, revert }
+
+class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen>
+    with InFlight<GenreTreeScreen, _GenreWork> {
   /// The working copy. Null until the stored tree lands.
   List<GenreNode>? _draft;
 
@@ -49,7 +55,6 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
   }
 
   bool _dirty = false;
-  bool _busy = false;
 
   void _adopt(GenreTree tree) {
     _draft = List<GenreNode>.of(tree.genres);
@@ -155,24 +160,22 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
     });
   }
 
-  Future<void> _save() async {
-    if (_busy) return;
-    setState(() => _busy = true);
+  Future<void> _save() {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    try {
-      await ref.read(genreTreeProvider.notifier).save(_genres);
-      if (!mounted) return;
-      setState(() => _dirty = false);
-      messenger.show(l10n.adminGenreSaved);
-    } on WaxDeckApiException catch (error) {
-      // The vocabulary somebody just edited: the server names the node
-      // or the alias it refused, which is what makes a 200-genre tree
-      // searchable.
-      messenger.show(explainRefusal(l10n, error));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    return runAs(_GenreWork.save, () async {
+      try {
+        await ref.read(genreTreeProvider.notifier).save(_genres);
+        if (!mounted) return;
+        setState(() => _dirty = false);
+        messenger.show(l10n.adminGenreSaved);
+      } on WaxDeckApiException catch (error) {
+        // The vocabulary somebody just edited: the server names the node
+        // or the alias it refused, which is what makes a 200-genre tree
+        // searchable.
+        messenger.show(explainRefusal(l10n, error));
+      }
+    });
   }
 
   /// Clearing the override is an empty vocabulary, which is the
@@ -192,22 +195,21 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
       cancelSemanticsId: SemanticsIds.confirmCancel,
     );
     if (!confirmed || !mounted) return;
-    setState(() => _busy = true);
     final messenger = ref.read(shellMessengerProvider.notifier);
-    try {
-      await ref.read(genreTreeProvider.notifier).save(const <GenreNode>[]);
-      if (!mounted) return;
-      setState(() {
-        _draft = null;
-        _selected = null;
-        _dirty = false;
-      });
-      messenger.show(l10n.adminGenreReverted);
-    } on WaxDeckApiException catch (error) {
-      messenger.show(explainError(l10n, error));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await runAs(_GenreWork.revert, () async {
+      try {
+        await ref.read(genreTreeProvider.notifier).save(const <GenreNode>[]);
+        if (!mounted) return;
+        setState(() {
+          _draft = null;
+          _selected = null;
+          _dirty = false;
+        });
+        messenger.show(l10n.adminGenreReverted);
+      } on WaxDeckApiException catch (error) {
+        messenger.show(explainError(l10n, error));
+      }
+    });
   }
 
   Future<void> _normalize({required bool dryRun}) async {
@@ -249,15 +251,16 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
           label: l10n.commonSave,
           kind: WaxButtonKind.text,
           semanticsId: SemanticsIds.genreSave,
-          onPressed: _dirty && !_busy ? _save : null,
+          busy: busyBy(_GenreWork.save),
+          onPressed: _dirty && !busy ? _save : null,
         ),
       ],
       body: switch (tree) {
-        AsyncError(:final error) => Padding(
+        AsyncValue(hasError: true) => Padding(
           padding: sizeClass.gutter,
-          child: ErrorState(
+          child: AsyncFailureCard.from(
+            tree,
             title: l10n.adminGenreTreeLoadError,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(genreTreeProvider),
           ),
         ),
@@ -270,7 +273,8 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
             children: <Widget>[
               _Header(
                 source: value.source,
-                busy: _busy,
+                busy: busy,
+                reverting: busyBy(_GenreWork.revert),
                 onRevert: value.isDefault ? null : _revert,
                 onNormalize: (dryRun) => _normalize(dryRun: dryRun),
               ),
@@ -312,7 +316,7 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
           title: l10n.adminGenreVocabulary,
           actionLabel: l10n.adminGenreAdd,
           semanticsId: SemanticsIds.genreAdd,
-          onAction: _busy ? null : _add,
+          onAction: busy ? null : _add,
         ),
         if (_genres.isEmpty)
           EmptyState(
@@ -374,12 +378,16 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.source,
     required this.busy,
+    required this.reverting,
     required this.onRevert,
     required this.onNormalize,
   });
 
   final String source;
   final bool busy;
+
+  /// The revert is the write in flight, which its own button draws.
+  final bool reverting;
   final VoidCallback? onRevert;
   final void Function(bool dryRun) onNormalize;
 
@@ -417,6 +425,7 @@ class _Header extends StatelessWidget {
               label: l10n.adminGenreRevertToDefault,
               kind: WaxButtonKind.destructive,
               semanticsId: SemanticsIds.genreRevert,
+              busy: reverting,
               onPressed: busy ? null : onRevert,
             ),
           ],
@@ -446,45 +455,39 @@ class _GenreRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final child = node.parent != null;
-    return WaxTappable(
+    return WaxInkTappable(
       label: node.name,
       semanticsId: SemanticsIds.genreNode(node.name),
       selected: selected,
-      borderRadius: BorderRadius.zero,
+      color: selected ? colors.accentContainer : Colors.transparent,
       surface: colors.canvas,
       onPressed: onTap,
-      child: Material(
-        color: selected ? colors.accentContainer : Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: child ? WaxSpace.s32 : WaxSpace.s12,
-              right: WaxSpace.s12,
-              top: WaxSpace.s8,
-              bottom: WaxSpace.s8,
-            ),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    node.name,
-                    style: (child ? WaxType.body : WaxType.titleItem).copyWith(
-                      color: selected
-                          ? colors.onAccentContainer
-                          : colors.textPrimary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: child ? WaxSpace.s32 : WaxSpace.s12,
+          right: WaxSpace.s12,
+          top: WaxSpace.s8,
+          bottom: WaxSpace.s8,
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                node.name,
+                style: (child ? WaxType.body : WaxType.titleItem).copyWith(
+                  color: selected
+                      ? colors.onAccentContainer
+                      : colors.textPrimary,
                 ),
-                if (node.aliases.isNotEmpty)
-                  Text(
-                    context.l10n.adminGenreAliasCount(node.aliases.length),
-                    style: WaxType.caption.copyWith(color: colors.textTertiary),
-                  ),
-              ],
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
+            if (node.aliases.isNotEmpty)
+              Text(
+                context.l10n.adminGenreAliasCount(node.aliases.length),
+                style: WaxType.caption.copyWith(color: colors.textTertiary),
+              ),
+          ],
         ),
       ),
     );

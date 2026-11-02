@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -811,6 +812,84 @@ void main() {
         tester.getSize(find.byType(WaxSeekBar)).height,
         WaxSpace.touchTarget,
       );
+    });
+  });
+
+  testWidgets('a value label replaces the percentage a reader hears', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await _pump(
+      tester,
+      WaxSlider(
+        value: 0.5,
+        label: 'Speed',
+        valueLabel: (v) => '${(v * 2).toStringAsFixed(1)}x',
+        onChanged: (_) {},
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Speed')),
+      matchesSemantics(
+        label: 'Speed',
+        value: '1.0x',
+        isSlider: true,
+        isFocusable: true,
+        hasFocusAction: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        hasIncreaseAction: true,
+        hasDecreaseAction: true,
+        increasedValue: '1.1x',
+        decreasedValue: '0.9x',
+      ),
+    );
+    semantics.dispose();
+  });
+
+  group('slider keyboard', () {
+    Widget slider(List<double> heard, {bool enabled = true}) => WaxSlider(
+      value: 0.5,
+      label: 'Level',
+      step: 0.1,
+      onChanged: enabled ? heard.add : null,
+    );
+
+    testWidgets('Tab lands on it and the arrows step it', (tester) async {
+      final heard = <double>[];
+      await _pump(tester, slider(heard));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+
+      expect(heard, <double>[0.6, 0.6, 0.4, 0.4]);
+    });
+
+    testWidgets('a focused slider draws the focus ring', (tester) async {
+      await _pump(tester, slider(<double>[]));
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      final ring = tester.widget<WaxFocusRing>(find.byType(WaxFocusRing));
+      expect(ring.focused, isTrue);
+    });
+
+    testWidgets('a disabled one takes no focus and no keys', (tester) async {
+      final heard = <double>[];
+      await _pump(tester, slider(heard, enabled: false));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+
+      expect(heard, isEmpty);
+      final ring = tester.widget<WaxFocusRing>(find.byType(WaxFocusRing));
+      expect(ring.focused, isFalse);
     });
   });
 }

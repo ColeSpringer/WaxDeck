@@ -60,7 +60,7 @@ class ShowNotesView extends StatelessWidget {
     }.copyWith(color: colors.textPrimary);
     switch (block.kind) {
       case ShowNotesBlockKind.rule:
-        return const Divider();
+        return const WaxHairline();
       case ShowNotesBlockKind.pre:
         return Container(
           width: double.infinity,

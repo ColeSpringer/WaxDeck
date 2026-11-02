@@ -64,49 +64,46 @@ class SessionHistorySection extends ConsumerWidget {
             Padding(
               key: ValueKey(SemanticsIds.queueRestoreSession(session.id)),
               padding: const EdgeInsets.only(bottom: WaxSpace.s8),
-              child: WaxTappable(
+              child: WaxInkTappable(
                 label: context.l10n.queueRestoreSession(_title(session)),
                 // Per session: the list holds several, and one
                 // identifier across all of them is ambiguous to a
                 // screen reader walking it and unusable to a test.
                 semanticsId: SemanticsIds.queueRestoreSession(session.id),
                 onPressed: () => _restore(context, ref, session),
-                child: InkWell(
-                  onTap: () => _restore(context, ref, session),
-                  child: Padding(
-                    padding: const EdgeInsets.all(WaxSpace.s8),
-                    child: Row(
-                      children: <Widget>[
-                        WaxIcon(
-                          WaxIcons.recent,
-                          size: 16,
-                          color: colors.textTertiary,
-                        ),
-                        const SizedBox(width: WaxSpace.s12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
+                child: Padding(
+                  padding: const EdgeInsets.all(WaxSpace.s8),
+                  child: Row(
+                    children: <Widget>[
+                      WaxIcon(
+                        WaxIcons.recent,
+                        size: 16,
+                        color: colors.textTertiary,
+                      ),
+                      const SizedBox(width: WaxSpace.s12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              _title(session),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: WaxType.bodySmall.copyWith(
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            if (_caption(session).isNotEmpty)
                               Text(
-                                _title(session),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: WaxType.bodySmall.copyWith(
-                                  color: colors.textPrimary,
+                                _caption(session),
+                                style: WaxType.caption.copyWith(
+                                  color: colors.textTertiary,
                                 ),
                               ),
-                              if (_caption(session).isNotEmpty)
-                                Text(
-                                  _caption(session),
-                                  style: WaxType.caption.copyWith(
-                                    color: colors.textTertiary,
-                                  ),
-                                ),
-                            ],
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),

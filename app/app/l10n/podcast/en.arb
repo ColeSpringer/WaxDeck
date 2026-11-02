@@ -163,9 +163,9 @@
       }
     }
   },
-  "podcastFetchFailed": "Last fetch failed: {reason}",
+  "podcastFetchFailed": "The server could not fetch this episode: {reason}",
   "@podcastFetchFailed": {
-    "description": "Chip on an episode whose server-side fetch failed. {reason} is the server's own diagnostic.",
+    "description": "Sentence read as the detail of the retry action on an episode whose server-side fetch failed. {reason} is the server's own diagnostic.",
     "placeholders": {
       "reason": {
         "type": "String",
@@ -288,10 +288,6 @@
   "podcastLoadMore": "Load more episodes",
   "@podcastLoadMore": {
     "description": "Button fetching the next page of a show's episodes, for a filter that scrolling cannot reach."
-  },
-  "podcastLoadingMore": "Loading...",
-  "@podcastLoadingMore": {
-    "description": "The load-more button while a page is on its way."
   },
   "podcastMarkOlderAll": "Every episode",
   "@podcastMarkOlderAll": {

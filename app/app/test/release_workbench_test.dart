@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/metadata/release_workbench.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -71,20 +75,118 @@ Future<void> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-      child: routedHost(const ReleaseWorkbench(pid: _album)),
-    ),
-  );
+  await tester.pumpWidget(_bench(repo));
   await tester.pumpAndSettle();
 }
 
+Widget _bench(FakeRepository repo) => ProviderScope(
+  overrides: [
+    repositoryProvider.overrideWithValue(repo),
+    audioEngineProvider.overrideWithValue(FakeEngine()),
+    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+  ],
+  child: routedHost(const ReleaseWorkbench(pid: _album)),
+);
+
 void main() {
+  for (final height in <double>[390, 300]) {
+    for (final width in <double>[1200, 420]) {
+      testWidgets('lays out without overflow at ${width}x$height', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, height);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(_bench(_repo()));
+        expect(tester.takeException(), isNull, reason: 'first frame');
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'settled');
+      });
+    }
+  }
+
+  testWidgets('waits for the session before it refuses anyone', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = _repo()..getSessionGate = Completer<void>();
+    await tester.pumpWidget(_bench(repo));
+    await tester.pump();
+
+    expect(find.text('Only administrators can edit a release'), findsNothing);
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+
+    repo.getSessionGate!.complete();
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.metadataWorkbench), findsOneWidget);
+  });
+
+  testWidgets(
+    'the member list on its way is a ghost that fits a short window',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 440);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repo = _repo()..listItemsGate = Completer<void>();
+      await tester.pumpWidget(_bench(repo));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.byType(SkeletonShapes), findsWidgets);
+      expect(tester.takeException(), isNull);
+      repo.listItemsGate!.complete();
+      repo.listItemsGate = null;
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('the next page of members is one ghost row, not a spinner', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = _repo();
+    repo.facetItems['album ${_album.substring(3)}'] = <ItemSummary>[
+      for (var i = 0; i <= kQueueCap; i++) testItem('tr-$i', title: 'Track $i'),
+    ];
+    await tester.pumpWidget(_bench(repo));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ReleaseWorkbench)),
+    );
+    repo.listItemsGate = Completer<void>();
+    final loading = container
+        .read(
+          musicItemsProvider((
+            dimension: MusicDimension.albums,
+            segment: _album,
+          )).notifier,
+        )
+        .loadMore();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final list = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    list.position.jumpTo(list.position.maxScrollExtent);
+    await tester.pump();
+    list.position.jumpTo(list.position.maxScrollExtent);
+    await tester.pump();
+
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(find.byType(WaxSpinner), findsNothing);
+    expect(tester.takeException(), isNull);
+    repo.listItemsGate!.complete();
+    repo.listItemsGate = null;
+    await loading;
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('the album pane opens first and a track tap swaps its editor '
       'in', (tester) async {
     final repo = _repo();

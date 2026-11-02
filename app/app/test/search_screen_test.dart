@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +15,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'row_finders.dart';
+import 'wax_finders.dart';
 
 SearchResults _results({
   List<SearchHit> artists = const <SearchHit>[],
@@ -48,9 +51,9 @@ Future<ProviderContainer> _pump(
   /// to reproduce.
   bool atOwnLocation = false,
 
-  /// Riverpod retries a failed provider on a backoff of its own, which
-  /// leaves a timer pending past the end of a test that is *about* the
-  /// failure. Those tests turn it off so the error state holds still.
+  /// Turns off the container's retry, so a failure holds still. The
+  /// search providers keep their own retry setting, which wins over the
+  /// container's.
   bool retryFailures = true,
 }) async {
   // Below sidebar width, which is where the screen owns a field. At and
@@ -510,6 +513,87 @@ void main() {
     ]);
   });
 
+  testWidgets('a directory Subscribe spins while it subscribes, and once', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repository = FakeRepository()
+      ..subscribeGate = gate
+      ..searchResults['night'] = _results()
+      ..podcastDirectoryEntries = <PodcastDirectoryEntry>[
+        const PodcastDirectoryEntry(
+          name: 'Nightjar Radio Hour',
+          feedUrl: 'https://feeds.example/nightjar',
+        ),
+        const PodcastDirectoryEntry(
+          name: 'Night Owls',
+          feedUrl: 'https://feeds.example/owls',
+        ),
+      ];
+    await _pump(tester, repository, initialQuery: 'night');
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('podcasts')),
+    );
+    await tester.pumpAndSettle();
+    final first = waxControl<WaxButton>(SemanticsIds.podcastSearchSubscribe(0));
+    final second = waxControl<WaxButton>(
+      SemanticsIds.podcastSearchSubscribe(1),
+    );
+
+    await tester.tap(first);
+    await tester.pump();
+    await tester.tap(first);
+    await tester.pump();
+
+    expect(tester.widget<WaxButton>(first).busy, isTrue);
+    expect(tester.widget<WaxButton>(second).onPressed, isNull);
+    expect(repository.subscribeCalls, hasLength(1));
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(tester.widget<WaxButton>(first).busy, isFalse);
+  });
+
+  testWidgets('a Subscribe in flight stays on its show while the results '
+      'are asked again', (tester) async {
+    // A new query answers new entry objects, the show among them; the
+    // busy row is the one whose feed is being subscribed to.
+    PodcastDirectoryEntry entry(String name, String feed) =>
+        PodcastDirectoryEntry(name: name, feedUrl: feed);
+    final gate = Completer<void>();
+    final repository = FakeRepository()
+      ..subscribeGate = gate
+      ..searchResults['night'] = _results()
+      ..searchResults['nightjar'] = _results()
+      ..podcastDirectoryEntries = <PodcastDirectoryEntry>[
+        entry('Night Owls', 'https://feeds.example/owls'),
+        entry('Nightjar Radio Hour', 'https://feeds.example/nightjar'),
+      ];
+    await _pump(tester, repository, initialQuery: 'night');
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('podcasts')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      waxControl<WaxButton>(SemanticsIds.podcastSearchSubscribe(1)),
+    );
+    await tester.pump();
+
+    repository.podcastDirectoryEntries = <PodcastDirectoryEntry>[
+      entry('Nightjar Radio Hour', 'https://feeds.example/nightjar'),
+    ];
+    await tester.enterText(find.byType(TextField), 'nightjar');
+    await tester.pump(SearchQuery.debounce);
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.podcastDirectoryQueries.last, 'nightjar');
+    final row = waxControl<WaxButton>(SemanticsIds.podcastSearchSubscribe(0));
+    expect(tester.widget<WaxButton>(row).busy, isTrue);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(tester.widget<WaxButton>(row).busy, isFalse);
+  });
+
   testWidgets('no directory call goes out under the library chips', (
     tester,
   ) async {
@@ -557,6 +641,74 @@ void main() {
 
     expect(find.text('Night Shift Ep. 4'), findsOneWidget);
     expect(find.textContaining('directory did not answer'), findsOneWidget);
+  });
+
+  testWidgets('a silent podcast directory\'s Retry is busy while it retries', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        episodes: <SearchHit>[_hit('episode', 'Night Shift Ep. 4')],
+      )
+      ..podcastDirectoryError = WaxDeckApiException(
+        statusCode: 502,
+        code: 'directory-unavailable',
+        message: 'the podcast directory could not be reached',
+      );
+    await _pump(tester, repository, initialQuery: 'night');
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('podcasts')),
+    );
+    await tester.pump();
+    await tester.pump();
+    // Every retry from here on waits, as on a directory that is gone.
+    repository.podcastDirectoryGate = Completer<void>();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    final retry = find.descendant(
+      of: find.byType(WaxBanner),
+      matching: find.byType(WaxButton),
+    );
+    expect(retry, findsOneWidget);
+    expect(tester.widget<WaxButton>(retry).busy, isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a failed library search draws Try again busy while it retries', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..searchError = const WaxDeckApiException(
+        code: 'internal',
+        message: 'the catalog is busy',
+      );
+    // Mounted by hand rather than through _pump, whose settle would run
+    // Riverpod's whole backoff down before the test could look.
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const SearchScreen(initialQuery: 'night')),
+      ),
+    );
+    await tester.pump(SearchQuery.debounce);
+    await tester.pump();
+    // The first read failed; every retry from here on waits.
+    repository.searchGate = Completer<void>();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    final retry = find.widgetWithText(WaxButton, 'Try again');
+    expect(retry, findsOneWidget);
+    expect(tester.widget<WaxButton>(retry).busy, isTrue);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('a failed library search does not take the directory with it', (

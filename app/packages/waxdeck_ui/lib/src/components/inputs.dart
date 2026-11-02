@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -92,6 +93,10 @@ class WaxTextField extends StatefulWidget {
     this.semanticsId,
     this.clearSemanticsId,
     this.showLabel = true,
+    this.validator,
+    this.autofillHints = const <String>[],
+    this.autocorrect = true,
+    this.enabled = true,
     super.key,
   }) : assert(maxLines >= 1, 'a field has at least one line');
 
@@ -120,6 +125,12 @@ class WaxTextField extends StatefulWidget {
 
   final TextEditingController? controller;
   final FocusNode? focusNode;
+
+  /// False takes no focus or typing and draws the field disabled, for a
+  /// field whose value only applies while another control is on: its
+  /// label, hint, glyph and text in the disabled tint and its box without
+  /// a fill, so an empty one does not pass for a live one.
+  final bool enabled;
 
   /// Placeholder text. Disappears on the first keystroke, so it never
   /// carries meaning the label does not also carry.
@@ -165,6 +176,27 @@ class WaxTextField extends StatefulWidget {
   /// field belongs where the field is.
   final String? errorText;
 
+  /// Registers the field with the enclosing [Form]: `validate()` runs
+  /// this against the text and draws what it returns through the
+  /// error line, as [errorText] would. Typing reports to the form, so
+  /// its `onChanged` and an `autovalidateMode` work as they do on a
+  /// form field. Null leaves the field out of the form. An explicit
+  /// [errorText] wins while it is set.
+  ///
+  /// Present or absent for the field's whole life: one that comes and
+  /// goes would remount the input, dropping its focus and the keyboard,
+  /// so it is refused. A validator answers null to switch checking off.
+  final String? Function(String? value)? validator;
+
+  /// What a password manager or the platform's autofill may offer for
+  /// the field, such as [AutofillHints.username]. Empty leaves autofill
+  /// on with no hint, as a bare text field has it; null turns it off.
+  final Iterable<String>? autofillHints;
+
+  /// Off for a field that holds an address or a code, where a
+  /// suggestion would rewrite what was typed.
+  final bool autocorrect;
+
   /// The line under the field: what the value means, what an empty one
   /// does, what unit it is in. Replaced by [errorText] while there is
   /// one, because two lines under one box is a field arguing with
@@ -193,6 +225,12 @@ class _WaxTextFieldState extends State<WaxTextField> {
   TextEditingController? _owned;
   FocusNode? _ownedFocus;
   bool _focused = false;
+
+  /// The form registration, set while a validator is present.
+  FormFieldState<String>? _form;
+
+  /// Whether the field was built with a validator, which it keeps.
+  late final bool _validated = widget.validator != null;
 
   TextEditingController get _controller =>
       widget.controller ?? (_owned ??= TextEditingController());
@@ -229,20 +267,53 @@ class _WaxTextFieldState extends State<WaxTextField> {
     super.dispose();
   }
 
+  void _changed(String value) {
+    _form?.didChange(value);
+    widget.onChanged?.call(value);
+  }
+
   void _clear() {
     _controller.clear();
-    widget.onChanged?.call('');
+    _changed('');
     _focus.requestFocus();
   }
 
   @override
   Widget build(BuildContext context) {
+    final validator = widget.validator;
+    // Checked here rather than as the widget updates: a throw while the
+    // element updates leaves the tree half swapped.
+    assert(
+      (validator != null) == _validated,
+      'a validator must not come and go: answer null to switch validation '
+      'off',
+    );
+    if (validator == null) {
+      _form = null;
+      return _body(context, widget.errorText);
+    }
+    return FormField<String>(
+      validator: (_) => validator(_controller.text),
+      builder: (state) {
+        _form = state;
+        // A group of its own, so the form field's validation result stays
+        // on this node and off the clear button beside the input.
+        return Semantics(
+          container: true,
+          child: _body(context, widget.errorText ?? state.errorText),
+        );
+      },
+    );
+  }
+
+  Widget _body(BuildContext context, String? error) {
     final colors = WaxColors.of(context);
     final motion = WaxMotion.of(context);
 
-    final error = widget.errorText;
     final multiline = widget.maxLines > 1;
     final radius = multiline ? WaxRadius.card : WaxRadius.pill;
+    final enabled = widget.enabled;
+    Color dimmed(Color live) => enabled ? live : colors.textDisabled;
     final field = WaxFocusRing(
       focused: _focused,
       borderRadius: radius,
@@ -253,7 +324,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
         constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
         padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s12),
         decoration: BoxDecoration(
-          color: colors.surface2,
+          color: enabled ? colors.surface2 : Colors.transparent,
           borderRadius: radius,
           border: Border.all(
             color: error != null
@@ -267,7 +338,11 @@ class _WaxTextFieldState extends State<WaxTextField> {
               : CrossAxisAlignment.center,
           children: <Widget>[
             if (widget.glyph != null) ...<Widget>[
-              WaxIcon(widget.glyph!, size: 18, color: colors.textTertiary),
+              WaxIcon(
+                widget.glyph!,
+                size: 18,
+                color: dimmed(colors.textTertiary),
+              ),
               const SizedBox(width: WaxSpace.s8),
             ],
             Expanded(
@@ -280,6 +355,11 @@ class _WaxTextFieldState extends State<WaxTextField> {
               child: Semantics(
                 identifier: widget.semanticsId,
                 label: widget.label,
+                // A refusal is one state however it was reached: a
+                // validator's message or an explicit error.
+                validationResult: error != null
+                    ? SemanticsValidationResult.invalid
+                    : SemanticsValidationResult.none,
                 // The lines under the box belong to the box: drawn as
                 // siblings they are separate nodes a screen reader
                 // reaches after the field, if at all, so "0 keeps all"
@@ -291,6 +371,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
                 child: TextField(
                   controller: _controller,
                   focusNode: _focus,
+                  enabled: widget.enabled,
                   autofocus: widget.autofocus,
                   textInputAction: widget.textInputAction,
                   keyboardType: widget.digitsOnly
@@ -302,11 +383,15 @@ class _WaxTextFieldState extends State<WaxTextField> {
                     if (widget.maxCharacters case final max?)
                       _CodePointLimit(max),
                   ],
+                  autofillHints: widget.autofillHints,
+                  autocorrect: widget.autocorrect,
                   obscureText: widget.obscureText,
                   maxLines: widget.maxLines,
-                  onChanged: widget.onChanged,
+                  onChanged: _form == null ? widget.onChanged : _changed,
                   onSubmitted: widget.onSubmitted,
-                  style: WaxType.body.copyWith(color: colors.textPrimary),
+                  style: WaxType.body.copyWith(
+                    color: dimmed(colors.textPrimary),
+                  ),
                   cursorColor: colors.accent,
                   // This component draws the field's own surface, border,
                   // and focus ring, so Material's are cleared rather than
@@ -327,7 +412,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
                     ),
                     hintText: widget.hint,
                     hintStyle: WaxType.body.copyWith(
-                      color: colors.textTertiary,
+                      color: dimmed(colors.textTertiary),
                     ),
                   ),
                 ),
@@ -336,17 +421,22 @@ class _WaxTextFieldState extends State<WaxTextField> {
             // Built off the controller so it appears with the first
             // character and leaves with the last, without the field
             // rebuilding its ancestors on every keystroke.
-            if (!widget.obscureText && !multiline)
+            if (!widget.obscureText && !multiline && widget.enabled)
               ValueListenableBuilder<TextEditingValue>(
                 valueListenable: _controller,
                 builder: (context, value, _) => value.text.isEmpty
                     ? const SizedBox.shrink()
-                    : WaxIconButton(
-                        glyph: WaxIcons.close,
-                        label: context.waxL10n.inputsClear(widget.label),
-                        size: 16,
-                        semanticsId: widget.clearSemanticsId,
-                        onPressed: _clear,
+                    // Its own node, so a group around the field never
+                    // folds the button into itself and the input under it.
+                    : Semantics(
+                        container: true,
+                        child: WaxIconButton(
+                          glyph: WaxIcons.close,
+                          label: context.waxL10n.inputsClear(widget.label),
+                          size: 16,
+                          semanticsId: widget.clearSemanticsId,
+                          onPressed: _clear,
+                        ),
                       ),
               ),
           ],
@@ -381,7 +471,9 @@ class _WaxTextFieldState extends State<WaxTextField> {
             child: ExcludeSemantics(
               child: Text(
                 widget.label,
-                style: WaxType.label.copyWith(color: colors.textSecondary),
+                style: WaxType.label.copyWith(
+                  color: dimmed(colors.textSecondary),
+                ),
               ),
             ),
           ),
@@ -395,11 +487,13 @@ class _WaxTextFieldState extends State<WaxTextField> {
             // Excluded for the same reason the label above is: the
             // field carries this string as its hint, and a second node
             // repeating it is one more stop reading the same words.
-            child: ExcludeSemantics(
-              child: WaxProse(
-                error ?? helper!,
-                style: WaxType.bodySmall.copyWith(
-                  color: error != null ? colors.error : colors.textTertiary,
+            child: _NoIntrinsicWidth(
+              child: ExcludeSemantics(
+                child: WaxProse(
+                  error ?? helper!,
+                  style: WaxType.bodySmall.copyWith(
+                    color: error != null ? colors.error : colors.textTertiary,
+                  ),
                 ),
               ),
             ),
@@ -407,6 +501,25 @@ class _WaxTextFieldState extends State<WaxTextField> {
       ],
     );
   }
+}
+
+/// Lays its child out as usual but asks for no width of its own, so a
+/// helper or error line wraps within the field and never widens an
+/// intrinsic-width host such as a dialog, as a raw field's did not.
+class _NoIntrinsicWidth extends SingleChildRenderObjectWidget {
+  const _NoIntrinsicWidth({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderNoIntrinsicWidth();
+}
+
+class _RenderNoIntrinsicWidth extends RenderProxyBox {
+  @override
+  double computeMinIntrinsicWidth(double height) => 0;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) => 0;
 }
 
 /// The search input: a real field the caller drives.
@@ -505,7 +618,9 @@ class WaxSegmented extends StatelessWidget {
   /// The chosen segment's [WaxSegment.name].
   final String selected;
 
-  final ValueChanged<String> onSelect;
+  /// Null disables the control: drawn and announced disabled, and no
+  /// segment takes a press.
+  final ValueChanged<String>? onSelect;
 
   /// What the control as a whole is for, spoken before the segment
   /// names. A segmented control reads as a row of nouns otherwise, and
@@ -546,7 +661,9 @@ class WaxSegmented extends StatelessWidget {
                   child: _Segment(
                     segment: segment,
                     selected: segment.name == selected,
-                    onTap: () => onSelect(segment.name),
+                    onTap: onSelect == null
+                        ? null
+                        : () => onSelect!(segment.name),
                   ),
                 ),
             ],
@@ -566,12 +683,13 @@ class _Segment extends StatelessWidget {
 
   final WaxSegment segment;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final motion = WaxMotion.of(context);
+    final enabled = onTap != null;
     return WaxTappable(
       label: segment.label,
       selected: selected,
@@ -597,7 +715,11 @@ class _Segment extends StatelessWidget {
           child: Text(
             segment.label,
             style: WaxType.label.copyWith(
-              color: selected ? colors.onAccentContainer : colors.textSecondary,
+              color: !enabled
+                  ? colors.textDisabled
+                  : selected
+                  ? colors.onAccentContainer
+                  : colors.textSecondary,
             ),
           ),
         ),

@@ -157,21 +157,26 @@ class AdminConsole extends ConsumerWidget {
     // but neither covers a pasted link, and a member following one used
     // to get the whole console with panels that all answer 403.
     // `ForbiddenPage` carries the rest of the argument.
-    if (!ref.watch(isAdminProvider)) return const _AdminForbidden();
+    final access = ref.watch(adminAccessProvider);
+    if (access == AdminAccess.resolving) {
+      return SessionPendingPage(pageTitle: context.l10n.shellNavAdmin);
+    }
+    if (access == AdminAccess.refused) {
+      return const _AdminForbidden();
+    }
     final sizeClass = WaxSizeClass.of(context);
     // Below sidebar width the console is one screen at a time: the
     // dashboard is the list of sections, and a section is a page with a
     // way back to it. A rail here would spend a phone's width on
     // navigation the page underneath already has.
     if (!sizeClass.hasSidebar) return child;
-    final colors = WaxColors.of(context);
     return Semantics(
       identifier: SemanticsIds.adminConsole,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _SectionList(location: location),
-          VerticalDivider(width: 1, color: colors.hairline),
+          const WaxHairline.vertical(),
           // A boundary, like the shell frame's content region: `child` is
           // a navigator, and the `ModalBarrier` in its route would
           // otherwise block the section list painted before it.
@@ -266,46 +271,39 @@ class _SectionRow extends StatelessWidget {
     final tint = selected ? colors.accent : colors.textSecondary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
-      child: WaxTappable(
+      child: WaxInkTappable(
         label: title,
         semanticsId: section.semanticsId,
         selected: selected,
+        color: selected ? colors.accentContainer : Colors.transparent,
         borderRadius: WaxRadius.chip,
         surface: colors.surface1,
         onPressed: () => context.go(section.location),
-        child: Material(
-          color: selected ? colors.accentContainer : Colors.transparent,
-          borderRadius: WaxRadius.chip,
-          child: InkWell(
-            onTap: () => context.go(section.location),
-            borderRadius: WaxRadius.chip,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: WaxSpace.s12,
-                vertical: WaxSpace.s8,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: WaxSpace.s12,
+            vertical: WaxSpace.s8,
+          ),
+          child: Row(
+            children: <Widget>[
+              WaxIcon(
+                section.glyph,
+                size: 16,
+                color: selected ? colors.onAccentContainer : tint,
               ),
-              child: Row(
-                children: <Widget>[
-                  WaxIcon(
-                    section.glyph,
-                    size: 16,
-                    color: selected ? colors.onAccentContainer : tint,
+              const SizedBox(width: WaxSpace.s12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: WaxType.label.copyWith(
+                    color: selected
+                        ? colors.onAccentContainer
+                        : colors.textPrimary,
                   ),
-                  const SizedBox(width: WaxSpace.s12),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: WaxType.label.copyWith(
-                        color: selected
-                            ? colors.onAccentContainer
-                            : colors.textPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

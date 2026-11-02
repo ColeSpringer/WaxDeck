@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'podcasts_controller.dart';
+import 'speed_slider.dart';
 
 /// Per-subscription settings. Save PUTs the complete object, so every
 /// field the sheet does not edit rides through untouched: the endpoint
@@ -174,18 +175,11 @@ class _SubscriptionSettingsSheetState
               l10n.podcastSettingsSpeed(l10n.formatSpeed(_speed)),
               style: WaxType.label.copyWith(color: colors.textSecondary),
             ),
-            Semantics(
-              identifier: SemanticsIds.podcastSettingsSpeed,
+            SpeedSlider(
+              speed: _speed,
               label: l10n.podcastSettingsSpeedLabel,
-              child: Slider(
-                key: const Key(SemanticsIds.podcastSettingsSpeed),
-                value: _speed,
-                min: 0.5,
-                max: 3.5,
-                divisions: 60,
-                label: l10n.formatSpeed(_speed),
-                onChanged: (v) => setState(() => _speed = v),
-              ),
+              semanticsId: SemanticsIds.podcastSettingsSpeed,
+              onChanged: (v) => setState(() => _speed = v),
             ),
             WaxSettingRow(
               key: const Key('podcast-settings-trim'),
@@ -210,24 +204,20 @@ class _SubscriptionSettingsSheetState
             Row(
               children: <Widget>[
                 Expanded(
-                  child: TextField(
+                  child: WaxTextField(
                     key: const Key('podcast-settings-skip-intro'),
                     controller: _skipIntro,
                     keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: l10n.podcastSkipIntro,
-                    ),
+                    label: l10n.podcastSkipIntro,
                   ),
                 ),
                 const SizedBox(width: WaxSpace.s12),
                 Expanded(
-                  child: TextField(
+                  child: WaxTextField(
                     key: const Key('podcast-settings-skip-outro'),
                     controller: _skipOutro,
                     keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: l10n.podcastSkipOutro,
-                    ),
+                    label: l10n.podcastSkipOutro,
                   ),
                 ),
               ],
@@ -253,46 +243,28 @@ class _SubscriptionSettingsSheetState
               style: WaxType.caption.copyWith(color: colors.textTertiary),
             ),
             const SizedBox(height: WaxSpace.s8),
-            Semantics(
-              identifier: SemanticsIds.podcastSettingsInclude,
-              textField: true,
-              child: TextField(
-                key: const Key(SemanticsIds.podcastSettingsInclude),
-                controller: _include,
-                enabled: _autoDownload,
-                decoration: InputDecoration(
-                  labelText: l10n.podcastIncludeLabel,
-                  helperText: l10n.podcastIncludeHelp,
-                ),
-              ),
+            WaxTextField(
+              semanticsId: SemanticsIds.podcastSettingsInclude,
+              controller: _include,
+              enabled: _autoDownload,
+              label: l10n.podcastIncludeLabel,
+              helperText: l10n.podcastIncludeHelp,
             ),
             const SizedBox(height: WaxSpace.s8),
-            Semantics(
-              identifier: SemanticsIds.podcastSettingsExclude,
-              textField: true,
-              child: TextField(
-                key: const Key(SemanticsIds.podcastSettingsExclude),
-                controller: _exclude,
-                enabled: _autoDownload,
-                decoration: InputDecoration(
-                  labelText: l10n.podcastExcludeLabel,
-                  helperText: l10n.podcastExcludeHelp,
-                ),
-              ),
+            WaxTextField(
+              semanticsId: SemanticsIds.podcastSettingsExclude,
+              controller: _exclude,
+              enabled: _autoDownload,
+              label: l10n.podcastExcludeLabel,
+              helperText: l10n.podcastExcludeHelp,
             ),
             const SizedBox(height: WaxSpace.s16),
-            Semantics(
-              identifier: SemanticsIds.podcastSettingsRetention,
-              textField: true,
-              child: TextField(
-                key: const Key(SemanticsIds.podcastSettingsRetention),
-                controller: _retention,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: l10n.podcastRetentionLabel,
-                  helperText: l10n.podcastRetentionHelp,
-                ),
-              ),
+            WaxTextField(
+              semanticsId: SemanticsIds.podcastSettingsRetention,
+              controller: _retention,
+              keyboardType: TextInputType.number,
+              label: l10n.podcastRetentionLabel,
+              helperText: l10n.podcastRetentionHelp,
             ),
             const SizedBox(height: WaxSpace.s16),
             Align(
@@ -300,7 +272,8 @@ class _SubscriptionSettingsSheetState
               child: WaxButton(
                 label: l10n.commonSave,
                 semanticsId: SemanticsIds.podcastSettingsSave,
-                onPressed: _busy ? null : _save,
+                busy: _busy,
+                onPressed: _save,
               ),
             ),
           ],

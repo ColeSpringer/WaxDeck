@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -137,9 +138,12 @@ class BackupsScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (staged != null)
-                        _RestoreBanner(
-                          plan: staged,
-                          onCancel: () => _cancelRestore(context, ref),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+                          child: _RestoreBanner(
+                            plan: staged,
+                            onCancel: () => _cancelRestore(context, ref),
+                          ),
                         ),
                       Row(
                         children: [
@@ -171,7 +175,13 @@ class BackupsScreen extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: WaxSpace.s8),
+                      // An error first, as the house faces read it: between
+                      // retries the state is loading and still carries it.
                       switch (backups) {
+                        AsyncValue(:final error?) => Padding(
+                          padding: const EdgeInsets.all(WaxSpace.s16),
+                          child: Text(context.explain(error)),
+                        ),
                         AsyncData(:final value) when value.isEmpty => Padding(
                           padding: const EdgeInsets.all(WaxSpace.s16),
                           child: Text(l10n.adminBackupsEmpty),
@@ -182,11 +192,10 @@ class BackupsScreen extends ConsumerWidget {
                               _BackupRow(backup: backup),
                           ],
                         ),
-                        AsyncError(:final error) => Padding(
-                          padding: const EdgeInsets.all(WaxSpace.s16),
-                          child: Text(context.explain(error)),
+                        _ => const SkeletonShapes(
+                          shape: SkeletonShape.list,
+                          count: 3,
                         ),
-                        _ => const Center(child: CircularProgressIndicator()),
                       },
                       SizedBox(height: WaxLayout.of(context).sectionGap),
                       SectionHeader(title: l10n.adminBackupsRetention),
@@ -211,37 +220,15 @@ class _RestoreBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final l10n = context.l10n;
-    return Semantics(
-      identifier: SemanticsIds.restoreBanner,
-      child: Card(
-        key: const Key(SemanticsIds.restoreBanner),
-        color: colorScheme.tertiaryContainer,
-        child: Padding(
-          padding: const EdgeInsets.all(WaxSpace.s12),
-          child: Row(
-            children: [
-              WaxIcon(WaxIcons.recent, color: colorScheme.onTertiaryContainer),
-              const SizedBox(width: WaxSpace.s12),
-              Expanded(
-                child: Text(
-                  l10n.adminRestoreStagedBanner(plan.backupId),
-                  style: TextStyle(color: colorScheme.onTertiaryContainer),
-                ),
-              ),
-              Semantics(
-                identifier: SemanticsIds.restoreCancel,
-                child: TextButton(
-                  key: const Key(SemanticsIds.restoreCancel),
-                  onPressed: onCancel,
-                  child: Text(l10n.commonCancel),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return WaxBanner(
+      message: l10n.adminRestoreStagedBanner(plan.backupId),
+      tone: WaxBannerTone.notice,
+      glyph: WaxIcons.recent,
+      actionLabel: l10n.commonCancel,
+      onAction: onCancel,
+      semanticsId: SemanticsIds.restoreBanner,
+      actionSemanticsId: SemanticsIds.restoreCancel,
     );
   }
 }
@@ -260,14 +247,15 @@ class _BackupRow extends ConsumerWidget {
         title: Text(l10n.adminBackupRestoreTitle),
         content: WaxProse(l10n.adminBackupRestoreBody(backup.fileName)),
         actions: [
-          TextButton(
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.commonCancel),
           ),
-          FilledButton(
+          WaxButton(
             key: const Key('backup-restore-confirm'),
+            label: l10n.adminBackupStageRestore,
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.adminBackupStageRestore),
           ),
         ],
       ),
@@ -295,14 +283,16 @@ class _BackupRow extends ConsumerWidget {
         title: Text(l10n.adminBackupDeleteTitle),
         content: WaxProse(l10n.adminBackupDeleteBody(backup.fileName)),
         actions: [
-          TextButton(
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.commonCancel),
           ),
-          FilledButton(
+          WaxButton(
             key: const Key('backup-delete-confirm'),
+            label: l10n.adminBackupDeleteAction,
+            kind: WaxButtonKind.destructive,
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.adminBackupDeleteAction),
           ),
         ],
       ),
@@ -457,10 +447,10 @@ class _RestorePlanDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        FilledButton(
+        WaxButton(
           key: const Key('restore-plan-done'),
+          label: l10n.commonDone,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonDone),
         ),
       ],
     );
@@ -544,10 +534,20 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(adminSettingsProvider).value;
+    final loaded = ref.watch(adminSettingsProvider);
+    final settings = loaded.value;
     final l10n = context.l10n;
     if (settings == null) {
-      return const Center(child: CircularProgressIndicator());
+      // Read off any state that carries it: between retries a failed
+      // read is loading with the error still on it.
+      if (loaded case AsyncValue(hasError: true)) {
+        return AsyncFailureCard.from(
+          loaded,
+          onRetry: () => ref.invalidate(adminSettingsProvider),
+          retrySemanticsId: SemanticsIds.backupRetentionRetry,
+        );
+      }
+      return const SkeletonShapes(shape: SkeletonShape.list, count: 2);
     }
     _seed(settings);
     return Column(
@@ -576,10 +576,12 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: WaxSpace.s12),
-        FilledButton.tonal(
+        WaxButton(
           key: const Key('backup-retention-save'),
-          onPressed: _busy ? null : () => _save(settings),
-          child: Text(l10n.adminBackupSaveRetention),
+          label: l10n.adminBackupSaveRetention,
+          kind: WaxButtonKind.tonal,
+          busy: _busy,
+          onPressed: () => _save(settings),
         ),
       ],
     );

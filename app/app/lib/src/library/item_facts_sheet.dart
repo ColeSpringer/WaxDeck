@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../music/entity_facts.dart';
 import '../player/play_state_controller.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import 'item_delete.dart';
 
@@ -92,10 +93,10 @@ class ItemFactsSheet extends ConsumerWidget {
                         if (value.copies > 0) _ItemFiles(pid: pid),
                       ],
                     ),
-                    AsyncError(:final error) => Padding(
+                    AsyncValue(hasError: true) => Padding(
                       padding: const EdgeInsets.all(WaxSpace.s16),
-                      child: ErrorState(
-                        message: context.explain(error),
+                      child: AsyncFailureCard.from(
+                        detail,
                         onRetry: () => ref.invalidate(itemDetailProvider(pid)),
                         semanticsId: SemanticsIds.itemFactsError,
                       ),
@@ -271,7 +272,8 @@ class _ItemFiles extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final canDelete = canDeleteItems(ref);
-    return switch (ref.watch(itemFilesProvider(pid))) {
+    final files = ref.watch(itemFilesProvider(pid));
+    return switch (files) {
       AsyncData(:final value) when value.isNotEmpty => Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -290,12 +292,12 @@ class _ItemFiles extends ConsumerWidget {
             ),
         ],
       ),
-      AsyncError(:final error)
+      AsyncValue(:final error?)
           when error is! WaxDeckApiException || !error.isRefusal =>
         Padding(
           padding: const EdgeInsets.all(WaxSpace.s16),
-          child: ErrorState(
-            message: context.explain(error),
+          child: AsyncFailureCard.from(
+            files,
             onRetry: () => ref.invalidate(itemFilesProvider(pid)),
           ),
         ),

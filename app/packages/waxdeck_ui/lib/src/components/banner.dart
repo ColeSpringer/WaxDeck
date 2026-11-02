@@ -33,8 +33,10 @@ enum WaxBannerTone {
 ///
 /// Banners carry conditions nobody asked for and no single tap resolves:
 /// the connection dropped, the server was upgraded underneath, the
-/// library is read-only. Anything that answers one action is a toast, and
-/// anything that needs a decision is a dialog.
+/// library is read-only. A condition set up earlier and withdrawn by one
+/// action (a staged restore with its Cancel) is a banner too, since a toast
+/// would let it vanish while it is still pending. Anything that answers one
+/// action is a toast, and anything that needs a decision is a dialog.
 ///
 /// It announces itself: the message is a live region, so a screen reader
 /// hears the connection drop rather than discovering it by exploring.
@@ -47,6 +49,7 @@ class WaxBanner extends StatelessWidget {
     this.glyph,
     this.actionLabel,
     this.onAction,
+    this.actionBusy = false,
     this.onDismiss,
     this.semanticsId,
     this.actionSemanticsId,
@@ -66,6 +69,11 @@ class WaxBanner extends StatelessWidget {
   /// The one thing to do about it, when there is one ("Reload").
   final String? actionLabel;
   final VoidCallback? onAction;
+
+  /// The work the action started is in flight, as [WaxButton.busy]: it
+  /// takes no press, keeps the live colours and its focus, is announced
+  /// as working, and draws a spinner over its label.
+  final bool actionBusy;
 
   /// Offered only where dismissing is honest: a condition that clears
   /// itself has no dismiss, because hiding it would not end it.
@@ -154,6 +162,7 @@ class WaxBanner extends StatelessWidget {
                   WaxButton(
                     label: actionLabel!,
                     kind: WaxButtonKind.text,
+                    busy: actionBusy,
                     onPressed: onAction,
                     semanticsId: actionSemanticsId,
                   ),

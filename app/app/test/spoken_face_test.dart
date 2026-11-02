@@ -1,17 +1,21 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/spoken_face.dart';
+import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
+import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const _episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
@@ -49,14 +53,63 @@ void main() {
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
         item: testEpisode(_episodePid),
+        host: (player) => routedHost(player),
       );
 
       final overline = find.bySemanticsIdentifier(SemanticsIds.playerShow);
       expect(overline, findsOneWidget);
+      // The episode screen's show link, drawn the same way: one look for
+      // one link, and a target a thumb can hit.
+      expect(
+        tester
+            .widget<WaxButton>(waxControl<WaxButton>(SemanticsIds.playerShow))
+            .kind,
+        WaxButtonKind.inline,
+      );
+      expect(
+        tester.getSize(overline).height,
+        greaterThanOrEqualTo(WaxSpace.touchTarget),
+      );
       expect(
         tester.getSemantics(overline).label,
         contains('The Prancing Pony Hour'),
       );
+
+      await tester.tap(overline);
+      await tester.pumpAndSettle();
+      expect(find.byType(ShowScreen), findsOneWidget);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a long show name keeps to one line, and is spoken whole', (
+      tester,
+    ) async {
+      // The least of the lines over the controls must not outgrow the
+      // title under it, which stops at two.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      const name =
+          'The Prancing Pony Hour of Tales Told Late by the Fire at Bree';
+      final repo = FakeRepository()
+        ..addSubscription(testShow(_showPid, title: name))
+        ..episodesByShow[_showPid] = [testEpisode(_episodePid, artist: name)];
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: testEpisode(_episodePid, artist: name),
+        host: (player) => routedHost(player),
+      );
+
+      final overline = find.bySemanticsIdentifier(SemanticsIds.playerShow);
+      final line = tester.renderObject<RenderParagraph>(
+        find.descendant(of: overline, matching: find.text(name)),
+      );
+      expect(line.maxLines, 1);
+      expect(line.didExceedMaxLines, isTrue);
+      expect(tester.getSize(overline).height, WaxSpace.touchTarget);
+      expect(tester.getSemantics(overline).label, contains(name));
       await harness.endPlayback(tester);
     });
 
@@ -353,6 +406,37 @@ void main() {
       // toggle is only honest if what is playing is reopened: a fresh
       // play-info is the request that carries it.
       expect(repo.playInfoCalls.length, mintsBefore + 1);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('voice boost spins while its change is in flight', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..addSubscription(testShow(_showPid))
+        ..episodesByShow[_showPid] = [testEpisode(_episodePid)]
+        ..putSubscriptionSettingsGate = gate;
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: testEpisode(_episodePid),
+      );
+      final pill = waxControl<WaxPill>(SemanticsIds.playerVoiceBoost);
+
+      await tester.tap(pill);
+      await tester.pump();
+      // Working, not unavailable, and a second press is not a second
+      // round trip.
+      expect(tester.widget<WaxPill>(pill).busy, isTrue);
+      await tester.tap(pill);
+      await tester.pump();
+      expect(repo.putSubscriptionSettingsCalls, hasLength(1));
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(tester.widget<WaxPill>(pill).busy, isFalse);
       await harness.endPlayback(tester);
     });
 
@@ -684,6 +768,133 @@ void main() {
       );
       await harness.endPlayback(tester);
     });
+
+    testWidgets('the bookmark sheet waits within a short window', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000)
+        ..listBookmarksGate = gate;
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: _book(),
+      );
+      tester.view.physicalSize = const Size(360, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playerBookmarks),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      gate.complete();
+      await tester.pumpAndSettle();
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('the transcript waits within a short window', (tester) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..addSubscription(testShow(_showPid))
+        ..episodesByShow[_showPid] = [
+          testEpisode(_episodePid, hasTranscript: true),
+        ]
+        ..episodeDetails[_episodePid] = EpisodeDetail(
+          pid: _episodePid,
+          mediaType: MediaType.podcast,
+          title: 'Pipeweed Economics',
+          durationMs: 214000,
+          showPid: _showPid,
+          publishedAt: DateTime.utc(2026, 7, 1),
+          downloaded: true,
+          hasTranscript: true,
+          descriptionHtml: '<p>What the pipeweed trade was worth.</p>',
+          chapters: const <ChapterMark>[
+            ChapterMark(index: 0, title: 'Cold open', startMs: 0),
+          ],
+        )
+        ..transcripts[_episodePid] = const Transcript(
+          format: 'vtt',
+          cues: <TranscriptCue>[TranscriptCue(startMs: 0, text: 'Welcome.')],
+        )
+        ..getTranscriptGate = gate;
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: testEpisode(_episodePid, hasTranscript: true),
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playerRegion('transcript')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      tester.view.physicalSize = const Size(844, 460);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pump();
+
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      // The panel is 22% of the window and goes below 100 px, so this is
+      // the shortest window that still draws it.
+      tester.view.resetPhysicalSize();
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(SkeletonShapes), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
+    for (final height in const [390.0, 300.0]) {
+      testWidgets('a spoken player at ${height.toInt()} px lays out whole', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(844, height);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final repo = FakeRepository()
+          ..addSubscription(testShow(_showPid))
+          ..episodesByShow[_showPid] = [
+            testEpisode(_episodePid, hasTranscript: true),
+          ]
+          ..episodeDetails[_episodePid] = EpisodeDetail(
+            pid: _episodePid,
+            mediaType: MediaType.podcast,
+            title: 'Pipeweed Economics',
+            durationMs: 214000,
+            showPid: _showPid,
+            publishedAt: DateTime.utc(2026, 7, 1),
+            downloaded: true,
+            hasTranscript: true,
+            descriptionHtml: '<p>What the pipeweed trade was worth.</p>',
+          );
+        final harness = await pumpPlayer(
+          tester,
+          repo: repo,
+          engine: FakeEngine(
+            mediaDuration: const Duration(milliseconds: 214000),
+          ),
+          item: testEpisode(_episodePid, hasTranscript: true),
+        );
+
+        // The panel gives way below its floor; the transport and seek stay
+        // inside the window and nothing overflows.
+        expect(tester.takeException(), isNull);
+        final window = Offset.zero & tester.view.physicalSize;
+        for (final id in [SemanticsIds.playerToggle, SemanticsIds.playerSeek]) {
+          final rect = tester.getRect(find.bySemanticsIdentifier(id));
+          expect(window.contains(rect.center), isTrue, reason: id);
+        }
+        await harness.endPlayback(tester);
+      });
+    }
 
     testWidgets('an episode carries none', (tester) async {
       final repo = FakeRepository()

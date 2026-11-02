@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -335,6 +337,31 @@ void main() {
       // Redrawn from the reloaded list, not from what was typed.
       expect(find.textContaining('Kitchen radio'), findsOneWidget);
       expect(find.textContaining('Pixel 9'), findsNothing);
+    });
+
+    testWidgets('a rename in flight spins on its Save', (tester) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo(
+        sessions: [testSession('se-2', deviceName: 'Pixel 9')],
+      );
+      await tester.pumpWidget(_section(repo, SettingsSection.account));
+      await tester.pumpAndSettle();
+      final rename = find.bySemanticsIdentifier(
+        SemanticsIds.deviceRename('se-2'),
+      );
+      await _show(tester, rename);
+      await tester.tap(rename);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Kitchen radio');
+      await tester.pumpAndSettle();
+      final gate = repo.renameGate = Completer<void>();
+      final save = find.byKey(const Key('device-rename-confirm'));
+      await tester.tap(save);
+      await tester.pump();
+
+      expect(tester.widget<WaxButton>(save).busy, isTrue);
+      gate.complete();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('an empty name cannot be saved', (tester) async {
@@ -1045,6 +1072,23 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Administrators only'), findsOneWidget);
+    });
+
+    testWidgets('waits for the session before it refuses anyone', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo()..getSessionGate = Completer<void>();
+      await tester.pumpWidget(_section(repo, SettingsSection.server));
+      await tester.pump();
+
+      expect(find.text('Administrators only'), findsNothing);
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+
+      repo.getSessionGate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Administrators only'), findsNothing);
+      expect(find.byType(SkeletonShapes), findsNothing);
     });
   });
 }

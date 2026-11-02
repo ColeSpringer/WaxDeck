@@ -26,6 +26,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _a = 'tr-01JZX5N8QW3F4V9T2B7KDKINDA1';
 const _b = 'tr-01JZX5N8QW3F4V9T2B7KDKINDB2';
@@ -667,6 +668,55 @@ void main() {
       shellMessageText(raisedMessage(tester)),
       'The change could not be made: a file of the item is not on disk',
     );
+  });
+
+  testWidgets('a running change keeps its dialog and its buttons', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..jobs = const [Job(pid: _job, kind: 'set-kind', state: 'running')];
+    await _pump(tester, repo, pids: [_a, _b], to: 'audiobook');
+    await tester.tap(find.text('Start'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.kindConfirm));
+    await tester.pump();
+    await tester.pump(kindChangePoll);
+
+    // The button pressed stays where it was, busy, so a keyboard keeps
+    // its place; the way out is drawn, unavailable while it cannot be.
+    final confirm = tester.widget<WaxButton>(
+      waxControl<WaxButton>(SemanticsIds.kindConfirm),
+    );
+    expect(confirm.busy, isTrue);
+    final cancel = tester.widget<WaxButton>(
+      find.widgetWithText(WaxButton, 'Cancel'),
+    );
+    expect(cancel.onPressed, isNull);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.kindWriteBack),
+      findsOneWidget,
+      reason: 'the body stays',
+    );
+    expect(find.text('Reading the files again'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(WaxSpinner),
+      ),
+      findsOneWidget,
+      reason: 'the one spinner is the busy button\'s glyph',
+    );
+    expect(
+      find.ancestor(
+        of: find.byType(WaxSpinner),
+        matching: find.byType(WaxButton),
+      ),
+      findsWidgets,
+    );
+
+    repo.jobs = const [Job(pid: _job, kind: 'set-kind', state: 'failed')];
+    await tester.pump(kindChangePoll);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('back while the change runs leaves the dialog to finish it', (

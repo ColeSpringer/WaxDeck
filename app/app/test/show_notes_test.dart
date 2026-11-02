@@ -98,6 +98,12 @@ void main() {
     expect(find.byType(WaxProse), findsOneWidget);
   });
 
+  testWidgets('a rule is the design system\'s hairline', (tester) async {
+    await tester.pumpWidget(_host('<p>Above</p><hr><p>Below</p>'));
+    expect(find.byType(WaxHairline), findsOneWidget);
+    expect(tester.getSize(find.byType(WaxHairline)).height, 1);
+  });
+
   testWidgets('script content is dropped, never rendered as markup', (
     tester,
   ) async {

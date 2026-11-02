@@ -60,24 +60,58 @@ class AsyncBoxFace<T> extends StatelessWidget {
 
 /// The failure card both faces draw, so what it offers is decided in one
 /// place: no Try again where the thing is gone (see
-/// [AsyncFaceFailed.gone]).
+/// [AsyncFaceFailed.gone]), and a busy one while the read asks again.
+///
+/// A switch that draws its own faces takes [AsyncFailureCard.from] for its
+/// failure arm, so it cannot forget either.
 class AsyncFailureCard extends StatelessWidget {
   const AsyncFailureCard({
     required this.failed,
-    required this.title,
     required this.onRetry,
+    this.title,
+    this.detail,
+    this.semanticsId,
+    this.retrySemanticsId,
     super.key,
   });
 
+  /// The card for [state], a read that failed: retrying while it is
+  /// loading again, which Riverpod's own retry is.
+  AsyncFailureCard.from(
+    AsyncValue<Object?> state, {
+    required this.onRetry,
+    this.title,
+    this.detail,
+    this.semanticsId,
+    this.retrySemanticsId,
+    super.key,
+  }) : assert(state.hasError, 'a failure card for a read that did not fail'),
+       failed = AsyncFaceFailed<Object?>(
+         state.error!,
+         retrying: state.isLoading,
+       );
+
   final AsyncFaceFailed<Object?> failed;
-  final String title;
+
+  /// The heading; the design system's own where null.
+  final String? title;
+
   final VoidCallback onRetry;
+
+  /// A technical line under the sentence; see [ErrorState.detail].
+  final String? detail;
+
+  final String? semanticsId;
+  final String? retrySemanticsId;
 
   @override
   Widget build(BuildContext context) => ErrorState(
     title: title,
     message: context.explain(failed.error),
+    detail: detail,
     onRetry: failed.gone ? null : onRetry,
     retrying: failed.retrying,
+    semanticsId: semanticsId,
+    retrySemanticsId: retrySemanticsId,
   );
 }

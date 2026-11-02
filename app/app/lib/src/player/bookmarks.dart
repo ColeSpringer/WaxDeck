@@ -368,7 +368,8 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
                       ),
                       semanticsId: SemanticsIds.playerBookmarkAdd,
                       expand: true,
-                      onPressed: _saving ? null : () => unawaited(_add()),
+                      busy: _saving,
+                      onPressed: () => unawaited(_add()),
                     ),
                     const SizedBox(height: WaxSpace.s16),
                   ],
@@ -401,7 +402,7 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
                       onRemove: () => unawaited(_remove(value[index].mark.id)),
                     ),
                   ),
-                  AsyncError(:final error) => Padding(
+                  AsyncValue(:final error?) => Padding(
                     padding: const EdgeInsets.all(WaxSpace.s24),
                     child: Text(
                       error is WaxDeckApiException
@@ -410,9 +411,9 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
                       style: WaxType.caption.copyWith(color: colors.error),
                     ),
                   ),
-                  _ => const Padding(
-                    padding: EdgeInsets.all(WaxSpace.s24),
-                    child: Center(child: CircularProgressIndicator()),
+                  _ => const SkeletonShapes(
+                    shape: SkeletonShape.list,
+                    count: 3,
                   ),
                 },
               ),
@@ -461,42 +462,38 @@ class _BookmarkRow extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              WaxTappable(
+              WaxInkTappable(
                 semanticsId: SemanticsIds.playerBookmark(index),
                 label: caption == null ? label : '$label, $caption',
                 onPressed: onJump,
                 borderRadius: WaxRadius.thumb,
-                child: InkWell(
-                  borderRadius: WaxRadius.thumb,
-                  onTap: onJump,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: WaxSpace.s24,
-                      vertical: WaxSpace.s12,
-                    ),
-                    child: Row(
-                      children: <Widget>[
-                        Text(
-                          stamp,
-                          style: WaxType.monoTime.copyWith(
-                            color: colors.textSecondary,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: WaxSpace.s24,
+                    vertical: WaxSpace.s12,
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Text(
+                        stamp,
+                        style: WaxType.monoTime.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: WaxSpace.s12),
+                      Expanded(
+                        child: Text(
+                          note ?? l10n.playerBookmarkNoNote,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: WaxType.body.copyWith(
+                            color: note == null
+                                ? colors.textTertiary
+                                : colors.textPrimary,
                           ),
                         ),
-                        const SizedBox(width: WaxSpace.s12),
-                        Expanded(
-                          child: Text(
-                            note ?? l10n.playerBookmarkNoNote,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: WaxType.body.copyWith(
-                              color: note == null
-                                  ? colors.textTertiary
-                                  : colors.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),

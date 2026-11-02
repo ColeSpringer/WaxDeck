@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import 'admin_console.dart';
 
@@ -103,6 +104,7 @@ class AuditController extends AsyncNotifier<AuditState> {
 
 final auditProvider = AsyncNotifierProvider<AuditController, AuditState>(
   AuditController.new,
+  retry: retryUnlessRefused,
 );
 
 /// The audit log: who did what, newest first, with the stored detail
@@ -184,10 +186,10 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
               ),
             ),
           AsyncData(:final value) => _list(sizeClass, value),
-          AsyncError(:final error) => SliverToBoxAdapter(
-            child: ErrorState(
+          AsyncValue(hasError: true) => SliverToBoxAdapter(
+            child: AsyncFailureCard.from(
+              audit,
               title: l10n.adminAuditLoadError,
-              message: context.explain(error),
               onRetry: () => ref.invalidate(auditProvider),
             ),
           ),
@@ -208,10 +210,7 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
         itemCount: state.events.length + (state.loadingMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= state.events.length) {
-            return const Padding(
-              padding: EdgeInsets.all(WaxSpace.s16),
-              child: Center(child: CircularProgressIndicator()),
-            );
+            return const SkeletonShapes(shape: SkeletonShape.list, count: 1);
           }
           // Paging asks from the tail rather than from a scroll
           // listener: the list is a sliver inside the page's own scroll
@@ -264,50 +263,42 @@ class _AuditRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        WaxTappable(
+        WaxInkTappable(
           label: l10n.adminAuditRowSpoken(event.action, subtitle.toString()),
           semanticsId: SemanticsIds.auditRow(event.id),
-          selected: expanded,
+          expanded: expanded,
           borderRadius: WaxRadius.chip,
           onPressed: onToggle,
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: WaxRadius.chip,
-            child: InkWell(
-              onTap: onToggle,
-              borderRadius: WaxRadius.chip,
-              child: Padding(
-                padding: const EdgeInsets.all(WaxSpace.s8),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            event.action,
-                            style: WaxType.monoData.copyWith(
-                              color: colors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            subtitle.toString(),
-                            style: WaxType.caption.copyWith(
-                              color: colors.textTertiary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+          child: Padding(
+            padding: const EdgeInsets.all(WaxSpace.s8),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        event.action,
+                        style: WaxType.monoData.copyWith(
+                          color: colors.textPrimary,
+                        ),
                       ),
-                    ),
-                    WaxIcon(
-                      expanded ? WaxIcons.collapse : WaxIcons.forward,
-                      size: 16,
-                      color: colors.textTertiary,
-                    ),
-                  ],
+                      Text(
+                        subtitle.toString(),
+                        style: WaxType.caption.copyWith(
+                          color: colors.textTertiary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                WaxIcon(
+                  expanded ? WaxIcons.collapse : WaxIcons.forward,
+                  size: 16,
+                  color: colors.textTertiary,
+                ),
+              ],
             ),
           ),
         ),

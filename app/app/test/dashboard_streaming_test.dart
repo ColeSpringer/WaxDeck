@@ -72,4 +72,20 @@ void main() {
     await pump(tester, null);
     expect(tile(), findsNothing);
   });
+
+  testWidgets('a tile without a caption is as tall as one with a caption', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const ServerStreaming(configured: true, connected: true, timelines: true),
+    );
+    final playing = find.bySemanticsIdentifier(
+      SemanticsIds.adminTile('sessions'),
+    );
+    expect(inTile(en.adminStreamingConnected), findsOneWidget);
+    expect(inTile(en.adminTileLoading), findsNothing);
+    expect(inTile(en.adminStreamingDirect), findsNothing);
+    expect(tester.getSize(tile()).height, tester.getSize(playing).height);
+  });
 }

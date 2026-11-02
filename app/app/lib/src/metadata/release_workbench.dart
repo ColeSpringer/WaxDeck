@@ -13,6 +13,7 @@ import '../music/entity_facts.dart';
 import '../music/music_controllers.dart';
 import '../settings/client_prefs.dart';
 import '../settings/settings_registry.dart';
+import '../shell/async_box_face.dart';
 import '../shell/forbidden_page.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -383,7 +384,14 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
     // is shareable and the web build puts it in the path, so a member
     // following a pasted link would otherwise get a form whose every
     // Save answers 403.
-    if (!ref.watch(isAdminProvider)) {
+    final access = ref.watch(adminAccessProvider);
+    if (access == AdminAccess.resolving) {
+      return SessionPendingPage(
+        pageTitle: l10n.musicAlbumTitle,
+        fallback: WaxRoute.music,
+      );
+    }
+    if (access == AdminAccess.refused) {
       return ForbiddenPage(
         pageTitle: l10n.musicAlbumTitle,
         heading: l10n.musicAlbumEditorForbiddenTitle,
@@ -558,16 +566,14 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
             _albumRow(album, trackCount: 0),
             Expanded(
               child: switch (members) {
-                AsyncValue(hasError: true, error: final Object error) =>
-                  Padding(
-                    padding: const EdgeInsets.all(WaxSpace.s16),
-                    child: ErrorState(
-                      title: context.l10n.musicAlbumLoadError,
-                      message: context.explain(error),
-                      onRetry: () =>
-                          ref.invalidate(musicItemsProvider(_listing)),
-                    ),
+                AsyncValue(hasError: true) => Padding(
+                  padding: const EdgeInsets.all(WaxSpace.s16),
+                  child: AsyncFailureCard.from(
+                    members,
+                    title: context.l10n.musicAlbumLoadError,
+                    onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
                   ),
+                ),
                 _ => const SkeletonShapes(shape: SkeletonShape.list),
               },
             ),
@@ -597,13 +603,7 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
               return _albumRow(album, trackCount: tracks.length);
             }
             if (index > tracks.length) {
-              return const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              );
+              return const SkeletonShapes(shape: SkeletonShape.list, count: 1);
             }
             return _trackRow(index, tracks[index - 1]);
           },

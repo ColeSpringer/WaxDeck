@@ -273,17 +273,24 @@ final downloadProgressProvider =
       final port = ref.watch(downloadManagerProvider);
       if (port == null) return const Stream<Map<String, double>>.empty();
       final fractions = <String, double>{};
+      final paused = <String>{};
       return port.progress.map((update) {
         if (update.complete) {
           fractions.remove(update.pid);
           // A finished transfer changes what is held, so the list behind
           // it is asked again.
           ref.invalidate(downloadsProvider);
-        } else if (update.failed) {
+        } else if (update.failed || update.stopped) {
           fractions.remove(update.pid);
           ref.invalidate(downloadsProvider);
         } else {
           fractions[update.pid] = update.fraction;
+          // A pause or its resume changes the row's record, which keeps
+          // the pause; the bar stays where it was.
+          final changed = update.paused
+              ? paused.add(update.pid)
+              : paused.remove(update.pid);
+          if (changed) ref.invalidate(downloadsProvider);
         }
         return Map<String, double>.unmodifiable(fractions);
       });

@@ -63,15 +63,17 @@ void main() {
     await _pump(tester, _host(container));
 
     await tester.enterText(
-      find.bySemanticsIdentifier('transcoding-max-concurrent'),
+      find.bySemanticsIdentifier(SemanticsIds.transcodingMaxConcurrent),
       '4',
     );
     await tester.enterText(
-      find.bySemanticsIdentifier('transcoding-default-kbps'),
+      find.bySemanticsIdentifier(SemanticsIds.transcodingDefaultKbps),
       '256',
     );
-    await tester.ensureVisible(find.bySemanticsIdentifier('transcoding-save'));
-    await tester.tap(find.bySemanticsIdentifier('transcoding-save'));
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier(SemanticsIds.transcodingSave),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.transcodingSave));
     await tester.pumpAndSettle();
 
     expect(repo.transcodingLimits.maxConcurrent, 4);
@@ -160,13 +162,15 @@ void main() {
     await _pump(tester, _host(container));
 
     await tester.enterText(
-      find.bySemanticsIdentifier('trash-retention-days'),
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionDays),
       'soon',
     );
     await tester.ensureVisible(
-      find.bySemanticsIdentifier('trash-retention-save'),
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionSave),
     );
-    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionSave),
+    );
     await tester.pumpAndSettle();
 
     // Named, not just refused: one save writes two windows.
@@ -176,10 +180,12 @@ void main() {
     );
 
     await tester.enterText(
-      find.bySemanticsIdentifier('trash-retention-days'),
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionDays),
       '007',
     );
-    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionSave),
+    );
     await tester.pumpAndSettle();
     expect(repo.adminSettings.trashRetentionDays, 7);
     // Reflected back as what was stored, not as what was typed.
@@ -197,13 +203,15 @@ void main() {
 
     // The trash field is fine; the message has to name the other one.
     await tester.enterText(
-      find.bySemanticsIdentifier('task-retention-days'),
+      find.bySemanticsIdentifier(SemanticsIds.taskRetentionDays),
       'never',
     );
     await tester.ensureVisible(
-      find.bySemanticsIdentifier('trash-retention-save'),
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionSave),
     );
-    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionSave),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -220,21 +228,25 @@ void main() {
     await _pump(tester, _host(container));
 
     await tester.enterText(
-      find.bySemanticsIdentifier('task-retention-days'),
+      find.bySemanticsIdentifier(SemanticsIds.taskRetentionDays),
       '14',
     );
     await tester.ensureVisible(
-      find.bySemanticsIdentifier('trash-retention-save'),
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionSave),
     );
-    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionSave),
+    );
     await tester.pumpAndSettle();
     expect(repo.adminSettings.taskRetentionDays, 14);
     // Zero is a choice here, not a default, so it has to store.
     await tester.enterText(
-      find.bySemanticsIdentifier('task-retention-days'),
+      find.bySemanticsIdentifier(SemanticsIds.taskRetentionDays),
       '0',
     );
-    await tester.tap(find.bySemanticsIdentifier('trash-retention-save'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.trashRetentionSave),
+    );
     await tester.pumpAndSettle();
     expect(repo.adminSettings.taskRetentionDays, 0);
   });

@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../settings/settings_registry.dart';
+import '../shell/async_box_face.dart';
 import '../shell/forbidden_page.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -375,7 +376,14 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     final l10n = context.l10n;
     // On the screen, not only on the doors that open it: the location
     // is shareable, and every save behind it is administrators-only.
-    if (!ref.watch(isAdminProvider)) {
+    final access = ref.watch(adminAccessProvider);
+    if (access == AdminAccess.resolving) {
+      return SessionPendingPage(
+        pageTitle: l10n.metadataTitle,
+        fallback: WaxRoute.music,
+      );
+    }
+    if (access == AdminAccess.refused) {
       return ForbiddenPage(
         pageTitle: l10n.metadataTitle,
         heading: l10n.metadataForbiddenTitle,
@@ -407,11 +415,11 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
           padding: const EdgeInsets.all(WaxSpace.s16),
           child: _body(rows),
         ),
-        AsyncValue(hasError: true, error: final Object error) => Padding(
+        AsyncValue(hasError: true) => Padding(
           padding: const EdgeInsets.all(WaxSpace.s16),
-          child: ErrorState(
+          child: AsyncFailureCard.from(
+            curation,
             title: l10n.metadataLoadError,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(entityCurationProvider(_curationKey)),
           ),
         ),

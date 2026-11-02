@@ -74,6 +74,7 @@ final topListProvider = FutureProvider<TopList>((ref) {
 /// One user's recap for one calendar year.
 final yearInReviewProvider = FutureProvider.family<YearInReview, int>(
   (ref, year) => ref.watch(repositoryProvider).getYearInReview(year: year),
+  retry: retryUnlessRefused,
 );
 
 /// The server-wide recap for one calendar year.
@@ -81,6 +82,7 @@ final serverYearInReviewProvider =
     FutureProvider.family<ServerYearInReview, int>(
       (ref, year) =>
           ref.watch(repositoryProvider).getServerYearInReview(year: year),
+      retry: retryUnlessRefused,
     );
 
 /// The reporting-client filter on the listen log; null shows every
@@ -183,4 +185,5 @@ class ListenLogController extends AsyncNotifier<ListenLogState> {
 final listenLogProvider =
     AsyncNotifierProvider<ListenLogController, ListenLogState>(
       ListenLogController.new,
+      retry: retryUnlessRefused,
     );

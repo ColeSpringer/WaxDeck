@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/in_flight.dart';
 import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -87,36 +88,27 @@ class ScrobblingSection extends ConsumerWidget {
     final l10n = context.l10n;
     final adminSetup = isAdmin && slot.service == 'lastfm';
     if (adminSetup && !slot.connected && !slot.available) {
-      return Semantics(
-        identifier: SemanticsIds.scrobblerSetupLastfm,
-        button: true,
-        child: TextButton(
-          key: const ValueKey(SemanticsIds.scrobblerSetupLastfm),
-          onPressed: () => _openLastfmSetup(context),
-          child: Text(l10n.settingsScrobblerSetUp),
-        ),
+      return WaxButton(
+        semanticsId: SemanticsIds.scrobblerSetupLastfm,
+        label: l10n.settingsScrobblerSetUp,
+        kind: WaxButtonKind.text,
+        onPressed: () => _openLastfmSetup(context),
       );
     }
     final action = slot.connected
-        ? Semantics(
-            identifier: SemanticsIds.scrobblerDisconnect(slot.service),
-            button: true,
-            child: TextButton(
-              key: ValueKey(SemanticsIds.scrobblerDisconnect(slot.service)),
-              onPressed: () => _disconnect(context, ref, slot),
-              child: Text(l10n.settingsScrobblerDisconnect),
-            ),
+        ? WaxButton(
+            semanticsId: SemanticsIds.scrobblerDisconnect(slot.service),
+            label: l10n.settingsScrobblerDisconnect,
+            kind: WaxButtonKind.text,
+            onPressed: () => _disconnect(context, ref, slot),
           )
-        : Semantics(
-            identifier: SemanticsIds.scrobblerConnect(slot.service),
-            button: true,
-            child: TextButton(
-              key: ValueKey(SemanticsIds.scrobblerConnect(slot.service)),
-              onPressed: slot.available
-                  ? () => _connect(context, ref, slot)
-                  : null,
-              child: Text(l10n.settingsScrobblerConnect),
-            ),
+        : WaxButton(
+            semanticsId: SemanticsIds.scrobblerConnect(slot.service),
+            label: l10n.settingsScrobblerConnect,
+            kind: WaxButtonKind.text,
+            onPressed: slot.available
+                ? () => _connect(context, ref, slot)
+                : null,
           );
     if (!adminSetup) return action;
     return Row(
@@ -124,7 +116,6 @@ class ScrobblingSection extends ConsumerWidget {
       children: [
         action,
         WaxIconButton(
-          key: const ValueKey(SemanticsIds.scrobblerSetupLastfm),
           glyph: WaxIcons.settings,
           label: l10n.settingsScrobblerCredentialsLabel,
           semanticsId: SemanticsIds.scrobblerSetupLastfm,
@@ -193,11 +184,8 @@ class ScrobblingSection extends ConsumerWidget {
                 ),
             ],
           ),
-          AsyncError() => Text(l10n.settingsScrobblingError),
-          _ => const Padding(
-            padding: EdgeInsets.all(WaxSpace.s8),
-            child: LinearProgressIndicator(),
-          ),
+          AsyncValue(hasError: true) => Text(l10n.settingsScrobblingError),
+          _ => SkeletonShapes(shape: SkeletonShape.list, count: 2),
         },
       ],
     );
@@ -256,43 +244,34 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // No Semantics identifier wrapper: on the web it would mint a
-          // second, disabled text-field node beside the real input.
-          TextField(
+          WaxTextField(
             key: const Key('listenbrainz-token-field'),
             controller: _tokenController,
-            decoration: InputDecoration(
-              labelText: l10n.settingsListenBrainzToken,
-              helperText: l10n.settingsListenBrainzTokenHelp,
-            ),
+            label: l10n.settingsListenBrainzToken,
+            helperText: l10n.settingsListenBrainzTokenHelp,
             autofocus: true,
           ),
-          const SizedBox(height: WaxSpace.s8),
-          TextField(
+          const SizedBox(height: WaxSpace.s12),
+          WaxTextField(
             key: const Key('listenbrainz-api-field'),
             controller: _apiUrlController,
-            decoration: InputDecoration(
-              labelText: l10n.settingsListenBrainzApi,
-              helperText: l10n.settingsListenBrainzApiHelp,
-            ),
+            label: l10n.settingsListenBrainzApi,
+            helperText: l10n.settingsListenBrainzApiHelp,
             keyboardType: TextInputType.url,
           ),
         ],
       ),
       actions: [
-        TextButton(
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        Semantics(
-          identifier: SemanticsIds.listenbrainzConnectConfirm,
+        WaxButton(
+          semanticsId: SemanticsIds.listenbrainzConnectConfirm,
           label: l10n.settingsScrobblerConnect,
-          button: true,
-          child: FilledButton(
-            key: const Key(SemanticsIds.listenbrainzConnectConfirm),
-            onPressed: _busy ? null : _connect,
-            child: Text(l10n.settingsScrobblerConnect),
-          ),
+          busy: _busy,
+          onPressed: _connect,
         ),
       ],
     );
@@ -311,12 +290,15 @@ class _LastfmCredentialsDialog extends ConsumerStatefulWidget {
       _LastfmCredentialsDialogState();
 }
 
+/// The dialog's two writes, each drawn on its own button.
+enum _CredentialsWork { save, clear }
+
 class _LastfmCredentialsDialogState
-    extends ConsumerState<_LastfmCredentialsDialog> {
+    extends ConsumerState<_LastfmCredentialsDialog>
+    with InFlight<_LastfmCredentialsDialog, _CredentialsWork> {
   final _apiKeyController = TextEditingController();
   final _secretController = TextEditingController();
   var _seeded = false;
-  var _busy = false;
 
   @override
   void dispose() {
@@ -331,28 +313,29 @@ class _LastfmCredentialsDialogState
     _apiKeyController.text = config.lastfmApiKey ?? '';
   }
 
-  Future<void> _save({required bool clear}) async {
-    if (_busy) return;
-    setState(() => _busy = true);
+  Future<void> _save({required bool clear}) {
     final navigator = Navigator.of(context);
     final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
-    try {
-      await ref
-          .read(scrobblingAdminConfigProvider.notifier)
-          .save(
-            apiKey: clear ? '' : _apiKeyController.text.trim(),
-            secret: clear ? '' : _secretController.text.trim(),
-          );
-      navigator.pop();
-    } on WaxDeckApiException catch (e) {
-      // The server's own sentence, for the same reason the ListenBrainz
-      // dialog keeps one: this refuses the pair that was just typed, and
-      // says which half is missing.
-      messenger.show(explainRefusal(l10n, e), channel: _scrobbling);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    return runAs(
+      clear ? _CredentialsWork.clear : _CredentialsWork.save,
+      () async {
+        try {
+          await ref
+              .read(scrobblingAdminConfigProvider.notifier)
+              .save(
+                apiKey: clear ? '' : _apiKeyController.text.trim(),
+                secret: clear ? '' : _secretController.text.trim(),
+              );
+          navigator.pop();
+        } on WaxDeckApiException catch (e) {
+          // The server's own sentence, for the same reason the ListenBrainz
+          // dialog keeps one: this refuses the pair that was just typed, and
+          // says which half is missing.
+          messenger.show(explainRefusal(l10n, e), channel: _scrobbling);
+        }
+      },
+    );
   }
 
   @override
@@ -361,74 +344,66 @@ class _LastfmCredentialsDialogState
     final config = ref.watch(scrobblingAdminConfigProvider);
     return AlertDialog(
       title: Text(l10n.settingsLastfmCredentialsTitle),
-      content: switch (config) {
-        AsyncData(:final value) => Builder(
-          builder: (context) {
-            _seed(value);
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // No Semantics identifier wrappers, for the same web
-                // duplicate-node reason as the ListenBrainz dialog.
-                TextField(
-                  key: const Key('lastfm-api-key-field'),
-                  controller: _apiKeyController,
-                  decoration: InputDecoration(
-                    labelText: l10n.settingsLastfmApiKey,
+      content: SingleChildScrollView(
+        child: switch (config) {
+          AsyncData(:final value) => Builder(
+            builder: (context) {
+              _seed(value);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  WaxTextField(
+                    key: const Key('lastfm-api-key-field'),
+                    controller: _apiKeyController,
+                    label: l10n.settingsLastfmApiKey,
                     helperText: l10n.settingsLastfmApiKeyHelp,
+                    autofocus: true,
                   ),
-                  autofocus: true,
-                ),
-                const SizedBox(height: WaxSpace.s8),
-                TextField(
-                  key: const Key('lastfm-secret-field'),
-                  controller: _secretController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: l10n.settingsLastfmSecret,
+                  const SizedBox(height: WaxSpace.s12),
+                  WaxTextField(
+                    key: const Key('lastfm-secret-field'),
+                    controller: _secretController,
+                    label: l10n.settingsLastfmSecret,
                     helperText: value.lastfmSecretSet
                         ? l10n.settingsLastfmSecretHelp
                         : null,
+                    obscureText: true,
                   ),
-                ),
-              ],
-            );
-          },
-        ),
-        AsyncError() => WaxProse(l10n.settingsLastfmCredentialsError),
-        _ => const Padding(
-          padding: EdgeInsets.all(WaxSpace.s8),
-          child: LinearProgressIndicator(),
-        ),
-      },
+                ],
+              );
+            },
+          ),
+          // Any state that carries it: while a retry runs the read is
+          // loading with the last error still on it.
+          AsyncValue(hasError: true) => WaxProse(
+            l10n.settingsLastfmCredentialsError,
+          ),
+          _ => SkeletonShapes(shape: SkeletonShape.list, count: 2),
+        },
+      ),
       actions: [
         // Only stored credentials can be cleared; the environment pair
         // is the fallback, not something this surface removes.
         if (config.value?.lastfmSource == 'settings')
-          Semantics(
-            identifier: SemanticsIds.lastfmCredentialsClear,
-            button: true,
-            child: TextButton(
-              key: const Key(SemanticsIds.lastfmCredentialsClear),
-              onPressed: _busy ? null : () => _save(clear: true),
-              child: Text(l10n.settingsLastfmCredentialsClear),
-            ),
+          WaxButton(
+            semanticsId: SemanticsIds.lastfmCredentialsClear,
+            label: l10n.settingsLastfmCredentialsClear,
+            kind: WaxButtonKind.text,
+            busy: busyBy(_CredentialsWork.clear),
+            onPressed: busy ? null : () => _save(clear: true),
           ),
-        TextButton(
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        Semantics(
-          identifier: SemanticsIds.lastfmCredentialsSave,
+        WaxButton(
+          semanticsId: SemanticsIds.lastfmCredentialsSave,
           label: l10n.commonSave,
-          button: true,
-          child: FilledButton(
-            key: const Key(SemanticsIds.lastfmCredentialsSave),
-            onPressed: _busy || config is! AsyncData
-                ? null
-                : () => _save(clear: false),
-            child: Text(l10n.commonSave),
-          ),
+          busy: busyBy(_CredentialsWork.save),
+          onPressed: busy || config is! AsyncData
+              ? null
+              : () => _save(clear: false),
         ),
       ],
     );
@@ -513,13 +488,11 @@ class _DiscordPresenceSectionState
                   onFocusChange: (has) {
                     if (!has) _commit();
                   },
-                  child: TextField(
+                  child: WaxTextField(
                     key: const Key('discord-application-id-field'),
                     controller: _id,
-                    decoration: InputDecoration(
-                      labelText: l10n.settingsDiscordApplicationLabel,
-                      helperText: l10n.settingsDiscordApplicationHelp,
-                    ),
+                    label: l10n.settingsDiscordApplicationLabel,
+                    helperText: l10n.settingsDiscordApplicationHelp,
                     keyboardType: TextInputType.number,
                     onSubmitted: (_) => _commit(),
                   ),
@@ -557,24 +530,23 @@ class AppPasswordsSection extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.settingsAppPasswordNewSpoken),
-        content: TextField(
+        content: WaxTextField(
           key: const Key('app-password-label-field'),
           controller: controller,
-          decoration: InputDecoration(
-            labelText: l10n.settingsAppPasswordLabel,
-            helperText: l10n.settingsAppPasswordLabelHelp,
-          ),
+          label: l10n.settingsAppPasswordLabel,
+          helperText: l10n.settingsAppPasswordLabelHelp,
           autofocus: true,
         ),
         actions: [
-          TextButton(
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.commonCancel),
           ),
-          FilledButton(
+          WaxButton(
             key: const Key('app-password-create-confirm'),
+            label: l10n.settingsAppPasswordCreate,
             onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: Text(l10n.settingsAppPasswordCreate),
           ),
         ],
       ),
@@ -603,16 +575,17 @@ class AppPasswordsSection extends ConsumerWidget {
             ],
           ),
           actions: [
-            TextButton(
+            WaxButton(
+              label: l10n.settingsAppPasswordCopy,
+              kind: WaxButtonKind.text,
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: created.secret));
               },
-              child: Text(l10n.settingsAppPasswordCopy),
             ),
-            FilledButton(
+            WaxButton(
               key: const Key('app-password-secret-done'),
+              label: l10n.settingsAppPasswordDone,
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.settingsAppPasswordDone),
             ),
           ],
         ),
@@ -680,11 +653,8 @@ class AppPasswordsSection extends ConsumerWidget {
                         ),
                     ],
                   ),
-          AsyncError() => Text(l10n.settingsAppPasswordsError),
-          _ => const Padding(
-            padding: EdgeInsets.all(WaxSpace.s8),
-            child: LinearProgressIndicator(),
-          ),
+          AsyncValue(hasError: true) => Text(l10n.settingsAppPasswordsError),
+          _ => SkeletonShapes(shape: SkeletonShape.list, count: 2),
         },
       ],
     );
@@ -915,11 +885,8 @@ class _EventChecklist extends ConsumerWidget {
           );
         },
       ),
-      AsyncError() => Text(l10n.settingsNotifyCatalogError),
-      _ => const Padding(
-        padding: EdgeInsets.all(WaxSpace.s8),
-        child: LinearProgressIndicator(),
-      ),
+      AsyncValue(hasError: true) => Text(l10n.settingsNotifyCatalogError),
+      _ => SkeletonShapes(shape: SkeletonShape.list, count: 3),
     };
   }
 }
@@ -1116,45 +1083,39 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (creating)
-                DropdownButtonFormField<String>(
-                  key: const Key('notify-target-kind'),
-                  initialValue: _kind,
-                  decoration: InputDecoration(
-                    labelText: l10n.settingsNotifyDeliverVia,
+                WaxSettingRow(
+                  title: l10n.settingsNotifyDeliverVia,
+                  control: WaxChoice<String>(
+                    key: const Key('notify-target-kind'),
+                    label: l10n.settingsNotifyDeliverVia,
+                    value: _kind,
+                    options: kinds.keys.toList(growable: false),
+                    labelFor: _kindLabel,
+                    onChanged: (kind) => setState(() {
+                      _kind = kind;
+                      _error = null;
+                    }),
                   ),
-                  items: [
-                    for (final kind in kinds.keys)
-                      DropdownMenuItem(
-                        value: kind,
-                        child: Text(_kindLabel(kind)),
-                      ),
-                  ],
-                  onChanged: (kind) => setState(() {
-                    _kind = kind ?? _kind;
-                    _error = null;
-                  }),
                 ),
-              TextField(
+              WaxTextField(
                 key: const Key('notify-target-label'),
                 controller: _labelController,
-                decoration: InputDecoration(
-                  labelText: l10n.settingsNotifyTargetLabel,
-                ),
+                label: l10n.settingsNotifyTargetLabel,
               ),
-              for (final field in kinds[_kind] ?? const <_ConfigField>[])
-                TextField(
+              const SizedBox(height: WaxSpace.s12),
+              for (final field in kinds[_kind] ?? const <_ConfigField>[]) ...[
+                WaxTextField(
                   key: ValueKey('notify-config-${field.key}'),
                   controller: _controllerFor(field),
+                  label: field.optional
+                      ? l10n.settingsNotifyFieldOptional(field.label)
+                      : field.label,
+                  helperText: field.helper,
                   obscureText: field.secret,
                   maxLines: field.multiline ? 4 : 1,
-                  decoration: InputDecoration(
-                    labelText: field.optional
-                        ? l10n.settingsNotifyFieldOptional(field.label)
-                        : field.label,
-                    helperText: field.helper,
-                  ),
                 ),
-              const SizedBox(height: WaxSpace.s12),
+                const SizedBox(height: WaxSpace.s12),
+              ],
               Text(
                 l10n.settingsNotifyAbout,
                 style: WaxType.label.copyWith(
@@ -1181,14 +1142,12 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
                   onChanged: (next) => setState(() => _muted = next),
                 ),
               ),
-              TextField(
+              WaxTextField(
                 key: const Key('notify-target-interval'),
                 controller: _intervalController,
+                label: l10n.settingsNotifyMinInterval,
+                helperText: l10n.settingsNotifyMinIntervalHelp,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: l10n.settingsNotifyMinInterval,
-                  helperText: l10n.settingsNotifyMinIntervalHelp,
-                ),
               ),
               if (_error != null)
                 Padding(
@@ -1206,14 +1165,16 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        FilledButton(
+        WaxButton(
           key: const Key('notify-target-save'),
-          onPressed: _busy ? null : _save,
-          child: Text(l10n.commonSave),
+          label: l10n.commonSave,
+          busy: _busy,
+          onPressed: _save,
         ),
       ],
     );
@@ -1385,11 +1346,8 @@ class _TargetList extends ConsumerWidget {
                         ),
                     ],
                   ),
-          AsyncError() => Text(l10n.settingsNotifyTargetsError),
-          _ => const Padding(
-            padding: EdgeInsets.all(WaxSpace.s8),
-            child: LinearProgressIndicator(),
-          ),
+          AsyncValue(hasError: true) => Text(l10n.settingsNotifyTargetsError),
+          _ => SkeletonShapes(shape: SkeletonShape.list, count: 2),
         },
       ],
     );

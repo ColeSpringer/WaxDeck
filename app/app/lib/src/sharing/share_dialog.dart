@@ -195,7 +195,8 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
         WaxButton(
           label: l10n.sharingCreate,
           semanticsId: SemanticsIds.shareCreate,
-          onPressed: _busy ? null : _create,
+          busy: _busy,
+          onPressed: _create,
         ),
       ],
     );

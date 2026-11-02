@@ -7,7 +7,7 @@ import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
 import 'playback_session.dart';
 
-/// The speeds the sheet offers as one tap each (5.3).
+/// The speeds the sheet offers as one tap each.
 ///
 /// Clustered where listening actually happens: the useful range for
 /// spoken word is a narrow band just above 1x, and a picker with even

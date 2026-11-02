@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/shell_messages.dart';
 import 'metadata_form.dart';
 
@@ -252,10 +253,10 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
                   : () => _apply(staged),
             ),
           ],
-          AsyncValue(hasError: true, error: final Object error) => <Widget>[
-            ErrorState(
+          AsyncValue(hasError: true) => <Widget>[
+            AsyncFailureCard.from(
+              widget.seed,
               title: l10n.metadataLoadError,
-              message: context.explain(error),
               onRetry: widget.onRetrySeed,
             ),
           ],

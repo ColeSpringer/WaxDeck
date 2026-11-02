@@ -12,6 +12,8 @@ import '../podcasts/add_podcast.dart';
 import '../radio/add_station.dart';
 import '../radio/radio_screen.dart';
 import '../shell/adaptive_shell.dart';
+import '../shell/async_box_face.dart';
+import '../shell/in_flight.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/server_health.dart';
@@ -34,7 +36,10 @@ class SearchScreen extends ConsumerStatefulWidget {
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends ConsumerState<SearchScreen> {
+/// Keyed by the feed URL a directory match subscribes to, which a list
+/// asked again keeps, unlike the entry objects it answers.
+class _SearchScreenState extends ConsumerState<SearchScreen>
+    with InFlight<SearchScreen, String> {
   late final TextEditingController _field = TextEditingController(
     text: widget.initialQuery,
   );
@@ -268,12 +273,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       // Typed rather than the `:final error` shorthand: `hasError` is
       // `error != null`, so binding it as an Object is exact and the
       // sentence below needs no null check.
-      AsyncValue(hasError: true, error: final Object error) => <Widget>[
+      AsyncValue(hasError: true) => <Widget>[
         ...stations,
         SliverToBoxAdapter(
-          child: ErrorState(
+          child: AsyncFailureCard.from(
+            results,
             title: context.l10n.searchFailedTitle,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(searchResultsProvider),
           ),
         ),
@@ -357,17 +362,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               message: l10n.searchDirectoryDegraded,
               tone: WaxBannerTone.caution,
               actionLabel: l10n.commonRetry,
+              actionBusy: entries.isLoading,
               onAction: () => ref.invalidate(radioDirectoryResultsProvider),
             ),
           ),
         ),
       ],
-      AsyncValue(hasError: true, error: final Object error) => <Widget>[
+      AsyncValue(hasError: true) => <Widget>[
         SliverFillRemaining(
           hasScrollBody: false,
-          child: ErrorState(
+          child: AsyncFailureCard.from(
+            entries,
             title: l10n.searchDirectoryErrorTitle,
-            message: context.explain(error),
             // The way out the directory-unavailable mapping implies:
             // adding a station by URL works with no directory at all.
             detail: l10n.searchDirectoryErrorDetail,
@@ -737,6 +743,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               message: context.l10n.searchPodcastDirectoryDegraded,
               tone: WaxBannerTone.caution,
               actionLabel: context.l10n.commonRetry,
+              actionBusy: entries.isLoading,
               onAction: () => ref.invalidate(podcastDirectoryResultsProvider),
             ),
           ),
@@ -752,7 +759,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             entry: value[index],
             index: index,
             rowSemanticsId: SemanticsIds.searchHit('podcastDirectory', index),
-            onSubscribe: () => unawaited(_subscribeShow(value[index])),
+            subscribing: busyBy(value[index].feedUrl),
+            onSubscribe: busy
+                ? null
+                : () => unawaited(_subscribeShow(value[index])),
           ),
         ),
       ],
@@ -767,10 +777,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   /// Subscribes to a directory match, reporting the refusal where there
   /// is no modal to put it in. The shared call says so on success.
-  Future<void> _subscribeShow(PodcastDirectoryEntry entry) async {
+  Future<void> _subscribeShow(PodcastDirectoryEntry entry) {
     final messenger = ref.read(shellMessengerProvider.notifier);
-    final refusal = await subscribeToDirectoryEntry(context, ref, entry);
-    if (refusal == null || !mounted) return;
-    messenger.show(refusal, channel: ShellChannel.podcasts);
+    return runAs(entry.feedUrl, () async {
+      final refusal = await subscribeToDirectoryEntry(context, ref, entry);
+      if (refusal == null || !mounted) return;
+      messenger.show(refusal, channel: ShellChannel.podcasts);
+    });
   }
 }

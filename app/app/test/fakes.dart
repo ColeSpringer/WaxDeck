@@ -185,6 +185,9 @@ class FakeRepository implements WaxDeckRepository {
   /// Full episode details by pid; absent pids derive from the summary.
   final Map<String, EpisodeDetail> episodeDetails = {};
 
+  /// When set, [getEpisodeTranscript] waits for it.
+  Completer<void>? getTranscriptGate;
+
   /// Transcripts by episode pid.
   final Map<String, Transcript> transcripts = {};
 
@@ -397,8 +400,15 @@ class FakeRepository implements WaxDeckRepository {
     return _signIn();
   }
 
+  /// Holds every session read until completed, when set: the session
+  /// a screen is mounted under has not answered yet.
+  Completer<void>? getSessionGate;
+
   @override
-  Future<SessionState> getSession() async => sessionState;
+  Future<SessionState> getSession() async {
+    await getSessionGate?.future;
+    return sessionState;
+  }
 
   @override
   Future<LoginResult> refreshToken() async {
@@ -417,11 +427,15 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<List<DeviceSession>> listSessions() async => List.of(deviceSessions);
 
+  /// Holds [renameSession] until completed.
+  Completer<void>? renameGate;
+
   @override
   Future<DeviceSession> renameSession(
     String sessionId,
     String deviceName,
   ) async {
+    if (renameGate case final gate?) await gate.future;
     final failure = renameError;
     if (failure != null) throw failure;
     // The server trims; the fake stores what a trimming server would.
@@ -758,9 +772,13 @@ class FakeRepository implements WaxDeckRepository {
   /// failure beside a surface that answered.
   WaxDeckApiException? searchError;
 
+  /// Holds [search] until completed, with the call recorded.
+  Completer<void>? searchGate;
+
   @override
   Future<SearchResults> search(String q, {int? limit}) async {
     searchCalls.add(q);
+    if (searchGate case final gate?) await gate.future;
     final error = searchError;
     if (error != null) throw error;
     return searchResults[q] ?? SearchResults(query: q);
@@ -1677,12 +1695,17 @@ class FakeRepository implements WaxDeckRepository {
     }
   }
 
+  /// Holds [putSubscriptionSettings] until completed, with the call
+  /// already recorded.
+  Completer<void>? putSubscriptionSettingsGate;
+
   @override
   Future<Subscription> putSubscriptionSettings(
     String pid,
     SubscriptionSettings settings,
   ) async {
     putSubscriptionSettingsCalls.add((pid: pid, settings: settings));
+    if (putSubscriptionSettingsGate case final gate?) await gate.future;
     final current = subscriptions[pid];
     if (current == null) {
       throw const WaxDeckApiException(
@@ -1758,6 +1781,7 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<Transcript> getEpisodeTranscript(String pid) async {
+    await getTranscriptGate?.future;
     final transcript = transcripts[pid];
     if (transcript == null) {
       throw const WaxDeckApiException(
@@ -1998,9 +2022,14 @@ class FakeRepository implements WaxDeckRepository {
     return keyed ?? waveforms[pid] ?? const Waveform(state: 'pending');
   }
 
+  /// Holds [getItemLyrics] until completed, with the call
+  /// already recorded.
+  Completer<void>? lyricsGate;
+
   @override
   Future<Lyrics?> getItemLyrics(String pid) async {
     lyricsCalls.add(pid);
+    await lyricsGate?.future;
     final error = lyricsError;
     if (error != null) throw error;
     return lyrics[pid];
@@ -2135,6 +2164,9 @@ class FakeRepository implements WaxDeckRepository {
     return PlaylistPage(playlists: rows);
   }
 
+  /// Holds [createPlaylist] until completed.
+  Completer<void>? createPlaylistGate;
+
   @override
   Future<Playlist> createPlaylist({
     required String name,
@@ -2143,6 +2175,7 @@ class FakeRepository implements WaxDeckRepository {
     SmartRule? rule,
     List<String> itemPids = const [],
   }) async {
+    if (createPlaylistGate case final gate?) await gate.future;
     final pid = 'pl-FAKE${_playlistSeq++}';
     final pl = Playlist(
       pid: pid,
@@ -2721,12 +2754,17 @@ class FakeRepository implements WaxDeckRepository {
   /// works.
   WaxDeckApiException? directoryError;
 
+  /// Holds [searchRadioDirectory] until completed, with the call already
+  /// recorded.
+  Completer<void>? directoryGate;
+
   @override
   Future<List<RadioDirectoryEntry>> searchRadioDirectory(
     String query, {
     int? limit,
   }) async {
     directoryQueries.add(query);
+    if (directoryGate case final gate?) await gate.future;
     final error = directoryError;
     if (error != null) throw error;
     return directoryEntries;
@@ -2742,12 +2780,17 @@ class FakeRepository implements WaxDeckRepository {
   /// Thrown by [searchPodcastDirectory] when set.
   WaxDeckApiException? podcastDirectoryError;
 
+  /// Holds [searchPodcastDirectory] until completed, with the call
+  /// recorded.
+  Completer<void>? podcastDirectoryGate;
+
   @override
   Future<List<PodcastDirectoryEntry>> searchPodcastDirectory(
     String query, {
     int? limit,
   }) async {
     podcastDirectoryQueries.add(query);
+    if (podcastDirectoryGate case final gate?) await gate.future;
     final error = podcastDirectoryError;
     if (error != null) throw error;
     return podcastDirectoryEntries;
@@ -3295,12 +3338,16 @@ class FakeRepository implements WaxDeckRepository {
     _ => action,
   };
 
+  /// Holds [listReviewQueue] until completed.
+  Completer<void>? reviewQueueGate;
+
   @override
   Future<ReviewEntryPage> listReviewQueue({
     String? status,
     String? cursor,
     int? limit,
   }) async {
+    await reviewQueueGate?.future;
     final error = reviewError;
     if (error != null) throw error;
     // `decided` is the server's pseudo-status: everything not pending.
@@ -4123,6 +4170,10 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
+  /// Holds [editItemMetadata] until completed, with the call already
+  /// recorded.
+  Completer<void>? editItemMetadataGate;
+
   @override
   Future<MetadataEditResult> editItemMetadata(
     String pid, {
@@ -4138,6 +4189,7 @@ class FakeRepository implements WaxDeckRepository {
       fields: Map.of(fields),
       writeBack: writeBack,
     ));
+    if (editItemMetadataGate case final gate?) await gate.future;
     _requireUnlocked(pid, fields.keys, force);
     (itemFieldsByPid[pid] ??= {}).addAll(fields);
     if (lock) (lockedFieldsByPid[pid] ??= {}).addAll(fields.keys);
@@ -5058,12 +5110,16 @@ class FakeRepository implements WaxDeckRepository {
   /// request and the summary that answers it.
   Completer<void>? healthGate;
 
+  /// When set, a later page of [listHealthIssues] waits for it.
+  Completer<void>? listHealthIssuesMoreGate;
+
   @override
   Future<HealthIssuePage> listHealthIssues({
     String? rule,
     String? cursor,
     int? limit,
   }) async {
+    if (cursor != null) await listHealthIssuesMoreGate?.future;
     final error = healthError;
     if (error != null) throw error;
     final filtered = rule == null
@@ -5078,6 +5134,9 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
+  /// Held open, [listFileDiagnostics] waits on it.
+  Completer<void>? listFileDiagnosticsGate;
+
   @override
   Future<FileDiagnosticPage> listFileDiagnostics({
     String? origin,
@@ -5087,6 +5146,7 @@ class FakeRepository implements WaxDeckRepository {
     String? cursor,
     int? limit,
   }) async {
+    await listFileDiagnosticsGate?.future;
     final filtered = fileDiagnostics
         .where((d) => origin == null || d.origin == origin)
         .where((d) => code == null || d.code == code)
@@ -5173,11 +5233,15 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
+  /// Held open, [listEntityFolds] waits on it.
+  Completer<void>? listEntityFoldsGate;
+
   /// A page after the cursor's type and key, as the server's keyset
   /// pages: an unfold before the cursor shifts nothing after it.
   @override
   Future<EntityFoldPage> listEntityFolds({String? cursor, int? limit}) async {
     listEntityFoldsCalls++;
+    await listEntityFoldsGate?.future;
     final error = foldsError;
     if (error != null) throw error;
     String at(EntityFold f) => '${f.entityType}|${f.key}';
@@ -6384,6 +6448,9 @@ class FakeRepository implements WaxDeckRepository {
   >
   createMigrationCalls = [];
 
+  /// Holds [createMigration] until completed, with the call recorded.
+  Completer<void>? createMigrationGate;
+
   @override
   Future<ToolTask> createMigration({
     required String source,
@@ -6409,6 +6476,7 @@ class FakeRepository implements WaxDeckRepository {
       options: options,
       dryRun: dryRun,
     ));
+    if (createMigrationGate case final gate?) await gate.future;
     final task = ToolTask(
       id: 'tt-FAKE${_toolTaskSeq++}',
       type: 'import-$source',
@@ -6425,11 +6493,15 @@ class FakeRepository implements WaxDeckRepository {
   /// Thrown by [stageMigrationExport] when set.
   Object? stageExportError;
 
+  /// Holds [stageMigrationExport] until completed.
+  Completer<void>? stageExportGate;
+
   @override
   Future<MigrationExport> stageMigrationExport({
     required int sizeBytes,
     required Stream<List<int>> Function() openRead,
   }) async {
+    if (stageExportGate case final gate?) await gate.future;
     final error = stageExportError;
     if (error != null) throw error;
     final export = MigrationExport(
@@ -7321,6 +7393,9 @@ class FakeRepository implements WaxDeckRepository {
     return portableExport;
   }
 
+  /// Holds [getPlaylistSource] until completed.
+  Completer<void>? playlistSourceGate;
+
   /// Stored source bindings by playlist pid; absent means unbound, the
   /// 404 the real endpoint answers.
   final Map<String, PlaylistSource> playlistSources = {};
@@ -7381,6 +7456,7 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<PlaylistSource> getPlaylistSource(String pid) async {
+    await playlistSourceGate?.future;
     final readError = playlistSourceReadError;
     if (readError != null) throw readError;
     final src = playlistSources[pid];
@@ -7504,6 +7580,10 @@ class FakeRepository implements WaxDeckRepository {
     playlistSources.remove(pid);
   }
 
+  /// Holds [previewPlaylistSync] until completed, with the call
+  /// already recorded.
+  Completer<void>? previewPlaylistSyncGate;
+
   @override
   Future<PlaylistSyncPreview> previewPlaylistSync(
     String pid, {
@@ -7523,6 +7603,7 @@ class FakeRepository implements WaxDeckRepository {
       refs: refs == null ? null : List.of(refs),
       intervalHours: intervalHours,
     ));
+    await previewPlaylistSyncGate?.future;
     return playlistSyncPreview;
   }
 
@@ -7600,6 +7681,9 @@ class FakeRepository implements WaxDeckRepository {
   /// Held open until completed, so a test can act mid-check.
   Completer<void>? nspImportCheckGate;
 
+  /// Holds [importNsp] until completed, with the call recorded.
+  Completer<void>? nspImportGate;
+
   @override
   Future<NspReport> checkNspImport(Map<String, Object?> document) async {
     nspImportChecks.add(document);
@@ -7614,6 +7698,7 @@ class FakeRepository implements WaxDeckRepository {
     String? name,
   }) async {
     nspImports.add((document: document, partial: partial, name: name));
+    if (nspImportGate case final gate?) await gate.future;
     final error = nspImportError;
     if (error != null) throw error;
     final named = document['name'];
@@ -7693,8 +7778,10 @@ PodcastShow testShow(
   String? descriptionHtml,
   bool explicit = false,
   int? episodeCount,
+  PodcastFunding? funding,
 }) => PodcastShow(
   pid: pid,
+  funding: funding,
   title: title,
   author: author,
   feedUrl: feedUrl,
@@ -7833,6 +7920,7 @@ BookDetail testBook(
   String? series,
   String? seriesPid,
   String? seriesSequence,
+  String? artUrl,
   String? publisher,
   String? isbn,
   String? asin,
@@ -7849,6 +7937,7 @@ BookDetail testBook(
     series: series,
     seriesPid: seriesPid,
     seriesSequence: seriesSequence,
+    artUrl: artUrl,
     publisher: publisher,
     isbn: isbn,
     asin: asin,
@@ -7892,7 +7981,13 @@ class FakeDownloads implements DownloadManagerPort {
 
   final _progress = StreamController<DownloadProgress>.broadcast();
 
-  void emit(DownloadProgress progress) => _progress.add(progress);
+  /// The fraction last emitted per pid, which a pause and a resume repeat.
+  final _fractions = <String, double>{};
+
+  void emit(DownloadProgress progress) {
+    _fractions[progress.pid] = progress.fraction;
+    _progress.add(progress);
+  }
 
   void setStored(List<DownloadedItem> items) => _items = items;
 
@@ -7906,8 +8001,17 @@ class FakeDownloads implements DownloadManagerPort {
   @override
   Future<bool> isComplete(String pid) async => byPid.containsKey(pid);
 
+  /// Set, [download] records the call and then throws it.
+  Object? downloadError;
+
   @override
-  Future<void> download(String pid) async => downloaded.add(pid);
+  Future<void> download(String pid) async {
+    downloaded.add(pid);
+    // The real manager throws reading the item's info, before it holds
+    // anything a cancel would stop.
+    if (downloadError case final error?) throw error;
+    _fetching.add(pid);
+  }
 
   /// How many removals are in flight at once. The real port refuses to
   /// unlink a file another row still references, so two removals racing
@@ -7932,9 +8036,29 @@ class FakeDownloads implements DownloadManagerPort {
     // here rather than running to completion synchronously.
     await Future<void>.delayed(Duration.zero);
     removed.add(pid);
+    final held = _drop(pid);
     byPid.remove(pid);
     _items = _items.where((i) => i.pid != pid).toList();
     inFlightRemovals--;
+    if (held) _stopped(pid);
+  }
+
+  /// Asked for and not yet canceled or removed: what the manager would
+  /// still hold records of.
+  final _fetching = <String>{};
+
+  /// Whether [pid] was held, letting go of its fetch.
+  bool _drop(String pid) =>
+      _fetching.remove(pid) ||
+      byPid.containsKey(pid) ||
+      _items.any((i) => i.pid == pid);
+
+  /// What the real manager says of an item a cancel or removal dropped.
+  void _stopped(String pid) {
+    if (_progress.isClosed) return;
+    _progress.add(
+      DownloadProgress(pid: pid, fraction: 0, complete: false, stopped: true),
+    );
   }
 
   /// Frees as [remove] does and answers no covers: what a real manager
@@ -7952,19 +8076,58 @@ class FakeDownloads implements DownloadManagerPort {
   }
 
   @override
+  Future<DownloadedItem?> storedItem(String pid) async =>
+      _items.where((i) => i.pid == pid).firstOrNull;
+
+  /// The same operation as [remove] in the real manager, minus the wait.
+  @override
   Future<void> cancel(String pid) async {
     canceled.add(pid);
+    final held = _drop(pid);
+    byPid.remove(pid);
     _items = _items.where((i) => i.pid != pid).toList();
+    if (held) _stopped(pid);
   }
 
   @override
   Future<bool> pause(String pid) async {
     paused.add(pid);
-    return pausable;
+    if (!pausable) return false;
+    _markPaused(pid, paused: true);
+    return true;
   }
 
   @override
-  Future<void> resume(String pid) async => resumed.add(pid);
+  Future<void> resume(String pid) async {
+    resumed.add(pid);
+    _markPaused(pid, paused: false);
+  }
+
+  /// What the real manager keeps and says of a pause or its resume.
+  void _markPaused(String pid, {required bool paused}) {
+    _items = <DownloadedItem>[
+      for (final i in _items)
+        i.pid == pid
+            ? DownloadedItem(
+                pid: i.pid,
+                sizeBytes: i.sizeBytes,
+                files: i.files,
+                complete: i.complete,
+                paused: paused,
+                active: !paused,
+              )
+            : i,
+    ];
+    if (_progress.isClosed) return;
+    _progress.add(
+      DownloadProgress(
+        pid: pid,
+        fraction: _fractions[pid] ?? 0,
+        complete: false,
+        paused: paused,
+      ),
+    );
+  }
 
   @override
   Stream<DownloadProgress> get progress => _progress.stream;
@@ -8019,6 +8182,9 @@ class FakeArtworkStore extends ArtworkStore {
   final List<String> pinned = <String>[];
   final List<String> unpinned = <String>[];
 
+  /// The cover URL each [pinForOffline] was handed, by pid.
+  final Map<String, String?> pinnedUrls = <String, String?>{};
+
   /// Every URL a surface asked for artwork at, so a test can see which
   /// origin a picture is being fetched from.
   final List<String> requested = <String>[];
@@ -8060,8 +8226,10 @@ class FakeArtworkStore extends ArtworkStore {
       warmed.add((url: artUrl, px: px));
 
   @override
-  Future<void> pinForOffline(String pid, String? artUrl) async =>
-      pinned.add(pid);
+  Future<void> pinForOffline(String pid, String? artUrl) async {
+    pinned.add(pid);
+    pinnedUrls[pid] = artUrl;
+  }
 
   @override
   Future<void> unpin(String pid) async => unpinned.add(pid);

@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../settings/client_prefs.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'books_screen.dart';
@@ -29,8 +30,13 @@ class BookSeriesIndexScreen extends ConsumerWidget {
       semanticsId: SemanticsIds.bookSeriesIndex,
       onBack: () => context.leave(fallback: WaxRoute.books),
       slivers: <Widget>[
-        switch (series) {
-          AsyncData(:final value) when value.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<List<BookSeries>>(
+          state: series,
+          errorTitle: l10n.bookSeriesIndexLoadError,
+          onRetry: () => ref.invalidate(bookSeriesProvider),
+          skeleton: SkeletonShape.grid,
+          isEmpty: (value) => value.isEmpty,
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.bookSeriesEmpty,
@@ -38,19 +44,8 @@ class BookSeriesIndexScreen extends ConsumerWidget {
               glyph: WaxIcons.audiobooks,
             ),
           ),
-          AsyncData(:final value) => _SeriesGrid(series: value),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.bookSeriesIndexLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(bookSeriesProvider),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.grid),
-          ),
-        },
+          builder: (context, value) => _SeriesGrid(series: value),
+        ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
     );

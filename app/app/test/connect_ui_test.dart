@@ -294,6 +294,39 @@ void main() {
     container.read(remoteSessionProvider.notifier).release();
   });
 
+  testWidgets('taking the room back from the picker asks with house buttons', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_endpoint];
+    final container = _container(repo: repo);
+    container.read(remoteSessionProvider.notifier).adopt(_session());
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerThisDevice));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(WaxButton),
+      ),
+      findsNWidgets(3),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.remoteStopThere));
+    await tester.pumpAndSettle();
+
+    expect(repo.deletePlaybackSessionCalls, ['ps-remote']);
+    expect(container.read(remoteSessionProvider), isNull);
+  });
+
   testWidgets('the picker during live radio says where a station stays', (
     tester,
   ) async {

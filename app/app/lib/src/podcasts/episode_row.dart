@@ -11,6 +11,7 @@ import '../player/play_progress.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'episode_actions.dart';
+import 'episode_fetch.dart';
 
 /// A row's key, so the row moves with its episode (see [indexByKey]).
 Key episodeRowKey(EpisodeSummary episode) =>
@@ -31,10 +32,8 @@ String episodeFacts(AppLocalizations l10n, EpisodeSummary episode) {
 }
 
 String? _audioFact(AppLocalizations l10n, EpisodeSummary episode) {
-  if (episode.fetchState == 'failed') return l10n.podcastDownloadFailed;
-  if (episode.fetchState != null && !episode.downloaded) {
-    return l10n.podcastQueuedForDownload;
-  }
+  final fetch = episodeFetchOf(episode);
+  if (episodeFetchFact(l10n, fetch) case final fact?) return fact;
   // Said on the row rather than left to the tap: an episode this server
   // holds no bytes for still plays, relayed from the feed's own host,
   // unless the listing says there is no audio to relay. It does not say
@@ -117,17 +116,15 @@ class EpisodeRow extends ConsumerWidget {
       selectSemanticsId: SemanticsIds.episodeSelect(episode.pid),
       selected: selected,
       actions: <Widget>[
-        if (!episode.downloaded &&
-            (episode.fetchState == null || episode.fetchState == 'failed'))
-          WaxIconButton(
+        ?switch (episodeFetchOf(episode)) {
+          EpisodeFetchReady() || EpisodeFetchFailed() => WaxIconButton(
             glyph: WaxIcons.downloads,
             label: l10n.podcastFetchEpisode(episode.title),
             size: 18,
             semanticsId: SemanticsIds.episodeFetch(episode.pid),
             onPressed: () => unawaited(actions.fetch(context, episode.pid)),
           ),
-        if (episode.downloaded)
-          WaxIconButton(
+          EpisodeFetchDone() => WaxIconButton(
             glyph: WaxIcons.offline,
             label: l10n.podcastRemoveEpisode(episode.title),
             size: 18,
@@ -135,6 +132,8 @@ class EpisodeRow extends ConsumerWidget {
             onPressed: () =>
                 unawaited(actions.removeDownload(context, episode.pid)),
           ),
+          EpisodeFetchQueued() => null,
+        },
         WaxIconButton(
           glyph: WaxIcons.info,
           label: l10n.podcastEpisodeDetails(episode.title),

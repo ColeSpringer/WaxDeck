@@ -16,6 +16,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _track = ItemSummary(
   pid: 'tr-01JZX5N8QW3F4V9T2B7KD3M9R6',
@@ -579,6 +580,21 @@ void main() {
       expect(find.byType(PlaylistScreen), findsOneWidget);
     });
 
+    testWidgets('an import in flight spins on the button that started it', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track]);
+      await check(tester, repo);
+      final gate = repo.nspImportGate = Completer<void>();
+      final confirm = waxControl<WaxButton>(SemanticsIds.nspImportConfirm);
+      await tester.tap(confirm);
+      await tester.pump();
+
+      expect(tester.widget<WaxButton>(confirm).busy, isTrue);
+      gate.complete();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('with parts WaxDeck cannot read offers to drop them', (
       tester,
     ) async {
@@ -818,6 +834,10 @@ void main() {
       );
 
       expect(sharedSwitch(tester).value, isTrue);
+      await tester.ensureVisible(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportShared),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.nspImportShared),
       );

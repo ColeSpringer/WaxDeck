@@ -203,7 +203,7 @@ class _Remote extends ConsumerWidget {
                 const SizedBox(height: WaxSpace.s8),
                 WaxButton(
                   label: l10n.devicesStopOn(remote.endpointName),
-                  kind: WaxButtonKind.destructive,
+                  kind: WaxButtonKind.text,
                   icon: WaxIcons.stop,
                   semanticsId: SemanticsIds.remoteStopThere,
                   onPressed: () => unawaited(_stopThere(context, controller)),

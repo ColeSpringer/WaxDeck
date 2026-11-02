@@ -64,6 +64,9 @@ class _Item {
   /// The listener's pause, which the rows keep across a restart.
   var paused = false;
 
+  /// How far along it last said it was, which a pause and a resume repeat.
+  var fraction = 0.0;
+
   DownloadInfo? info;
 
   /// When [info]'s URLs stop working.
@@ -231,7 +234,16 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     final server = repository();
     final info = await server.getDownloadInfo(pid);
     final received = clock();
-    if (info.files.isEmpty) return;
+    if (info.files.isEmpty) {
+      // Nothing to fetch ends what was held of an item not on disk whole,
+      // as a cancel would: a stop keeps nothing.
+      await _serialize(() async {
+        if (await isComplete(pid)) return;
+        await _discard(pid);
+        _stopped(pid);
+      });
+      return;
+    }
     unawaited(_ensureNotifications());
     await _serialize(() async {
       await _adopt(pid, info, received, from: server.baseUrl);
@@ -413,7 +425,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
         _byTask[id] = (item, part);
       }
     } on Object {
-      await _giveUp(item.pid);
+      await _giveUp(item.pid, DownloadFailure.interrupted);
       return false;
     }
     part.stage = _Stage.running;
@@ -474,7 +486,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
         final from = await _serversOf(item.pid);
         if (from.contains(server.baseUrl) ||
             (gone && from.every((s) => s == null))) {
-          return _giveUp(item.pid);
+          return _giveUp(item.pid, DownloadFailure.gone);
         }
         item.parkedOn = server.baseUrl;
         return;
@@ -798,17 +810,18 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       // Its own cancels are forgotten first, so this came from outside:
       // the notification's cancel.
       case TransferState.canceled:
-        await _giveUp(item.pid);
+        await _stop(item.pid);
       case TransferState.paused:
       case TransferState.running:
         break;
       case null:
         part.renewals = 0;
         final done = item.files - item.parts.length;
+        item.fraction = (done + (event.fraction ?? 0)) / item.files;
         _emit(
           DownloadProgress(
             pid: item.pid,
-            fraction: (done + (event.fraction ?? 0)) / item.files,
+            fraction: item.fraction,
             complete: false,
           ),
         );
@@ -834,18 +847,32 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       await _pump();
       return;
     }
-    await _giveUp(item.pid);
+    await _giveUp(item.pid, switch (status) {
+      404 || 410 => DownloadFailure.gone,
+      401 || 403 => DownloadFailure.refused,
+      _ => DownloadFailure.interrupted,
+    });
   }
 
   /// Whole or not at all: a left-behind `pending` row reads as a transfer
   /// forever, and dropping it alone would leave the parts that landed
   /// answering `isComplete`.
-  Future<void> _giveUp(String pid) async {
+  Future<void> _giveUp(String pid, DownloadFailure why) async {
     await _discard(pid);
     _emit(
-      DownloadProgress(pid: pid, fraction: 0, complete: false, failed: true),
+      DownloadProgress(pid: pid, fraction: 0, complete: false, failure: why),
     );
   }
+
+  /// Drops [pid] by request, and says so when there was anything to drop:
+  /// a watcher waiting on it settles, and nothing reads it as a failure.
+  Future<void> _stop(String pid) async {
+    if (await _discard(pid)) _stopped(pid);
+  }
+
+  void _stopped(String pid) => _emit(
+    DownloadProgress(pid: pid, fraction: 0, complete: false, stopped: true),
+  );
 
   /// Marks a file on disk, and says so once the item is whole, unless
   /// [announce] is off: the record of an item that is going is kept without
@@ -915,8 +942,9 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     );
   }
 
+  /// On the chain, for the reason [storedItem] is.
   @override
-  Future<List<DownloadedItem>> stored() async {
+  Future<List<DownloadedItem>> stored() => _serialize(() async {
     final rows = await (db.select(
       db.downloadRecords,
     )..orderBy([(t) => OrderingTerm.asc(t.fileIndex)])).get();
@@ -932,18 +960,42 @@ class BackgroundDownloadManager implements DownloadManagerPort {
           files: files.length,
           complete: files.every((r) => r.state == 'complete'),
           paused: files.any((r) => r.state == 'paused'),
+          active: _active(pid),
         ),
     ];
-  }
+  });
+
+  /// On the chain, so an item a previous run left reads as the recovery
+  /// that takes it up leaves it, not as rows nothing holds yet.
+  @override
+  Future<DownloadedItem?> storedItem(String pid) => _serialize(() async {
+    final rows = await _recordsOf(pid);
+    if (rows.isEmpty) return null;
+    return DownloadedItem(
+      pid: pid,
+      sizeBytes: rows.fold(0, (sum, r) => sum + r.sizeBytes),
+      files: rows.length,
+      complete: rows.every((r) => r.state == 'complete'),
+      paused: rows.any((r) => r.state == 'paused'),
+      // The rows' own pid: a kind change keys the item by the new one.
+      active: _active(rows.first.pid),
+    );
+  });
+
+  /// Whether [pid] is an item this run moves or will on its own.
+  bool _active(String pid) => switch (_items[pid]) {
+    final item? => !item.paused && item.parkedOn == null,
+    null => false,
+  };
 
   /// Two verbs on the port because the manager has two affordances (one
   /// on a transfer, one on bytes), one operation underneath: a
   /// half-downloaded item is not a downloaded item.
   @override
-  Future<void> cancel(String pid) => _serialize(() => _discard(pid));
+  Future<void> cancel(String pid) => _serialize(() => _stop(pid));
 
   @override
-  Future<void> remove(String pid) => _serialize(() => _discard(pid));
+  Future<void> remove(String pid) => _serialize(() => _stop(pid));
 
   /// Frees what a commit promised to free for [pid], and decides in this
   /// manager's own chain whether it still is: a request queued ahead of it
@@ -956,7 +1008,10 @@ class BackgroundDownloadManager implements DownloadManagerPort {
   Future<List<OwedPin>?> freeOwed(String pid) => _serialize(() async {
     final owed = await PendingFrees(db).owed(pid);
     if (owed == null) return null;
-    await _discard(pid, only: owed.files);
+    // A screen showing the item downloaded settles, as after a removal.
+    if (await _discard(pid, only: owed.files) && !await isComplete(pid)) {
+      _stopped(pid);
+    }
     return owed.pins;
   });
 
@@ -969,6 +1024,14 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     item.paused = true;
     await _hold(item);
     await _mark(pid, 'paused');
+    _emit(
+      DownloadProgress(
+        pid: pid,
+        fraction: item.fraction,
+        complete: false,
+        paused: true,
+      ),
+    );
     return true;
   });
 
@@ -1005,6 +1068,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       if (part.stage == _Stage.stopped) part.stage = _Stage.parked;
     }
     await _mark(pid, 'pending');
+    _emit(DownloadProgress(pid: pid, fraction: item.fraction, complete: false));
     await _pump();
   });
 
@@ -1017,8 +1081,8 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   /// Drops what this device holds for [pid]: the transfers in flight, the
   /// bytes on disk, and the records naming them. Everything, or with [only]
-  /// the files listed and no others.
-  Future<void> _discard(String pid, {List<OwedFile>? only}) async {
+  /// the files listed and no others. Answers whether it held anything.
+  Future<bool> _discard(String pid, {List<OwedFile>? only}) async {
     // Before anything is read or unlinked: a transfer still running would
     // write its file back after the unlink and report completion against
     // a row that no longer exists.
@@ -1060,7 +1124,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       await (db.delete(
         db.downloadRecords,
       )..where((t) => t.pid.equals(pid))).go();
-      return;
+      return item != null || held.isNotEmpty;
     }
     for (final r in rows) {
       await (db.delete(db.downloadRecords)..where(
@@ -1071,5 +1135,6 @@ class BackgroundDownloadManager implements DownloadManagerPort {
           ))
           .go();
     }
+    return item != null || rows.isNotEmpty;
   }
 }

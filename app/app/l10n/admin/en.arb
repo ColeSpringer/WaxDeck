@@ -1203,6 +1203,10 @@
   "@adminInvitesEmpty": {
     "description": "Empty state of the invites tab."
   },
+  "adminInvitesLoadError": "Could not load the invites",
+  "@adminInvitesLoadError": {
+    "description": "Title of the error state when the invites tab could not read the invites."
+  },
   "adminLibrariesColumnActions": "Actions",
   "@adminLibrariesColumnActions": {
     "description": "Header of the libraries table's column holding each library's menu, and the label of that row on a library's card."
@@ -1656,6 +1660,10 @@
   "adminMigrateServerUrlLabel": "Server URL",
   "@adminMigrateServerUrlLabel": {
     "description": "Field for the address of the server being imported from."
+  },
+  "adminMigrateSourceLabel": "Import from",
+  "@adminMigrateSourceLabel": {
+    "description": "Accessible name of the control that picks which kind of server or service to import from."
   },
   "adminMigrateSpotifyExport": "Spotify data export",
   "@adminMigrateSpotifyExport": {
@@ -2884,6 +2892,10 @@
   "@adminUsersEmptyTitle": {
     "description": "Empty state of the account list."
   },
+  "adminUsersLoadError": "Could not load the accounts",
+  "@adminUsersLoadError": {
+    "description": "Title of the error state when the users tab could not read the accounts."
+  },
   "adminUsersNamedAccount": "{displayName} ({username})",
   "@adminUsersNamedAccount": {
     "description": "An account in the table when it has a display name as well as a username.",
@@ -2943,6 +2955,10 @@
         "example": "Aug 12, 2026"
       }
     }
+  },
+  "adminUsersRequestsLoadError": "Could not load the signup requests",
+  "@adminUsersRequestsLoadError": {
+    "description": "Title of the error state when the requests tab could not read the pending signup requests."
   },
   "adminUsersStateActive": "Active",
   "@adminUsersStateActive": {

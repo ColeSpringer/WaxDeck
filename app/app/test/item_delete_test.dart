@@ -96,12 +96,20 @@ void main() {
     expect(repo.deleteItemsCalls.single.dryRun, isTrue);
     expect(repo.libraryItems, hasLength(1));
     expect(find.text('This removes 3 files, 5.0 MB.'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is WaxButton && w.kind == WaxButtonKind.destructive,
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.itemDeleteMode('permanent')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
     await tester.pumpAndSettle();
 
     final applied = repo.deleteItemsCalls.last;
@@ -365,7 +373,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await _delete(tester);
-    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -393,7 +403,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await _delete(tester);
-    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -426,7 +438,9 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.itemDeleteMode('permanent')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -453,7 +467,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await _delete(tester);
-    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(left, isFalse);
@@ -517,7 +533,9 @@ void main() {
     expect(repo.deleteItemsCalls.last.pids, ['tr-1', 'tr-2', 'tr-3']);
     expect(repo.deleteItemsCalls.last.dryRun, isTrue);
     expect(find.text('This removes 3 files, 3.0 MB.'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.deleteItemsCalls.last.dryRun, isFalse);
@@ -665,7 +683,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await _delete(tester);
-    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -721,7 +741,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(permanent);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.deleteItemsCalls.last.dryRun, isFalse);

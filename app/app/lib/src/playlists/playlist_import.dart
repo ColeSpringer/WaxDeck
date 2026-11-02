@@ -544,21 +544,13 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
                 semanticsId: SemanticsIds.playlistImportName,
               ),
               const SizedBox(height: WaxSpace.s12),
-              // A paste box, not a field: an export is many lines and
-              // the house field has no multiline shape.
-              Semantics(
-                identifier: SemanticsIds.playlistImportPayload,
+              WaxTextField(
                 label: l10n.playlistImportPayloadLabel(source),
-                child: TextField(
-                  controller: _payload,
-                  autofocus: !_source.needsName,
-                  maxLines: 8,
-                  style: WaxType.monoData.copyWith(color: colors.textPrimary),
-                  decoration: InputDecoration(
-                    hintText: _source.hintOf(l10n),
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
+                hint: _source.hintOf(l10n),
+                controller: _payload,
+                autofocus: !_source.needsName,
+                maxLines: 8,
+                semanticsId: SemanticsIds.playlistImportPayload,
               ),
               if (_source.canBind)
                 WaxSettingRow(
@@ -575,12 +567,19 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
                 ),
               if (report != null) _NspCheck(report: report),
               if (preview != null) _M3uCheck(preview: preview),
-              if (_step case final step?)
-                _M3uWorking(
-                  label: switch (step) {
-                    _M3uStep.checking => l10n.playlistM3uPreviewChecking,
-                    _M3uStep.importing => l10n.playlistM3uPreviewImporting,
-                  },
+              if (_step == _M3uStep.checking)
+                _M3uWorking(label: l10n.playlistM3uPreviewChecking)
+              else if (_step == _M3uStep.importing)
+                // The check's lines are already on screen; the button
+                // carries the wait.
+                Padding(
+                  padding: const EdgeInsets.only(top: WaxSpace.s12),
+                  child: Text(
+                    l10n.playlistM3uPreviewImporting,
+                    style: WaxType.bodySmall.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
                 )
               else if (importedElsewhere)
                 Padding(
@@ -628,6 +627,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
           WaxButton(
             label: l10n.playlistImportRun,
             semanticsId: SemanticsIds.playlistM3uImport,
+            busy: _step == _M3uStep.importing,
             onPressed: _busy || importedElsewhere
                 ? null
                 : () => unawaited(_importM3u()),
@@ -640,23 +640,22 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
             semanticsId: _source == PlaylistImportSource.m3u
                 ? SemanticsIds.playlistM3uCheck
                 : SemanticsIds.playlistImportRun,
-            onPressed: _busy ? null : () => unawaited(_import()),
+            busy: _busy,
+            onPressed: () => unawaited(_import()),
           )
         else if (report.gaps.isEmpty)
           WaxButton(
             label: l10n.playlistImportRun,
             semanticsId: SemanticsIds.nspImportConfirm,
-            onPressed: _busy
-                ? null
-                : () => unawaited(_importNsp(partial: false)),
+            busy: _busy,
+            onPressed: () => unawaited(_importNsp(partial: false)),
           )
         else if (report.rule != null)
           WaxButton(
             label: l10n.playlistImportNspPartial,
             semanticsId: SemanticsIds.nspImportPartial,
-            onPressed: _busy
-                ? null
-                : () => unawaited(_importNsp(partial: true)),
+            busy: _busy,
+            onPressed: () => unawaited(_importNsp(partial: true)),
           ),
       ],
     );
@@ -751,7 +750,7 @@ class _NspCheck extends StatelessWidget {
 /// What a dialog can be waiting on the server for with an M3U file.
 enum _M3uStep { checking, importing }
 
-/// Work under way, said in words beside a spinner.
+/// A check under way, said in words over a ghost of the lines to come.
 class _M3uWorking extends StatelessWidget {
   const _M3uWorking({required this.label});
 
@@ -760,18 +759,17 @@ class _M3uWorking extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: WaxSpace.s12),
-    child: Row(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const WaxSpinner(),
-        const SizedBox(width: WaxSpace.s12),
-        Expanded(
-          child: Text(
-            label,
-            style: WaxType.bodySmall.copyWith(
-              color: WaxColors.of(context).textSecondary,
-            ),
+        Text(
+          label,
+          style: WaxType.bodySmall.copyWith(
+            color: WaxColors.of(context).textSecondary,
           ),
         ),
+        const SizedBox(height: WaxSpace.s4),
+        const SkeletonShapes(shape: SkeletonShape.list, count: 3),
       ],
     ),
   );

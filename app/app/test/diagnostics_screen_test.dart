@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/health/diagnostics_screen.dart';
@@ -9,6 +11,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'direction_glyph.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'wax_finders.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
@@ -42,6 +45,30 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.diagnosticsMore),
       up: false,
     );
+  });
+
+  testWidgets('a pressed Load more stays, busy, over the ghost row', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..fileDiagnosticsNextCursor = 'more';
+    repo.fileDiagnostics.add(
+      FileDiagnostic(
+        path: '/music/a.wma',
+        origin: 'scan',
+        code: 'unsupported_format',
+        severity: 'info',
+        seenAt: DateTime.utc(2026, 7, 20),
+      ),
+    );
+    await _pump(tester, _host(repo));
+
+    repo.listFileDiagnosticsGate = Completer<void>();
+    await expectLoadMoreHolds(
+      tester,
+      waxControl<WaxButton>(SemanticsIds.diagnosticsMore),
+    );
+    repo.listFileDiagnosticsGate!.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('shows summary chips and rows, and filters by code', (

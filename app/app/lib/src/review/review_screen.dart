@@ -10,6 +10,7 @@ import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../settings/client_prefs.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -545,11 +546,11 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       // carrying the failure it is retrying. Matching the settled state
       // alone drops the error card to a skeleton for as long as the
       // fetch keeps failing, which is exactly when it must not.
-      AsyncValue(hasError: true, error: final Object error) => Padding(
+      AsyncValue(hasError: true) => Padding(
         padding: sizeClass.gutter,
-        child: ErrorState(
+        child: AsyncFailureCard.from(
+          queue,
           title: context.l10n.reviewLoadError,
-          message: context.explain(error),
           onRetry: () => ref.invalidate(reviewQueueProvider),
         ),
       ),
@@ -583,13 +584,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         findChildIndexCallback: indexByKey(state.entries, _reviewKey),
         itemBuilder: (context, index) {
           if (index >= state.entries.length) {
-            return const Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            );
+            return const SkeletonShapes(shape: SkeletonShape.list, count: 1);
           }
           final entry = state.entries[index];
           return _ReviewRow(
@@ -868,7 +863,7 @@ class _ReviewRow extends StatelessWidget {
         ? name
         : l10n.reviewEntryLine(name, entry.artist!);
     final surface = selected || open ? colors.accentContainer : colors.canvas;
-    return WaxTappable(
+    return WaxInkTappable(
       label: title,
       semanticsId: SemanticsIds.reviewRow(entry.id),
       // The tick is inside this control and reports nothing of its own,
@@ -877,99 +872,90 @@ class _ReviewRow extends StatelessWidget {
       surface: surface,
       borderRadius: BorderRadius.zero,
       onPressed: onTap,
-      child: Material(
-        color: surface,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: WaxSpace.s16,
-              vertical: WaxSpace.s8,
-            ),
-            child: Row(
-              children: <Widget>[
-                if (selecting) ...<Widget>[
-                  WaxIcon(
-                    checked ? WaxIcons.success : WaxIcons.check,
-                    size: 18,
-                    color: checked ? colors.accent : colors.textTertiary,
-                    active: checked,
+      onLongPress: onLongPress,
+      color: surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: WaxSpace.s16,
+          vertical: WaxSpace.s8,
+        ),
+        child: Row(
+          children: <Widget>[
+            if (selecting) ...<Widget>[
+              WaxIcon(
+                checked ? WaxIcons.success : WaxIcons.check,
+                size: 18,
+                color: checked ? colors.accent : colors.textTertiary,
+                active: checked,
+              ),
+              const SizedBox(width: WaxSpace.s12),
+            ],
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    title,
+                    style: WaxType.titleItem.copyWith(
+                      color: colors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: WaxSpace.s12),
-                ],
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        title,
-                        style: WaxType.titleItem.copyWith(
-                          color: colors.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: WaxSpace.s4),
-                      if (entry.identifying)
-                        Row(
-                          children: <Widget>[
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                            const SizedBox(width: WaxSpace.s8),
-                            Text(
-                              l10n.reviewIdentifying,
-                              style: WaxType.caption.copyWith(
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        )
-                      else
+                  const SizedBox(height: WaxSpace.s4),
+                  if (entry.identifying)
+                    Row(
+                      children: <Widget>[
+                        const WaxSpinner(),
+                        const SizedBox(width: WaxSpace.s8),
                         Text(
-                          best == null
-                              ? l10n.reviewRowNoCandidates(entry.trackCount)
-                              : l10n.reviewRowBest(
-                                  entry.trackCount,
-                                  bestLine(l10n, best),
-                                ),
+                          l10n.reviewIdentifying,
                           style: WaxType.caption.copyWith(
-                            color: best == null
-                                ? colors.textTertiary
-                                : colors.textSecondary,
+                            color: colors.textSecondary,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: WaxSpace.s8),
-                DomainBadge(
-                  waxDomainOf(entry.mediaType),
-                  label: _originLabel(l10n, context.waxL10n, entry),
-                  compact: true,
-                ),
-                // The pane drops its warning once decided; so does the row.
-                if (entry.status == 'pending' &&
-                    entry.duplicateCount > 0) ...<Widget>[
-                  const SizedBox(width: WaxSpace.s4),
-                  CodecChip(
-                    l10n.reviewDuplicateCount(entry.duplicateCount),
-                    emphasis: true,
-                  ),
+                      ],
+                    )
+                  else
+                    Text(
+                      best == null
+                          ? l10n.reviewRowNoCandidates(entry.trackCount)
+                          : l10n.reviewRowBest(
+                              entry.trackCount,
+                              bestLine(l10n, best),
+                            ),
+                      style: WaxType.caption.copyWith(
+                        color: best == null
+                            ? colors.textTertiary
+                            : colors.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                 ],
-                if (entry.status != 'pending') ...<Widget>[
-                  const SizedBox(width: WaxSpace.s4),
-                  CodecChip(entry.status),
-                ],
-              ],
+              ),
             ),
-          ),
+            const SizedBox(width: WaxSpace.s8),
+            DomainBadge(
+              waxDomainOf(entry.mediaType),
+              label: _originLabel(l10n, context.waxL10n, entry),
+              compact: true,
+            ),
+            // The pane drops its warning once decided; so does the row.
+            if (entry.status == 'pending' &&
+                entry.duplicateCount > 0) ...<Widget>[
+              const SizedBox(width: WaxSpace.s4),
+              CodecChip(
+                l10n.reviewDuplicateCount(entry.duplicateCount),
+                emphasis: true,
+              ),
+            ],
+            if (entry.status != 'pending') ...<Widget>[
+              const SizedBox(width: WaxSpace.s4),
+              CodecChip(entry.status),
+            ],
+          ],
         ),
       ),
     );

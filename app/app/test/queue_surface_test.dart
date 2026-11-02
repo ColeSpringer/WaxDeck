@@ -250,6 +250,10 @@ void main() {
           .playNow(['tr-1', 'tr-2', 'tr-3'], source: _album, startIndex: 2);
       await tester.pumpAndSettle();
       final head = find.bySemanticsIdentifier(SemanticsIds.queueHistory);
+      expect(
+        find.ancestor(of: head, matching: find.byType(WaxInkTappable)),
+        findsOneWidget,
+      );
 
       expectDisclosure(tester, head, open: false);
       await tester.tap(head);

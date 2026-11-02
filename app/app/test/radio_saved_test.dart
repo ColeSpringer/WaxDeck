@@ -439,6 +439,42 @@ void main() {
     );
   });
 
+  testWidgets('the identify sheet waits within a short window', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..seedSavedSong(
+        _song(
+          pid: 'rw-1',
+          line: 'Salt Harbour - The Bree Trio',
+          artist: 'Salt Harbour',
+          title: 'The Bree Trio',
+        ),
+      )
+      ..reviewQueueGate = gate;
+    await _pump(tester, repo);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedMore('rw-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedIdentify),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    // The menu above it has rows of its own; the window shrinks once the
+    // identify sheet is the one up.
+    tester.view.physicalSize = const Size(360, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pump();
+
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    tester.view.resetPhysicalSize();
+    gate.complete();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('the identify handoff lists pending singles and hands the '
       'parse to the one picked', (tester) async {
     final repo = FakeRepository()

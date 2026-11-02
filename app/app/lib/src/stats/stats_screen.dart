@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'media_split.dart';
@@ -444,16 +445,16 @@ class _SectionFace<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final value = state.value;
     final Widget face;
-    if (state case AsyncValue<T>(hasError: true, :final error?)) {
-      face = _StatsError(
+    if (state case AsyncValue<T>(hasError: true)) {
+      // A retry keeps this face rather than flashing the skeleton, so the
+      // control has to be what says the press took. Riverpod's own retry
+      // lands here too, which is right: the button cannot be pressed into
+      // a fetch that is already running.
+      face = AsyncFailureCard.from(
+        state,
         key: const ValueKey<String>('failed'),
-        error: error,
+        title: context.l10n.statsLoadError,
         onRetry: onRetry,
-        // A retry keeps this face rather than flashing the skeleton, so
-        // the control has to be what says the press took. Riverpod's own
-        // retry lands here too, which is right: the button cannot be
-        // pressed into a fetch that is already running.
-        retrying: state.isLoading,
       );
     } else if (value != null) {
       // Keyed on the value's identity: a fetch that lands is a new
@@ -499,28 +500,5 @@ class _SectionFace<T> extends StatelessWidget {
         ),
       ?current,
     ],
-  );
-}
-
-class _StatsError extends StatelessWidget {
-  const _StatsError({
-    super.key,
-    required this.error,
-    required this.onRetry,
-    this.retrying = false,
-  });
-
-  final Object error;
-  final VoidCallback onRetry;
-
-  /// Whether the fetch this reports is already being tried again.
-  final bool retrying;
-
-  @override
-  Widget build(BuildContext context) => ErrorState(
-    title: context.l10n.statsLoadError,
-    message: context.explain(error),
-    onRetry: onRetry,
-    retrying: retrying,
   );
 }

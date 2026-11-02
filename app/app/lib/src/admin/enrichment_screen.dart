@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/art_source_label.dart';
 import '../l10n/l10n.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
@@ -71,9 +72,9 @@ class EnrichmentScreen extends ConsumerWidget {
                 const _ResponseCache(),
               ],
             ),
-            AsyncError(:final error) => ErrorState(
+            AsyncValue(hasError: true) => AsyncFailureCard.from(
+              status,
               title: l10n.adminEnrichmentLoadError,
-              message: context.explain(error),
               onRetry: () => ref.invalidate(enrichmentStatusProvider),
             ),
             _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -130,23 +131,22 @@ class _Coverage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    Widget tile(String label, CoverageCount count, {String? caption}) => _Tile(
-      label: label,
-      // A total of zero is one the server could not count, not an empty
-      // library, so it is left unsaid.
-      value: count.total > 0
-          ? l10n.adminEnrichmentCoverageOf(count.enriched, count.total)
-          : '${count.enriched}',
-      caption: caption,
-    );
+    StatTile tile(String label, CoverageCount count, {String? caption}) =>
+        StatTile(
+          label: label,
+          // A total of zero is one the server could not count, not an empty
+          // library, so it is left unsaid.
+          value: count.total > 0
+              ? l10n.adminEnrichmentCoverageOf(count.enriched, count.total)
+              : '${count.enriched}',
+          caption: caption,
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(title: l10n.adminEnrichmentCoverageGroup),
-        Wrap(
-          spacing: WaxSpace.s12,
-          runSpacing: WaxSpace.s12,
-          children: <Widget>[
+        WaxStatGrid(
+          tiles: <StatTile>[
             tile(l10n.adminEnrichmentCoverageArtists, coverage.artists),
             tile(
               l10n.adminEnrichmentCoverageReleaseGroups,
@@ -167,21 +167,6 @@ class _Coverage extends StatelessWidget {
       ],
     );
   }
-}
-
-/// One count on this screen, every one the same width.
-class _Tile extends StatelessWidget {
-  const _Tile({required this.label, required this.value, this.caption});
-
-  final String label;
-  final String value;
-  final String? caption;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 200,
-    child: StatTile(label: label, value: value, caption: caption),
-  );
 }
 
 /// A phase in the listener's words, with what it fills.
@@ -667,12 +652,10 @@ class _LastRun extends StatelessWidget {
           ],
         ),
         const SizedBox(height: WaxSpace.s16),
-        Wrap(
-          spacing: WaxSpace.s12,
-          runSpacing: WaxSpace.s12,
-          children: <Widget>[
+        WaxStatGrid(
+          tiles: <StatTile>[
             for (final (label, value) in tallies)
-              _Tile(label: label, value: '$value'),
+              StatTile(label: label, value: '$value'),
           ],
         ),
       ],
@@ -784,27 +767,25 @@ class _ResponseCacheState extends ConsumerState<_ResponseCache> {
         ),
         const SizedBox(height: WaxSpace.s12),
         switch (cache) {
-          AsyncError(:final error) => ErrorState(
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            cache,
             title: l10n.adminEnrichmentCacheLoadError,
-            message: context.explain(error),
             onRetry: () => ref.invalidate(enrichmentCacheProvider),
           ),
           AsyncData(:final value) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Wrap(
-                spacing: WaxSpace.s12,
-                runSpacing: WaxSpace.s12,
-                children: <Widget>[
-                  _Tile(
+              WaxStatGrid(
+                tiles: <StatTile>[
+                  StatTile(
                     label: l10n.adminEnrichmentCacheAnswers,
                     value: '${value.rows}',
                   ),
-                  _Tile(
+                  StatTile(
                     label: l10n.adminEnrichmentCacheSize,
                     value: l10n.formatBytes(value.bytes),
                   ),
-                  _Tile(
+                  StatTile(
                     label: l10n.adminEnrichmentCacheExempt,
                     value: l10n.formatBytes(value.exemptBytes),
                   ),

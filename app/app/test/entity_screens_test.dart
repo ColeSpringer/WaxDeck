@@ -21,6 +21,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'entity_header_bar.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
@@ -153,6 +154,23 @@ void main() {
         dimension: MusicDimension.albums,
         segment: 'al-1',
       ));
+    });
+
+    testWidgets('the header row is one action bar with the menu', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['album 1'] = <ItemSummary>[_track('Bellwether', track: 1)];
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      expectHeaderOnActionBar();
+      for (final id in <String>[
+        SemanticsIds.entityPlay,
+        SemanticsIds.entityShuffle,
+        SemanticsIds.entityOverflow,
+      ]) {
+        expect(inActionBar(id), findsOneWidget, reason: id);
+      }
     });
 
     testWidgets('lists a release in the order it was pressed', (tester) async {
@@ -621,7 +639,9 @@ void main() {
       // The plan first, of every track of the release.
       expect(repository.deleteItemsCalls.single.pids, ['tr-One', 'tr-Two']);
       expect(repository.deleteItemsCalls.single.dryRun, isTrue);
-      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+      );
       await tester.pumpAndSettle();
 
       expect(repository.deleteItemsCalls.last.dryRun, isFalse);
@@ -672,7 +692,9 @@ void main() {
         'tr-Two',
         'tr-Three',
       ], reason: 'the album asked for, then the rest of the file');
-      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+      );
       await tester.pumpAndSettle();
 
       expect(repository.deleteItemsCalls.last.dryRun, isFalse);
@@ -728,7 +750,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(_byId(SemanticsIds.itemMenuDelete));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+      );
       await tester.pumpAndSettle();
 
       expect(repository.deleteItemsCalls.last.dryRun, isFalse);
@@ -769,7 +793,9 @@ void main() {
       await tester.tap(_byId(SemanticsIds.itemMenuDelete));
       await tester.pumpAndSettle();
       expect(repository.deleteItemsCalls.single.pids, ['tr-One']);
-      await tester.tap(find.byKey(const Key(SemanticsIds.itemDeleteConfirm)));
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+      );
       await tester.pumpAndSettle();
 
       expect(repository.deleteItemsCalls.last.dryRun, isFalse);
@@ -891,6 +917,27 @@ void main() {
         dimension: MusicDimension.artists,
         segment: 'ar-1',
       ));
+    });
+
+    testWidgets('the header row is one action bar with the menu', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One', track: 1)];
+      await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1', label: 'Nightjar'),
+        repository,
+      );
+
+      expectHeaderOnActionBar();
+      for (final id in <String>[
+        SemanticsIds.entityPlay,
+        SemanticsIds.entityShuffle,
+        SemanticsIds.entityOverflow,
+      ]) {
+        expect(inActionBar(id), findsOneWidget, reason: id);
+      }
     });
 
     testWidgets('is titled by the artist, never by a track credit', (

@@ -454,10 +454,6 @@
   "@booksLoadMore": {
     "description": "Button fetching the next page of the shelf, for a filter that scrolling cannot reach."
   },
-  "booksLoadingMore": "Loading...",
-  "@booksLoadingMore": {
-    "description": "The load-more button while a page is on its way."
-  },
   "booksMore": "More",
   "@booksMore": {
     "description": "Accessible name of the audiobook hub's overflow menu."

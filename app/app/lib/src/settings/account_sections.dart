@@ -241,7 +241,8 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
         ),
         WaxButton(
           label: l10n.settingsPasswordTitle,
-          onPressed: _busy ? null : _save,
+          busy: _busy,
+          onPressed: _save,
           semanticsId: SemanticsIds.setting('password-save'),
         ),
       ],
@@ -373,7 +374,7 @@ class _DeviceSessions extends ConsumerWidget {
                 ),
             ],
           ),
-          AsyncError() => ErrorState(
+          AsyncValue(hasError: true) => ErrorState(
             title: l10n.settingsDevicesErrorTitle,
             message: l10n.settingsDevicesErrorMessage,
           ),
@@ -464,6 +465,7 @@ class _DeviceRenameDialogState extends ConsumerState<_DeviceRenameDialog> {
         WaxButton(
           key: const Key('device-rename-confirm'),
           label: l10n.commonSave,
+          busy: _busy,
           onPressed: _busy || empty ? null : _save,
         ),
       ],

@@ -10,6 +10,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'wax_finders.dart';
 
 Widget _host(FakeRepository repo) => _hostOf(repo, const OrganizeScreen());
 
@@ -350,6 +351,15 @@ void main() {
       matching: find.byType(StatTile),
     );
     expect(find.descendant(of: tile, matching: find.text('2')), findsOneWidget);
+
+    // The report's tiles sit in a grid: one height, none stretched wide.
+    final sizes = [
+      for (final t in tester.widgetList<StatTile>(find.byType(StatTile)))
+        tester.getSize(find.byWidget(t)),
+    ];
+    expect(sizes.length, greaterThan(1));
+    expect(sizes.map((s) => s.height).toSet(), hasLength(1));
+    expect(sizes.every((s) => s.width <= WaxStatGrid.defaultTileWidth), isTrue);
   });
 
   testWidgets('a preview can be discarded', (tester) async {
@@ -379,12 +389,7 @@ void main() {
     );
     expect(
       tester
-          .widget<WaxButton>(
-            find.byWidgetPredicate(
-              (w) =>
-                  w is WaxButton && w.semanticsId == SemanticsIds.organizeApply,
-            ),
-          )
+          .widget<WaxButton>(waxControl<WaxButton>(SemanticsIds.organizeApply))
           .onPressed,
       isNull,
       reason: 'no plan, no apply',
@@ -790,9 +795,7 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
     await tester.pumpAndSettle();
     WaxButton apply() => tester.widget<WaxButton>(
-      find.byWidgetPredicate(
-        (w) => w is WaxButton && w.semanticsId == SemanticsIds.organizeApply,
-      ),
+      waxControl<WaxButton>(SemanticsIds.organizeApply),
     );
     expect(apply().busy, isTrue);
 
@@ -810,9 +813,7 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pump();
     WaxButton preview() => tester.widget<WaxButton>(
-      find.byWidgetPredicate(
-        (w) => w is WaxButton && w.semanticsId == SemanticsIds.organizePreview,
-      ),
+      waxControl<WaxButton>(SemanticsIds.organizePreview),
     );
     expect(preview().busy, isTrue);
 

@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
+import '../downloads/download_state.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
@@ -20,6 +21,7 @@ import '../player/play_progress.dart';
 import '../player/play_state_controller.dart';
 import '../podcasts/episode_screen.dart' show formatCueTimestamp;
 import '../podcasts/show_notes.dart';
+import '../podcasts/speed_slider.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
@@ -113,10 +115,7 @@ class _BookScreenState extends ConsumerState<BookScreen> {
       // home - and goes to the hub where nothing did, so the arrow and
       // the system gesture agree from either entry point.
       onBack: () => context.leave(fallback: WaxRoute.books),
-      actions: <Widget>[
-        if (book != null) _BookOverflow(book: book, onToolQueued: _watchTask),
-        const SearchAction(),
-      ],
+      actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
         // The shared face rather than a switch on the state's type: a
         // read Riverpod is retrying is a loading state carrying its
@@ -129,7 +128,7 @@ class _BookScreenState extends ConsumerState<BookScreen> {
           onRetry: () => ref.invalidate(bookDetailProvider(widget.pid)),
           builder: (context, value) => SliverList.list(
             children: <Widget>[
-              _Header(book: value),
+              _Header(book: value, onToolQueued: _watchTask),
               _Description(book: value),
               _Chapters(book: value),
               _PartsNote(book: value),
@@ -175,9 +174,10 @@ void playBook(WidgetRef ref, BookDetail book, {required int positionMs}) {
 
 /// Cover, contributors, where the listener stands, and the verbs.
 class _Header extends ConsumerWidget {
-  const _Header({required this.book});
+  const _Header({required this.book, required this.onToolQueued});
 
   final BookDetail book;
+  final void Function(String taskId) onToolQueued;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -210,8 +210,9 @@ class _Header extends ConsumerWidget {
       artwork: ref.watch(artworkStoreProvider).source(book.artUrl),
       artworkCaption: artSourceLabelWithBorrow(l10n, book.artSource),
       description: _people(l10n, book),
-      actions: <Widget>[
-        WaxButton(
+      link: _seriesLink(context, ref),
+      actions: <WaxAction>[
+        WaxAction(
           // The verb says where it will put you, and the chapter name is
           // the part that makes it a promise rather than a guess.
           label: started
@@ -225,20 +226,58 @@ class _Header extends ConsumerWidget {
                       : _chapterTitleAt(book, positionMs),
                 )
               : l10n.bookPlay,
-          icon: WaxIcons.play,
+          glyph: WaxIcons.play,
+          emphasis: WaxActionEmphasis.primary,
           semanticsId: SemanticsIds.bookResume,
           onPressed: () => playBook(ref, book, positionMs: playFromMs),
         ),
-        if (book.series != null) _SeriesLink(book: book),
-        DownloadAction(
-          pid: book.pid,
-          artUrl: book.artUrl,
+        ?downloadWaxAction(
+          l10n,
+          ref.watch(downloadStateProvider(book.pid)),
           label: l10n.bookDownloadOffline,
           semanticsId: SemanticsIds.bookDownload,
+          onStart: () => unawaited(
+            ref
+                .read(downloadStateProvider(book.pid).notifier)
+                .start(artUrl: book.artUrl),
+          ),
         ),
+      ],
+      trailing: <Widget>[
         _SettingsButton(book: book),
         ItemStarRatingRow(pid: book.pid),
       ],
+      overflow: _BookOverflow(book: book, onToolQueued: onToolQueued),
+    );
+  }
+
+  /// The series line, which navigates to the books that share it.
+  EntityHeaderLink? _seriesLink(BuildContext context, WidgetRef ref) {
+    final series = book.series;
+    if (series == null) return null;
+    final sequence = book.seriesSequence;
+    final seriesPid = book.seriesPid;
+    return EntityHeaderLink(
+      label: sequence == null
+          ? series
+          : context.l10n.bookSeriesSequence(sequence, series),
+      semanticsId: SemanticsIds.bookSeriesLink,
+      // The series screen where the book knows its pid. Where it does
+      // not - a series carried as a name with no entity behind it - the
+      // fallback still stands: narrow the hub to the author, which is
+      // where the rest of the series is. Narrowing rather than
+      // toggling, so an author the hub already held is not cleared.
+      onPressed: () {
+        if (seriesPid != null) {
+          context.go(WaxRoute.bookSeries(seriesPid));
+          return;
+        }
+        final author = book.authors.firstOrNull;
+        if (author != null) {
+          ref.read(bookViewProvider.notifier).narrowToAuthor(author);
+        }
+        context.go(WaxRoute.books);
+      },
     );
   }
 
@@ -294,43 +333,6 @@ class _Header extends ConsumerWidget {
   static String? _chapterTitleAt(BookDetail book, int positionMs) {
     final at = chapterIndexAt(book.chapters, positionMs);
     return at < 0 ? null : book.chapters[at].title;
-  }
-}
-
-/// The series line, which navigates to the books that share it.
-class _SeriesLink extends ConsumerWidget {
-  const _SeriesLink({required this.book});
-
-  final BookDetail book;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final series = book.series!;
-    final sequence = book.seriesSequence;
-    final seriesPid = book.seriesPid;
-    return WaxButton(
-      label: sequence == null
-          ? series
-          : context.l10n.bookSeriesSequence(sequence, series),
-      kind: WaxButtonKind.text,
-      semanticsId: SemanticsIds.bookSeriesLink,
-      // The series screen where the book knows its pid. Where it does
-      // not - a series carried as a name with no entity behind it - the
-      // fallback still stands: narrow the hub to the author, which is
-      // where the rest of the series is. Narrowing rather than
-      // toggling, so an author the hub already held is not cleared.
-      onPressed: () {
-        if (seriesPid != null) {
-          context.go(WaxRoute.bookSeries(seriesPid));
-          return;
-        }
-        final author = book.authors.firstOrNull;
-        if (author != null) {
-          ref.read(bookViewProvider.notifier).narrowToAuthor(author);
-        }
-        context.go(WaxRoute.books);
-      },
-    );
   }
 }
 
@@ -512,7 +514,6 @@ class _Edition extends StatelessWidget {
         (label: l10n.bookFieldFiles, value: '${book.parts.length}'),
     ];
     if (rows.isEmpty) return const SizedBox.shrink();
-    final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -521,20 +522,13 @@ class _Edition extends StatelessWidget {
         sizeClass.gutter.horizontal / 2,
         0,
       ),
-      child: Semantics(
-        identifier: SemanticsIds.bookEdition,
-        child: ExpansionTile(
-          key: const Key(SemanticsIds.bookEdition),
-          tilePadding: EdgeInsets.zero,
-          title: Text(
-            l10n.bookEditionTitle,
-            style: WaxType.headline.copyWith(color: colors.textPrimary),
-          ),
-          children: <Widget>[
-            for (final row in rows)
-              MonoDetailRow(label: row.label, value: row.value),
-          ],
-        ),
+      child: WaxDisclosure(
+        semanticsId: SemanticsIds.bookEdition,
+        title: l10n.bookEditionTitle,
+        children: <Widget>[
+          for (final row in rows)
+            MonoDetailRow(label: row.label, value: row.value),
+        ],
       ),
     );
   }
@@ -943,20 +937,16 @@ class _BookToolDialogState extends State<_BookToolDialog> {
           ),
         ],
       ),
-      // The delete dialogs' buttons, whose labels wrap where the design
-      // system's would clip at large type on a narrow window.
       actions: <Widget>[
-        TextButton(
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        Semantics(
-          identifier: confirmId,
-          child: FilledButton(
-            key: Key(confirmId),
-            onPressed: () => Navigator.of(context).pop(_keep),
-            child: Text(merge ? l10n.bookMergeAction : l10n.bookSplitAction),
-          ),
+        WaxButton(
+          label: merge ? l10n.bookMergeAction : l10n.bookSplitAction,
+          semanticsId: confirmId,
+          onPressed: () => Navigator.of(context).pop(_keep),
         ),
       ],
     );
@@ -1084,18 +1074,11 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
             l10n.bookSettingsSpeed(l10n.formatSpeed(_speed)),
             style: WaxType.monoData.copyWith(color: colors.textSecondary),
           ),
-          Semantics(
-            identifier: SemanticsIds.bookSettingsSpeed,
+          SpeedSlider(
+            speed: _speed,
             label: l10n.bookSettingsSpeedLabel,
-            child: Slider(
-              key: const Key(SemanticsIds.bookSettingsSpeed),
-              value: _speed,
-              min: 0.5,
-              max: 3.5,
-              divisions: 60,
-              label: l10n.formatSpeed(_speed),
-              onChanged: (v) => setState(() => _speed = v),
-            ),
+            semanticsId: SemanticsIds.bookSettingsSpeed,
+            onChanged: (v) => setState(() => _speed = v),
           ),
           WaxSettingRow(
             key: const Key('book-settings-boost'),
@@ -1123,7 +1106,8 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
             child: WaxButton(
               label: l10n.commonSave,
               semanticsId: SemanticsIds.bookSettingsSave,
-              onPressed: _busy ? null : _save,
+              busy: _busy,
+              onPressed: _save,
             ),
           ),
         ],
