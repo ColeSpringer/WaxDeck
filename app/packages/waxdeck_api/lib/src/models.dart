@@ -1906,6 +1906,7 @@ class BookDetail {
     this.series,
     this.seriesPid,
     this.seriesSequence,
+    this.authorPid,
     this.publisher,
     this.asin,
     this.isbn,
@@ -1931,6 +1932,10 @@ class BookDetail {
   /// merge. Null when the book belongs to none.
   final String? seriesPid;
   final String? seriesSequence;
+
+  /// The first author as an artist pid: the bucket the author index
+  /// files this book under. Null when the book names no author.
+  final String? authorPid;
   final String? publisher;
   final String? asin;
   final String? isbn;

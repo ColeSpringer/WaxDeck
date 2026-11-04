@@ -16,6 +16,7 @@ import '../downloads/downloads_controller.dart';
 import '../health/health_controller.dart';
 import '../home/home_shelves.dart';
 import '../metadata/metadata_controller.dart';
+import '../music/music_controllers.dart';
 import '../organize/organize_screen.dart';
 import '../player/entity_play_state_controller.dart';
 import '../player/play_progress.dart';
@@ -28,7 +29,6 @@ import '../queue/queue_recheck.dart';
 import '../radio/radio_controller.dart';
 import '../review/review_controller.dart';
 import '../settings/prefs_controller.dart';
-import '../shell/adaptive_shell.dart';
 import '../shell/lifecycle_banners.dart';
 import '../shell/server_health.dart';
 import '../tools/tool_tasks_provider.dart';
@@ -95,11 +95,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       // set until the app is relaunched.
       bookSeriesProvider,
       bookSeriesShelfProvider,
-      // Whether a domain has anything behind it is a catalog fact, and
-      // it decides whether the chrome offers its tab. This is what turns
-      // the Audiobooks tab on when a first scan finds books, instead of
-      // at the next launch.
-      emptyDomainsProvider,
+      bookSeriesCountProvider,
       // What is downloaded is local, but who each row is comes from the
       // mirror, so a retitled item has to reach an open manager.
       downloadsProvider,
@@ -121,6 +117,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       metadataControllerProvider,
       // An open series screen is a catalog read like a show's.
       bookSeriesDetailProvider,
+      // The hubs' tile counts, which a scan or an import moves.
+      musicIndexCountProvider,
     ],
   );
 

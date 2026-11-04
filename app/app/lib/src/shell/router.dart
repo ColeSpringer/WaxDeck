@@ -31,6 +31,8 @@ import '../auth/connect_server_screen.dart';
 import '../auth/login_screen.dart';
 import '../auth/setup_screen.dart';
 import '../auth/signup_screen.dart';
+import '../books/book_bucket_screen.dart';
+import '../books/book_dimension.dart';
 import '../books/book_screen.dart';
 import '../books/books_screen.dart';
 import '../books/series_index_screen.dart';
@@ -315,6 +317,7 @@ GoRoute _musicIndexRoute(MusicDimension dimension) => GoRoute(
               dimension: dimension,
               segment: state.pathParameters['key']!,
               label: state.extra is String ? state.extra! as String : null,
+              domain: _listingDomain(state),
             ),
           ),
       ],
@@ -357,8 +360,36 @@ Widget _bucketScreen(MusicDimension dimension, GoRouterState state) {
     dimension: dimension,
     segment: segment,
     label: label,
+    domain: _listingDomain(state),
   );
 }
+
+/// The scope a `/music` listing's location states: music, unless it says
+/// the whole library.
+BrowseDomain _listingDomain(GoRouterState state) =>
+    state.uri.queryParameters[WaxRoute.scopeParam] == WaxRoute.wholeLibraryScope
+    ? BrowseDomain.wholeLibrary
+    : BrowseDomain.music;
+
+/// One books index, and a bucket beneath it. Declared ahead of the
+/// book's `:pid` so the literal wins the match.
+GoRoute _bookIndexRoute(BookDimension dimension) => GoRoute(
+  path: dimension.segment,
+  builder: (context, state) => MusicIndexScreen(
+    dimension: dimension.dimension,
+    domain: BrowseDomain.books,
+  ),
+  routes: <RouteBase>[
+    GoRoute(
+      path: ':key',
+      builder: (context, state) => BookBucketScreen(
+        dimension: dimension,
+        segment: state.pathParameters['key']!,
+        label: state.extra is String ? state.extra! as String : null,
+      ),
+    ),
+  ],
+);
 
 Widget _trackList(BuildContext context, GoRouterState state) {
   final args = state.extra! as TrackListArgs;
@@ -418,9 +449,9 @@ final publicRoutes = <RouteBase>[
 ///
 /// Every branch is declared whether or not its tab is drawn: the branch
 /// index is `goBranch`'s contract, so a branch that came and went with a
-/// count would renumber the ones after it. A domain with nothing behind
-/// it loses its tab, not its routes, which is also what keeps a shared
-/// link into one working.
+/// count would renumber the ones after it. A destination whose tab is not
+/// drawn (podcasts, on a server that turns them off) keeps its routes,
+/// which is also what keeps a shared link into one working.
 List<RouteBase> shellRoutes() => <RouteBase>[
   StatefulShellRoute(
     navigatorContainerBuilder: _branchStack,
@@ -492,9 +523,10 @@ List<RouteBase> shellRoutes() => <RouteBase>[
           ),
         ],
       ),
-      // Audiobooks: the hub, and one book beneath it. Its own branch now
-      // that there is a hub to send anyone to; before this the book hung
-      // off home, so opening one from the library grid lit Home.
+      // Audiobooks: the hub, its indexes, and one book beneath it. Its
+      // own branch now that there is a hub to send anyone to; before this
+      // the book hung off home, so opening one from the library grid lit
+      // Home.
       StatefulShellBranch(
         routes: <RouteBase>[
           GoRoute(
@@ -513,6 +545,8 @@ List<RouteBase> shellRoutes() => <RouteBase>[
                   ),
                 ],
               ),
+              for (final dimension in BookDimension.values)
+                _bookIndexRoute(dimension),
               GoRoute(
                 path: ':pid',
                 builder: (context, state) =>

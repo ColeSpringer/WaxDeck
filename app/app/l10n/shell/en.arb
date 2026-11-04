@@ -107,7 +107,7 @@
   },
   "shellNavAdmin": "Admin console",
   "@shellNavAdmin": {
-    "description": "Navigation entry for the administration console. Every shellNav* label draws in a 224px sidebar (about 150px of text room, 20px less for the indented music indexes), so translations stay short - a label past that ellipsizes."
+    "description": "Navigation entry for the administration console. Every shellNav* label draws in a 224px sidebar (about 150px of text room, 20px less for the indexes indented under Music and Books), so translations stay short - a label past that ellipsizes."
   },
   "shellNavAlbums": "Albums",
   "@shellNavAlbums": {
@@ -116,6 +116,14 @@
   "shellNavArtists": "Artists",
   "@shellNavArtists": {
     "description": "Navigation entry for the artist index, under Music."
+  },
+  "shellNavAuthors": "Authors",
+  "@shellNavAuthors": {
+    "description": "Navigation entry for the author index, under Books."
+  },
+  "shellNavBookGenres": "Genres",
+  "@shellNavBookGenres": {
+    "description": "Navigation entry for the genre index, under Books."
   },
   "shellNavBooks": "Books",
   "@shellNavBooks": {
@@ -156,6 +164,10 @@
   "shellNavReview": "Review queue",
   "@shellNavReview": {
     "description": "Navigation entry for the queue of imports waiting on an administrator's decision."
+  },
+  "shellNavSeries": "Series",
+  "@shellNavSeries": {
+    "description": "Navigation entry for the series index, under Books."
   },
   "shellNavSettings": "App settings",
   "@shellNavSettings": {
@@ -212,6 +224,16 @@
   "shellPaletteGroupSettings": "Settings",
   "@shellPaletteGroupSettings": {
     "description": "Command palette group holding matching settings."
+  },
+  "shellPaletteInHubDetail": "In {hub}",
+  "@shellPaletteInHubDetail": {
+    "description": "The second line of a palette row that is an index under a hub, naming the hub so two indexes of one name (Music's Genres, Books' Genres) read apart.",
+    "placeholders": {
+      "hub": {
+        "type": "String",
+        "example": "Music"
+      }
+    }
   },
   "shellPaletteNoMatch": "Nothing matches \"{query}\"",
   "@shellPaletteNoMatch": {

@@ -29,6 +29,7 @@ Future<void> _pump(
   bool Function(MediaTileData item)? itemHasActions,
   String Function(int index)? moreSemanticsIdAt,
   String Function(int index)? playSemanticsIdAt,
+  String? Function(int index)? playLabelAt,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -59,6 +60,7 @@ Future<void> _pump(
                   itemHasActions: itemHasActions,
                   moreSemanticsIdAt: moreSemanticsIdAt,
                   playSemanticsIdAt: playSemanticsIdAt,
+                  playLabelAt: playLabelAt,
                   backSemanticsId: 'shelf-test-back',
                   forwardSemanticsId: 'shelf-test-forward',
                 ),
@@ -298,6 +300,39 @@ void main() {
     await tester.pump();
     expect(_plays, <String>['Card 1']);
     expect(_taps, isEmpty);
+  });
+
+  testWidgets('the play affordance says what the shelf names it', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      playSemanticsIdAt: (index) => 'shelf-test-play-$index',
+      playLabelAt: (index) => index == 1 ? 'Resume Card 1' : null,
+    );
+    final gesture = await _hover(tester);
+    String labelAt(int index) => find.semantics
+        .byPredicate(
+          (node) =>
+              node.getSemanticsData().identifier == 'shelf-test-play-$index',
+        )
+        .evaluate()
+        .single
+        .getSemanticsData()
+        .label;
+    await gesture.moveTo(
+      tester.getTopLeft(find.widgetWithText(MediaCard, 'Card 1')) +
+          const Offset(12, 12),
+    );
+    await tester.pumpAndSettle();
+    expect(labelAt(1), 'Resume Card 1');
+    // Null keeps the design system's own wording.
+    await gesture.moveTo(
+      tester.getTopLeft(find.widgetWithText(MediaCard, 'Card 0')) +
+          const Offset(12, 12),
+    );
+    await tester.pumpAndSettle();
+    expect(labelAt(0), 'Play Card 0');
   });
 
   testWidgets('a card that lands in front leaves the others their nodes', (

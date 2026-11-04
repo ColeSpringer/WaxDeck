@@ -8,6 +8,7 @@ import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../providers.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/paged_scroll.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -28,27 +29,10 @@ class RadioSavedScreen extends ConsumerStatefulWidget {
   ConsumerState<RadioSavedScreen> createState() => _RadioSavedScreenState();
 }
 
-class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
-  final _scroll = ScrollController();
-
+class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen>
+    with PagedScroll {
   @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_maybeLoadMore);
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  void _maybeLoadMore() {
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    if (position.pixels < position.maxScrollExtent - 400) return;
-    ref.read(radioSavedProvider.notifier).loadMore();
-  }
+  void loadMore() => ref.read(radioSavedProvider.notifier).loadMore();
 
   Future<void> _remove(RadioSavedSong song) async {
     final l10n = context.l10n;
@@ -65,12 +49,16 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
   @override
   Widget build(BuildContext context) {
     final saved = ref.watch(radioSavedProvider);
+    fillViewportWhile(
+      (saved.value?.hasMore ?? false) && !(saved.value?.loadingMore ?? true),
+      at: saved.value?.songs,
+    );
     final l10n = context.l10n;
 
     return WaxScaffold(
       title: l10n.radioSavedTitle,
       largeTitle: false,
-      controller: _scroll,
+      controller: pagedScroll,
       semanticsId: SemanticsIds.radioSaved,
       onBack: () => context.leave(fallback: WaxRoute.radio),
       slivers: <Widget>[

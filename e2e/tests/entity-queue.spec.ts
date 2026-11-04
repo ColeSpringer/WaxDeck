@@ -83,11 +83,19 @@ test('an artist bucket opens the artist, not a filtered list', async ({ app }) =
   // header's verbs are what a listing at this location never had.
   expect(app.nav.location()).toMatch(/\/music\/artists\/ar-/);
   await expect(app.music.entityPlay()).toBeVisible();
+  // A music artist's play is live; an author-only bucket in the first
+  // slot would turn it off.
+  await expect(app.music.entityPlay()).toBeEnabled();
 
-  // The bucket the fixture library sorts first is an audiobook author,
-  // which is exactly the case a music-only screen gets wrong: the list
-  // has to hold what the bucket counted, and the verbs have to be off
-  // rather than queueing a twelve-hour file.
+  // The music index counts tracks only, so an audiobook author is not
+  // among its buckets; the artist page still reads the whole library,
+  // since search and the editor reach it with the medium unknown. An
+  // author's page holds their books, with the verbs off rather than
+  // queueing a twelve-hour file.
+  const book = await app.seed.book('The Fixture Book');
+  const detail = await app.api.get('/books/{pid}', { path: { pid: book.pid } });
+  expect(detail.authorPid, 'the fixture book names its author').toBeTruthy();
+  await app.nav.open(`/music/artists/${detail.authorPid}`, app.music.entityPlay());
   await expect(app.music.text('Audiobooks')).toBeVisible();
   await expect(app.music.entityPlay()).toBeDisabled();
 });

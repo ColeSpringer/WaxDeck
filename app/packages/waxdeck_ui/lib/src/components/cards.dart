@@ -1444,6 +1444,7 @@ class ShelfRow extends StatefulWidget {
     this.itemHasActions,
     this.moreSemanticsIdAt,
     this.playSemanticsIdAt,
+    this.playLabelAt,
     this.backSemanticsId,
     this.forwardSemanticsId,
     this.cardWidth,
@@ -1480,6 +1481,10 @@ class ShelfRow extends StatefulWidget {
   /// Each card's play affordance identifier, by position, for the same
   /// reason.
   final String Function(int index)? playSemanticsIdAt;
+
+  /// Each card's play affordance name, by position, where the verb is not
+  /// "Play" plus the title. Null takes the design system's wording.
+  final String? Function(int index)? playLabelAt;
 
   /// Chevron handles, as plain strings: the package takes no registry
   /// dependency.
@@ -1686,6 +1691,7 @@ class _ShelfRowState extends State<ShelfRow> {
                               playSemanticsId: widget.playSemanticsIdAt?.call(
                                 index,
                               ),
+                              playLabel: widget.playLabelAt?.call(index),
                             );
                           },
                         ),

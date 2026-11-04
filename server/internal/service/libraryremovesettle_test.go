@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,8 +18,27 @@ import (
 
 // takenOut adds a library and takes it out of the catalog directly, as a
 // removal's job does before it ends; the follower leaves that job to the
-// settle the test drives, as it does one the console started.
+// settle the test drives, as it does one the console started. It returns
+// once the follower has taken the job's end in, so the settle the test
+// drives is the only one: the follower takes an end in once.
 func takenOut(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, name string) (LibraryInfo, string, *model.RemoveRootReport) {
+	t.Helper()
+	followed := make(chan struct{})
+	var once sync.Once
+	hook := func(j *model.Job, done bool) {
+		if done && j.Kind == "remove-root" {
+			once.Do(func() { close(followed) })
+		}
+	}
+	svc.jobFinishedHook.Store(&hook)
+	lib, dir, rep := removeDirectly(t, ctx, svc, uc, name)
+	awaitClosed(t, followed, "the follower to take the removal's end in")
+	svc.jobFinishedHook.Store(nil)
+	return lib, dir, rep
+}
+
+// removeDirectly is takenOut without waiting for the follower.
+func removeDirectly(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, name string) (LibraryInfo, string, *model.RemoveRootReport) {
 	t.Helper()
 	dir := t.TempDir()
 	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: dir})
@@ -39,12 +59,26 @@ func takenOut(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, name
 }
 
 // endedRemoval is a removal job's end as the settle reads it, its origin
-// holding what the console recorded at the start.
+// holding what the console recorded at the start. It is the catalog's own
+// job when takenOut ran one, as the console's settle is: a follower that
+// reaches that job late then finds its outcome kept, and does not follow
+// it up a second time.
 func endedRemoval(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, lib LibraryInfo, dir string, state model.JobState, rep *model.RemoveRootReport) *model.Job {
 	t.Helper()
 	_, bare, _ := parseAPIPID(lib.PID)
+	pid := model.NewPID()
+	jobs, err := svc.lib.Jobs(ctx, reachSeedWindow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, j := range jobs {
+		if j.Kind == "remove-root" && j.TargetPID == bare {
+			pid = j.PID
+			break
+		}
+	}
 	j := &model.Job{
-		PID: model.NewPID(), Kind: "remove-root", State: state, TargetType: "library", TargetPID: bare,
+		PID: pid, Kind: "remove-root", State: state, TargetType: "library", TargetPID: bare,
 		StartedAt: time.Now().UnixNano(), FinishedAt: time.Now().UnixNano(),
 	}
 	if rep != nil {
@@ -248,4 +282,40 @@ func TestARemovalWhoseFollowUpFailsIsDoneAtTheNextStart(t *testing.T) {
 		has, err := svc.db.HasJobOrigin(ctx, string(jobPID))
 		return err == nil && !has
 	}, "the origin dropped once settled")
+}
+
+// A follower that reaches a removal only after its starter settled it
+// follows it up no second time: both settle the catalog's own job, whose
+// outcome the first settle keeps.
+func TestALateFollowerOfASettledRemovalUnmountsOnce(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
+	flow := &fakeFlowRoots{names: []string{"configured"}}
+	svc.SetFlowRoots(flow)
+	reached, followed := make(chan struct{}), make(chan struct{})
+	late := newGate(t)
+	var reachedOnce, followedOnce sync.Once
+	hook := func(j *model.Job, done bool) {
+		if j.Kind != "remove-root" {
+			return
+		}
+		if done {
+			followedOnce.Do(func() { close(followed) })
+			return
+		}
+		reachedOnce.Do(func() { close(reached) })
+		late.wait()
+	}
+	svc.jobFinishedHook.Store(&hook)
+	books, dir, rep := removeDirectly(t, ctx, svc, uc, "books")
+	awaitClosed(t, reached, "the follower to reach the removal")
+	svc.settleJobOrigin(ctx, endedRemoval(t, ctx, svc, uc, books, dir, model.JobDone, rep))
+	late.release()
+	awaitClosed(t, followed, "the follower to follow the removal up")
+	flow.mu.Lock()
+	removed := slices.Clone(flow.removed)
+	flow.mu.Unlock()
+	if !slices.Equal(removed, []string{"books"}) {
+		t.Errorf("the bridge removed %v, want books once", removed)
+	}
 }

@@ -515,6 +515,7 @@ func (s *Server) GetBook(ctx context.Context, req GetBookRequestObject) (GetBook
 	out.ArtSource = artSourceJSON(bd.ArtSource)
 	setOpt(&out.Subtitle, bd.Subtitle)
 	setOpt(&out.Series, bd.Series)
+	setOpt(&out.AuthorPid, bd.AuthorPID)
 	setOpt(&out.SeriesPid, bd.SeriesPID)
 	setOpt(&out.SeriesSequence, bd.SeriesSequence)
 	setOpt(&out.Publisher, bd.Publisher)

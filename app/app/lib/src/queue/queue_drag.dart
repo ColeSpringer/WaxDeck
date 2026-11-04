@@ -47,9 +47,15 @@ class QueueDrop {
     required WaxDeckRepository repository,
     required String facet,
     required String facetKey,
+    MediaType? mediaType,
   }) => QueueDrop(
     label: label,
-    resolve: () => bucketItems(repository, facet: facet, facetKey: facetKey),
+    resolve: () => bucketItems(
+      repository,
+      facet: facet,
+      facetKey: facetKey,
+      mediaType: mediaType,
+    ),
   );
 
   /// What the drag is of, for the feedback and for what is said after.
@@ -70,8 +76,10 @@ Future<List<ItemSummary>> bucketItems(
   WaxDeckRepository repository, {
   required String facet,
   required String facetKey,
+  MediaType? mediaType,
 }) async {
   final page = await repository.listItems(
+    mediaType: mediaType,
     facet: facet,
     facetKey: facetKey,
     limit: kQueueDropCap,

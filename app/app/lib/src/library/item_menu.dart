@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../books/book_dimension.dart';
 import '../discovery/discovery_actions.dart';
 import '../home/pin_action.dart';
 import '../home/pinned_controller.dart';
@@ -41,6 +42,9 @@ Future<void> showItemMenuForSummary(
   WidgetRef ref,
   ItemSummary item, {
   bool withPin = false,
+  void Function(WidgetRef ref)? onPlay,
+  bool inProgress = false,
+  bool withOpen = false,
 }) => showItemMenuSheet(
   context,
   ref,
@@ -52,6 +56,10 @@ Future<void> showItemMenuForSummary(
   album: item.album,
   albumPid: item.albumPid,
   withPin: withPin,
+  onPlay: onPlay,
+  inProgress: inProgress,
+  withOpen: withOpen,
+  showPid: item is EpisodeSummary ? item.showPid : null,
 );
 
 /// The overflow sheet behind an item row, one component for every
@@ -61,15 +69,20 @@ Future<void> showItemMenuForSummary(
 /// not claimed the gesture for multi-select - a long press.
 ///
 /// What it holds follows the item, and it always holds something: the
-/// editor door for the sessions that can use it, then per medium - a
-/// track's entity navigation, pin rows where the caller had a pin
-/// affordance to keep (a book's pins itself), the instant mix, and the
-/// album share; a share link for an episode or a book, whose only
-/// handles are themselves.
+/// editor door for the sessions that can use it, then a book's or an
+/// episode's own screen where the caller passes [withOpen] (only where the
+/// row's own tap does not open it: a shelf whose tap resumes, a queue or
+/// playlist row whose tap plays), an episode beneath its show where the
+/// caller knows [showPid], and a book's play where the caller passes
+/// [onPlay], labelled Resume when [inProgress]; then per medium - a
+/// track's entity navigation or a book's author, pin rows where the
+/// caller had a pin affordance to keep (a book's pins itself), the
+/// instant mix, and the album share; a share link for an episode or a
+/// book, whose only handles are themselves.
 /// The music-only gating on the navigation rows is load-bearing: an
 /// audiobook carries its author as `artistPid`, and routing that into
 /// the Music hub's artist bucket would be a wrong answer dressed as a
-/// door.
+/// door. A book's goes to its author's page under Books instead.
 Future<void> showItemMenuSheet(
   BuildContext context,
   WidgetRef ref, {
@@ -82,6 +95,10 @@ Future<void> showItemMenuSheet(
   String? albumPid,
   bool withGoToAlbum = true,
   bool withPin = false,
+  void Function(WidgetRef ref)? onPlay,
+  bool inProgress = false,
+  bool withOpen = false,
+  String? showPid,
 }) async {
   // Captured before the sheet, which outlives the row that opened it: a
   // queue entry scrolls into collapsed history, a sync delta rewrites a
@@ -92,17 +109,17 @@ Future<void> showItemMenuSheet(
   final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final pinnedController = ref.read(pinnedEntitiesProvider.notifier);
-  // Which navigator this row sits in decides the verb, and it has to be
-  // read before anything is popped. On the root navigator (the queue
-  // and player overlays) an in-shell location is gone to, never pushed,
-  // or a second shell is built beside the mounted one; inside the shell
-  // (every listing, and the queue's side panel) `push` is the better
-  // answer - it leaves the screen underneath for the way back, where
-  // `go` would reset the branch. The same derivation, for the same
-  // hazard, as the lyrics panel's editor door.
-  final overRoot =
-      Navigator.of(context) == Navigator.of(context, rootNavigator: true);
+  // The page that raised the sheet, when it is a branch page: read off
+  // its own route, which stays exact for a pushed one. The overlays (the
+  // queue, the player) and the side panel sit beside the shell's
+  // branches, not in one, so they have none.
+  final here = StatefulNavigationShell.maybeOf(context) == null
+      ? null
+      : GoRouterState.of(context).matchedLocation;
   final music = mediaType == MediaType.music;
+  final episodeLocation = showPid == null
+      ? WaxRoute.episode(pid)
+      : WaxRoute.showEpisode(showPid, pid);
   await showWaxOptionSheet(
     context,
     builder: (sheetContext) => Consumer(
@@ -111,12 +128,21 @@ Future<void> showItemMenuSheet(
       // the sheet's own rather than the possibly-gone row's.
       builder: (_, sheetRef, _) {
         void close() => Navigator.of(sheetContext).pop();
+        // A door to the page the sheet stands on goes nowhere, so it is
+        // not drawn: Go to author on that author's page, and the like.
+        bool leads(String location) => here != location;
+        // A destination the route table declares directly beneath the page
+        // is gone to, as that page's own taps go: the address bar follows
+        // and back is the page. Anything else is pushed, leaving the page
+        // beneath for the way back; over an overlay the push first leaves
+        // the overlay, or it would stack a second shell beside the mounted
+        // one.
         void open(String location) {
           close();
-          if (overRoot) {
+          if (here != null && here == router.declaredParentOf(location)) {
             router.go(location);
           } else {
-            unawaited(router.push(location));
+            unawaited(router.pushInShell<void>(location));
           }
         }
 
@@ -142,7 +168,39 @@ Future<void> showItemMenuSheet(
                   semanticsId: SemanticsIds.editMetadata(pid),
                   onTap: () => open(WaxRoute.metadata(pid)),
                 ),
-              // Every medium, right after the editor door: what the
+              if (mediaType == MediaType.audiobook) ...<Widget>[
+                if (withOpen && leads(WaxRoute.book(pid)))
+                  WaxOptionRow(
+                    title: l10n.libraryMenuOpenBook,
+                    glyph: WaxIcons.audiobooks,
+                    semanticsId: SemanticsIds.itemMenuOpenBook,
+                    onTap: () => open(WaxRoute.book(pid)),
+                  ),
+                if (onPlay != null)
+                  WaxOptionRow(
+                    title: inProgress
+                        ? l10n.libraryMenuResume
+                        : l10n.libraryMenuPlay,
+                    glyph: WaxIcons.play,
+                    semanticsId: SemanticsIds.itemMenuPlay,
+                    // Through the sheet's own ref, before the close: the row
+                    // that raised the sheet may be gone by now.
+                    onTap: () {
+                      onPlay(sheetRef);
+                      close();
+                    },
+                  ),
+              ],
+              if (mediaType == MediaType.podcast &&
+                  withOpen &&
+                  leads(episodeLocation))
+                WaxOptionRow(
+                  title: l10n.libraryMenuOpenEpisode,
+                  glyph: WaxIcons.podcasts,
+                  semanticsId: SemanticsIds.itemMenuOpenEpisode,
+                  onTap: () => open(episodeLocation),
+                ),
+              // Every medium, right after the doors above: what the
               // editor writes is what this reads back, plus the play
               // record and the file's own facts, which nothing else
               // shows.
@@ -161,7 +219,10 @@ Future<void> showItemMenuSheet(
                   );
                 },
               ),
-              if (music && withGoToAlbum && albumPid != null)
+              if (music &&
+                  withGoToAlbum &&
+                  albumPid != null &&
+                  leads(WaxRoute.musicBucket(MusicDimension.albums, albumPid)))
                 WaxOptionRow(
                   title: l10n.libraryMenuGoToAlbum,
                   subtitle: album,
@@ -171,7 +232,11 @@ Future<void> showItemMenuSheet(
                     WaxRoute.musicBucket(MusicDimension.albums, albumPid),
                   ),
                 ),
-              if (music && artistPid != null)
+              if (music &&
+                  artistPid != null &&
+                  leads(
+                    WaxRoute.musicBucket(MusicDimension.artists, artistPid),
+                  ))
                 WaxOptionRow(
                   title: l10n.libraryMenuGoToArtist,
                   subtitle: artist,
@@ -182,6 +247,18 @@ Future<void> showItemMenuSheet(
                   // The screen resolves the card instead.
                   onTap: () => open(
                     WaxRoute.musicBucket(MusicDimension.artists, artistPid),
+                  ),
+                ),
+              if (mediaType == MediaType.audiobook &&
+                  artistPid != null &&
+                  leads(WaxRoute.bookBucket(BookDimension.authors, artistPid)))
+                WaxOptionRow(
+                  title: l10n.libraryMenuGoToAuthor,
+                  subtitle: artist,
+                  glyph: WaxIcons.artists,
+                  semanticsId: SemanticsIds.itemMenuGoAuthor,
+                  onTap: () => open(
+                    WaxRoute.bookBucket(BookDimension.authors, artistPid),
                   ),
                 ),
               if (withPin)

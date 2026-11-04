@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -169,6 +171,369 @@ func TestAddingALibraryAtARegisteredPathIsRefused(t *testing.T) {
 	}
 	if roots := svc.RootTable(); len(roots) != 1 || roots[0].Name != "configured" || !roots[0].Managed {
 		t.Errorf("roots = %+v, want the configured root untouched", roots)
+	}
+}
+
+// A create at a folder the catalog holds under another path through a
+// symlink is refused: two libraries on one folder would catalog it twice.
+// The path is stored resolved, so this is the path check's refusal; the
+// identity checks a bind mount needs are pinned below.
+func TestAddingALibraryAtARegisteredFolderByAnotherPathIsRefused(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
+	links := t.TempDir()
+	parent := filepath.Join(links, "parent")
+	if err := os.Symlink(dataDir, parent); err != nil {
+		t.Fatal(err)
+	}
+	self := filepath.Join(links, "self")
+	if err := os.Symlink(filepath.Join(dataDir, "configured"), self); err != nil {
+		t.Fatal(err)
+	}
+	for i, path := range []string{filepath.Join(parent, "configured"), self} {
+		name := fmt.Sprintf("again-%d", i)
+		_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: path})
+		if KindOf(err) != KindConflict || !strings.Contains(err.Error(), "configured") {
+			t.Fatalf("a create at %s = %v, want conflict naming the library that holds the folder", path, err)
+		}
+		stored, err := svc.db.LibraryRootsList(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slices.ContainsFunc(stored, func(r wdb.LibraryRoot) bool { return r.Name == name }) {
+			t.Errorf("stored names = %+v, want none for the refused library", stored)
+		}
+	}
+	if roots := svc.RootTable(); len(roots) != 1 || roots[0].Name != "configured" {
+		t.Errorf("roots = %+v, want the configured root alone", roots)
+	}
+}
+
+// A library created at a symlink, or at a path that runs through one, is
+// stored as the folder the link names: the catalog's whole-library scan
+// does not follow a symlinked root, so the track already there is
+// cataloged only this way.
+func TestALibraryCreatedAtASymlinkIsStoredAsItsFolder(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
+	base := resolvedTempDir(t)
+	itself, through := filepath.Join(base, "itself"), filepath.Join(base, "through", "music")
+	for _, dir := range []string{itself, through} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dropTrack(t, itself, "Already Behind The Link")
+	dropTrack(t, through, "Already Through The Parent")
+	for link, to := range map[string]string{"link": itself, "parent": filepath.Join(base, "through")} {
+		if err := os.Symlink(to, filepath.Join(base, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, c := range []struct{ name, typed, want, title string }{
+		{"linked", filepath.Join(base, "link"), itself, "Already Behind The Link"},
+		{"parented", filepath.Join(base, "parent", "music"), through, "Already Through The Parent"},
+	} {
+		info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: c.name, Path: c.typed})
+		if err != nil {
+			t.Fatalf("a create at %s = %v", c.typed, err)
+		}
+		if info.Path != c.want || info.Name != c.name {
+			t.Errorf("created %s at %q, want %s at the folder the link names, %q", info.Name, info.Path, c.name, c.want)
+		}
+		stored, err := svc.db.LibraryRootsList(ctx)
+		if err != nil || !slices.ContainsFunc(stored, func(r wdb.LibraryRoot) bool { return r.Name == c.name && r.Path == c.want }) {
+			t.Errorf("stored names = %+v (%v), want %s at %s", stored, err, c.name, c.want)
+		}
+		if r, ok := rootAt(svc, c.want); !ok || r.Name != c.name {
+			t.Errorf("root table entry = %+v (found %v), want %s at %s", r, ok, c.name, c.want)
+		}
+		waitForTitle(t, ctx, svc, c.title)
+	}
+}
+
+// A library added before its folder is there is stored as the folder a
+// symlink names all the same, through a link whose target is not there
+// yet and through a link to the parent of a folder not there yet: once
+// the drive mounts, its scans walk a real folder.
+func TestALibraryAtASymlinkToAFolderNotThereYetIsStoredAsThatFolder(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
+	base := resolvedTempDir(t)
+	later := filepath.Join(base, "mnt", "later")
+	if err := os.Mkdir(filepath.Join(base, "mnt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dangling := filepath.Join(base, "dangling")
+	// A relative target, as `ln -s mnt/later dangling` makes.
+	if err := os.Symlink(filepath.Join("mnt", "later"), dangling); err != nil {
+		t.Fatal(err)
+	}
+	parent := filepath.Join(base, "parent")
+	if err := os.Symlink(filepath.Join(base, "mnt"), parent); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ name, typed, want string }{
+		{"dangling", dangling, later},
+		{"through", filepath.Join(parent, "elsewhere"), filepath.Join(base, "mnt", "elsewhere")},
+	} {
+		info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: c.name, Path: c.typed, AllowAbsent: true})
+		if err != nil {
+			t.Fatalf("a create at %s = %v", c.typed, err)
+		}
+		if info.Path != c.want {
+			t.Errorf("created %s at %q, want the folder the link names, %q", c.name, info.Path, c.want)
+		}
+		if r, ok := rootAt(svc, c.want); !ok || r.Name != c.name {
+			t.Errorf("root table entry = %+v (found %v), want %s at %s", r, ok, c.name, c.want)
+		}
+	}
+}
+
+// A link not there yet whose relative target climbs out of its folder,
+// reached through a linked folder, is followed from where the link really
+// is, as the system follows it: the library is stored at that folder, not
+// at the one the path's spelling suggests, whose files stay out of it.
+func TestADanglingRelativeLinkIsFollowedFromWhereItIs(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
+	base := resolvedTempDir(t)
+	sub := filepath.Join(base, "x", "y", "sub")
+	unrelated := filepath.Join(base, "mnt", "later")
+	for _, dir := range []string{sub, unrelated} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dropTrack(t, unrelated, "Not This Library's")
+	if err := os.Symlink(filepath.Join("x", "y", "sub"), filepath.Join(base, "sp")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "mnt", "later"), filepath.Join(sub, "d")); err != nil {
+		t.Fatal(err)
+	}
+	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "climbing", Path: filepath.Join(base, "sp", "d"), AllowAbsent: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(base, "x", "y", "mnt", "later"); info.Path != want {
+		t.Errorf("created at %q, want %q, where the system follows the link", info.Path, want)
+	}
+	waitFor(t, func() bool {
+		running, err := svc.catalogJobRunning(ctx)
+		return err == nil && !running
+	}, "the create's scan to end")
+	items, err := svc.lib.Query(ctx, query.New(query.EntityItems).Where("title", query.OpIs, "Not This Library's").Limit(1).Build(), "")
+	if err != nil || len(items) > 0 {
+		t.Errorf("the catalog holds %d items from the unrelated folder (%v), want none", len(items), err)
+	}
+}
+
+// A path under a file can never become a folder, so it is refused even
+// for a library added before its folder is there.
+func TestALibraryUnderAFileIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	below := filepath.Join(file, "below")
+	for _, allowAbsent := range []bool{false, true} {
+		_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "under", Path: below, AllowAbsent: allowAbsent})
+		if KindOf(err) != KindInvalid || err.Error() != below+" lies under a file, so it can never be a folder" {
+			t.Fatalf("a create under a file (allowAbsent %v) = %v, want it refused as under a file", allowAbsent, err)
+		}
+	}
+	if roots := svc.RootTable(); len(roots) != 1 {
+		t.Errorf("roots = %+v, want the configured root alone", roots)
+	}
+}
+
+// A link not there yet whose absolute target climbs with ".." past a
+// linked folder climbs out of the folder that link names, as the system
+// follows it, not out of the target's spelling.
+func TestADanglingAbsoluteLinkClimbsFromWhereItsFoldersAre(t *testing.T) {
+	t.Parallel()
+	base := resolvedTempDir(t)
+	if err := os.MkdirAll(filepath.Join(base, "x", "y", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("x", "y", "sub"), filepath.Join(base, "sp")); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "d")
+	if err := os.Symlink(base+"/sp/../mnt/later", link); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(base, "x", "y", "mnt", "later")
+	if got, err := resolveFolder(link); err != nil || got != want {
+		t.Errorf("resolveFolder(%s) = %q, %v, want %q", link, got, err, want)
+	}
+}
+
+// A ".." that would climb out of a link not followable yet (its folder not
+// mounted) cannot be answered as the system will answer it once it is, so
+// the path is kept as given rather than guessed from its spelling.
+func TestAClimbOutOfALinkNotThereYetKeepsThePathAsGiven(t *testing.T) {
+	t.Parallel()
+	base := resolvedTempDir(t)
+	if err := os.Symlink(filepath.Join(base, "elsewhere", "mnt"), filepath.Join(base, "dang")); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "d")
+	if err := os.Symlink(base+"/dang/../x", link); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := resolveFolder(link); err == nil {
+		t.Errorf("resolveFolder(%s) = %q, want it to give up, keeping the path as given", link, got)
+	}
+	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
+	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "climbing", Path: link, AllowAbsent: true})
+	if err != nil || info.Path != link {
+		t.Errorf("created at %q (%v), want the path as given, %q", info.Path, err, link)
+	}
+}
+
+// resolveFolder steps up through any number of absent folders, and
+// through a path under a file, without reading either as a link it
+// could not follow.
+func TestResolveFolderStepsUpThroughWhatIsNotThere(t *testing.T) {
+	t.Parallel()
+	base := resolvedTempDir(t)
+	deep := base
+	for i := range 45 {
+		deep = filepath.Join(deep, fmt.Sprintf("absent-%d", i))
+	}
+	if got, err := resolveFolder(deep); err != nil || got != deep {
+		t.Errorf("resolveFolder(45 absent folders) = %q, %v, want the path as it is", got, err)
+	}
+	file := filepath.Join(base, "file")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := resolveFolder(filepath.Join(file, "below")); err != nil || got != filepath.Join(file, "below") {
+		t.Errorf("resolveFolder(under a file) = %q, %v, want the path as it is", got, err)
+	}
+}
+
+// resolvedTempDir is t.TempDir with its own symlinks followed, as macOS's
+// /var -> /private/var needs, so a test's expected paths are the stored
+// ones.
+func resolvedTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// A create at a folder a library holds under a path no string check
+// equates with it, as a bind mount gives, is refused by the folders'
+// identity alone: the stat of the configured root's folder answers the
+// new folder.
+func TestAddingALibraryAtARegisteredFolderIsRefusedByItsIdentity(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
+	configured := filepath.Join(dataDir, "configured")
+	other := t.TempDir()
+	svc.creates.stat = func(path string) (fs.FileInfo, error) {
+		if path == configured {
+			return os.Stat(other)
+		}
+		return os.Stat(path)
+	}
+	_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "bound", Path: other})
+	if KindOf(err) != KindConflict || !strings.Contains(err.Error(), "already holds that folder") {
+		t.Fatalf("a create at the configured root's folder by another path = %v, want conflict", err)
+	}
+	if roots := svc.RootTable(); len(roots) != 1 || roots[0].Name != "configured" {
+		t.Errorf("roots = %+v, want the configured root alone", roots)
+	}
+}
+
+// A link and the folder it names, created together, make one library:
+// while the first create to pass its checks has stored nothing yet, the
+// other is refused as the same folder being added, which only the
+// folders' identity can tell.
+func TestALinkAndItsFolderCreatedTogetherMakeOneLibrary(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
+	base := resolvedTempDir(t)
+	folder := filepath.Join(base, "folder")
+	if err := os.Mkdir(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(folder, link); err != nil {
+		t.Fatal(err)
+	}
+	// Each look waits until both creates are looking, and the first to
+	// pass its checks waits until the other has answered.
+	both := make(chan struct{})
+	var arrived, passed atomic.Int32
+	svc.creates.look = func(path string) folderAnswer {
+		if arrived.Add(1) == 2 {
+			close(both)
+		}
+		<-both
+		return lookAt(path)
+	}
+	first := newGate(t)
+	svc.creates.free = func() {
+		if passed.Add(1) == 1 {
+			first.wait()
+		}
+	}
+	errs := make(chan error, 2)
+	for i, path := range []string{link, folder} {
+		go func() {
+			_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: fmt.Sprintf("one-%d", i), Path: path})
+			errs <- err
+		}()
+	}
+	var refused []error
+	for range 2 {
+		if err := <-errs; err != nil {
+			refused = append(refused, err)
+		}
+		first.release()
+	}
+	if len(refused) != 1 || KindOf(refused[0]) != KindConflict || !strings.Contains(refused[0].Error(), "is being added") {
+		t.Fatalf("refused %v, want exactly one create refused as the same folder being added", refused)
+	}
+	if roots := svc.RootTable(); len(roots) != 2 {
+		t.Errorf("roots = %+v, want the configured root and one library on the folder", roots)
+	}
+}
+
+// Creates while a library's folder hangs share one stat of it: a create
+// does not start another while one is out, and each lands meanwhile.
+func TestCreatesShareOneStatOfALibraryFolderThatHangs(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
+	configured := filepath.Join(dataDir, "configured")
+	hangs := newGate(t)
+	var stats atomic.Int32
+	svc.creates.wait = 100 * time.Millisecond
+	svc.creates.stat = func(path string) (fs.FileInfo, error) {
+		if path == configured {
+			stats.Add(1)
+			hangs.wait()
+		}
+		return os.Stat(path)
+	}
+	for i := range 3 {
+		if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: fmt.Sprintf("beside-%d", i), Path: t.TempDir()}); err != nil {
+			t.Fatalf("create %d beside a folder that hangs = %v, want it added", i, err)
+		}
+	}
+	if n := stats.Load(); n != 1 {
+		t.Fatalf("%d stats of the folder that hangs over three creates, want one", n)
 	}
 }
 
@@ -578,6 +943,15 @@ func TestARuntimeLibraryKeepsItsNameAndPolicyAcrossARestart(t *testing.T) {
 	ctx, svc, _, _ = openServiceAt(t, dataDir, watch)
 	if r, ok := rootAt(svc, books); !ok || r.Name != "books" || !r.Managed {
 		t.Fatalf("root after a restart = %+v (found %v), want books, managed", r, ok)
+	}
+	// The start's first pass arms it like every root it opens with: no
+	// catch-up scan on top of what the restart owes.
+	awaitClosed(t, svc.watchReady, "the watcher to arm after the restart")
+	svc.watchQueue.mu.Lock()
+	_, pending := svc.watchQueue.dirs[books]
+	svc.watchQueue.mu.Unlock()
+	if pending {
+		t.Error("the restart owed a library it already watched a catch-up scan")
 	}
 	dropAndWaitForTheWatcher(t, ctx, svc, books, "Dropped After The Restart")
 }

@@ -1077,6 +1077,8 @@ components:
         keys are case-insensitive and canonicalize to upper case, so
         `tag.mood` and `tag.MOOD` are one dimension; responses echo the
         canonical spelling.
+        `kind` buckets items by what they are; its keys are `track`,
+        `book`, and `episode`.
       example: genre
 
     FacetSort:

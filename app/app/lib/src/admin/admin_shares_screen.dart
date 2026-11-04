@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/paged_scroll.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import '../sharing/share_dialog.dart';
@@ -27,27 +28,10 @@ class AdminSharesScreen extends ConsumerStatefulWidget {
   ConsumerState<AdminSharesScreen> createState() => _AdminSharesScreenState();
 }
 
-class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen> {
-  final _scroll = ScrollController();
-
+class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen>
+    with PagedScroll {
   @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_maybeLoadMore);
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  void _maybeLoadMore() {
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    if (position.pixels < position.maxScrollExtent - 400) return;
-    ref.read(adminSharesProvider.notifier).loadMore();
-  }
+  void loadMore() => ref.read(adminSharesProvider.notifier).loadMore();
 
   void _report(String message) {
     ref
@@ -79,13 +63,17 @@ class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen> {
   @override
   Widget build(BuildContext context) {
     final shares = ref.watch(adminSharesProvider);
+    fillViewportWhile(
+      (shares.value?.hasMore ?? false) && !(shares.value?.loadingMore ?? true),
+      at: shares.value?.shares,
+    );
     final l10n = context.l10n;
 
     return WaxScaffold(
       title: l10n.adminSectionShares,
       largeTitle: false,
       semanticsId: SemanticsIds.adminShares,
-      controller: _scroll,
+      controller: pagedScroll,
       onBack: adminBack(context),
       slivers: <Widget>[
         AsyncSliverFace<SharesState>(

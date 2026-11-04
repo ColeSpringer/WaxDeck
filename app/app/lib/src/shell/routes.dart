@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../books/book_dimension.dart';
 import '../music/music_controllers.dart';
 import '../settings/settings_registry.dart';
 
@@ -63,8 +64,24 @@ abstract final class WaxRoute {
   /// endpoint enumerates `kind` and `tag.<KEY>` too, whose keys are free
   /// text, and a helper that is safe only for its current callers is a
   /// trap for the next one.
-  static String musicBucket(MusicDimension dimension, String segment) =>
-      '${musicIndex(dimension)}/${Uri.encodeComponent(segment)}';
+  ///
+  /// A `/music` listing lists music. [wholeLibrary] is for a link whose
+  /// medium is unknown (a health fold, the editor's door for an item that
+  /// is not a track): the location says so, so a stranger opening it gets
+  /// the same list.
+  static String musicBucket(
+    MusicDimension dimension,
+    String segment, {
+    bool wholeLibrary = false,
+  }) {
+    final path = '${musicIndex(dimension)}/${Uri.encodeComponent(segment)}';
+    return wholeLibrary ? '$path?$scopeParam=$wholeLibraryScope' : path;
+  }
+
+  /// The query a listing's location states its scope in, and the value
+  /// that names the whole library.
+  static const scopeParam = 'in';
+  static const wholeLibraryScope = 'library';
 
   /// Everything one artist plays on, as a list rather than as a screen
   /// about them. Its own location beneath the artist, because the
@@ -113,11 +130,21 @@ abstract final class WaxRoute {
   static String book(String pid) => '$books/$pid';
 
   /// The series index, and one series beneath it. Both are locations a
-  /// stranger can open, so both are gone to; the index's declared
-  /// parent is the books hub, which is where the shelf that opens it
-  /// lives.
+  /// stranger can open, gone to from their declared parents (the hub for
+  /// the index, the index for a series) and pushed from anywhere else, as
+  /// a book is.
   static const bookSeriesIndex = '$books/series';
   static String bookSeries(String pid) => '$bookSeriesIndex/$pid';
+
+  /// The authors or genres index, and one bucket beneath it, routed as
+  /// the series ones are: gone to from the declared parent (the hub for
+  /// an index, the index for a bucket) and pushed from anywhere else.
+  /// [segment] is the handle [musicBucketSegment] mints for the
+  /// dimension behind it.
+  static String bookIndex(BookDimension dimension) =>
+      '$books/${dimension.segment}';
+  static String bookBucket(BookDimension dimension, String segment) =>
+      '${bookIndex(dimension)}/${Uri.encodeComponent(segment)}';
 
   static const radio = '/radio';
 
@@ -357,12 +384,12 @@ extension WaxPushOnce on GoRouter {
   /// The check reads the match stack rather than the reported URL,
   /// because go_router deliberately keeps imperative pushes out of that
   /// URL and `optionURLReflectsImperativeAPIs` is not the way
-  /// back. The stack does carry them.
+  /// back. The stack does carry them, and its top is the deepest match:
+  /// a push merges into the signed-in shell's match, which keeps the
+  /// location the shell was first opened at.
   void pushOnce(String location) {
-    final matches = routerDelegate.currentConfiguration.matches;
-    if (matches.isNotEmpty && matches.last.matchedLocation == location) {
-      return;
-    }
+    final top = routerDelegate.currentConfiguration.lastOrNull;
+    if (top?.matchedLocation == location) return;
     unawaited(push<void>(location));
   }
 }
@@ -399,6 +426,32 @@ extension WaxLeave on GoRouter {
 extension WaxLeaveContext on BuildContext {
   void leave({String fallback = WaxRoute.home, Object? result}) =>
       GoRouter.of(this).leave(fallback: fallback, result: result);
+}
+
+/// Where a location sits in the route table.
+extension WaxDeclaredParent on GoRouter {
+  /// The page [location] is declared beneath: the match before its own.
+  /// Null at the top of the table and for a location off it. Matched
+  /// without the redirects, which say who may open a page, not where it
+  /// is declared.
+  String? declaredParentOf(String location) {
+    final match = configuration.findMatch(Uri.parse(location));
+    if (match.isError) return null;
+    final pages = <RouteMatch>[];
+    void walk(List<RouteMatchBase> matches) {
+      for (final m in matches) {
+        switch (m) {
+          case ShellRouteMatch():
+            walk(m.matches);
+          case RouteMatch():
+            pages.add(m);
+        }
+      }
+    }
+
+    walk(match.matches);
+    return pages.length < 2 ? null : pages[pages.length - 2].matchedLocation;
+  }
 }
 
 /// Opening a destination in the shell from under an overlay.

@@ -674,13 +674,14 @@ void main() {
       expect(pending.spans, isEmpty);
     });
 
-    test('book detail maps chapters, parts, and settings', () {
+    test('book detail maps chapters, parts, settings, and the author', () {
       final book = bookDetailFromGen(
         gen.BookDetail(
           (b) => b
             ..pid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01'
             ..title = 'There And Back Again'
             ..authors.add('B. Baggins')
+            ..authorPid = 'ar-01JZX5N8QW3F4V9T2B7KDAUTHOR'
             ..narrators.add('Frodo')
             ..durationMs = 120000
             ..artUrl = '/media/art?pid=bk-x'
@@ -715,6 +716,7 @@ void main() {
       expect(book.parts, hasLength(2));
       expect(book.parts[1].startMs, 60000);
       expect(book.settings?.speed, 1.25);
+      expect(book.authorPid, 'ar-01JZX5N8QW3F4V9T2B7KDAUTHOR');
     });
 
     test('sync payloads carry shows and the new event kinds', () {

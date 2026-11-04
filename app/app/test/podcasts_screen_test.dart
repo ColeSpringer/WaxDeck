@@ -7,6 +7,7 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/podcasts/add_podcast.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
+import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_actions.dart';
 import 'package:waxdeck/src/providers.dart';
@@ -235,6 +236,7 @@ void main() {
     await tester.tap(byId(SemanticsIds.episodeMore('tr-new')));
     await tester.pumpAndSettle();
     expect(byId(SemanticsIds.itemMenuSheet('tr-new')), findsOneWidget);
+    expect(byId(SemanticsIds.itemMenuOpenEpisode), findsNothing);
 
     // The hub never builds the show's own listing to flip a button.
     expect(repo.listEpisodesCalls, isEmpty);
@@ -419,6 +421,15 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Details'), findsOneWidget);
+
+    // The card resumes, so the menu is the way to the episode, beneath
+    // the show the shelf knows.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuOpenEpisode),
+    );
+    await tester.pumpAndSettle();
+    final screen = tester.widget<EpisodeScreen>(find.byType(EpisodeScreen));
+    expect((screen.pid, screen.showPid), ('tr-half', 'pc-A'));
   });
 
   testWidgets('a show card plays its newest unfinished episode', (

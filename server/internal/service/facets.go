@@ -251,6 +251,9 @@ type facetCache struct {
 type facetCacheKey struct {
 	dimension string
 	sort      FacetSort
+	// kind is a kind scope's key (see facetScope.cacheKind), empty for
+	// the whole library.
+	kind string
 }
 
 // facetGeneration identifies the inputs an enumeration was computed
@@ -300,6 +303,24 @@ type facetScope struct {
 // scoped reports whether an enumeration is narrowed to a bucket, which is
 // what decides both cache participation and cursor compatibility.
 func (s facetScope) scoped() bool { return s.Facet != "" }
+
+// cacheKind answers the cache key a scope's enumeration is kept under:
+// empty for the whole library, a kind's own name for a kind scope (the
+// music and books indexes read whole dimensions under one), and not
+// cacheable for any other scope, whose keys are as many as the entities.
+func (s facetScope) cacheKind() (string, bool) {
+	if !s.scoped() {
+		return "", true
+	}
+	if s.Facet != "kind" {
+		return "", false
+	}
+	switch model.Kind(s.Key) {
+	case model.KindTrack, model.KindBook, model.KindEpisode:
+		return s.Key, true
+	}
+	return "", false
+}
 
 // Facets enumerates one browse dimension's buckets, paged: most items
 // first by default, A to Z under FacetSortLabel.
@@ -439,15 +460,19 @@ func facetSeekPrefix(buckets []FacetBucket, prefix string) int {
 // bucket list for the caller, in the requested order.
 func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension string, group read.GroupBy, order FacetSort, scope facetScope, scoped query.Query) ([]FacetBucket, error) {
 	gen := l.facetGeneration(ctx)
-	// A scoped enumeration takes part in the cache in neither direction.
-	// Not read, because the cached entry is the whole library's and
-	// answering it here would hand an artist page every album there is.
-	// Not published either, and that is the load-bearing half: the key
-	// names a dimension and an order, so a scoped result published under
-	// it would poison the unscoped read for everyone until the catalog
-	// moved. Keying the scope in instead would mint an unbounded number
-	// of entries, one per entity, which is what the bound on the scoped
-	// read makes unnecessary - it is cheap because it is scoped.
+	// An entity-scoped enumeration takes part in the cache in neither
+	// direction. Not read, because the cached entry is another scope's
+	// and answering it here would hand an artist page every album there
+	// is. Not published either, and that is the load-bearing half: a
+	// result published under a key that does not name its scope would
+	// poison that key's read for everyone until the catalog moved.
+	// Keying the entity in instead would mint an unbounded number of
+	// entries, one per entity, which is what the bound on such a read
+	// makes unnecessary: it is cheap because it is narrow.
+	//
+	// A kind scope is the exception, and is keyed in: there are three
+	// kinds, and a music index's kind is most of the library, as
+	// expensive as the unscoped read and paged the same way.
 	//
 	// The content-rule half of the gate is newer than the library half
 	// and matters for the same reason: the scope query carries the
@@ -459,11 +484,12 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 	// so an ordinary rule-free account computes the same enumeration an
 	// explicit one does and shares its cache line.
 	ruleFree := uc.Admin || (len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0)
-	cacheable := uc.AllLibraries && ruleFree && !scope.scoped()
+	kind, keyed := scope.cacheKind()
+	cacheable := uc.AllLibraries && ruleFree && keyed
 	if cacheable {
 		l.facets.mu.Lock()
 		if l.facets.gen == gen {
-			if cached, ok := l.facets.byDimension[facetCacheKey{dimension, order}]; ok {
+			if cached, ok := l.facets.byDimension[facetCacheKey{dimension, order, kind}]; ok {
 				l.facets.mu.Unlock()
 				return cached, nil
 			}
@@ -521,12 +547,12 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 
 	sortFacetBuckets(out, order)
 	if !cacheable {
-		// Nothing a restricted caller or a scoped read computes is
-		// published, so the other order would be sorted for a cache it can
-		// never reach.
+		// Nothing a restricted caller or an entity-scoped read computes
+		// is published, so the other order would be sorted for a cache it
+		// can never reach.
 		return out, nil
 	}
-	l.publishFacetBuckets(ctx, gen, dimension, order, out)
+	l.publishFacetBuckets(ctx, gen, facetCacheKey{dimension, order, kind}, out)
 
 	// Both orders come out of the one aggregation. The catalog call is the
 	// expensive half and the answers differ only in arrangement, so
@@ -538,7 +564,7 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 	}
 	alternate := append([]FacetBucket(nil), out...)
 	sortFacetBuckets(alternate, other)
-	l.publishFacetBuckets(ctx, gen, dimension, other, alternate)
+	l.publishFacetBuckets(ctx, gen, facetCacheKey{dimension, other, kind}, alternate)
 	return out, nil
 }
 
@@ -564,7 +590,7 @@ func (l *Library) facetGeneration(ctx context.Context) facetGeneration {
 // generation is read before the lock, which holds no catalog read, and
 // under it only a generation dominating the held one is installed, so a
 // publisher holding an older one cannot land after a newer publish.
-func (l *Library) publishFacetBuckets(ctx context.Context, gen facetGeneration, dimension string, order FacetSort, buckets []FacetBucket) {
+func (l *Library) publishFacetBuckets(ctx context.Context, gen facetGeneration, key facetCacheKey, buckets []FacetBucket) {
 	if l.facetGeneration(ctx) != gen {
 		return
 	}
@@ -576,7 +602,7 @@ func (l *Library) publishFacetBuckets(ctx context.Context, gen facetGeneration, 
 	if l.facets.gen != gen || l.facets.byDimension == nil {
 		l.facets.gen, l.facets.byDimension = gen, map[facetCacheKey][]FacetBucket{}
 	}
-	l.facets.byDimension[facetCacheKey{dimension, order}] = buckets
+	l.facets.byDimension[key] = buckets
 }
 
 // sortFacetBuckets arranges buckets in one of the two orders, stably, so

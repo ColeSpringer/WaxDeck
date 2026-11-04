@@ -343,6 +343,34 @@ Every entry carries a gate tag saying what actually blocks it:
   them at the replacement (dropping what the new catalog lacks, after
   telling each subscriber) is the fix.
 
+- `[decision]` **A library root that hangs inside a walk can still
+  stall the library watcher.** Every stat, walk and mount-table read
+  runs in a per-root look off the watcher's loop, so a root whose folder
+  stops answering holds only its own look. But fsnotify holds its
+  watcher's lock across `inotify_add_watch`, which resolves the path,
+  so a hard network mount that stops answering in the middle of a
+  walk's `Add` blocks the loop's table calls (`WatchList`, `Remove`) and
+  fsnotify's own event reader until the mount answers. The window is the
+  walk of a root taken up (a new or returning root, a lost watch, a
+  mount change, an overflow), not each recheck. Isolating it means one
+  kernel watcher per root, which spends the per-user
+  `fs.inotify.max_user_instances` budget (128 by default, shared with
+  every other process of that user). Blocked on the owner's call on
+  that trade-off.
+
+- `[decision]` **A worker stuck in a hung stat holds up server
+  shutdown.** The library watcher's looks and a create's stats of
+  library folders run on supervised workers, and a stat on a hard mount
+  whose server is gone never returns, so `group.Wait()` in
+  `cmd/waxdeck` waits on it unbounded and the service manager's stop
+  timeout ends the process. Each hung folder holds at most one such
+  worker per watcher run and one for creates, however often it is
+  asked. The ways out each change a contract: a probe-worker kind in
+  `supervise` that `Wait` does not count (CLAUDE.md rule 7), or a
+  bounded wait in main, which would let `svc.Close` race workers that
+  are slow rather than hung. Blocked on the owner's call on that
+  trade-off.
+
 - `[in-repo]` **The Android build turns Kotlin's incremental compiler
   off on Windows, and should stop having to.** Kotlin 2.3.20 opens a
   cache file it already holds open while closing it, and every module

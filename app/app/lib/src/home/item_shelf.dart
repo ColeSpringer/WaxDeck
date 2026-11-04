@@ -8,10 +8,9 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
+import '../library/item_play.dart';
 import '../media_view.dart';
-import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
-import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../sync/streamed_play_states.dart';
@@ -46,6 +45,7 @@ class ItemShelf extends ConsumerWidget {
     this.withProgress = false,
     this.orderedByProgress = false,
     this.allLocation,
+    this.tapResumes = false,
   });
 
   /// The handle stem, and what a spec calls this shelf. Not the title: a
@@ -68,6 +68,11 @@ class ItemShelf extends ConsumerWidget {
   /// played" but the shelf itself, and a door onto a screen that does not
   /// exist is worse than no door.
   final String? allLocation;
+
+  /// Whether a book's or an episode's tap carries it on in place rather
+  /// than opening its screen, for the shelf that exists to continue. The
+  /// screen is in the card's menu instead; a track plays either way.
+  final bool tapResumes;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -105,8 +110,8 @@ class ItemShelf extends ConsumerWidget {
     // shelf's own items only, since the reports are replaced whole on
     // every report, for any item.
     final streamed = <String, PlayState>{
-      if (withProgress)
-        for (final item in read)
+      for (final item in read)
+        if (withProgress || item.mediaType != MediaType.music)
           item.pid: ?ref.watch(
             streamedPlayStatesProvider.select((all) => all[item.pid]),
           ),
@@ -181,7 +186,12 @@ class ItemShelf extends ConsumerWidget {
             onTapItem: (tile) {
               final at = tiles.indexOf(tile);
               if (at < 0) return;
-              openHomeItem(context, ref, items[at], positionOf(items[at].pid));
+              final item = items[at];
+              if (tapResumes && item.mediaType != MediaType.music) {
+                playOrResumeItem(ref, item, positionOf(item.pid));
+                return;
+              }
+              openHomeItem(context, ref, item, positionOf(item.pid));
             },
             // The cover is the thing that plays here, so it says so
             // under a pointer. Nothing appears for a finger: the
@@ -189,15 +199,32 @@ class ItemShelf extends ConsumerWidget {
             onPlayItem: (tile) {
               final at = tiles.indexOf(tile);
               if (at < 0) return;
-              playHomeItem(ref, items[at], positionOf(items[at].pid));
+              playOrResumeItem(ref, items[at], positionOf(items[at].pid));
             },
+            playLabelAt: (at) =>
+                playResumes(items[at], positionOf(items[at].pid))
+                ? l10n.libraryResumeItem(items[at].title)
+                : null,
             onMoreItem: (tile) {
               final at = tiles.indexOf(tile);
               if (at < 0) return;
+              final item = items[at];
+              final progress = positionOf(item.pid);
               // Home is where the pinned shelf lives, so its cards pin
               // from here the way a listing row does.
               unawaited(
-                showItemMenuForSummary(context, ref, items[at], withPin: true),
+                showItemMenuForSummary(
+                  context,
+                  ref,
+                  item,
+                  withPin: true,
+                  onPlay: item.mediaType == MediaType.audiobook
+                      ? (ref) => playOrResumeItem(ref, item, progress)
+                      : null,
+                  inProgress: playResumes(item, progress),
+                  // Where the tap resumes, the menu is the way in.
+                  withOpen: tapResumes,
+                ),
               );
             },
           ),
@@ -322,38 +349,6 @@ class _DelayedShelfSkeletonState extends State<DelayedShelfSkeleton> {
   }
 }
 
-/// Plays one shelf item where it stands, going nowhere.
-///
-/// The verb behind a card's hover play affordance, and behind
-/// [openHomeItem]'s track arm. Playback lands in the dock whatever
-/// raised it; the deck bar is the way into the full player.
-///
-/// One item, and it says so: a shelf is a dozen unrelated covers
-/// rather than a running order, and queueing the shelf would fill the
-/// queue with a view. A book
-/// names itself as the source instead, because its parts roll inside the
-/// session and there is nothing else in the queue for them to be.
-void playHomeItem(WidgetRef ref, ItemSummary item, PlayProgress progress) {
-  ref
-      .read(nowPlayingProvider.notifier)
-      .play(
-        <ItemSummary>[item],
-        source: QueueSource(
-          kind: item.mediaType == MediaType.audiobook
-              ? QueueSourceKind.book
-              : QueueSourceKind.single,
-          label: item.title,
-          pid: item.pid,
-        ),
-        // The caller's own where it holds one (the Downloaded shelf's
-        // comes off the mirror), none where it holds none so the session
-        // reads its checkpoint, and the head of a finished item.
-        positionMs: progress.finished
-            ? 0
-            : (progress.positionMs > 0 ? progress.positionMs : null),
-      );
-}
-
 /// Opens or resumes whatever a home card is about.
 ///
 /// One verb for every medium, because home is the one screen that mixes
@@ -370,8 +365,9 @@ void openHomeItem(
   BuildContext context,
   WidgetRef ref,
   ItemSummary item,
-  PlayProgress progress,
-) {
+  PlayProgress progress, {
+  bool fromMirror = false,
+}) {
   switch (item.mediaType) {
     case MediaType.audiobook:
       unawaited(context.push(WaxRoute.book(item.pid)));
@@ -383,6 +379,6 @@ void openHomeItem(
       // about whether its feed still holds audio.
       unawaited(context.push(WaxRoute.episode(item.pid)));
     case MediaType.music:
-      playHomeItem(ref, item, progress);
+      playHomeItem(ref, item, progress, fromMirror: fromMirror);
   }
 }

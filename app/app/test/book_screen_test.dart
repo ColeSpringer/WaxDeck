@@ -3,12 +3,17 @@ import 'dart:async';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_controller.dart';
+import 'package:waxdeck/src/books/books_screen.dart';
+import 'package:waxdeck/src/books/series_screen.dart';
 import 'package:waxdeck/src/l10n/formats.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
@@ -21,6 +26,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'entity_header_bar.dart';
 import 'fakes.dart';
+import 'player_host.dart';
 import 'routed_host.dart';
 import 'row_finders.dart';
 import 'wax_finders.dart';
@@ -217,6 +223,157 @@ void main() {
     );
   });
 
+  group('the header links', () {
+    /// Back from the screen [from] shows, as the app bar's back does.
+    Future<void> back(WidgetTester tester, {required Finder from}) async {
+      GoRouter.of(tester.element(from)).pop();
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> pumpBook(WidgetTester tester, BookDetail book) async {
+      await tester.pumpWidget(
+        _host(FakeRepository()..books[bookPid] = book, FakeEngine()),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the author line goes to the author\'s page', (tester) async {
+      await pumpBook(
+        tester,
+        testBook(
+          bookPid,
+          authorPid: 'ar-1',
+          series: 'Harbour Chronicles',
+          seriesPid: 'sr-01JZX5N8QW3F4V9T2B7KDSERIE1',
+        ),
+      );
+
+      final author = _byId(SemanticsIds.bookAuthorLink);
+      expect(
+        find.descendant(of: author, matching: find.text('By B. Baggins')),
+        findsOneWidget,
+      );
+      // The author first, then the series, one per line.
+      expect(
+        tester.getTopLeft(author).dy,
+        lessThan(tester.getTopLeft(_byId(SemanticsIds.bookSeriesLink)).dy),
+      );
+      // Named once: the description keeps the narrators alone.
+      expect(find.textContaining('By B. Baggins'), findsOneWidget);
+      expect(find.textContaining('Read by Frodo'), findsOneWidget);
+
+      await _tap(tester, SemanticsIds.bookAuthorLink);
+      expect(
+        tester.widget<BookBucketScreen>(find.byType(BookBucketScreen)).segment,
+        'ar-1',
+      );
+      // Pushed: back is the book, not the Authors index.
+      await back(tester, from: find.byType(BookBucketScreen));
+      expect(find.byType(BookScreen), findsOneWidget);
+      expect(find.byType(BookBucketScreen), findsNothing);
+    });
+
+    testWidgets(
+      'a co-authored book links its first author and names the rest',
+      (tester) async {
+        await pumpBook(
+          tester,
+          testBook(
+            bookPid,
+            authors: const ['Zed Second', 'Alma First', 'Cy Third'],
+            authorPid: 'ar-1',
+          ),
+        );
+
+        // The link names whom it opens; the others are named, not linked.
+        expect(
+          find.descendant(
+            of: _byId(SemanticsIds.bookAuthorLink),
+            matching: find.text('By Zed Second'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('With Alma First, Cy Third'),
+          findsOneWidget,
+        );
+        expect(
+          tester.getTopLeft(find.textContaining('With Alma First')).dy,
+          lessThanOrEqualTo(
+            tester.getTopLeft(find.textContaining('Read by')).dy,
+          ),
+        );
+
+        await _tap(tester, SemanticsIds.bookAuthorLink);
+        expect(
+          tester
+              .widget<BookBucketScreen>(find.byType(BookBucketScreen))
+              .segment,
+          'ar-1',
+        );
+      },
+    );
+
+    testWidgets('a sole author has no With line', (tester) async {
+      await pumpBook(tester, testBook(bookPid, authorPid: 'ar-1'));
+      expect(find.textContaining('With '), findsNothing);
+    });
+
+    testWidgets('without an author pid the By line stays in the description', (
+      tester,
+    ) async {
+      await pumpBook(
+        tester,
+        testBook(bookPid, authors: const ['B. Baggins', 'A. Other']),
+      );
+      expect(_byId(SemanticsIds.bookAuthorLink), findsNothing);
+      expect(find.textContaining('By B. Baggins, A. Other'), findsOneWidget);
+      expect(find.textContaining('With '), findsNothing);
+    });
+
+    testWidgets('a series with no pid goes to the first author\'s page', (
+      tester,
+    ) async {
+      await pumpBook(
+        tester,
+        testBook(bookPid, authorPid: 'ar-1', series: 'Harbour Chronicles'),
+      );
+      await _tap(tester, SemanticsIds.bookSeriesLink);
+      expect(
+        tester.widget<BookBucketScreen>(find.byType(BookBucketScreen)).segment,
+        'ar-1',
+      );
+      await back(tester, from: find.byType(BookBucketScreen));
+      expect(find.byType(BookScreen), findsOneWidget);
+    });
+
+    testWidgets('the series line opens the series, and back is the book', (
+      tester,
+    ) async {
+      await pumpBook(
+        tester,
+        testBook(
+          bookPid,
+          series: 'Harbour Chronicles',
+          seriesPid: 'sr-01JZX5N8QW3F4V9T2B7KDSERIE1',
+        ),
+      );
+      await _tap(tester, SemanticsIds.bookSeriesLink);
+      expect(find.byType(BookSeriesScreen), findsOneWidget);
+      await back(tester, from: find.byType(BookSeriesScreen));
+      expect(find.byType(BookScreen), findsOneWidget);
+      expect(find.byType(BookSeriesScreen), findsNothing);
+    });
+
+    testWidgets('a series with no pid and no author goes to the hub', (
+      tester,
+    ) async {
+      await pumpBook(tester, testBook(bookPid, series: 'Harbour Chronicles'));
+      await _tap(tester, SemanticsIds.bookSeriesLink);
+      expect(find.byType(BooksScreen), findsOneWidget);
+    });
+  });
+
   testWidgets('the download is a pill in the bar, and pressing it starts it', (
     tester,
   ) async {
@@ -315,6 +472,28 @@ void main() {
     expect(find.text('Play'), findsOneWidget);
     await _tap(tester, SemanticsIds.bookResume);
     expect(engine.position, Duration.zero);
+  });
+
+  testWidgets('Resume on a paused current book plays it on, no new start', (
+    tester,
+  ) async {
+    final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
+    await tester.pumpWidget(_host(_repo(), engine));
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(BookScreen)),
+    );
+    await _tap(tester, SemanticsIds.bookResume);
+    final playback = container.read(nowPlayingProvider.notifier);
+    await playback.transportPause();
+    await tester.pumpAndSettle();
+    expect(engine.playing, isFalse);
+    final starts = playback.startGeneration;
+
+    await _tap(tester, SemanticsIds.bookResume);
+    expect(playback.startGeneration, starts, reason: 'no new start');
+    expect(engine.playing, isTrue);
+    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('tapping a chapter starts playback at its start', (tester) async {

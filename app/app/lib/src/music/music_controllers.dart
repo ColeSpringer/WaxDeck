@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../library/page_walk.dart';
 import '../providers.dart';
@@ -122,8 +123,35 @@ String musicFacetKey(MusicDimension dimension, String segment) {
       : segment;
 }
 
+/// Which part of the library an index browses: the scope its buckets
+/// are counted under, and the media type a bucket drills with, so a
+/// bucket's count and the list it opens agree.
+enum BrowseDomain {
+  music(scopeFacet: 'kind', scopeKey: 'track', drillMediaType: MediaType.music),
+  books(
+    scopeFacet: 'kind',
+    scopeKey: 'book',
+    drillMediaType: MediaType.audiobook,
+  ),
+
+  /// No scope and no media type: the entity pages and the editor, reached
+  /// from search, mixes and the health folds, where the medium is unknown
+  /// and an author-only artist must not open to an empty page.
+  wholeLibrary();
+
+  const BrowseDomain({this.scopeFacet, this.scopeKey, this.drillMediaType});
+
+  final String? scopeFacet;
+  final String? scopeKey;
+  final MediaType? drillMediaType;
+}
+
 /// Which index a caller is looking at, and in which order.
-typedef MusicIndexKey = ({MusicDimension dimension, FacetSort sort});
+typedef MusicIndexKey = ({
+  MusicDimension dimension,
+  FacetSort sort,
+  BrowseDomain domain,
+});
 
 /// Accumulated pages of one dimension's buckets.
 class MusicIndexState {
@@ -170,6 +198,10 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
   /// list that no longer exists.
   var _generation = 0;
 
+  /// Whether the read [generation] started has lost its reader: the index
+  /// was left (it is disposed with its screen), or rebuilt under it.
+  bool _gone(int generation) => !ref.mounted || generation != _generation;
+
   /// Watched in [build], so flipping the preference reloads open indexes.
   var _showUnknown = true;
 
@@ -194,7 +226,13 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
     );
     final page = await ref
         .watch(repositoryProvider)
-        .listFacets(key.dimension.wireName, sort: key.sort, limit: pageSize);
+        .listFacets(
+          key.dimension.wireName,
+          sort: key.sort,
+          facet: key.domain.scopeFacet,
+          facetKey: key.domain.scopeKey,
+          limit: pageSize,
+        );
     return MusicIndexState(
       buckets: _shown(page.buckets),
       nextCursor: page.nextCursor,
@@ -217,9 +255,11 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
             key.dimension.wireName,
             sort: key.sort,
             cursor: current.nextCursor,
+            facet: key.domain.scopeFacet,
+            facetKey: key.domain.scopeKey,
             limit: pageSize,
           );
-      if (generation != _generation) return false;
+      if (_gone(generation)) return false;
       state = AsyncData(
         MusicIndexState(
           buckets: <FacetBucket>[...current.buckets, ..._shown(page.buckets)],
@@ -233,7 +273,7 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
     } on WaxDeckApiException {
       // An expected transport or server error. Keep what we have;
       // scrolling near the end again retries.
-      if (generation == _generation) {
+      if (!_gone(generation)) {
         state = AsyncData(current.copyWith(loadingMore: false));
       }
       return false;
@@ -243,7 +283,7 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
       // two fetches from racing, so leaving it set would wedge paging
       // permanently and silently - then let the error reach the app's
       // error handler instead of vanishing here.
-      if (generation == _generation) {
+      if (!_gone(generation)) {
         state = AsyncData(current.copyWith(loadingMore: false));
       }
       rethrow;
@@ -274,9 +314,11 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
             key.dimension.wireName,
             sort: key.sort,
             startsAt: letter,
+            facet: key.domain.scopeFacet,
+            facetKey: key.domain.scopeKey,
             limit: pageSize,
           );
-      if (generation != _generation) return false;
+      if (_gone(generation)) return false;
       if (page.buckets.isEmpty) {
         // Past the last bucket is a legitimately empty page. Committing
         // it would trade the listing, and the rail with it, for nothing.
@@ -293,12 +335,12 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
       return true;
     } on WaxDeckApiException {
       // Keep the listing rather than trading it for an error screen.
-      if (generation == _generation) state = previous;
+      if (!_gone(generation)) state = previous;
       return false;
     } catch (_) {
       // A defect. Put a usable listing back first, or the screen is a
       // permanent skeleton with no retry on it.
-      if (generation == _generation) state = previous;
+      if (!_gone(generation)) state = previous;
       rethrow;
     }
   }
@@ -310,12 +352,12 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
   }
 }
 
-final musicIndexProvider =
-    AsyncNotifierProvider.family<
-      MusicIndexController,
-      MusicIndexState,
-      MusicIndexKey
-    >(MusicIndexController.new);
+/// Disposed with the index: a visit reads the account's library as it
+/// stands, and the window holds still while the index is open.
+final musicIndexProvider = AsyncNotifierProvider.autoDispose
+    .family<MusicIndexController, MusicIndexState, MusicIndexKey>(
+      MusicIndexController.new,
+    );
 
 /// What an index opens in with no stored order. A-to-Z where an alphabet
 /// is how anyone looks for a thing; biggest-first for genres and years,
@@ -332,12 +374,18 @@ String browseSortLabel(AppLocalizations l10n, FacetSort sort) => switch (sort) {
   FacetSort.count => l10n.libraryBrowseSortMostFirst,
 };
 
-/// Which order an index is showing. Per dimension, because the choice is
-/// about the list in front of you.
-class MusicIndexSort extends Notifier<FacetSort> {
-  MusicIndexSort(this.dimension);
+/// Which index: a dimension over a domain.
+typedef MusicIndexId = ({MusicDimension dimension, BrowseDomain domain});
 
-  final MusicDimension dimension;
+/// Which order an index is showing. Per index, because the choice is
+/// about the list in front of you: sorting Books > Authors leaves Music >
+/// Artists alone. Both start from the one stored default per dimension.
+class MusicIndexSort extends Notifier<FacetSort> {
+  MusicIndexSort(this.key);
+
+  final MusicIndexId key;
+
+  MusicDimension get dimension => key.dimension;
 
   /// Outranks the stored default. Dropped when that value itself
   /// changes: the provider outlives its screen, so a toolbar tap would
@@ -370,13 +418,17 @@ class MusicIndexSort extends Notifier<FacetSort> {
 }
 
 final musicIndexSortProvider =
-    NotifierProvider.family<MusicIndexSort, FacetSort, MusicDimension>(
+    NotifierProvider.family<MusicIndexSort, FacetSort, MusicIndexId>(
       MusicIndexSort.new,
     );
 
 /// One drilled listing: a dimension bucket, or the whole tracks index
 /// when [dimension] is null.
-typedef MusicListing = ({MusicDimension? dimension, String segment});
+typedef MusicListing = ({
+  MusicDimension? dimension,
+  String segment,
+  BrowseDomain domain,
+});
 
 /// Accumulated pages of a listing's items.
 class MusicItemsState {
@@ -433,17 +485,13 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
   Future<ItemPage> _page(WaxDeckRepository repository, String? cursor) {
     final dimension = listing.dimension;
     return repository.listItems(
-      // A bucket is drilled exactly as its count was computed, with
-      // no media type on top. The music dimensions already leave
-      // podcast episodes out server-side, and they take in whatever
-      // else carries an artist or a year - an audiobook has both - so
-      // narrowing to music here would open a bucket of two to an
-      // empty list. A count that disagrees with the list it opens is
-      // the one thing faceted browse cannot do.
-      //
-      // The tracks index is the other case and does filter: it is
-      // "every track", not a bucket of anything.
-      mediaType: dimension == null ? MediaType.music : null,
+      // A bucket drills under its domain's media type, which is the
+      // scope its count was taken over: a count that disagrees with the
+      // list it opens is the one thing faceted browse cannot do. The
+      // tracks index is "every track", not a bucket of anything.
+      mediaType: dimension == null
+          ? MediaType.music
+          : listing.domain.drillMediaType,
       facet: dimension?.wireName,
       facetKey: dimension == null
           ? null
@@ -525,11 +573,11 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
   }
 }
 
-/// Auto-disposed, unlike the index providers: a dimension is one of four,
-/// but a bucket is any artist, album, genre, or year in the library.
-/// Keeping every drilled bucket's pages alive for the app's lifetime
-/// would grow without bound as someone browsed, and would serve the stale
-/// page set when they came back.
+/// Auto-disposed, as the index pages are: a bucket is any artist, album,
+/// genre, or year in the library, and keeping every drilled bucket's
+/// pages alive for the app's lifetime would grow without bound as
+/// someone browsed, and would serve the stale page set when they came
+/// back.
 /// A refusal is about the request rather than the connection (a key a
 /// bucket cannot take is `invalid-request`), so the screen draws its
 /// error state instead of spinning through the ladder. A key that names
@@ -562,19 +610,29 @@ class MusicIndexCount {
   String get label => atLeast ? '$buckets+' : '$buckets';
 }
 
-/// Cached for the session rather than auto-disposed: the hub is a
-/// destination people come back to, and four dimensions of buckets is
-/// not a fetch worth repeating on every visit.
+/// Cached for the session rather than auto-disposed: a hub is a
+/// destination people come back to, and a hub's counts are not a fetch
+/// worth repeating on every visit. The account, the catalog fan-out and
+/// a kind change move it. It counts what the index lists, so the
+/// unknown bucket only while the account shows it.
 final musicIndexCountProvider =
-    FutureProvider.family<MusicIndexCount, MusicDimension>((
-      ref,
-      dimension,
-    ) async {
+    FutureProvider.family<MusicIndexCount, MusicIndexId>((ref, key) async {
+      ref.watch(signedInAccountProvider);
+      final showUnknown = ref.watch(
+        prefsControllerProvider.select(
+          (prefs) => prefs.value?.browseShowUnknown ?? true,
+        ),
+      );
       final page = await ref
           .watch(repositoryProvider)
-          .listFacets(dimension.wireName, limit: MusicIndexController.pageSize);
+          .listFacets(
+            key.dimension.wireName,
+            facet: key.domain.scopeFacet,
+            facetKey: key.domain.scopeKey,
+            limit: MusicIndexController.pageSize,
+          );
       return MusicIndexCount(
-        buckets: page.buckets.length,
+        buckets: page.buckets.where((b) => showUnknown || !b.unknown).length,
         atLeast: page.hasMore,
       );
     });

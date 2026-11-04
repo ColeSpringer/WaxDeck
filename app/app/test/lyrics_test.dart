@@ -2,12 +2,19 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/app.dart';
+import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/lyrics.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_screen.dart';
+import 'package:waxdeck/src/shell/adaptive_shell.dart';
+import 'package:waxdeck/src/shell/router.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/side_panel.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -394,6 +401,55 @@ void main() {
     expect(find.byType(MetadataScreen), findsOneWidget);
     expect(find.text('No lyrics for this track'), findsNothing);
     await harness.endPlayback(tester);
+  });
+
+  testWidgets('the door from the player overlay leaves it for the shell', (
+    tester,
+  ) async {
+    // The whole app: the player is an overlay beside the shell, and a
+    // push of the editor over it would stack a second shell.
+    _phone(tester);
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        audioEngineProvider.overrideWithValue(
+          FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        ),
+        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const WaxDeckApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    PlayerHarness(container).play([testItem(_pid)]);
+    await tester.pumpAndSettle();
+    container.read(routerProvider).push<void>(WaxRoute.nowPlaying);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerLyrics));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.lyricsAdd));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(MetadataScreen), findsOneWidget);
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(find.byType(AdaptiveShell, skipOffstage: false), findsOneWidget);
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('and the same door in the panel pops no screen', (tester) async {

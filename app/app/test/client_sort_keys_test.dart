@@ -165,46 +165,6 @@ void main() {
         ]);
       },
     );
-
-    test('the author chips break a tie of counts by the artist key', () {
-      final authors = bookAuthors(<ItemSummary>[
-        _book('One', author: 'Terry Pratchett', authorKey: 'terry pratchett'),
-        _book('Two', author: 'Terry Pratchett', authorKey: 'terry pratchett'),
-        _book(
-          'Three',
-          author: 'Ursula Le Guin',
-          authorSort: 'Le Guin, Ursula',
-          authorKey: 'le guin, ursula',
-        ),
-        _book(
-          'Four',
-          author: 'Ursula Le Guin',
-          authorSort: 'Le Guin, Ursula',
-          authorKey: 'le guin, ursula',
-        ),
-        _book('Five', author: 'Zed', authorKey: 'zed'),
-      ]);
-      // By name alone Pratchett would lead Le Guin; by key it is the other
-      // way about, and the author with the one book is last either way.
-      expect(authors.map((a) => a.name), [
-        'Ursula Le Guin',
-        'Terry Pratchett',
-        'Zed',
-      ]);
-      expect(authors.map((a) => a.count), [2, 2, 1]);
-    });
-
-    test('the author chips fall back to the name, and never swap on a tie', () {
-      final books = <ItemSummary>[
-        _book('One', author: 'ann'),
-        _book('Two', author: 'Ann'),
-        _book('Three', author: 'Bob'),
-        _book('Four', author: 'Bob'),
-      ];
-      final names = bookAuthors(books).map((a) => a.name).toList();
-      expect(names, ['Bob', 'Ann', 'ann']);
-      expect(bookAuthors(books.reversed.toList()).map((a) => a.name), names);
-    });
   });
 
   group('downloads sorted on the client', () {

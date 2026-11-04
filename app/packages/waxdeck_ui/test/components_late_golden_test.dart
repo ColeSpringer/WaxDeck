@@ -545,11 +545,18 @@ void main() {
                   artworkCaption: 'From the Cover Art Archive',
                   shape: ArtworkShape.portrait,
                   domain: WaxDomain.audiobooks,
-                  link: EntityHeaderLink(
-                    label: 'Book 2 of The Tide Almanac',
-                    semanticsId: 'series',
-                    onPressed: () {},
-                  ),
+                  links: <EntityHeaderLink>[
+                    EntityHeaderLink(
+                      label: 'By Mirren Vaux',
+                      semanticsId: 'author',
+                      onPressed: () {},
+                    ),
+                    EntityHeaderLink(
+                      label: 'Book 2 of The Tide Almanac',
+                      semanticsId: 'series',
+                      onPressed: () {},
+                    ),
+                  ],
                   actions: <WaxAction>[
                     WaxAction(
                       label: 'Resume',

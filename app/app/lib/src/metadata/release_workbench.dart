@@ -118,8 +118,11 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
   /// Where a drag in flight has the seam; null outside a gesture.
   double? _dragging;
 
-  MusicListing get _listing =>
-      (dimension: MusicDimension.albums, segment: widget.pid);
+  MusicListing get _listing => (
+    dimension: MusicDimension.albums,
+    segment: widget.pid,
+    domain: BrowseDomain.wholeLibrary,
+  );
 
   List<ItemSummary> get _tracks => albumOrder(
     ref.read(musicItemsProvider(_listing)).value?.items ?? const [],

@@ -191,9 +191,10 @@ abstract final class SemanticsIds {
   static const String signupSubmit = 'signup-submit';
   static const String signupUsername = 'signup-username';
 
-  // books: Audiobooks: the hub, the book screen, its chapters, and its per-book settings.
+  // books: Audiobooks: the hub with its tiles and cover plays, the author and genre pages, the book screen, its chapters, and its per-book settings.
   static String book(Object pid) => 'book-$pid';
-  static String bookAuthorFilter(Object key) => 'book-author-$key';
+  static const String bookAuthorLink = 'book-author-link';
+  static String bookAuthorScreen(Object key) => 'book-author-screen-$key';
   static const String bookChapterEditor = 'book-chapter-editor';
   static const String bookChapterEditorAdd = 'book-chapter-editor-add';
   static String bookChapterEditorRemove(Object index) =>
@@ -204,9 +205,11 @@ abstract final class SemanticsIds {
   static String bookChapterEditorTitle(Object index) =>
       'book-chapter-editor-title-$index';
   static String bookContinue(Object pid) => 'book-continue-$pid';
+  static String bookContinuePlay(Object pid) => 'book-continue-play-$pid';
   static const String bookDownload = 'book-download';
   static const String bookEdition = 'book-edition';
   static String bookFinishedFilter(Object name) => 'book-finished-$name';
+  static String bookGenreScreen(Object key) => 'book-genre-screen-$key';
   static const String bookMarkFinished = 'book-mark-finished';
   static const String bookMerge = 'book-merge';
   static const String bookMergeConfirm = 'book-merge-confirm';
@@ -214,6 +217,7 @@ abstract final class SemanticsIds {
   static const String bookOverflow = 'book-overflow';
   static const String bookPartsNote = 'book-parts-note';
   static const String bookPin = 'book-pin';
+  static String bookPlay(Object pid) => 'book-play-$pid';
   static const String bookResume = 'book-resume';
   static String bookSeriesCard(Object pid) => 'book-series-card-$pid';
   static const String bookSeriesIndex = 'book-series-index';
@@ -229,6 +233,7 @@ abstract final class SemanticsIds {
   static const String bookSplitConfirm = 'book-split-confirm';
   static const String bookSplitKeep = 'book-split-keep';
   static const String bookStartOver = 'book-start-over';
+  static String bookTile(Object name) => 'book-tile-$name';
   static const String booksAdd = 'books-add';
   static const String booksHub = 'books-hub';
   static const String booksHubOverflow = 'books-hub-overflow';
@@ -434,10 +439,14 @@ abstract final class SemanticsIds {
   static const String itemMenuDetails = 'item-menu-details';
   static const String itemMenuGoAlbum = 'item-menu-go-album';
   static const String itemMenuGoArtist = 'item-menu-go-artist';
+  static const String itemMenuGoAuthor = 'item-menu-go-author';
   static const String itemMenuKindAlbum = 'item-menu-kind-album';
   static const String itemMenuKindBook = 'item-menu-kind-book';
   static const String itemMenuKindMusic = 'item-menu-kind-music';
   static const String itemMenuMix = 'item-menu-mix';
+  static const String itemMenuOpenBook = 'item-menu-open-book';
+  static const String itemMenuOpenEpisode = 'item-menu-open-episode';
+  static const String itemMenuPlay = 'item-menu-play';
   static const String itemMenuShare = 'item-menu-share-album';
   static const String itemMenuShareItem = 'item-menu-share';
   static String itemMenuSheet(Object pid) => 'item-menu-sheet-$pid';
@@ -544,6 +553,7 @@ abstract final class SemanticsIds {
   static String albumTrackMore(Object index) => 'album-track-more-$index';
   static String albumTrackPlays(Object index) => 'album-track-plays-$index';
   static String entityAlbum(Object pid) => 'entity-album-$pid';
+  static const String entityAllBooks = 'entity-all-books';
   static const String entityAllTracks = 'entity-all-tracks';
   static const String entityEditMetadata = 'entity-edit-metadata';
   static const String entityInstantMix = 'entity-instant-mix';

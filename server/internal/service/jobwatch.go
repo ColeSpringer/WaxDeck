@@ -437,6 +437,10 @@ func (l *Library) emitEveryoneEvent(ctx context.Context, kind string) {
 // artwork epoch, so generated playlist covers re-composite, and whoever
 // started the job hears of it.
 func (l *Library) onJobFinished(ctx context.Context, j *model.Job) {
+	if hook := l.jobFinishedHook.Load(); hook != nil {
+		(*hook)(j, false)
+		defer (*hook)(j, true)
+	}
 	// A kind change WaxDeck started is followed up when its origin
 	// settles, which a restart repeats; one started elsewhere has no
 	// origin, so a follow-up that fails leaves one of no one's for the

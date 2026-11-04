@@ -322,6 +322,20 @@
       }
     }
   },
+  "libraryHubTileSpoken": "{name}, {count}",
+  "@libraryHubTileSpoken": {
+    "description": "One hub tile read as a whole for a screen reader: what it opens, then how much is behind it.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Albums"
+      },
+      "count": {
+        "type": "String",
+        "example": "500+"
+      }
+    }
+  },
   "libraryKindAlbum": "album",
   "@libraryKindAlbum": {
     "description": "The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case."
@@ -465,8 +479,38 @@
   "@libraryMenuGoToArtist": {
     "description": "Item-menu row opening the item's artist."
   },
+  "libraryMenuGoToAuthor": "Go to author",
+  "@libraryMenuGoToAuthor": {
+    "description": "Item-menu row opening an audiobook's author: the books filed under them."
+  },
+  "libraryMenuOpenBook": "Open book",
+  "@libraryMenuOpenBook": {
+    "description": "Item-menu row opening an audiobook's own screen, the way to it from a shelf whose tap plays."
+  },
+  "libraryMenuOpenEpisode": "Open episode",
+  "@libraryMenuOpenEpisode": {
+    "description": "Item-menu row opening an episode's own screen, the way to it from a shelf whose tap plays."
+  },
+  "libraryMenuPlay": "Play",
+  "@libraryMenuPlay": {
+    "description": "Item-menu row starting an audiobook that has not been started, or has been finished and starts again."
+  },
+  "libraryMenuResume": "Resume",
+  "@libraryMenuResume": {
+    "description": "Item-menu row carrying on with an audiobook part way through, where it was left."
+  },
   "libraryMenuShareAlbum": "Share album",
   "@libraryMenuShareAlbum": {
     "description": "Item-menu row minting a public share link for the item's album."
+  },
+  "libraryResumeItem": "Resume {title}",
+  "@libraryResumeItem": {
+    "description": "Spoken name of the cover play over a book or an episode part way through, whose press carries on where it was left: the home shelves, the Downloaded shelf, the books hub's Continue shelf and every books grid.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "The Hobbit"
+      }
+    }
   }
 }

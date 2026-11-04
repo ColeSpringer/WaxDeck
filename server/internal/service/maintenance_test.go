@@ -565,6 +565,41 @@ func TestACursorPastTheHeadIsAReplacedCatalog(t *testing.T) {
 	}
 }
 
+// A start that mints a generation stores it with a row to check it
+// against, so a process that stops before the feed has stored its own
+// position keeps it: the next start serves the cursors handed out in
+// between rather than sending every client back to a snapshot.
+func TestAStopBeforeTheFeedDrainsKeepsTheGeneration(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
+	// What a process stopping here leaves stored: the feed stores its
+	// position on a tick after its first drain, and on its own stop.
+	stopped, err := svc.db.SyncStateGet(ctx, syncKeyCatalogCursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gen := feedGen(svc)
+	before := snapshotSince(t, ctx, svc, uc)
+	stop()
+
+	store, err := wdb.Open(context.Background(), filepath.Join(dataDir, "waxdeck.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SyncStateSet(context.Background(), syncKeyCatalogCursor, stopped); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	ctx, svc, uc, _ = openServiceAt(t, dataDir, nil)
+	if feedGen(svc) != gen {
+		t.Errorf("generation %s -> %s over the stored feed position %q, want it kept", gen, feedGen(svc), stopped)
+	}
+	if retired(t, ctx, svc, uc, before) {
+		t.Error("a cursor from before the stop answers sync-reset")
+	}
+}
+
 // The durable queues wait out a hand-off rather than burn an attempt,
 // and the health sweep keeps a pending request for after it.
 func TestTheQueuesWaitOutAHandOff(t *testing.T) {

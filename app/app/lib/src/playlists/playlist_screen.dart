@@ -673,7 +673,8 @@ class _EntryRow extends ConsumerWidget {
                 semanticsId: SemanticsIds.playlistEntry(index),
               ),
               onTap: onTap,
-              onMore: () => showItemMenuForSummary(context, ref, item),
+              onMore: () =>
+                  showItemMenuForSummary(context, ref, item, withOpen: true),
               moreSemanticsId: SemanticsIds.playlistEntryMore(index),
             ),
           ),

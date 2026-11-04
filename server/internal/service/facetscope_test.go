@@ -1,8 +1,12 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/colespringer/waxdeck/fixtures"
 )
 
 // artistBucketKey is the bare pid a bucket's key carries, which is what
@@ -53,12 +57,14 @@ func TestScopedFacetCountsTheScopeOnly(t *testing.T) {
 	}
 }
 
-// TestScopedFacetBypassesTheCacheBothWays is the trap this change had to
-// avoid. The enumeration cache is keyed on dimension and order alone, so
-// a scoped result published under that key would answer every later
-// unscoped read with one artist's albums until the catalog moved; and a
-// scoped read served *from* it would hand an artist page the whole
-// library. Neither direction is allowed.
+// TestScopedFacetBypassesTheCacheBothWays is the trap an entity scope
+// (an artist, a genre, any scope but a kind) has to avoid. The cache key
+// does not name the entity, so an entity-scoped result published under
+// it would answer every later unscoped read with one artist's albums
+// until the catalog moved; and an entity-scoped read served *from* it
+// would hand an artist page the whole library. Neither direction is
+// allowed. A kind scope is keyed in instead; see
+// TestKindScopedFacetIsCachedPerKind.
 func TestScopedFacetBypassesTheCacheBothWays(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
@@ -230,5 +236,175 @@ func TestScopedFacetHonoursTheGrant(t *testing.T) {
 		Dimension: "album", Facet: "artist", FacetKey: key, Limit: 100,
 	}); err != nil {
 		t.Fatalf("a good scope should still answer empty, got %v", err)
+	}
+}
+
+// TestScopedFacetByKindBookCountsBooksOnly pins what the Books Authors
+// and Genres indexes read: an artist or genre enumeration scoped to the
+// book kind counts books alone, and a bucket's count agrees with the
+// book-scoped list it opens, though a track shares the artist and genre.
+func TestScopedFacetByKindBookCountsBooksOnly(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixtureWith(t, catalogFixtureOptions{extra: func(t *testing.T, dir string) {
+		if _, err := fixtures.GenerateM4B(dir, fixtures.Spec{
+			Name: "ensemble-book", Duration: 2 * time.Second,
+			Tags: map[string]string{
+				"TITLE": "Ensemble Tales", "ALBUM": "Ensemble Tales",
+				"ARTIST": "Test Ensemble", "ALBUMARTIST": "Test Ensemble", "GENRE": "Ambient",
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}})
+	books, err := svc.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
+	if err != nil || len(books.Items) != 1 {
+		t.Fatalf("books = %+v (%v), want the one fixture book", books.Items, err)
+	}
+	book := books.Items[0].PID
+
+	for _, tc := range []struct{ dimension, label string }{
+		{"artist", "Test Ensemble"},
+		{"genre", "Ambient"},
+	} {
+		whole, err := svc.Facets(ctx, uc, FacetQuery{Dimension: tc.dimension, Limit: 500})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := bucketCount(whole.Buckets, tc.label); got != 4 {
+			t.Fatalf("unscoped %s %q counts %d, want the 3 tracks and the book", tc.dimension, tc.label, got)
+		}
+
+		scoped, err := svc.Facets(ctx, uc, FacetQuery{
+			Dimension: tc.dimension, Facet: "kind", FacetKey: "book", Limit: 500,
+		})
+		if err != nil {
+			t.Fatalf("%s scoped to books: %v", tc.dimension, err)
+		}
+		if len(scoped.Buckets) != 1 || scoped.Buckets[0].Label != tc.label || scoped.Buckets[0].Count != 1 {
+			t.Fatalf("%s scoped to books = %+v, want %q with 1", tc.dimension, scoped.Buckets, tc.label)
+		}
+
+		opened, err := svc.Items(ctx, uc, ItemFilter{
+			MediaType: "audiobook", Facet: tc.dimension, FacetKey: scoped.Buckets[0].Key,
+		}, "", 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(opened.Items) != 1 || opened.Items[0].PID != book {
+			t.Fatalf("%s bucket opened %+v, want the book alone", tc.dimension, opened.Items)
+		}
+	}
+}
+
+func bucketCount(buckets []FacetBucket, label string) int {
+	for _, b := range buckets {
+		if b.Label == label {
+			return b.Count
+		}
+	}
+	return 0
+}
+
+// servesKindFromCache is servesFromCache for an enumeration scoped to
+// one kind.
+func servesKindFromCache(l *Library, dimension, kind string) bool {
+	gen := l.facetGeneration(context.Background())
+	l.facets.mu.Lock()
+	defer l.facets.mu.Unlock()
+	if l.facets.gen != gen {
+		return false
+	}
+	_, ok := l.facets.byDimension[facetCacheKey{dimension: dimension, sort: FacetSortCount, kind: kind}]
+	return ok
+}
+
+// TestKindScopedFacetIsCachedPerKind: the music and books indexes read
+// whole dimensions scoped to a kind, and a music library's track scope is
+// as large as the unscoped read, so it is cached as that one is: per
+// catalog generation, for the callers the unscoped cache serves, under a
+// key naming the kind. A repeated read is a hit, a catalog change
+// invalidates it, and no other caller or scope shares the entry.
+func TestKindScopedFacetIsCachedPerKind(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	settleCatalogFeed(t, svc)
+	tracks := func(who *UserCtx) map[string]int {
+		t.Helper()
+		page, err := svc.Facets(ctx, who, FacetQuery{
+			Dimension: "artist", Facet: "kind", FacetKey: "track", Limit: 500,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]int{}
+		for _, b := range page.Buckets {
+			out[b.Label] = b.Count
+		}
+		return out
+	}
+
+	if got := tracks(uc); got["Test Ensemble"] != 3 || got["Brass Nine"] != 1 {
+		t.Fatalf("artists over tracks = %v, want the fixture's", got)
+	}
+	if !servesKindFromCache(svc, "artist", "track") {
+		t.Fatal("the kind-scoped enumeration did not cache")
+	}
+	// Under its own key: neither the whole library's nor another kind's.
+	if servesFromCache(svc, "artist") || servesKindFromCache(svc, "artist", "book") {
+		t.Fatal("the kind-scoped enumeration was published under another scope's key")
+	}
+
+	// A hit: what the cache holds is what the next read answers.
+	gen := svc.facetGeneration(ctx)
+	marked := []FacetBucket{facetFolded(FacetBucket{Key: "marked", Label: "Marked", Count: 7})}
+	svc.publishFacetBuckets(ctx, gen, facetCacheKey{dimension: "artist", sort: FacetSortCount, kind: "track"}, marked)
+	if got := tracks(uc); len(got) != 1 || got["Marked"] != 7 {
+		t.Fatalf("a repeated kind-scoped read = %v, want the cached entry", got)
+	}
+
+	// Another grant never shares it: a caller granted a library holding
+	// nothing reads live, past the marked entry, and its empty answer is
+	// not published over it.
+	restricted := &UserCtx{
+		ID: uc.ID, CatalogPID: uc.CatalogPID,
+		Libraries: map[string]bool{"01JZX5N8QW3F4V9T2B7KDNOLIB0": true},
+	}
+	if got := tracks(restricted); len(got) != 0 {
+		t.Fatalf("a caller granted no library holding tracks saw %v", got)
+	}
+	if got := tracks(uc); len(got) != 1 || got["Marked"] != 7 {
+		t.Fatalf("after a restricted read the cached entry = %v, want it untouched", got)
+	}
+
+	// A key that names no kind is not cached: it is any string a client
+	// sends.
+	if _, err := svc.Facets(ctx, uc, FacetQuery{
+		Dimension: "artist", Facet: "kind", FacetKey: "not-a-kind", Limit: 500,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if servesKindFromCache(svc, "artist", "not-a-kind") {
+		t.Fatal("a kind scope naming no kind was cached")
+	}
+
+	// A catalog change invalidates it.
+	settleCatalogFeed(t, svc)
+	tracks(uc)
+	if !servesKindFromCache(svc, "artist", "track") {
+		t.Fatal("the kind-scoped enumeration did not cache again")
+	}
+	amber, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
+	if _, err := svc.EditItemMetadata(ctx, uc, amber, map[string]string{"artist": "Brass Nine"}, MetadataEditParams{}); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(10 * time.Second); servesKindFromCache(svc, "artist", "track"); {
+		if time.Now().After(deadline) {
+			t.Fatal("an edit to what the catalog holds left the kind-scoped enumeration cached")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	settleCatalogFeed(t, svc)
+	if got := tracks(uc); got["Test Ensemble"] != 2 || got["Brass Nine"] != 2 {
+		t.Errorf("artists over tracks after the edit = %v, want the track moved to Brass Nine", got)
 	}
 }

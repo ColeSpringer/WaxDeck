@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
+import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
@@ -60,6 +62,21 @@ final bookSeriesShelfProvider = FutureProvider.autoDispose<List<BookSeries>>(
   ),
   retry: retryUnlessRefused,
 );
+
+/// How many series there are, for the hub's tile: one page, as the music
+/// tiles count, so a library past it reads as a floor. Cached for the
+/// session like those counts; the account, the catalog fan-out and a
+/// merge move it.
+final bookSeriesCountProvider = FutureProvider<MusicIndexCount>((ref) async {
+  ref.watch(signedInAccountProvider);
+  final page = await ref
+      .watch(repositoryProvider)
+      .listBookSeries(limit: MusicIndexController.pageSize);
+  return MusicIndexCount(
+    buckets: page.series.length,
+    atLeast: page.nextCursor != null,
+  );
+}, retry: retryUnlessRefused);
 
 /// How many series the hub's shelf draws before Show all is the way on.
 const int kBookSeriesShelf = 12;
@@ -186,6 +203,7 @@ Future<void> _merge({
         );
     container
       ..invalidate(bookSeriesProvider)
+      ..invalidate(bookSeriesCountProvider)
       ..invalidate(bookSeriesDetailProvider)
       ..invalidate(bookDetailProvider);
     messenger.show(l10n.bookSeriesMergeDone(survivor.name));

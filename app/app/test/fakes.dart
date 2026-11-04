@@ -40,6 +40,15 @@ Future<void> pressRaisedAction(WidgetTester tester) async {
 /// is pointed at.
 const testServerAddress = 'http://server.test';
 
+/// One [FakeRepository.listItems] call, as it was asked.
+typedef ListItemsCall = ({
+  MediaType? mediaType,
+  String? facet,
+  String? facetKey,
+  String? cursor,
+  int? limit,
+});
+
 /// In-memory repository for widget tests. Pagination uses the item index as
 /// the cursor, which is enough to exercise keyset-style paging end to end.
 class FakeRepository implements WaxDeckRepository {
@@ -514,12 +523,23 @@ class FakeRepository implements WaxDeckRepository {
   /// tell an A-to-Z index from a biggest-first one.
   final List<FacetSort?> facetSorts = [];
 
+  /// Every [listFacets] call whole, in call order: its sort and its scope
+  /// in one record, so a test reads both off the same call.
+  final List<
+    ({String dimension, FacetSort? sort, String? facet, String? facetKey})
+  >
+  facetReads = [];
+
   /// So a rail test can tell a re-anchor from a free scroll.
   final List<String?> facetStartsAt = [];
 
   /// Held open, every facet listing waits on it, so a test can have one
   /// genuinely in flight while it starts another.
   Completer<void>? facetGate;
+
+  /// Thrown by a facet listing once [facetGate] opens, so a read can fail
+  /// after the reader that started it has gone.
+  Object? facetErrorAfterGate;
 
   /// Held open, every item listing waits on it. What a screen's refresh
   /// test needs: a reload genuinely in flight, which is the state that
@@ -542,8 +562,7 @@ class FakeRepository implements WaxDeckRepository {
   final Set<String> hiddenFromListings = {};
 
   /// Every [listItems] call, browse fallthroughs included, in call order.
-  final List<({MediaType? mediaType, String? cursor, int? limit})>
-  listItemsCalls = [];
+  final List<ListItemsCall> listItemsCalls = [];
 
   List<ItemSummary> _visible(List<ItemSummary> items) => <ItemSummary>[
     for (final item in items)
@@ -558,7 +577,13 @@ class FakeRepository implements WaxDeckRepository {
     String? cursor,
     int? limit,
   }) async {
-    listItemsCalls.add((mediaType: mediaType, cursor: cursor, limit: limit));
+    listItemsCalls.add((
+      mediaType: mediaType,
+      facet: facet,
+      facetKey: facetKey,
+      cursor: cursor,
+      limit: limit,
+    ));
     final error = listError;
     if (error != null) throw error;
     await listItemsGate?.future;
@@ -574,6 +599,11 @@ class FakeRepository implements WaxDeckRepository {
     if (facet != null) {
       facetDrills.add((facet, facetKey ?? ''));
       filtered = facetItems['$facet ${facetKey ?? ''}'] ?? const [];
+      // Narrowed as the server narrows a drill, so a screen that asks
+      // for the wrong medium is answered with the wrong rows.
+      if (mediaType != null) {
+        filtered = filtered.where((i) => i.mediaType == mediaType).toList();
+      }
     }
     final start = cursor == null ? 0 : int.parse(cursor);
     final pageSize = limit ?? 100;
@@ -597,12 +627,20 @@ class FakeRepository implements WaxDeckRepository {
     final error = listError;
     if (error != null) throw error;
     facetSorts.add(sort);
+    facetReads.add((
+      dimension: dimension,
+      sort: sort,
+      facet: facet,
+      facetKey: facetKey,
+    ));
     facetStartsAt.add(startsAt);
     if (facet != null) {
       facetScopes.add((dimension, facet, facetKey ?? ''));
     }
     final gate = facetGate;
     if (gate != null) await gate.future;
+    final failure = facetErrorAfterGate;
+    if (failure != null) throw failure;
     final scoped = facet == null
         ? null
         : facets['$dimension|$facet|${facetKey ?? ''}'];
@@ -1915,6 +1953,7 @@ class FakeRepository implements WaxDeckRepository {
       series: book.series,
       seriesPid: book.seriesPid,
       seriesSequence: book.seriesSequence,
+      authorPid: book.authorPid,
       publisher: book.publisher,
       asin: book.asin,
       isbn: book.isbn,
@@ -2680,11 +2719,15 @@ class FakeRepository implements WaxDeckRepository {
     _savedByLine[song.nowPlaying] = song;
   }
 
+  /// The cursor each saved-songs page read carried, in call order.
+  final List<String?> radioSavedCursors = [];
+
   @override
   Future<RadioSavedSongPage> listRadioSavedSongs({
     String? cursor,
     int? limit,
   }) async {
+    radioSavedCursors.add(cursor);
     if (cursor != null) await savedPageGate?.future;
     final rows = _savedByLine.values.toList(growable: false).reversed.toList();
     final from = cursor == null ? 0 : int.parse(cursor);
@@ -4810,20 +4853,36 @@ class FakeRepository implements WaxDeckRepository {
     return const MetadataEditResult(applied: true);
   }
 
-  /// The series the book listing answers, in one page.
+  /// The series the book listing answers, paged by [limit] when one is
+  /// asked for.
   final List<BookSeries> bookSeries = [];
+
+  /// Every series page read, in call order.
+  final List<({String? cursor, int? limit})> bookSeriesReads = [];
 
   @override
   Future<BookSeriesPage> listBookSeries({String? cursor, int? limit}) async {
-    return BookSeriesPage(series: List<BookSeries>.of(bookSeries));
+    bookSeriesReads.add((cursor: cursor, limit: limit));
+    final start = cursor == null ? 0 : int.parse(cursor);
+    final end = limit == null
+        ? bookSeries.length
+        : (start + limit).clamp(0, bookSeries.length);
+    return BookSeriesPage(
+      series: bookSeries.sublist(start.clamp(0, bookSeries.length), end),
+      nextCursor: end < bookSeries.length ? '$end' : null,
+    );
   }
 
   /// The series detail answered by pid; an unknown pid is a 404, as the
   /// server's is.
   final Map<String, BookSeriesDetail> bookSeriesDetails = {};
 
+  /// Every series detail read, by pid, in call order.
+  final List<String> bookSeriesDetailReads = [];
+
   @override
   Future<BookSeriesDetail> getBookSeries(String pid) async {
+    bookSeriesDetailReads.add(pid);
     final detail = bookSeriesDetails[pid];
     if (detail == null) {
       throw const WaxDeckApiException(
@@ -7281,6 +7340,9 @@ class FakeRepository implements WaxDeckRepository {
   /// Whether each `listShares` call passed `all`.
   final List<bool> listSharesCalls = [];
 
+  /// The cursor each `listShares` call carried, in call order.
+  final List<String?> listSharesCursors = [];
+
   @override
   Future<SharePage> listShares({
     String? cursor,
@@ -7288,9 +7350,18 @@ class FakeRepository implements WaxDeckRepository {
     bool all = false,
   }) async {
     listSharesCalls.add(all);
+    listSharesCursors.add(cursor);
     final error = shareError;
     if (error != null) throw error;
-    return SharePage(shares: List.of(all ? allShares : shares));
+    final rows = all ? allShares : shares;
+    final from = cursor == null ? 0 : int.parse(cursor);
+    final to = limit == null
+        ? rows.length
+        : math.min(rows.length, from + limit);
+    return SharePage(
+      shares: rows.sublist(from, to),
+      nextCursor: to < rows.length ? '$to' : null,
+    );
   }
 
   @override
@@ -7920,6 +7991,7 @@ BookDetail testBook(
   String? series,
   String? seriesPid,
   String? seriesSequence,
+  String? authorPid,
   String? artUrl,
   String? publisher,
   String? isbn,
@@ -7937,6 +8009,7 @@ BookDetail testBook(
     series: series,
     seriesPid: seriesPid,
     seriesSequence: seriesSequence,
+    authorPid: authorPid,
     artUrl: artUrl,
     publisher: publisher,
     isbn: isbn,

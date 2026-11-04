@@ -46,10 +46,10 @@ const HomeShelfItems _emptyShelf = (
 /// page failing keeps the cards the earlier ones gave.
 ///
 /// [withProgress] asks for the caller's positions alongside the rows.
-/// Only the shelves that draw a ring want them: the sealed shelf is
-/// unplayed by construction and the rest are about what a thing is
-/// rather than how far through it you are, so reading positions for them
-/// would be a round trip spent confirming a row of zeroes.
+/// Only the shelves that draw a ring want every one: the rest are about
+/// what a thing is rather than how far through it you are. They still
+/// read their spoken word's, whose press resumes and whose label says so;
+/// a page of music asks for none.
 Future<HomeShelfItems> readShelf(
   Ref ref,
   DiscoveryList list, {
@@ -72,10 +72,12 @@ Future<HomeShelfItems> readShelf(
         limit: cards,
       );
       seed ??= page.seed;
-      if (page.items.isEmpty || !withProgress) return page;
-      final read = await repository.listPlayStates([
-        for (final item in page.items) item.pid,
-      ]);
+      final pids = <String>[
+        for (final item in page.items)
+          if (withProgress || item.mediaType != MediaType.music) item.pid,
+      ];
+      if (pids.isEmpty) return page;
+      final read = await repository.listPlayStates(pids);
       for (final state in read) {
         states[state.pid] = PlayProgress.of(state);
       }

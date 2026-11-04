@@ -507,7 +507,7 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 	if in.Managed {
 		mode = model.ModeManaged
 	}
-	lib, err := l.registerRoot(ctx, name, path, mode, media, in.AllowAbsent)
+	lib, path, err := l.registerRoot(ctx, name, path, mode, media, in.AllowAbsent)
 	if err != nil {
 		return LibraryInfo{}, err
 	}
@@ -602,18 +602,29 @@ func (l *Library) teachFlowRoot(ctx context.Context, flow FlowRootSync, name, pa
 // stopped answering fails this create alone; the write probe goes only
 // into a folder no library holds, never on a read-only server. path is
 // absolute and clean; allowAbsent takes a folder that does not answer yet.
-func (l *Library) registerRoot(ctx context.Context, name, path string, mode model.Mode, media model.MediaType, allowAbsent bool) (*model.Library, error) {
+// It answers the path stored: path with its symlinks followed, when they
+// can be.
+func (l *Library) registerRoot(ctx context.Context, name, path string, mode model.Mode, media model.MediaType, allowAbsent bool) (*model.Library, string, error) {
 	claim, release, err := l.claimRoot(ctx, name, path, mode == model.ModeManaged)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer release()
-	probed, err := l.lookAtFolder(ctx, claim, allowAbsent)
+	probed, folder, resolved, err := l.lookAtFolder(ctx, claim, allowAbsent)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	if err := l.rootStillFree(ctx, name, path); err != nil {
-		return nil, err
+	// The catalog's whole-library scan does not follow a root that is a
+	// symlink, so a path that is one, or runs through one, is stored as
+	// the folder it names.
+	if resolved != "" {
+		path = rootKey(resolved)
+	}
+	if err := l.rootStillFree(ctx, claim, path, folder); err != nil {
+		return nil, "", err
+	}
+	if l.creates.free != nil {
+		l.creates.free()
 	}
 	l.rootsMu.Lock()
 	defer l.rootsMu.Unlock()
@@ -625,7 +636,7 @@ func (l *Library) registerRoot(ctx context.Context, name, path string, mode mode
 	if err := l.db.LibraryRootsUpsert(ctx, wdb.LibraryRoot{
 		Path: key, Name: name, CreatedAtNS: time.Now().UnixNano(),
 	}); err != nil {
-		return nil, &Error{Kind: KindInternal, Err: err}
+		return nil, "", &Error{Kind: KindInternal, Err: err}
 	}
 	var opts []waxbin.RootOption
 	if allowAbsent {
@@ -642,9 +653,9 @@ func (l *Library) registerRoot(ctx context.Context, name, path string, mode mode
 		if derr := l.db.LibraryRootsDelete(context.WithoutCancel(ctx), key); derr != nil {
 			l.log.Warn("dropping the name of a library the catalog refused", "library", name, "err", derr)
 		}
-		return nil, classify(err)
+		return nil, "", classify(err)
 	}
-	return lib, nil
+	return lib, path, nil
 }
 
 // RemoveLibrary takes a library out of the catalog, its files staying on
@@ -750,6 +761,8 @@ const (
 	folderBroken folderAnswer = iota
 	folderListed
 	folderIsFile
+	// folderUnderFile is a path under a file: never a folder.
+	folderUnderFile
 	// folderUnlisted is a folder whose names the server cannot read.
 	folderUnlisted
 	// folderForbidden is a path its parents keep the server out of.
@@ -770,7 +783,9 @@ func lookAt(path string) folderAnswer {
 		return folderListed
 	case errors.Is(err, fs.ErrPermission):
 		return folderForbidden
-	case errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR):
+	case errors.Is(err, syscall.ENOTDIR):
+		return folderUnderFile
+	case errors.Is(err, fs.ErrNotExist):
 		return folderMissing
 	default:
 		return folderUnreadable
@@ -785,6 +800,9 @@ func folderRefusal(path string, found folderAnswer, allowAbsent bool) error {
 		return nil
 	case found == folderIsFile:
 		return errInvalid(path + " is a file, not a folder")
+	case found == folderUnderFile:
+		// Nothing mounted later makes a folder of it.
+		return errInvalid(path + " lies under a file, so it can never be a folder")
 	case found == folderBroken || found == folderUnlisted || found == folderForbidden:
 		// Mounting there later would not change what its parents allow.
 		return errInvalid("the server cannot read the library path")

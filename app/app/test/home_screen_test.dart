@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
 import 'package:waxdeck/src/home/item_shelf.dart';
@@ -15,6 +16,7 @@ import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -26,6 +28,7 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
 
@@ -121,12 +124,23 @@ FakeRepository _behindForeignEpisodes(FakeRepository repo, int count) {
 }
 
 /// The library-wide listing reads home's probe made.
-List<({MediaType? mediaType, String? cursor, int? limit})> _probeReads(
-  FakeRepository repo,
-) => repo.listItemsCalls.where((call) => call.mediaType == null).toList();
+List<ListItemsCall> _probeReads(FakeRepository repo) =>
+    repo.listItemsCalls.where((call) => call.mediaType == null).toList();
 
 int _browsesOf(FakeRepository repo, DiscoveryList list) =>
     repo.browseCalls.where((call) => call.list == list).length;
+
+/// What [shelf]'s cover play over [pid] is called; null is the card's own
+/// "Play {title}".
+String? _coverLabel(WidgetTester tester, String shelf, String pid) {
+  final row = tester.widget<ShelfRow>(
+    find.descendant(
+      of: _byId(SemanticsIds.shelf(shelf)),
+      matching: find.byType(ShelfRow),
+    ),
+  );
+  return row.playLabelAt?.call(_shelfOrder(tester, shelf).indexOf(pid));
+}
 
 /// [bus] stands in for the user stream, fed by hand.
 Widget _host(FakeRepository repo, {ServerEventBus? bus}) => ProviderScope(
@@ -165,6 +179,32 @@ Future<void> _pumpHome(
   addTearDown(tester.view.reset);
   await tester.pumpWidget(_host(repo, bus: bus));
   await tester.pumpAndSettle();
+}
+
+/// [_pumpHome] over a container the test holds, for what a press starts.
+Future<ProviderContainer> _pumpPlaying(
+  WidgetTester tester,
+  FakeRepository repo,
+) async {
+  tester.view.physicalSize = const Size(1200, 4000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  final container = playbackContainer(
+    repo: repo,
+    engine: FakeEngine(),
+    extra: [
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
+    ],
+  );
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: routedHost(const HomeScreen()),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return container;
 }
 
 void main() {
@@ -361,6 +401,161 @@ void main() {
           ),
         );
     expect(shelves.where((shelf) => shelf.dirty), isEmpty);
+  });
+
+  testWidgets('a book on continue listening carries on where it is, '
+      'and its menu opens it', (tester) async {
+    final repo = _repo()
+      ..playPositions[_book] = 1800000
+      ..playStateUpdatedAt[_book] = DateTime.utc(2026, 10, 3);
+    final container = await _pumpPlaying(tester, repo);
+
+    await tester.tap(_byId(SemanticsIds.shelfCard('continue', _book)));
+    await tester.pumpAndSettle();
+    final queue = container.read(queueControllerProvider);
+    expect(<String>[for (final e in queue.entries) e.pid], <String>[_book]);
+    expect(queue.source.kind, QueueSourceKind.book);
+    expect(find.byType(BookScreen), findsNothing);
+    await PlayerHarness(container).endPlayback(tester);
+
+    await tester.longPress(_byId(SemanticsIds.shelfCard('continue', _book)));
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.itemMenuPlay), findsOneWidget);
+    await tester.tap(_byId(SemanticsIds.itemMenuOpenBook));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookScreen), findsOneWidget);
+  });
+
+  testWidgets('an episode on continue listening carries on too, and its '
+      'menu opens it', (tester) async {
+    const episode = 'tr-01JZX5N8QW3F4V9T2B7KDEPISOD';
+    final repo = _repo()
+      ..libraryItems.add(
+        const ItemSummary(
+          pid: episode,
+          mediaType: MediaType.podcast,
+          title: 'Second Breakfast',
+          artist: 'The Prancing Pony Hour',
+          durationMs: 1800000,
+        ),
+      )
+      ..playPositions[episode] = 600000
+      ..playStateUpdatedAt[episode] = DateTime.utc(2026, 10, 2);
+    final container = await _pumpPlaying(tester, repo);
+
+    await tester.tap(_byId(SemanticsIds.shelfCard('continue', episode)));
+    await tester.pumpAndSettle();
+    expect(
+      <String>[
+        for (final e in container.read(queueControllerProvider).entries) e.pid,
+      ],
+      <String>[episode],
+    );
+    expect(find.byType(EpisodeScreen), findsNothing);
+    await PlayerHarness(container).endPlayback(tester);
+
+    await tester.longPress(_byId(SemanticsIds.shelfCard('continue', episode)));
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.itemMenuOpenEpisode));
+    await tester.pumpAndSettle();
+    expect(find.byType(EpisodeScreen), findsOneWidget);
+  });
+
+  testWidgets('an episode part way through on continue says Resume', (
+    tester,
+  ) async {
+    const episode = 'tr-01JZX5N8QW3F4V9T2B7KDEPISOD';
+    final repo = _repo()
+      ..libraryItems.add(
+        const ItemSummary(
+          pid: episode,
+          mediaType: MediaType.podcast,
+          title: 'Second Breakfast',
+          artist: 'The Prancing Pony Hour',
+          durationMs: 1800000,
+        ),
+      )
+      ..playPositions[episode] = 600000
+      ..playStateUpdatedAt[episode] = DateTime.utc(2026, 10, 2);
+    await _pumpHome(tester, repo);
+
+    // Its press carries on from the checkpoint, so the word says so; a
+    // track part way through starts at its head and keeps Play.
+    expect(_coverLabel(tester, 'continue', episode), 'Resume Second Breakfast');
+    expect(_coverLabel(tester, 'continue', _halfHeard), isNull);
+  });
+
+  testWidgets('a half-read book on a shelf without rings still says Resume', (
+    tester,
+  ) async {
+    final repo = _repo()..playPositions[_book] = 1800000;
+    repo.browseLists[DiscoveryList.recentlyAdded] = <ItemSummary>[
+      repo.libraryItems.firstWhere((item) => item.pid == _book),
+      _track(_sealed, 'Still Sealed'),
+    ];
+    await _pumpHome(tester, repo);
+
+    expect(_coverLabel(tester, 'recent', _book), 'Resume There And Back Again');
+    await tester.longPress(_byId(SemanticsIds.shelfCard('recent', _book)));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: _byId(SemanticsIds.itemMenuPlay),
+        matching: find.text('Resume'),
+      ),
+      findsOneWidget,
+    );
+    // The shelf asks for its spoken word's positions alone, and a page of
+    // music asks for none.
+    expect(repo.playStateBatches, anyElement(equals(<String>[_book])));
+    for (final batch in repo.playStateBatches) {
+      expect(batch, isNot(contains(_sealed)), reason: '$batch');
+      expect(batch, isNot(contains(_favourite)), reason: '$batch');
+    }
+  });
+
+  testWidgets('a book elsewhere on home still opens on its tap', (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.browseLists[DiscoveryList.recentlyAdded] = <ItemSummary>[
+      repo.libraryItems.firstWhere((item) => item.pid == _book),
+    ];
+    await _pumpHome(tester, repo);
+
+    // The tap is the door, so the menu draws none.
+    await tester.longPress(_byId(SemanticsIds.shelfCard('recent', _book)));
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.itemMenuSheet(_book)), findsOneWidget);
+    expect(_byId(SemanticsIds.itemMenuOpenBook), findsNothing);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+
+    await tester.tap(_byId(SemanticsIds.shelfCard('recent', _book)));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookScreen), findsOneWidget);
+  });
+
+  testWidgets('an episode elsewhere on home opens on its tap, not its menu', (
+    tester,
+  ) async {
+    const episode = ItemSummary(
+      pid: 'tr-01JZX5N8QW3F4V9T2B7KDEPISOD',
+      mediaType: MediaType.podcast,
+      title: 'Second Breakfast',
+      artist: 'The Prancing Pony Hour',
+      durationMs: 1800000,
+    );
+    final repo = _repo()..libraryItems.add(episode);
+    repo.browseLists[DiscoveryList.recentlyAdded] = <ItemSummary>[episode];
+    await _pumpHome(tester, repo);
+
+    await tester.longPress(
+      _byId(SemanticsIds.shelfCard('recent', episode.pid)),
+    );
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.itemMenuSheet(episode.pid)), findsOneWidget);
+    expect(_byId(SemanticsIds.itemMenuOpenEpisode), findsNothing);
   });
 
   testWidgets('a position the stream reports moves the resume ring without '

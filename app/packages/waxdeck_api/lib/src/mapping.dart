@@ -860,6 +860,7 @@ BookDetail bookDetailFromGen(gen.BookDetail book, {String baseUrl = ''}) {
     series: book.series,
     seriesPid: book.seriesPid,
     seriesSequence: book.seriesSequence,
+    authorPid: book.authorPid,
     publisher: book.publisher,
     asin: book.asin,
     isbn: book.isbn,

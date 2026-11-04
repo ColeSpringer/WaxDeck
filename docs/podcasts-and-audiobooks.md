@@ -360,6 +360,22 @@ than something anyone curates, two spellings are two series: an
 administrator folds one into the other from the book screen's
 overflow, and the books move while everything else about them stays.
 
+Books has **Authors**, **Genres** and **Series** indexes like Music's,
+as tiles over the hub's shelves and as rows under Books in the sidebar.
+An author's page lists the books filed under them, and the author line
+on a book screen and **Go to author** in a book's menu open it. A book
+is filed under its first author: co-authors and narrators have no page
+of their own.
+
+A book's cover play, and a card on **Continue listening** here and on
+home, carry the book on where it was left without leaving the page.
+The book's own screen is **Open book** in the card's menu, which also
+holds **Play** or **Resume** for a touch screen, where the cover's play
+does not show.
+
+The Books section is always in the navigation, empty or not. An empty
+hub offers the upload set to audiobooks to anyone who may upload.
+
 ### How a file becomes a book
 
 The library the file sits in decides first. In a library that holds

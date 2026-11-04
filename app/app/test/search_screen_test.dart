@@ -762,6 +762,33 @@ void main() {
     expect(container.read(recentSearchesProvider), isEmpty);
   });
 
+  testWidgets('an episode hit\'s menu has no Open episode: its tap is that', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        episodes: <SearchHit>[
+          _hit('episode', 'Night Shift', pid: 'tr-01JZXNIGHTSHIFT'),
+        ],
+      );
+    await _pump(tester, repository, initialQuery: 'night');
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchHitMore('episodes', 0)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(
+        SemanticsIds.itemMenuSheet('tr-01JZXNIGHTSHIFT'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuOpenEpisode),
+      findsNothing,
+    );
+  });
+
   testWidgets('a pinnable hit offers the pin from its overflow, a track '
       'its own menu', (tester) async {
     // Artists, albums, and books pin; a track cannot (a kept set of

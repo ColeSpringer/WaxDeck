@@ -14,7 +14,7 @@ import 'prose.dart';
 import 'view_data.dart';
 
 /// A navigation link under an [EntityHeader]'s subtitle, as plain data:
-/// the series a book belongs to, not an action on the book.
+/// a book's author or its series, not an action on the book.
 @immutable
 class EntityHeaderLink {
   const EntityHeaderLink({
@@ -44,7 +44,7 @@ class EntityHeader extends StatelessWidget {
     this.shape = ArtworkShape.square,
     this.domain = WaxDomain.music,
     this.palette,
-    this.link,
+    this.links = const <EntityHeaderLink>[],
     this.actions = const <WaxAction>[],
     this.trailing = const <Widget>[],
     this.overflow,
@@ -73,8 +73,9 @@ class EntityHeader extends StatelessWidget {
   final WaxDomain domain;
   final WaxPalette? palette;
 
-  /// A link to where this belongs, drawn under [subtitle].
-  final EntityHeaderLink? link;
+  /// Links to where this belongs, drawn one per line under [subtitle] in
+  /// the order given.
+  final List<EntityHeaderLink> links;
 
   /// Play, shuffle, download: the pills of the header's action bar.
   final List<WaxAction> actions;
@@ -145,7 +146,7 @@ class EntityHeader extends StatelessWidget {
               style: WaxType.body.copyWith(color: colors.textSecondary),
             ),
           ),
-        if (link != null)
+        for (final link in links)
           Padding(
             padding: const EdgeInsets.only(top: WaxSpace.s4),
             // The button's label takes the ambient alignment, so a link
@@ -153,10 +154,10 @@ class EntityHeader extends StatelessWidget {
             child: DefaultTextStyle.merge(
               textAlign: stacked ? TextAlign.center : TextAlign.start,
               child: WaxButton(
-                label: link!.label,
+                label: link.label,
                 kind: WaxButtonKind.inline,
-                semanticsId: link!.semanticsId,
-                onPressed: link!.onPressed,
+                semanticsId: link.semanticsId,
+                onPressed: link.onPressed,
               ),
             ),
           ),

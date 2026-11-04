@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
+
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/config"
 	"github.com/colespringer/waxbin/enrich"
@@ -728,6 +730,25 @@ type Library struct {
 	// go of one a catalog scan covered, in a test; nothing in the server
 	// sets it.
 	watchScanHook func(dir string, scanned bool)
+	// watchArmHook runs as a watcher pass starts arming its roots (false)
+	// and once they are armed (true), in a test; nothing in the server
+	// sets it. Atomic, since a test sets it while the watcher runs.
+	watchArmHook atomic.Pointer[func(armed bool)]
+	// watchLookHook runs at each stage of a look at a root, before its
+	// stat ("stat"), its walk ("walk") and each create it arms ("arm");
+	// watchMountsHook stands in for the mount-table read; watchCheckHook
+	// runs once the watcher has acted on a look's answer;
+	// watchLookWait stands in for how long a pass waits for its looks;
+	// watcher is the running kernel watcher, for a test to drop a watch
+	// the way an unmount does. Tests only, like the hooks above.
+	watchLookHook   atomic.Pointer[func(stage, path string)]
+	watchMountsHook atomic.Pointer[func() (string, error)]
+	watchCheckHook  atomic.Pointer[func(root string)]
+	watchLookWait   atomic.Int64
+	watcher         atomic.Pointer[fsnotify.Watcher]
+	// jobFinishedHook runs as a job's end is taken in (false) and once it
+	// has been (true), in a test; nothing in the server sets it.
+	jobFinishedHook atomic.Pointer[func(j *model.Job, done bool)]
 }
 
 // SocketFileName names the IPC socket, beside the catalog DB unless that

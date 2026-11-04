@@ -75,16 +75,22 @@ class _FoldGroups extends ConsumerWidget {
   };
 
   /// Where an entry of a type opens, from the pid form the server lists:
-  /// a release group and a genre open their listings. Null for a type
-  /// this build does not know.
+  /// a release group and a genre open their listings, over the whole
+  /// library, since a fold names an entity every medium shares. Null for
+  /// a type this build does not know.
   static String Function(String pid)? _entryOf(String type) => switch (type) {
     'artist' => (pid) => WaxRoute.musicBucket(MusicDimension.artists, pid),
     'album' => (pid) => WaxRoute.musicBucket(MusicDimension.albums, pid),
     'release-group' => (pid) => WaxRoute.musicBucket(
       MusicDimension.releaseGroups,
       pid,
+      wholeLibrary: true,
     ),
-    'genre' => (pid) => WaxRoute.musicBucket(MusicDimension.genres, pid),
+    'genre' => (pid) => WaxRoute.musicBucket(
+      MusicDimension.genres,
+      pid,
+      wholeLibrary: true,
+    ),
     'series' => WaxRoute.bookSeries,
     _ => null,
   };

@@ -9,6 +9,7 @@ import '../artwork/artwork_providers.dart';
 import '../downloads/downloads_controller.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
+import '../library/item_play.dart';
 import '../media_view.dart';
 import '../notifications/notifications_bell.dart';
 import '../player/play_progress.dart';
@@ -216,6 +217,7 @@ class _Shelves extends StatelessWidget {
         provider: continueListeningShelfProvider,
         withProgress: true,
         orderedByProgress: true,
+        tapResumes: true,
       ),
       // Second, under what is half-finished: a pin is the strongest
       // statement a listener makes about the library, and everything
@@ -315,14 +317,30 @@ class _DownloadedShelf extends ConsumerWidget {
               // carries one: this is the shelf most likely to be tapped
               // with no network, and resuming at zero there is the
               // failure it exists to avoid.
-              openHomeItem(context, ref, item, _resume(entry.progress));
+              openHomeItem(
+                context,
+                ref,
+                item,
+                _resume(entry.progress),
+                fromMirror: true,
+              );
+            },
+            playLabelAt: (at) => switch (shown[at].item) {
+              final item? when playResumes(item, _resume(shown[at].progress)) =>
+                context.l10n.libraryResumeItem(item.title),
+              _ => null,
             },
             onPlayItem: (tile) {
               final at = tiles.indexOf(tile);
               if (at < 0) return;
               final item = shown[at].item;
               if (item == null) return;
-              playHomeItem(ref, item, _resume(shown[at].progress));
+              playOrResumeItem(
+                ref,
+                item,
+                _resume(shown[at].progress),
+                fromMirror: true,
+              );
             },
           ),
         ),

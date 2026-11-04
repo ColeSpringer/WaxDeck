@@ -46,7 +46,11 @@ class GatedRepository extends FakeRepository {
 /// The tracks index: the listing with no bucket, which is the one that
 /// pages the whole library and the surface the deleted library grid's
 /// paging behaviour moved onto.
-const MusicListing _tracks = (dimension: null, segment: '');
+const MusicListing _tracks = (
+  dimension: null,
+  segment: '',
+  domain: BrowseDomain.music,
+);
 
 /// One page and a bit, so there is a second page to race against.
 final _library = <ItemSummary>[

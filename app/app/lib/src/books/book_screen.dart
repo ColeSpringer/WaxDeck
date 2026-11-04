@@ -13,6 +13,7 @@ import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
 import '../library/item_kind.dart';
+import '../library/item_play.dart';
 import '../metadata/metadata_controller.dart';
 import '../player/download_action.dart';
 import '../player/item_star_rating_row.dart';
@@ -32,6 +33,7 @@ import '../shell/semantics_ids.dart';
 import '../shell/server_health.dart';
 import '../shell/shell_messages.dart';
 import '../tools/tool_tasks_provider.dart';
+import 'book_dimension.dart';
 import 'books_controller.dart';
 import 'series_merge.dart';
 
@@ -210,7 +212,7 @@ class _Header extends ConsumerWidget {
       artwork: ref.watch(artworkStoreProvider).source(book.artUrl),
       artworkCaption: artSourceLabelWithBorrow(l10n, book.artSource),
       description: _people(l10n, book),
-      link: _seriesLink(context, ref),
+      links: <EntityHeaderLink>[?_authorLink(context), ?_seriesLink(context)],
       actions: <WaxAction>[
         WaxAction(
           // The verb says where it will put you, and the chapter name is
@@ -229,7 +231,12 @@ class _Header extends ConsumerWidget {
           glyph: WaxIcons.play,
           emphasis: WaxActionEmphasis.primary,
           semanticsId: SemanticsIds.bookResume,
-          onPressed: () => playBook(ref, book, positionMs: playFromMs),
+          onPressed: () {
+            if (resumeInPlace(ref, book.pid, finished: progress.finished)) {
+              return;
+            }
+            playBook(ref, book, positionMs: playFromMs);
+          },
         ),
         ?downloadWaxAction(
           l10n,
@@ -251,32 +258,46 @@ class _Header extends ConsumerWidget {
     );
   }
 
+  /// The author line, which navigates to the books filed under them: the
+  /// first author, the one the book is filed under, and named alone so
+  /// the link says whom it opens. Pushed, as the series line's pages are:
+  /// their declared parents are their indexes, and back should return to
+  /// this book.
+  EntityHeaderLink? _authorLink(BuildContext context) {
+    final authorPid = book.authorPid;
+    if (authorPid == null || book.authors.isEmpty) return null;
+    return EntityHeaderLink(
+      label: context.l10n.bookByAuthors(book.authors.first),
+      semanticsId: SemanticsIds.bookAuthorLink,
+      onPressed: () => unawaited(
+        context.push(WaxRoute.bookBucket(BookDimension.authors, authorPid)),
+      ),
+    );
+  }
+
   /// The series line, which navigates to the books that share it.
-  EntityHeaderLink? _seriesLink(BuildContext context, WidgetRef ref) {
+  EntityHeaderLink? _seriesLink(BuildContext context) {
     final series = book.series;
     if (series == null) return null;
     final sequence = book.seriesSequence;
     final seriesPid = book.seriesPid;
+    final authorPid = book.authorPid;
     return EntityHeaderLink(
       label: sequence == null
           ? series
           : context.l10n.bookSeriesSequence(sequence, series),
       semanticsId: SemanticsIds.bookSeriesLink,
-      // The series screen where the book knows its pid. Where it does
-      // not - a series carried as a name with no entity behind it - the
-      // fallback still stands: narrow the hub to the author, which is
-      // where the rest of the series is. Narrowing rather than
-      // toggling, so an author the hub already held is not cleared.
-      onPressed: () {
-        if (seriesPid != null) {
-          context.go(WaxRoute.bookSeries(seriesPid));
-          return;
-        }
-        final author = book.authors.firstOrNull;
-        if (author != null) {
-          ref.read(bookViewProvider.notifier).narrowToAuthor(author);
-        }
-        context.go(WaxRoute.books);
+      // A series carried as a name with no entity behind it has no
+      // screen; the author's page is where the rest of it is, and the hub,
+      // this book's own parent, where there is no author either.
+      onPressed: () => switch ((seriesPid, authorPid)) {
+        (final String pid, _) => unawaited(
+          context.push(WaxRoute.bookSeries(pid)),
+        ),
+        (null, final String pid) => unawaited(
+          context.push(WaxRoute.bookBucket(BookDimension.authors, pid)),
+        ),
+        (null, null) => context.go(WaxRoute.books),
       },
     );
   }
@@ -313,10 +334,16 @@ class _Header extends ConsumerWidget {
     return parts.join(' · ');
   }
 
-  /// Authors and narrators, as the header's own lines.
+  /// Authors and narrators, as the header's own lines: every author where
+  /// there is no author link, the co-authors where the link names the
+  /// first.
   static String? _people(AppLocalizations l10n, BookDetail book) {
+    final linked = book.authorPid != null;
     final lines = <String>[
-      if (book.authors.isNotEmpty) l10n.bookByAuthors(book.authors.join(', ')),
+      if (book.authors.isNotEmpty && !linked)
+        l10n.bookByAuthors(book.authors.join(', ')),
+      if (book.authors.length > 1 && linked)
+        l10n.bookWithAuthors(book.authors.skip(1).join(', ')),
       if (book.narrators.isNotEmpty) l10n.bookReadBy(book.narrators.join(', ')),
     ];
     return lines.isEmpty ? null : lines.join('\n');

@@ -130,6 +130,16 @@ note.
   `series_pid` item field (and a series facet group) like `album_pid`.
   Shipped workaround: WaxDeck reads the books per series and takes
   their tag verdicts for the whole page in one query.
+- **Book authors past the first and narrators have no facet group.** A
+  book's co-authors and narrators are `item_contributor` rows, but the
+  `artist` group files a book under its first author only and
+  `credit-artist` reads the `artist` role alone, so neither has a bucket
+  or a query field. Wanted: author and narrator groups, many-per-item
+  over `item_contributor`, and `author_pid`/`narrator_pid` item fields
+  like `credit_artist_pid`. Shipped workaround: the Books Authors index
+  enumerates the `artist` dimension scoped to books, which files each
+  book under its first author only; narrators are listed on the book
+  screen and browse nowhere.
 - **Entity counts include the trash.** `EntityInfo.ItemCount` and
   `TotalDurationMS` count every member, trashed ones included, while
   every listing leaves the trash out, so an album or series holding a
@@ -619,6 +629,25 @@ note.
   an upload flagged as a fingerprint duplicate of a library file has no
   end-to-end test, since the library file's fingerprint comes from the
   catalog's analysis.
+- **A whole-library scan of a root that is a symlink finds nothing.**
+  The scan walks the root as stored with `filepath.WalkDir`, which does
+  not descend a root that is itself a symlink, and no error says so: a
+  library at `/srv/music -> /mnt/nas/music` scans zero files. A scan
+  with a `SubPath` under that root resolves through the link and works,
+  so WaxDeck's watcher, which scans changed directories by `SubPath`,
+  covers such a root only while eight or fewer directories change at
+  once; past that it runs one whole-library scan, which finds nothing.
+  A library added at a symlink path would start empty, since the
+  create's scan is a whole-library one. Wanted: a scan that follows a
+  symlinked root and keeps the root's own paths for what it finds, so
+  the path an administrator typed could be stored as typed. Shipped
+  workaround: WaxDeck stores the folder a symlinked path names when a
+  library is created, following the links as far as they go when that
+  folder is not there yet (a drive mounted later), so its scans walk a
+  real folder. A root named in the configuration or stored before that,
+  or one whose links could not be followed at create (a loop, a
+  permission error, logged), keeps its path and still scans nothing
+  whole-library.
 
 ## WaxTap
 

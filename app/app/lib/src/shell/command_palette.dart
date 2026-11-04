@@ -196,7 +196,12 @@ class _CommandPaletteDialog extends ConsumerWidget {
           entry(
             id: 'go-${target.name}',
             label: target.labelOf(l10n),
-            detail: l10n.shellPaletteGoToDetail,
+            // The sidebar tells an index by the hub it sits under; a flat
+            // list has to say so, or two Genres rows read the same.
+            detail: switch (target.parent) {
+              final hub? => l10n.shellPaletteInHubDetail(hub.labelOf(l10n)),
+              null => l10n.shellPaletteGoToDetail,
+            },
             glyph: target.glyph,
             run: () => host.go(target.location),
           ),

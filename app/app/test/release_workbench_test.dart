@@ -162,6 +162,7 @@ void main() {
           musicItemsProvider((
             dimension: MusicDimension.albums,
             segment: _album,
+            domain: BrowseDomain.wholeLibrary,
           )).notifier,
         )
         .loadMore();
@@ -547,5 +548,50 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Salt Harbour'), findsNothing);
+  });
+
+  /// The rows the members list draws by title, for a refresh assertion.
+  Finder listed(String title) => find.descendant(
+    of: _byId(SemanticsIds.workbenchList),
+    matching: find.text(title),
+  );
+
+  /// What the next members read answers, so a list that never asks
+  /// again keeps the old titles.
+  void freshMembers(FakeRepository repo) =>
+      repo.facetItems['album ${_album.substring(3)}'] = <ItemSummary>[
+        testItem('tr-A', title: 'Fresh Name'),
+        testItem('tr-B', title: 'Nightjar'),
+      ];
+
+  testWidgets('a bulk save refreshes the members list', (tester) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    await tester.longPress(_trackRow('tr-A'));
+    await tester.pumpAndSettle();
+    await tester.tap(_trackRow('tr-B'));
+    await tester.pumpAndSettle();
+
+    freshMembers(repo);
+    await tester.enterText(
+      _byId(SemanticsIds.workbenchBulkField('artist')),
+      'The Harbour Lights',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.workbenchBulkSave));
+    await tester.pumpAndSettle();
+
+    expect(listed('Fresh Name'), findsOneWidget);
+    expect(listed('Salt Harbour'), findsNothing);
+  });
+
+  testWidgets('a rewrite refreshes the members list', (tester) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    freshMembers(repo);
+    await rewriteAlbum(tester, 'Renamed Harbour');
+
+    expect(listed('Fresh Name'), findsOneWidget);
+    expect(listed('Salt Harbour'), findsNothing);
   });
 }

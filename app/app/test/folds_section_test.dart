@@ -722,13 +722,17 @@ void main() {
       _fold('release-group', 'rg:joni\u001fblue', 'rg-1', 'Blue'),
       isA<MusicListingScreen>()
           .having((s) => s.dimension, 'dimension', MusicDimension.releaseGroups)
-          .having((s) => s.segment, 'segment', 'rg-1'),
+          .having((s) => s.segment, 'segment', 'rg-1')
+          // The fold list covers every medium, and so does what it opens.
+          .having((s) => s.domain, 'domain', BrowseDomain.wholeLibrary),
     ),
     (
       _fold('genre', 'genre:hip hop', '01JZX5N8QW3F4V9T2B7KDGENRE', 'Hip-Hop'),
       isA<MusicListingScreen>()
           .having((s) => s.dimension, 'dimension', MusicDimension.genres)
-          .having((s) => s.segment, 'segment', '01JZX5N8QW3F4V9T2B7KDGENRE'),
+          .having((s) => s.segment, 'segment', '01JZX5N8QW3F4V9T2B7KDGENRE')
+          // The fold list covers every medium, and so does what it opens.
+          .having((s) => s.domain, 'domain', BrowseDomain.wholeLibrary),
     ),
     (
       _fold('series', 'series:harbor tales', 'sr-1', 'Harbor Tales'),

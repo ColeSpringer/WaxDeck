@@ -21,6 +21,7 @@ part 'book_detail.g.dart';
 /// * [subtitle] - Subtitle, when known.
 /// * [artSource] - Where the cover this book answers came from, for the mark under it. Absent when the book has no artwork, or when the answering image carries no attribution. 
 /// * [authors] - Author display names, in credit order.
+/// * [authorPid] - The book's first author as an artist pid (`ar-`), the author the `artist` browse dimension files the book under. Absent when the book names no author. 
 /// * [narrators] - Narrator display names, in credit order.
 /// * [series] - Series name, when the book belongs to one.
 /// * [seriesPid] - The series entity behind `series`, so a caller can name it to a merge. Absent when the book belongs to none. 
@@ -57,6 +58,10 @@ abstract class BookDetail implements Built<BookDetail, BookDetailBuilder> {
   /// Author display names, in credit order.
   @BuiltValueField(wireName: r'authors')
   BuiltList<String> get authors;
+
+  /// The book's first author as an artist pid (`ar-`), the author the `artist` browse dimension files the book under. Absent when the book names no author. 
+  @BuiltValueField(wireName: r'authorPid')
+  String? get authorPid;
 
   /// Narrator display names, in credit order.
   @BuiltValueField(wireName: r'narrators')
@@ -169,6 +174,13 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
       object.authors,
       specifiedType: const FullType(BuiltList, [FullType(String)]),
     );
+    if (object.authorPid != null) {
+      yield r'authorPid';
+      yield serializers.serialize(
+        object.authorPid,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'narrators';
     yield serializers.serialize(
       object.narrators,
@@ -325,6 +337,14 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
             specifiedType: const FullType(BuiltList, [FullType(String)]),
           ) as BuiltList<String>;
           result.authors.replace(valueDes);
+          break;
+        case r'authorPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.authorPid = valueDes;
           break;
         case r'narrators':
           final valueDes = serializers.deserialize(

@@ -317,7 +317,14 @@ class _UpNextShelf extends ConsumerWidget {
         onMoreItem: (tile) {
           final at = tiles.indexOf(tile);
           if (at < 0) return;
-          unawaited(showItemMenuForSummary(context, ref, rows[at].episode));
+          unawaited(
+            showItemMenuForSummary(
+              context,
+              ref,
+              rows[at].episode,
+              withOpen: true,
+            ),
+          );
         },
       ),
     );

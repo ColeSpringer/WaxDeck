@@ -16,6 +16,8 @@ import 'package:waxdeck/src/admin/trash_screen.dart';
 import 'package:waxdeck/src/admin/users_screen.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
+import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
 import 'package:waxdeck/src/books/series_index_screen.dart';
@@ -129,6 +131,14 @@ final _locations = <String, Type>{
   WaxRoute.books: BooksScreen,
   WaxRoute.bookSeriesIndex: BookSeriesIndexScreen,
   WaxRoute.bookSeries('sr-1'): BookSeriesScreen,
+  // The books indexes are the music index over the books' scope; a
+  // bucket is one page of covers whatever its handle is.
+  for (final dimension in BookDimension.values)
+    WaxRoute.bookIndex(dimension): MusicIndexScreen,
+  WaxRoute.bookBucket(BookDimension.authors, 'ar-1'): BookBucketScreen,
+  WaxRoute.bookBucket(BookDimension.genres, 'plain-key'): BookBucketScreen,
+  WaxRoute.bookBucket(BookDimension.authors, musicUnknownSegment):
+      BookBucketScreen,
   WaxRoute.book('bk-1'): BookScreen,
   WaxRoute.radio: RadioScreen,
   WaxRoute.radioSaved: RadioSavedScreen,
@@ -241,6 +251,10 @@ final _stackedInShell = <String>{
   // opening either link gets the surface above it underneath.
   WaxRoute.bookSeriesIndex,
   WaxRoute.bookSeries('sr-1'),
+  for (final dimension in BookDimension.values) WaxRoute.bookIndex(dimension),
+  WaxRoute.bookBucket(BookDimension.authors, 'ar-1'),
+  WaxRoute.bookBucket(BookDimension.genres, 'plain-key'),
+  WaxRoute.bookBucket(BookDimension.authors, musicUnknownSegment),
   WaxRoute.show('pc-1'),
   // Declared beneath its show, which is the point of putting the show in
   // the path: a stranger opening the link gets the show underneath.
@@ -307,6 +321,105 @@ void main() {
         _stackedInShell.contains(entry.key),
         reason: '${entry.key} back affordance',
       );
+    }
+  });
+
+  testWidgets('a listing reads the scope its location states', (tester) async {
+    // A /music listing is music, whatever its handle; a link whose medium
+    // is unknown says so in the location.
+    final router = await _pumpApp(tester);
+    for (final (location, domain) in <(String, BrowseDomain)>[
+      (WaxRoute.artistTracks('ar-1'), BrowseDomain.music),
+      (WaxRoute.artistTracks(musicUnknownSegment), BrowseDomain.music),
+      (
+        WaxRoute.musicBucket(MusicDimension.artists, 'plain-key'),
+        BrowseDomain.music,
+      ),
+      (
+        WaxRoute.musicBucket(MusicDimension.genres, 'key-1'),
+        BrowseDomain.music,
+      ),
+      (
+        WaxRoute.musicBucket(
+          MusicDimension.genres,
+          'key-1',
+          wholeLibrary: true,
+        ),
+        BrowseDomain.wholeLibrary,
+      ),
+      (
+        WaxRoute.musicBucket(MusicDimension.releaseGroups, 'rg-1'),
+        BrowseDomain.music,
+      ),
+      (
+        WaxRoute.musicBucket(
+          MusicDimension.releaseGroups,
+          'rg-1',
+          wholeLibrary: true,
+        ),
+        BrowseDomain.wholeLibrary,
+      ),
+    ]) {
+      router.go(location);
+      await tester.pumpAndSettle();
+      final listing = tester.widget<MusicListingScreen>(
+        find.byType(MusicListingScreen),
+      );
+      expect(listing.domain, domain, reason: location);
+      expect(listing.segment, isNot(contains('?')), reason: location);
+    }
+  });
+
+  testWidgets('the books locations read the books domain', (tester) async {
+    // A music index under the books path would count tracks.
+    final router = await _pumpApp(tester);
+    for (final dimension in BookDimension.values) {
+      final location = WaxRoute.bookIndex(dimension);
+      router.go(location);
+      await tester.pumpAndSettle();
+      final index = tester.widget<MusicIndexScreen>(
+        find.byType(MusicIndexScreen),
+      );
+      expect(index.domain, BrowseDomain.books, reason: location);
+      expect(index.dimension, dimension.dimension, reason: location);
+
+      final bucket = WaxRoute.bookBucket(dimension, 'plain-key');
+      router.go(bucket);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<BookBucketScreen>(find.byType(BookBucketScreen))
+            .dimension,
+        dimension,
+        reason: bucket,
+      );
+    }
+  });
+
+  testWidgets('a door\'s declared parent is the table\'s, not its path\'s', (
+    tester,
+  ) async {
+    final router = await _pumpApp(tester);
+    final parents = <String, String?>{
+      WaxRoute.book('bk-1'): WaxRoute.books,
+      WaxRoute.bookBucket(BookDimension.authors, 'ar-1'): WaxRoute.bookIndex(
+        BookDimension.authors,
+      ),
+      WaxRoute.musicBucket(MusicDimension.albums, 'al-1'): WaxRoute.musicIndex(
+        MusicDimension.albums,
+      ),
+      WaxRoute.musicBucket(MusicDimension.artists, 'ar-1'): WaxRoute.musicIndex(
+        MusicDimension.artists,
+      ),
+      // Two segments below its show: cutting the last one off would name
+      // `/podcasts/pc-1/episodes`, which is no page.
+      WaxRoute.showEpisode('pc-1', 'ep-1'): WaxRoute.show('pc-1'),
+      WaxRoute.episode('ep-1'): null,
+      WaxRoute.metadata('tr-1'): null,
+      '/nowhere/at-all': null,
+    };
+    for (final MapEntry(key: location, value: parent) in parents.entries) {
+      expect(router.declaredParentOf(location), parent, reason: location);
     }
   });
 

@@ -28,12 +28,25 @@ Share _share({
   owner: owner,
 );
 
+FakeRepository _seeded(int count) => FakeRepository()
+  ..allShares.addAll([
+    for (var i = 0; i < count; i++)
+      _share(pid: 'sh-$i', title: 'Link $i', owner: 'Sam Gamgee'),
+  ]);
+
+Future<void> _pumpAt(
+  WidgetTester tester,
+  FakeRepository repo, {
+  required Size size,
+}) => _pump(tester, repo, const AdminSharesScreen(), size: size);
+
 Future<ProviderContainer> _pump(
   WidgetTester tester,
   FakeRepository repo,
-  Widget screen,
-) async {
-  tester.view.physicalSize = const Size(1280, 1600);
+  Widget screen, {
+  Size size = const Size(1280, 1600),
+}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
@@ -111,5 +124,38 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.shareRow('sh-9')),
       findsOneWidget,
     );
+  });
+
+  group('paging', () {
+    Future<void> toTheEnd(WidgetTester tester) async {
+      for (var i = 0; i < 20; i++) {
+        await tester.drag(
+          find.byType(CustomScrollView).first,
+          const Offset(0, -2000),
+        );
+        await tester.pumpAndSettle();
+      }
+    }
+
+    testWidgets('scrolling near the end reads the next page', (tester) async {
+      final repo = _seeded(120);
+      await _pumpAt(tester, repo, size: const Size(800, 600));
+      expect(repo.listSharesCursors, <String?>[null]);
+
+      await toTheEnd(tester);
+      expect(
+        repo.listSharesCursors,
+        containsAllInOrder(<String?>[null, '50', '100']),
+      );
+    });
+
+    testWidgets('a window the first page cannot fill reads the next', (
+      tester,
+    ) async {
+      final repo = _seeded(60);
+      await _pumpAt(tester, repo, size: const Size(800, 9000));
+
+      expect(repo.listSharesCursors, <String?>[null, '50']);
+    });
   });
 }

@@ -978,13 +978,17 @@ class QueueRow extends ConsumerWidget {
             // rows that have one - the component gives it precedence -
             // so the menu is the kebab and a right click here.
             onLongPress: onLongPress,
-            // The menu derives its navigation verb from which navigator
-            // this row sits in - the full-screen queue is an overlay on
-            // the root, the queue side panel is inside the shell, and
-            // this row renders in both.
+            // The menu's doors push into the shell from both places this
+            // row renders: the side panel beside the shell, and the
+            // full-screen queue, an overlay the push leaves first.
             onMore: item == null
                 ? null
-                : () => showItemMenuForSummary(context, ref, item),
+                : () => showItemMenuForSummary(
+                    context,
+                    ref,
+                    item,
+                    withOpen: true,
+                  ),
             moreSemanticsId: SemanticsIds.queueEntryMore(entry.queueId),
             selectSemanticsId: selectSemanticsId,
             selected: selected,

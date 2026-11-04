@@ -377,6 +377,17 @@ func (l *Library) initSync(ctx context.Context) error {
 			return classify(err)
 		}
 		bootTS = l.tsOf(ctx, head)
+		// The generation is stored with a row to check it against (after
+		// it, so a stop between the two mints again rather than keeping
+		// the old one): the feed stores its own position only once its
+		// first drain is done, and a stop before that would otherwise mint
+		// again at the next start. The rows up to the head are this
+		// boot's history, which a later start need not read again.
+		if bootTS != 0 {
+			if err := l.db.SyncStateSet(ctx, syncKeyCatalogCursor, fmt.Sprintf("%d|%d", head, bootTS)); err != nil {
+				return err
+			}
+		}
 	}
 	l.feed.mu.Lock()
 	l.feed.gen = gen

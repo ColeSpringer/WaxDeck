@@ -3,15 +3,16 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/discovery/track_list_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
-import 'package:waxdeck/src/library/page_walk.dart';
 import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
@@ -77,8 +78,6 @@ Future<ProviderContainer> _pumpShell(
           ..episodesByShow[_showPid] = <EpisodeSummary>[
             testEpisode(_episodePid),
           ]
-          // A library with a book in it, because the Audiobooks tab hides
-          // where there are none; the false case is its own test.
           ..libraryItems.addAll(<ItemSummary>[
             if (hasBooks)
               testItem(
@@ -150,6 +149,20 @@ Future<bool> _systemBackLeftTheApp(WidgetTester tester) async {
   );
   await _systemBack(tester);
   return left;
+}
+
+/// Every location on the stack, the shells' pushes included: the
+/// top-level matches stay one signed-in shell whatever is pushed into it,
+/// and the reported URI leaves a push out.
+List<String> _stack(GoRouter router) {
+  List<String> walk(List<RouteMatchBase> matches) => <String>[
+    for (final match in matches)
+      if (match is ShellRouteMatch)
+        ...walk(match.matches)
+      else
+        match.matchedLocation,
+  ];
+  return walk(router.routerDelegate.currentConfiguration.matches);
 }
 
 String _location(ProviderContainer container) => container
@@ -262,13 +275,9 @@ void main() {
               SemanticsIds.navDestination(target.name),
     );
 
-    testWidgets('loses its tab, and home absorbs the gap', (tester) async {
-      // The layout system's rule, and the answer to the tab count a fifth
-      // domain forces: a library with no audiobooks is not offered a
-      // books tab. The routes stay declared either way, so a shared link
-      // into one still resolves.
+    testWidgets('an empty library keeps its Books tab', (tester) async {
       await _pumpShell(tester, hasBooks: false);
-      expect(navFor(WaxNavTarget.books), findsNothing);
+      expect(navFor(WaxNavTarget.books), findsWidgets);
       expect(navFor(WaxNavTarget.podcasts), findsWidgets);
       expect(navFor(WaxNavTarget.home), findsWidgets);
     });
@@ -286,88 +295,6 @@ void main() {
       await _pumpShell(tester, podcastsOn: false);
       expect(navFor(WaxNavTarget.podcasts), findsNothing);
       expect(navFor(WaxNavTarget.books), findsWidgets);
-    });
-
-    test(
-      'keeps its tab when the first page of books is empty but continues',
-      () async {
-        // The listing contract allows a page that comes back empty with
-        // books behind it: rows are dropped after the page is cut.
-        final hidden = <ItemSummary>[
-          for (var i = 0; i < 60; i++)
-            testItem(
-              'bk-01JZX5N8QW3F4V9T2B7KH${i.toString().padLeft(5, '0')}',
-              mediaType: MediaType.audiobook,
-            ),
-        ];
-        final repo = FakeRepository(
-          items: <ItemSummary>[
-            ...hidden,
-            testItem(_bookPid, mediaType: MediaType.audiobook),
-          ],
-        )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
-        final container = ProviderContainer(
-          overrides: [repositoryProvider.overrideWithValue(repo)],
-        );
-        addTearDown(container.dispose);
-
-        expect(
-          await container.read(emptyDomainsProvider.future),
-          isNot(contains(WaxNavTarget.books)),
-        );
-      },
-    );
-
-    test('keeps its tab when its probe runs out of pages unproven', () async {
-      // A walk that spent its budget on rows this caller is not shown has
-      // not shown the library holds no books.
-      final hidden = <ItemSummary>[
-        for (var i = 0; i < kProbePageBudget * kProbePageSize + 10; i++)
-          testItem(
-            'bk-01JZX5N8QW3F4V9T2B7KH${i.toString().padLeft(5, '0')}',
-            mediaType: MediaType.audiobook,
-          ),
-      ];
-      final repo = FakeRepository(
-        items: <ItemSummary>[
-          ...hidden,
-          testItem(_bookPid, mediaType: MediaType.audiobook),
-        ],
-      )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-      );
-      addTearDown(container.dispose);
-
-      expect(
-        await container.read(emptyDomainsProvider.future),
-        isNot(contains(WaxNavTarget.books)),
-      );
-      expect(
-        repo.listItemsCalls,
-        hasLength(kProbePageBudget),
-        reason: 'the probe stops at its budget, short of the one book',
-      );
-    });
-
-    testWidgets('a book is still reachable by location without the tab', (
-      tester,
-    ) async {
-      final container = await _pumpShell(tester, hasBooks: false);
-      container.read(routerProvider).go(WaxRoute.book(_bookPid));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(BookScreen), findsOneWidget);
-      // And the chrome lights nothing rather than lying about where the
-      // visitor is. The branch on screen still names its domain - that is
-      // what keeps a drill-in from lighting Home - but the chrome is not
-      // drawing that destination, so no row is selected.
-      final frame = tester.widget<WaxShellFrame>(find.byType(WaxShellFrame));
-      expect(frame.selected, WaxNavTarget.books.name);
-      expect(
-        frame.destinations.map((d) => d.name),
-        isNot(contains(WaxNavTarget.books.name)),
-      );
     });
 
     // Two mounts in one body would tear the first app down with its
@@ -400,11 +327,13 @@ void main() {
     // Tall enough that the whole list is built: the sidebar scrolls, and
     // a lazily-built row that is off screen is not the thing under test.
     final container = await _pumpShell(tester, size: const Size(1000, 1400));
-    // Music's indexes start closed away from what they hold, so their
+    // The indexes start closed away from what they hold, so their
     // children are not built until it is opened; every one of them has to
     // carry a handle once they are. Nothing else discloses: the
     // administrative rows are rows.
     await tester.tap(find.bySemanticsLabel('Expand Music'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Expand Books'));
     await tester.pumpAndSettle();
 
     for (final target in WaxNavTarget.values) {
@@ -454,6 +383,136 @@ void main() {
       contains('isSelected'),
     );
     semantics.dispose();
+  });
+
+  test('an index target goes where its dimension\'s index is', () {
+    expect(
+      <WaxNavTarget, (MusicDimension?, BookDimension?)>{
+        for (final t in WaxNavTarget.values)
+          if (t.musicIndex != null || t.bookIndex != null)
+            t: (t.musicIndex, t.bookIndex),
+      },
+      <WaxNavTarget, (MusicDimension?, BookDimension?)>{
+        WaxNavTarget.artists: (MusicDimension.artists, null),
+        WaxNavTarget.albums: (MusicDimension.albums, null),
+        WaxNavTarget.genres: (MusicDimension.genres, null),
+        WaxNavTarget.years: (MusicDimension.years, null),
+        WaxNavTarget.authors: (null, BookDimension.authors),
+        WaxNavTarget.bookGenres: (null, BookDimension.genres),
+      },
+    );
+    for (final t in WaxNavTarget.values) {
+      if (t.musicIndex case final d?) {
+        expect(t.location, WaxRoute.musicIndex(d), reason: t.name);
+      }
+      if (t.bookIndex case final d?) {
+        expect(t.location, WaxRoute.bookIndex(d), reason: t.name);
+      }
+    }
+  });
+
+  testWidgets('the sidebar lists the books indexes under Books', (
+    tester,
+  ) async {
+    final container = await _pumpShell(tester, size: const Size(1000, 1400));
+    expect(WaxNavTarget.books.indexes, <WaxNavTarget>[
+      WaxNavTarget.authors,
+      WaxNavTarget.bookGenres,
+      WaxNavTarget.series,
+    ]);
+    expect(WaxNavTarget.music.indexes, <WaxNavTarget>[
+      WaxNavTarget.artists,
+      WaxNavTarget.albums,
+      WaxNavTarget.tracks,
+      WaxNavTarget.genres,
+      WaxNavTarget.years,
+      WaxNavTarget.playlists,
+    ]);
+    await tester.tap(find.bySemanticsLabel('Expand Books'));
+    await tester.pumpAndSettle();
+
+    Finder row(String label) => find.descendant(
+      of: find.byType(WaxSidebar),
+      matching: find.text(label),
+    );
+    final books = tester.getTopLeft(row('Books')).dy;
+    final radio = tester.getTopLeft(row('Radio')).dy;
+    for (final label in <String>['Authors', 'Series']) {
+      final at = tester.getTopLeft(row(label)).dy;
+      expect(at, greaterThan(books), reason: '$label sits under Books');
+      expect(at, lessThan(radio), reason: '$label sits under Books');
+    }
+
+    await _tapNav(tester, WaxNavTarget.authors.name);
+    expect(
+      container
+          .read(routerProvider)
+          .routerDelegate
+          .currentConfiguration
+          .uri
+          .path,
+      WaxRoute.bookIndex(BookDimension.authors),
+    );
+    await _tapNav(tester, WaxNavTarget.bookGenres.name);
+    expect(
+      container
+          .read(routerProvider)
+          .routerDelegate
+          .currentConfiguration
+          .uri
+          .path,
+      WaxRoute.bookIndex(BookDimension.genres),
+    );
+    await _tapNav(tester, WaxNavTarget.series.name);
+    expect(
+      container
+          .read(routerProvider)
+          .routerDelegate
+          .currentConfiguration
+          .uri
+          .path,
+      WaxRoute.bookSeriesIndex,
+    );
+  });
+
+  testWidgets('the sidebar rows move with the section that opens', (
+    tester,
+  ) async {
+    // Music's indexes close and Books' open in the same slots, so an
+    // unkeyed row would keep the identifier of the row it replaced.
+    final container = await _pumpShell(tester, size: const Size(1000, 1400));
+    final router = container.read(routerProvider);
+    router.go(WaxRoute.music);
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.navDestination('genres')),
+      findsOneWidget,
+    );
+    router.go(WaxRoute.books);
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.navDestination('bookGenres')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.navDestination('genres')),
+      findsNothing,
+    );
+    router.go(WaxRoute.music);
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.navDestination('genres')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('an author page lights Authors', (tester) async {
+    final container = await _pumpShell(tester);
+    container
+        .read(routerProvider)
+        .go(WaxRoute.bookBucket(BookDimension.authors, 'ar-1'));
+    await tester.pumpAndSettle();
+    expect(_selected(tester), WaxNavTarget.authors.name);
   });
 
   testWidgets('a drilled-in screen keeps its domain highlighted', (
@@ -1098,7 +1157,7 @@ void main() {
       final router = container.read(routerProvider);
       router.go(WaxRoute.radio);
       await tester.pumpAndSettle();
-      final depth = router.routerDelegate.currentConfiguration.matches.length;
+      final stack = _stack(router);
       final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
 
       await tester.tap(field);
@@ -1112,10 +1171,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_location(container), WaxRoute.radio);
-      expect(
-        router.routerDelegate.currentConfiguration.matches,
-        hasLength(depth),
-      );
+      expect(_stack(router), stack, reason: 'nothing pushed either');
       // The query is still written, which is what keeps the field and
       // the provider in step: a provider that stopped hearing keystrokes
       // off search would leave text here that nothing could clear, since
@@ -1182,7 +1238,19 @@ void main() {
       await tester.enterText(field, 'n');
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
-      final depth = router.routerDelegate.currentConfiguration.matches.length;
+      final stack = _stack(router);
+      // How the router is asked to move while typing. The screen writes
+      // its settled query with `replace`, which adds no history entry; a
+      // `go` or a push would, and the location alone cannot tell them
+      // apart.
+      final navigations = <NavigatingType>[];
+      void record() {
+        final state = router.routeInformationProvider.value.state;
+        if (state is RouteInformationState) navigations.add(state.type);
+      }
+
+      router.routeInformationProvider.addListener(record);
+      addTearDown(() => router.routeInformationProvider.removeListener(record));
 
       // On web every `go` mints a history entry, so routing per keystroke
       // would make one word several back presses. The one navigation this
@@ -1192,12 +1260,10 @@ void main() {
         await tester.pump(SearchQuery.debounce);
       }
       await tester.pumpAndSettle();
+      expect(navigations, everyElement(NavigatingType.replace));
 
       expect(_location(container), startsWith(WaxRoute.search));
-      expect(
-        router.routerDelegate.currentConfiguration.matches,
-        hasLength(depth),
-      );
+      expect(_stack(router), stack, reason: 'nothing pushed either');
     });
 
     testWidgets('an empty submit still opens the screen', (tester) async {
@@ -1405,6 +1471,24 @@ void main() {
         WaxNavTarget.review,
       );
       expect(activeNavTarget(WaxRoute.tasks, targets), WaxNavTarget.tasks);
+      expect(
+        activeNavTarget(
+          WaxRoute.bookBucket(BookDimension.authors, 'ar-1'),
+          targets,
+        ),
+        WaxNavTarget.authors,
+      );
+      expect(
+        activeNavTarget(WaxRoute.bookSeries('sr-1'), targets),
+        WaxNavTarget.series,
+      );
+      expect(
+        activeNavTarget(
+          WaxRoute.bookBucket(BookDimension.genres, 'g-fantasy'),
+          targets,
+        ),
+        WaxNavTarget.bookGenres,
+      );
     });
 
     test('falls to the branch on screen when only home would claim it', () {

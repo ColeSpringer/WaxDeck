@@ -64,52 +64,76 @@ void main() {
     expect(find.byType(WaxActionBar), findsNothing);
   });
 
-  testWidgets('the link slot is drawn under the subtitle, tappable and named', (
+  testWidgets('the links are drawn under the subtitle, tappable and named', (
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    var taps = 0;
+    var authorTaps = 0;
+    var seriesTaps = 0;
     await _pump(
       tester,
       EntityHeader(
         title: 'A Bright Shore',
         subtitle: 'Read by Ines Marchetti',
-        link: EntityHeaderLink(
-          label: 'Book 2 of The Tide Almanac',
-          semanticsId: 'series-link',
-          onPressed: () => taps++,
-        ),
+        links: <EntityHeaderLink>[
+          EntityHeaderLink(
+            label: 'By Mirren Vaux',
+            semanticsId: 'author-link',
+            onPressed: () => authorTaps++,
+          ),
+          EntityHeaderLink(
+            label: 'Book 2 of The Tide Almanac',
+            semanticsId: 'series-link',
+            onPressed: () => seriesTaps++,
+          ),
+        ],
       ),
     );
-    final link = find.text('Book 2 of The Tide Almanac');
-    expect(link, findsOneWidget);
+    final author = find.text('By Mirren Vaux');
+    final series = find.text('Book 2 of The Tide Almanac');
+    expect(author, findsOneWidget);
+    expect(series, findsOneWidget);
     expect(
-      tester.getTopLeft(link).dy,
+      tester.getTopLeft(author).dy,
       greaterThan(tester.getBottomLeft(find.text('Read by Ines Marchetti')).dy),
+    );
+    expect(
+      tester.getTopLeft(series).dy,
+      greaterThan(tester.getBottomLeft(author).dy),
+      reason: 'one per line, in the order given',
     );
     final node = tester.getSemantics(find.bySemanticsIdentifier('series-link'));
     expect(node.label, contains('Book 2 of The Tide Almanac'));
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
-    expect(
-      tester.getSize(find.byType(WaxButton)).height,
-      WaxSpace.touchTarget,
-      reason: 'the link keeps the vertical touch target',
-    );
-    await tester.tap(link);
+    expect(find.byType(WaxButton), findsNWidgets(2));
+    for (final button in tester.widgetList<WaxButton>(find.byType(WaxButton))) {
+      expect(
+        tester.getSize(find.byWidget(button)).height,
+        WaxSpace.touchTarget,
+        reason: 'each link keeps the vertical touch target',
+      );
+    }
+    await tester.tap(series);
     await tester.pump();
-    expect(taps, 1);
+    expect((authorTaps, seriesTaps), (0, 1));
+    await tester.tap(author);
+    await tester.pump();
+    expect((authorTaps, seriesTaps), (1, 1));
     semantics.dispose();
+  });
+
+  testWidgets('no links draws no button', (tester) async {
+    await _pump(tester, const EntityHeader(title: 'A Bright Shore'));
+    expect(find.byType(WaxButton), findsNothing);
   });
 
   testWidgets('the link follows the text block alignment', (tester) async {
     final header = EntityHeader(
       title: 'A Bright Shore',
       subtitle: 'Read by Ines Marchetti',
-      link: EntityHeaderLink(
-        label: 'Series',
-        semanticsId: 'l',
-        onPressed: _noop,
-      ),
+      links: <EntityHeaderLink>[
+        EntityHeaderLink(label: 'Series', semanticsId: 'l', onPressed: _noop),
+      ],
     );
     final title = find.text('A Bright Shore');
     final link = find.text('Series');
@@ -134,7 +158,9 @@ void main() {
         'Book 12 of The Long Chronicle of the Harbour and Everything Past It';
     final header = EntityHeader(
       title: 'A Bright Shore',
-      link: EntityHeaderLink(label: label, semanticsId: 'l', onPressed: _noop),
+      links: <EntityHeaderLink>[
+        EntityHeaderLink(label: label, semanticsId: 'l', onPressed: _noop),
+      ],
     );
     RenderParagraph paragraph() =>
         tester.renderObject<RenderParagraph>(find.text(label));

@@ -153,16 +153,15 @@ export async function clickUntil(
   }).toPass({ timeout: T.nav });
 }
 
-// Click a canvas control until the page issues a matching request -
-// `clickUntil` with the listener armed here, so the listener cannot
-// time out under the loop that polls it (a raced clock would strand
-// the flag false while the loop kept clicking).
-export async function clickUntilRequested(
+// Arm a listener for the page's next matching request, answering
+// whether it has been seen. Unbounded, so it cannot time out under the
+// loop that polls it (a raced clock would strand the flag false while
+// the loop kept clicking); armed before the first click, so a fast
+// request is never missed.
+export function requestSeen(
   page: Pick<Page, 'waitForRequest'>,
-  trigger: Locator,
   matches: (req: Request) => boolean,
-  press: Press = {},
-) {
+): () => boolean {
   let seen = false;
   page
     .waitForRequest(matches, { timeout: 0 })
@@ -170,7 +169,18 @@ export async function clickUntilRequested(
       seen = true;
     })
     .catch(() => {});
-  await clickUntil(trigger, () => seen, press);
+  return () => seen;
+}
+
+// Click a canvas control until the page issues a matching request -
+// `clickUntil` over `requestSeen`.
+export async function clickUntilRequested(
+  page: Pick<Page, 'waitForRequest'>,
+  trigger: Locator,
+  matches: (req: Request) => boolean,
+  press: Press = {},
+) {
+  await clickUntil(trigger, requestSeen(page, matches), press);
 }
 
 // Click a canvas control and wait for what it opens, as one retried unit:

@@ -1,15 +1,32 @@
 // Audiobooks: the hub, a book, and the player's spoken face.
 
-import { Locator, expect } from '@playwright/test';
-import { SemanticsIds, sem } from '../../semantics-ids';
+import { Locator, Request, expect } from '@playwright/test';
+import { SemanticsIdPrefixes, SemanticsIds, sem, semPrefix } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough, clickToward, wheelIntoReach } from '../gestures';
+import { DEST } from '../nav';
+import {
+  chooseFromMenu,
+  clickThrough,
+  clickToward,
+  clickUntilRequested,
+  rectAtRest,
+  requestSeen,
+  wheelIntoReach,
+} from '../gestures';
+
+/// The indexes the hub's tiles open.
+export type BookIndex = 'authors' | 'genres';
 
 export class Books extends Surface {
   /// A book's card on the hub.
   card(pid: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.book(pid)));
+  }
+
+  /// A book's card on the hub's Continue listening shelf.
+  continueCard(pid: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookContinue(pid)));
   }
 
   /// The resume control on a book's own screen, which the hub does not
@@ -60,6 +77,43 @@ export class Books extends Surface {
       this.resume(),
       this.ctx.page.locator(sem(SemanticsIds.deckBar)),
     );
+  }
+
+  /// Play a book from its cover on the hub, where it stands. The play is
+  /// its own node, drawn only while a pointer rests on the card, so each
+  /// try hovers the card and clicks the play at its own rect. Settles on
+  /// the start's play-info request: the deck bar may already be up with
+  /// a queue the account left behind.
+  async playCover(pid: string): Promise<void> {
+    const page = this.ctx.page;
+    const card = this.card(pid);
+    const play = page.locator(sem(SemanticsIds.bookPlay(pid)));
+    const started = requestSeen(page, startOf(pid));
+    await wheelIntoReach(page, card);
+    await expect(async () => {
+      if (started()) return;
+      const box = await card.boundingBox();
+      expect(box, 'the card reports a box to hover').toBeTruthy();
+      // The top of the card is its cover.
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.width / 2);
+      await play.waitFor({ timeout: T.step });
+      await rectAtRest(play);
+      await play.click({ timeout: 2_000, force: true }).catch(() => {});
+      await expect
+        .poll(started, { timeout: T.step, message: 'the cover should start the book' })
+        .toBe(true);
+    }).toPass({ timeout: T.nav });
+  }
+
+  /// Carry a book on from the hub's Continue listening card, whose tap
+  /// resumes rather than opening the book. Pressed on the caption, off
+  /// the cover, whose hover play is the other way to resume. Settles as
+  /// [playCover] does.
+  async continueResume(pid: string): Promise<void> {
+    const page = this.ctx.page;
+    const card = this.continueCard(pid);
+    await wheelIntoReach(page, card);
+    await clickUntilRequested(page, card, startOf(pid), { aim: 'caption' });
   }
 
   /// Sort is a standing choice in the hub's overflow.
@@ -159,4 +213,58 @@ export class Books extends Surface {
   seriesCard(pid: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.bookSeriesCard(pid)));
   }
+
+  /// A tile on the hub: the way into one index.
+  tile(name: BookIndex | 'series'): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookTile(name)));
+  }
+
+  /// Open an index from the hub's tile, settling on its first row.
+  async openIndex(name: BookIndex): Promise<void> {
+    await clickThrough(
+      this.tile(name),
+      this.ctx.page.locator(sem(SemanticsIds.indexBucket(0))),
+    );
+  }
+
+  /// An index row by the name it shows. Rows are numbered by position,
+  /// which other workers' books shift, so a spec names the one it means.
+  /// Anchored at the row's start, so a name another one merely contains
+  /// is not a second match.
+  indexRow(label: string): Locator {
+    const rows = `${semPrefix(SemanticsIdPrefixes.indexBucket)}:not(${semPrefix(SemanticsIdPrefixes.indexBucketMore)})`;
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return this.ctx.page.locator(rows).filter({ hasText: new RegExp(`^${escaped}`) });
+  }
+
+  /// One author's page, by the author's artist pid.
+  authorPage(key: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookAuthorScreen(key)));
+  }
+
+  /// Where a book's page lives, for a spec that checks it stayed.
+  bookLocation(pid: string): string {
+    return `${DEST.books.path}/${encodeURIComponent(pid)}`;
+  }
+
+  /// Where an author's page lives, for a spec that checks it arrived.
+  authorLocation(key: string): string {
+    return `${DEST.books.path}/authors/${encodeURIComponent(key)}`;
+  }
+
+  /// Open an author from the Authors index, settling on their page. The
+  /// index is built lazily and lists every worker's authors, so the row
+  /// is wheeled into reach first; two rows of one name fail here, by
+  /// name, rather than as a click that never lands.
+  async openAuthor(label: string, key: string): Promise<void> {
+    const row = this.indexRow(label);
+    await wheelIntoReach(this.ctx.page, row);
+    await expect(row, `one Authors row reads ${label}`).toHaveCount(1);
+    await clickThrough(row, this.authorPage(key));
+  }
+}
+
+/// [pid]'s play-info request, the first thing a start of it asks.
+function startOf(pid: string): (req: Request) => boolean {
+  return (req) => req.url().includes(`/items/${pid}/play-info`);
 }

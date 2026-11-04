@@ -11,6 +11,8 @@ import 'package:waxdeck/src/metadata/artwork_manager.dart';
 import 'package:waxdeck/src/metadata/metadata_controller.dart';
 import 'package:waxdeck/src/metadata/metadata_form.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
+import 'package:waxdeck/src/music/listing_screen.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -911,6 +913,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MetadataScreen), findsNothing);
   });
+
+  for (final (mediaType, domain) in <(MediaType, BrowseDomain)>[
+    (MediaType.music, BrowseDomain.music),
+    (MediaType.audiobook, BrowseDomain.wholeLibrary),
+  ]) {
+    testWidgets('the release-group door of an item opens the listing its '
+        'medium allows (${mediaType.wireName})', (tester) async {
+      final repo = _repo();
+      repo.libraryItems
+        ..clear()
+        ..add(testItem('tr-1', title: 'Old Title', mediaType: mediaType));
+      repo.metadataEntityPids['tr-1'] = (
+        artistPid: null,
+        albumPid: null,
+        releaseGroupPid: 'rg-01JZX5N8QW3F4V9T2B7KDBWORK',
+      );
+      await _pump(tester, _routed(_container(repo)));
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.metadataOpenReleaseGroup),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<MusicListingScreen>(find.byType(MusicListingScreen))
+            .domain,
+        domain,
+      );
+    });
+  }
 
   testWidgets('no entity doors without pids to open', (tester) async {
     await _pump(tester, _routed(_container(_repo())));

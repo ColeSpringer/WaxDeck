@@ -21,7 +21,7 @@ export interface paths {
         put?: never;
         /**
          * Create a library at runtime
-         * @description Registers a new library root without a server restart. The path is validated (absolute; an existing folder the server can read, or with `allowAbsent` one mounted later; writable by the server when the library is managed; and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries `streamingWarning` saying so, rather than reporting a plain success. `name` is the display name and the WaxFlow root name the same directory is served under. Administrators only.
+         * @description Registers a new library root without a server restart. The path is validated (absolute; an existing folder the server can read, or with `allowAbsent` one mounted later; writable by the server when the library is managed; and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. A path that is a symbolic link, or runs through one, is stored and returned as the folder the link points to, followed as far as it goes when that folder is not there yet; repointing the link later does not move the library. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries `streamingWarning` saying so, rather than reporting a plain success. `name` is the display name and the WaxFlow root name the same directory is served under. Administrators only.
          */
         post: operations["createLibrary"];
         delete?: never;
@@ -6824,6 +6824,11 @@ export interface components {
             artSource?: components["schemas"]["ArtSource"];
             /** @description Author display names, in credit order. */
             authors: string[];
+            /**
+             * @description The book's first author as an artist pid (`ar-`), the author the `artist` browse dimension files the book under. Absent when the book names no author.
+             * @example ar-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            authorPid?: string;
             /** @description Narrator display names, in credit order. */
             narrators: string[];
             /** @description Series name, when the book belongs to one. */
@@ -7692,7 +7697,7 @@ export interface components {
          */
         DiscoveryList: "newest" | "recently-added" | "most-played" | "recently-played" | "random" | "starred" | "alphabetical" | "never-played" | "rediscover" | "in-progress";
         /**
-         * @description A browse dimension: one of `genre`, `artist`, `credit-artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a custom tag dimension spelled `tag.<KEY>` (for example `tag.MOOD`). `release-group` buckets tracks by their album's release group, which is the work rather than the edition, so the several pressings of one record answer as one bucket. `credit-artist` buckets a track under every artist its credit names, where `artist` buckets it once under the primary: a featured artist has a bucket here and none there. It is what an artist's "appears on" reads, and it is many-per-item, so its counts sum above the item count. The fixed set is stable; which tag dimensions exist depends on the library's tags. Tag keys are case-insensitive and canonicalize to upper case, so `tag.mood` and `tag.MOOD` are one dimension; responses echo the canonical spelling.
+         * @description A browse dimension: one of `genre`, `artist`, `credit-artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a custom tag dimension spelled `tag.<KEY>` (for example `tag.MOOD`). `release-group` buckets tracks by their album's release group, which is the work rather than the edition, so the several pressings of one record answer as one bucket. `credit-artist` buckets a track under every artist its credit names, where `artist` buckets it once under the primary: a featured artist has a bucket here and none there. It is what an artist's "appears on" reads, and it is many-per-item, so its counts sum above the item count. The fixed set is stable; which tag dimensions exist depends on the library's tags. Tag keys are case-insensitive and canonicalize to upper case, so `tag.mood` and `tag.MOOD` are one dimension; responses echo the canonical spelling. `kind` buckets items by what they are; its keys are `track`, `book`, and `episode`.
          * @example genre
          */
         BrowseDimension: string;
@@ -12864,7 +12869,7 @@ export interface operations {
                     "application/json": components["schemas"]["LibraryCreated"];
                 };
             };
-            /** @description The library was refused (code `invalid-request`): the name is missing or holds a path separator, the media is not one of the three, or the path is missing, relative, names no folder (without `allowAbsent`), names a file, names a folder the server cannot read or list or that does not answer in time, is to be managed and cannot be written by the server (not checked while the server is read-only), or overlaps an existing root, the inbox folders or the podcast download dir. */
+            /** @description The library was refused (code `invalid-request`): the name is missing or holds a path separator, the media is not one of the three, or the path is missing, relative, names no folder (without `allowAbsent`), names a file or lies under one (with `allowAbsent` too), names a folder the server cannot read or list or that does not answer in time, is to be managed and cannot be written by the server (not checked while the server is read-only), or overlaps an existing root, the inbox folders or the podcast download dir. */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -4749,13 +4749,37 @@ abstract class AppLocalizations {
   /// **'An upload changed.'**
   String get bellUploadChanged;
 
+  /// Title of the author page holding the books with no author tagged, and the name of its row in the Authors index.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown author'**
+  String get bookAuthorUnknown;
+
   /// Snackbar after putting a book's position back at zero.
   ///
   /// In en, this message translates to:
   /// **'Back to the beginning'**
   String get bookBackToBeginning;
 
-  /// Who wrote a book, under its title. {names} is the authors joined by commas.
+  /// Empty state of an author or genre page whose books have moved or been removed.
+  ///
+  /// In en, this message translates to:
+  /// **'No books here'**
+  String get bookBucketEmptyTitle;
+
+  /// Title of an author or genre page reached by a link with no name to go by: an author whose card could not be read, a genre whose key names nothing a reader knows.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, authors{Author} genres{Genre} other{Books}}'**
+  String bookBucketFallbackTitle(String dimension);
+
+  /// Title of the error state when an author's or a genre's page could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, authors{Could not load this author} genres{Could not load this genre} other{Could not load these books}}'**
+  String bookBucketLoadError(String dimension);
+
+  /// Who wrote a book, under its title on the book screen: the author link, naming the first author (whose page it opens), or, for a book whose author has no page, a plain line naming them all. {names} is that one author, or every author joined by commas.
   ///
   /// In en, this message translates to:
   /// **'By {names}'**
@@ -4821,6 +4845,12 @@ abstract class AppLocalizations {
   /// **'Chapters'**
   String get bookChaptersTitle;
 
+  /// How many books an author or a genre holds: under its name in the Authors or Genres index, under the title of its own page, and beside the track count in the line under an artist's name on their page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 book} other{{count} books}}'**
+  String bookCount(int count);
+
   /// Control keeping a book's audio on this device.
   ///
   /// In en, this message translates to:
@@ -4880,6 +4910,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Publisher'**
   String get bookFieldPublisher;
+
+  /// Title of the genre page holding the books with no genre tagged, and the name of its row in the Genres index.
+  ///
+  /// In en, this message translates to:
+  /// **'No genre'**
+  String get bookGenreUnknown;
 
   /// Title of the error state when one book could not be read.
   ///
@@ -5079,7 +5115,7 @@ abstract class AppLocalizations {
   /// **'Show all'**
   String get bookSeriesShowAll;
 
-  /// The shelf on the audiobook hub that opens the series index, and that index's own title. One key for both: they name the same thing on two surfaces.
+  /// The audiobook hub's tile that opens the series index, the heading of the hub's series shelf, that index's own title, and a series page's title while its name loads. One key for all four: they name the same thing.
   ///
   /// In en, this message translates to:
   /// **'Series'**
@@ -5193,17 +5229,17 @@ abstract class AppLocalizations {
   /// **'Lifts speech over a noisy room'**
   String get bookVoiceBoostHelp;
 
+  /// A co-authored book's other authors, on the book screen's own line above the narrators, under the author link that names the first. {names} is the authors after the first, joined by commas.
+  ///
+  /// In en, this message translates to:
+  /// **'With {names}'**
+  String bookWithAuthors(String names);
+
   /// The value of a yes-or-no row in a book's edition details.
   ///
   /// In en, this message translates to:
   /// **'Yes'**
   String get bookYes;
-
-  /// Action on the empty Books hub, for administrators: opens the libraries screen where a Books library is added.
-  ///
-  /// In en, this message translates to:
-  /// **'Add a library'**
-  String get booksAddLibrary;
 
   /// Accessible name of the add control on the audiobook hub, which opens the same sheet home's does with the audiobook type chosen.
   ///
@@ -5211,11 +5247,11 @@ abstract class AppLocalizations {
   /// **'Add to library'**
   String get booksAddToLibrary;
 
-  /// Chip narrowing the hub to one author, with how many books they have on the shelf.
+  /// Heading on the audiobook hub over the grid of every book, under the shelves.
   ///
   /// In en, this message translates to:
-  /// **'{name} ({count})'**
-  String booksAuthorChip(String name, int count);
+  /// **'All books'**
+  String get booksAllTitle;
 
   /// Shelf on the audiobook hub holding the books part way through.
   ///
@@ -5223,11 +5259,17 @@ abstract class AppLocalizations {
   /// **'Continue listening'**
   String get booksContinueTitle;
 
-  /// Message of the Books hub when there are no audiobooks: how a file becomes a book. 'Treat as audiobook' is the menu row of that name (libraryKindToBook).
+  /// What each way of browsing the books is called: the audiobook hub's tile label and the title of the index it opens.
   ///
   /// In en, this message translates to:
-  /// **'In a library that holds Books every audio file becomes a book, parts and all. Elsewhere a file is a book when its tags say so, or when someone who may edit it chooses Treat as audiobook.'**
-  String get booksEmptyMessage;
+  /// **'{dimension, select, authors{Authors} genres{Genres} other{Books}}'**
+  String booksDimensionTitle(String dimension);
+
+  /// Action on the empty Books hub for anyone who may upload: opens the add sheet with the audiobook type chosen.
+  ///
+  /// In en, this message translates to:
+  /// **'Add audiobooks'**
+  String get booksEmptyAdd;
 
   /// Empty state of the audiobook hub.
   ///
@@ -5264,6 +5306,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Finished'**
   String get booksFinished;
+
+  /// Caption over a books index saying how much of it is loaded, when the whole index is loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, authors{{count, plural, =1{1 author} other{{count} authors}}} genres{{count, plural, =1{1 genre} other{{count} genres}}} other{{count, plural, =1{1 entry} other{{count} entries}}}}'**
+  String booksIndexCount(String dimension, int count);
+
+  /// The same caption where the index runs past the page that was read, so the number is a floor rather than a total.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, authors{{count, plural, =1{1+ author} other{{count}+ authors}}} genres{{count, plural, =1{1+ genre} other{{count}+ genres}}} other{{count, plural, =1{1+ entry} other{{count}+ entries}}}}'**
+  String booksIndexCountAtLeast(String dimension, int count);
+
+  /// Empty state of a books index, on a library that holds no books yet.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, authors{No authors yet} genres{No genres yet} other{Nothing here yet}}'**
+  String booksIndexEmptyTitle(String dimension);
+
+  /// Title of the error state when a books index could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, authors{Could not load authors} genres{Could not load genres} other{Could not load this index}}'**
+  String booksIndexLoadError(String dimension);
+
+  /// The row at the top of a books index that was re-anchored on a letter, offering the way back to the head of the list.
+  ///
+  /// In en, this message translates to:
+  /// **'{dimension, select, authors{Start of authors} genres{Start of genres} other{Start of the list}}'**
+  String booksIndexStartOf(String dimension);
 
   /// Title of the error state when the audiobooks could not be read.
   ///
@@ -7893,6 +7965,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 file} other{{count} files}}'**
   String libraryFilesCount(int count);
 
+  /// One hub tile read as a whole for a screen reader: what it opens, then how much is behind it.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}, {count}'**
+  String libraryHubTileSpoken(String name, String count);
+
   /// The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case.
   ///
   /// In en, this message translates to:
@@ -8067,11 +8145,47 @@ abstract class AppLocalizations {
   /// **'Go to artist'**
   String get libraryMenuGoToArtist;
 
+  /// Item-menu row opening an audiobook's author: the books filed under them.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to author'**
+  String get libraryMenuGoToAuthor;
+
+  /// Item-menu row opening an audiobook's own screen, the way to it from a shelf whose tap plays.
+  ///
+  /// In en, this message translates to:
+  /// **'Open book'**
+  String get libraryMenuOpenBook;
+
+  /// Item-menu row opening an episode's own screen, the way to it from a shelf whose tap plays.
+  ///
+  /// In en, this message translates to:
+  /// **'Open episode'**
+  String get libraryMenuOpenEpisode;
+
+  /// Item-menu row starting an audiobook that has not been started, or has been finished and starts again.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get libraryMenuPlay;
+
+  /// Item-menu row carrying on with an audiobook part way through, where it was left.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get libraryMenuResume;
+
   /// Item-menu row minting a public share link for the item's album.
   ///
   /// In en, this message translates to:
   /// **'Share album'**
   String get libraryMenuShareAlbum;
+
+  /// Spoken name of the cover play over a book or an episode part way through, whose press carries on where it was left: the home shelves, the Downloaded shelf, the books hub's Continue shelf and every books grid.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume {title}'**
+  String libraryResumeItem(String title);
 
   /// Never displayed. Any natural sentence in this language, written the way the language actually is, accents and all: the app scans it for the scripts this locale needs and loads their fonts before the interface draws.
   ///
@@ -9375,11 +9489,17 @@ abstract class AppLocalizations {
   /// **'Appears on'**
   String get musicArtistAppearsOn;
 
-  /// Heading over an author's books, drawn instead of the tracks heading where a bucket holds no tracks at all.
+  /// Heading over the shelf of an artist's audiobooks on their page, drawn only when they have any; its Show all opens the author's page under Books.
   ///
   /// In en, this message translates to:
   /// **'Audiobooks'**
   String get musicArtistAudiobooksSection;
+
+  /// How many audiobooks an artist's page holds, beside the track count in the line under their name, where the read runs past the page it read, so the number is a floor rather than a total. The whole count reads bookCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1+ book} other{{count}+ books}}'**
+  String musicArtistBookCountAtLeast(int count);
 
   /// Entry in the artist screen's overflow opening the artist editor. Administrators only.
   ///
@@ -9399,18 +9519,6 @@ abstract class AppLocalizations {
   /// **'Nothing by this artist'**
   String get musicArtistEmptyTitle;
 
-  /// How much an artist's bucket holds, in the line under their name. Items rather than tracks, because a bucket holds whatever carried the artist, audiobooks included.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 item} other{{count} items}}'**
-  String musicArtistItemCount(int count);
-
-  /// The same count where the listing runs past the page that was read, so the number is a floor rather than a total.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1+ item} other{{count}+ items}}'**
-  String musicArtistItemCountAtLeast(int count);
-
   /// Title of the error state when an artist's items could not be read.
   ///
   /// In en, this message translates to:
@@ -9429,11 +9537,17 @@ abstract class AppLocalizations {
   /// **'Releases'**
   String get musicArtistReleases;
 
-  /// Action beside an artist's track heading, opening the full listing where the screen shows only the first few.
+  /// Action on an artist's page: beside the tracks heading, opening the full track listing where the page shows only the first few; on the audiobooks shelf, opening the author's page under Books.
   ///
   /// In en, this message translates to:
   /// **'Show all'**
   String get musicArtistShowAll;
+
+  /// How many tracks an artist's page holds, in the line under their name, where the read runs past the page it read, so the number is a floor rather than a total. The whole count reads musicTrackCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1+ track} other{{count}+ tracks}}'**
+  String musicArtistTrackCountAtLeast(int count);
 
   /// Heading over the first few of an artist's tracks.
   ///
@@ -9704,12 +9818,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.'**
   String get musicHubEmptyMessage;
-
-  /// One hub tile read as a whole for a screen reader: what it opens, then how much is behind it.
-  ///
-  /// In en, this message translates to:
-  /// **'{name}, {count}'**
-  String musicHubTileSpoken(String name, String count);
 
   /// Caption over an index saying how much of it is loaded, when the whole dimension is loaded.
   ///
@@ -18357,7 +18465,7 @@ abstract class AppLocalizations {
   /// **'Volume up'**
   String get shellCommandVolumeUp;
 
-  /// Navigation entry for the administration console. Every shellNav* label draws in a 224px sidebar (about 150px of text room, 20px less for the indented music indexes), so translations stay short - a label past that ellipsizes.
+  /// Navigation entry for the administration console. Every shellNav* label draws in a 224px sidebar (about 150px of text room, 20px less for the indexes indented under Music and Books), so translations stay short - a label past that ellipsizes.
   ///
   /// In en, this message translates to:
   /// **'Admin console'**
@@ -18374,6 +18482,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Artists'**
   String get shellNavArtists;
+
+  /// Navigation entry for the author index, under Books.
+  ///
+  /// In en, this message translates to:
+  /// **'Authors'**
+  String get shellNavAuthors;
+
+  /// Navigation entry for the genre index, under Books.
+  ///
+  /// In en, this message translates to:
+  /// **'Genres'**
+  String get shellNavBookGenres;
 
   /// Navigation entry for the audiobook domain. Deliberately shorter than the hub's own title: five of these share a phone's width.
   ///
@@ -18434,6 +18554,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Review queue'**
   String get shellNavReview;
+
+  /// Navigation entry for the series index, under Books.
+  ///
+  /// In en, this message translates to:
+  /// **'Series'**
+  String get shellNavSeries;
 
   /// Navigation entry for the settings screens. Named against the admin console's server settings, which sit one row below it: one is what this account prefers, the other is what this instance does.
   ///
@@ -18518,6 +18644,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Settings'**
   String get shellPaletteGroupSettings;
+
+  /// The second line of a palette row that is an index under a hub, naming the hub so two indexes of one name (Music's Genres, Books' Genres) read apart.
+  ///
+  /// In en, this message translates to:
+  /// **'In {hub}'**
+  String shellPaletteInHubDetail(String hub);
 
   /// Empty state of the command palette when what was typed matched nothing. {query} is what was typed.
   ///

@@ -63,7 +63,7 @@
     "prose-slot-args": 4
   },
   "lib/src/books/books_screen.dart": {
-    "prose-slot-args": 3
+    "prose-slot-args": 2
   },
   "lib/src/books/series_index_screen.dart": {
     "prose-slot-args": 1

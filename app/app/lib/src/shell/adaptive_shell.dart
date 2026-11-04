@@ -7,10 +7,10 @@ import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
+import '../books/book_dimension.dart';
 import '../l10n/l10n.dart';
-import '../library/page_walk.dart';
+import '../music/music_controllers.dart';
 import '../player/deck_bar_host.dart';
-import '../providers.dart';
 import '../search/search_controller.dart';
 import '../settings/client_settings_providers.dart';
 import '../sync/sync_providers.dart';
@@ -39,10 +39,9 @@ enum WaxNavSection {
 /// Every place the shell's chrome can send a visitor.
 ///
 /// One list, so the chrome, the role gating, and the active-destination
-/// highlight all read the same declaration. The four primaries are the
-/// domains the plan gives tabs to; audiobooks joins them when there is a
-/// books hub to send anyone to, and search and downloads when those
-/// screens exist.
+/// highlight all read the same declaration. The five primaries are the
+/// domains. Each is offered whether or not the library holds any of its
+/// medium, except podcasts on a server that turns them off.
 enum WaxNavTarget {
   home(WaxIcons.home, WaxRoute.home, WaxNavSection.primary),
 
@@ -53,25 +52,47 @@ enum WaxNavTarget {
   // them, which is why they are not tabs and not in the rail's overflow.
   artists(
     WaxIcons.artists,
-    '${WaxRoute.music}/artists',
+    null,
     WaxNavSection.domainIndex,
+    parent: WaxNavTarget.music,
+    musicIndex: MusicDimension.artists,
   ),
   albums(
     WaxIcons.albums,
-    '${WaxRoute.music}/albums',
+    null,
     WaxNavSection.domainIndex,
+    parent: WaxNavTarget.music,
+    musicIndex: MusicDimension.albums,
   ),
-  tracks(WaxIcons.music, WaxRoute.musicTracks, WaxNavSection.domainIndex),
+  tracks(
+    WaxIcons.music,
+    WaxRoute.musicTracks,
+    WaxNavSection.domainIndex,
+    parent: WaxNavTarget.music,
+  ),
   genres(
     WaxIcons.filter,
-    '${WaxRoute.music}/genres',
+    null,
     WaxNavSection.domainIndex,
+    parent: WaxNavTarget.music,
+    musicIndex: MusicDimension.genres,
   ),
-  years(WaxIcons.recent, '${WaxRoute.music}/years', WaxNavSection.domainIndex),
+  years(
+    WaxIcons.recent,
+    null,
+    WaxNavSection.domainIndex,
+    parent: WaxNavTarget.music,
+    musicIndex: MusicDimension.years,
+  ),
   // Playlists moves under Music now that there is a group to hold it. It
   // is a way into the collection like the others, and the hub lists it
   // beside them.
-  playlists(WaxIcons.playlists, WaxRoute.playlists, WaxNavSection.domainIndex),
+  playlists(
+    WaxIcons.playlists,
+    WaxRoute.playlists,
+    WaxNavSection.domainIndex,
+    parent: WaxNavTarget.music,
+  ),
 
   podcasts(
     WaxIcons.podcasts,
@@ -82,11 +103,27 @@ enum WaxNavTarget {
   // "Books" rather than "Audiobooks" on the chrome, which is what the
   // layout system's own tab row says: five labels share a phone's width,
   // and the hub's own title is where the long name belongs.
-  books(
-    WaxIcons.audiobooks,
-    WaxRoute.books,
-    WaxNavSection.primary,
-    hidesWhenEmpty: true,
+  books(WaxIcons.audiobooks, WaxRoute.books, WaxNavSection.primary),
+  // The ways into books, in the order the hub's tiles list them.
+  authors(
+    WaxIcons.artists,
+    null,
+    WaxNavSection.domainIndex,
+    parent: WaxNavTarget.books,
+    bookIndex: BookDimension.authors,
+  ),
+  bookGenres(
+    WaxIcons.filter,
+    null,
+    WaxNavSection.domainIndex,
+    parent: WaxNavTarget.books,
+    bookIndex: BookDimension.genres,
+  ),
+  series(
+    WaxIcons.library,
+    WaxRoute.bookSeriesIndex,
+    WaxNavSection.domainIndex,
+    parent: WaxNavTarget.books,
   ),
   radio(WaxIcons.radio, WaxRoute.radio, WaxNavSection.primary),
 
@@ -152,18 +189,35 @@ enum WaxNavTarget {
 
   const WaxNavTarget(
     this.glyph,
-    this.location,
+    this._location,
     this.section, {
+    this.parent,
+    this.musicIndex,
+    this.bookIndex,
     this.adminOnly = false,
     this.needsUpload = false,
     this.needsDownloads = false,
     this.needsPodcasts = false,
-    this.hidesWhenEmpty = false,
   });
 
   final WaxGlyph glyph;
-  final String location;
+  final String? _location;
   final WaxNavSection section;
+
+  /// The index a [WaxNavSection.domainIndex] target opens, by dimension,
+  /// so its location has one source: [WaxRoute].
+  final MusicDimension? musicIndex;
+  final BookDimension? bookIndex;
+
+  String get location => switch ((musicIndex, bookIndex)) {
+    (final music?, _) => WaxRoute.musicIndex(music),
+    (_, final book?) => WaxRoute.bookIndex(book),
+    _ => _location!,
+  };
+
+  /// The hub a [WaxNavSection.domainIndex] target is listed beneath.
+  final WaxNavTarget? parent;
+
   final bool adminOnly;
 
   /// Hidden without the effective upload right, which the server reports
@@ -180,51 +234,33 @@ enum WaxNavTarget {
   /// subscribe, so the domain could only ever be empty.
   final bool needsPodcasts;
 
-  /// Hidden while the server has nothing behind it.
-  ///
-  /// The layout system's rule: a domain tab goes away where the library
-  /// holds none of that medium, and home absorbs the gap. Only
-  /// audiobooks gates on it so far - a tab per medium is what makes the
-  /// count tight on a phone, and books is the medium a library most
-  /// often has none of. Podcasts and Radio stay unconditional until
-  /// their own phases have a count to gate on.
-  final bool hidesWhenEmpty;
-
   /// Whether [user] may be offered this target at all. The server refuses
   /// the calls behind it regardless; this keeps the chrome honest.
-  ///
-  /// [emptyDomains] names the domains a probe has found nothing for.
-  /// Absence means "not answered yet", which shows the tab: a tab that
-  /// arrives late shifts the row under a thumb already moving, and the
-  /// libraries that would gain one are the ones nobody is aiming at it
-  /// on.
   bool visibleTo(
     WaxDeckUser? user, {
     bool hasDownloads = false,
     bool podcastsOn = true,
-    Set<WaxNavTarget> emptyDomains = const <WaxNavTarget>{},
   }) {
     final isAdmin = user?.roles.contains('admin') ?? false;
     if (adminOnly && !isAdmin) return false;
     if (needsUpload && !(user?.uploadEnabled ?? false)) return false;
     if (needsDownloads && !hasDownloads) return false;
     if (needsPodcasts && !podcastsOn) return false;
-    if (hidesWhenEmpty && emptyDomains.contains(this)) return false;
     return true;
   }
 
   /// The indexes the sidebar lists beneath this target, for the domains
   /// that have any. Computed once: it is a property of the declaration
   /// and every sidebar build walked the whole enum for it.
-  List<WaxNavTarget> get indexes =>
-      this == WaxNavTarget.music ? _musicIndexes : const <WaxNavTarget>[];
+  List<WaxNavTarget> get indexes => _indexes[this] ?? const <WaxNavTarget>[];
 
-  static final List<WaxNavTarget> _musicIndexes =
-      List<WaxNavTarget>.unmodifiable(
-        WaxNavTarget.values.where(
-          (t) => t.section == WaxNavSection.domainIndex,
-        ),
-      );
+  static final Map<WaxNavTarget, List<WaxNavTarget>> _indexes =
+      <WaxNavTarget, List<WaxNavTarget>>{
+        for (final hub in WaxNavTarget.values)
+          hub: List<WaxNavTarget>.unmodifiable(
+            WaxNavTarget.values.where((t) => t.parent == hub),
+          ),
+      };
 
   /// What the chrome calls this destination. The enum keeps its `name`,
   /// which is the handle every spec and every semantics identifier uses
@@ -240,6 +276,9 @@ enum WaxNavTarget {
     WaxNavTarget.playlists => l10n.shellNavPlaylists,
     WaxNavTarget.podcasts => l10n.shellNavPodcasts,
     WaxNavTarget.books => l10n.shellNavBooks,
+    WaxNavTarget.authors => l10n.shellNavAuthors,
+    WaxNavTarget.bookGenres => l10n.shellNavBookGenres,
+    WaxNavTarget.series => l10n.shellNavSeries,
     WaxNavTarget.radio => l10n.shellNavRadio,
     WaxNavTarget.stats => l10n.shellNavStats,
     WaxNavTarget.downloads => l10n.shellNavDownloads,
@@ -276,33 +315,6 @@ const List<WaxNavTarget> waxShellBranches = <WaxNavTarget>[
   WaxNavTarget.books,
   WaxNavTarget.radio,
 ];
-
-/// The domains the server has nothing behind.
-///
-/// Each gating domain probes its listing ([probePages]) until it finds
-/// one item or proves there are none, cached for the app's lifetime
-/// rather than auto-disposed: the answer is a property of the library,
-/// the chrome asks on every build, and a library does not gain its first
-/// audiobook while somebody is looking at the tab bar. A catalog
-/// invalidation is what refreshes it (`sync_binder` drops it), which is
-/// also what makes a first scan's books turn the tab on without a
-/// relaunch.
-final emptyDomainsProvider = FutureProvider<Set<WaxNavTarget>>((ref) async {
-  final repository = ref.watch(repositoryProvider);
-  final empty = <WaxNavTarget>{};
-  // One item is all the question needs: the tab is about whether there
-  // is anything at all, not about how much. The tab stays where the
-  // probe could not prove there are none.
-  final books = await probePages(
-    (cursor, limit) => repository.listItems(
-      mediaType: MediaType.audiobook,
-      cursor: cursor,
-      limit: limit,
-    ),
-  );
-  if (books.provedEmpty) empty.add(WaxNavTarget.books);
-  return empty;
-});
 
 /// Whether [location] is [base] or something declared beneath it.
 bool _isUnder(String location, String base) =>
@@ -502,14 +514,12 @@ final shellChromeProvider = Provider.autoDispose<ShellChrome>((ref) {
   final user = ref.watch(authControllerProvider).value?.user;
   final hasDownloads = ref.watch(downloadManagerProvider) != null;
   final podcastsOn = ref.watch(podcastsOnProvider);
-  final empty = ref.watch(emptyDomainsProvider).value ?? const <WaxNavTarget>{};
   final visible = WaxNavTarget.values
       .where(
         (target) => target.visibleTo(
           user,
           hasDownloads: hasDownloads,
           podcastsOn: podcastsOn,
-          emptyDomains: empty,
         ),
       )
       .toList();

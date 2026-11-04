@@ -8,8 +8,11 @@ import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
+import 'package:waxdeck/src/books/series_controller.dart';
+import 'package:waxdeck/src/books/series_merge.dart';
 import 'package:waxdeck/src/library/item_kind.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/now_playing_slot.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
@@ -118,6 +121,102 @@ void main() {
       tester.widget<BookScreen>(find.byType(BookScreen)).pid,
       'bk-${_a.substring(3)}',
     );
+  });
+
+  testWidgets('a kind change recounts the kind-scoped indexes', (tester) async {
+    final repo = _repo();
+    final harness = await _pump(tester, repo, pids: [_a, _b], to: 'audiobook');
+    final container = harness.container;
+    const count = (
+      dimension: MusicDimension.artists,
+      domain: BrowseDomain.music,
+    );
+    const index = (
+      dimension: MusicDimension.artists,
+      sort: FacetSort.label,
+      domain: BrowseDomain.books,
+    );
+    final held = <ProviderSubscription<Object?>>[
+      container.listen(musicIndexCountProvider(count), (_, _) {}),
+      container.listen(musicIndexProvider(index), (_, _) {}),
+    ];
+    addTearDown(() {
+      for (final subscription in held) {
+        subscription.close();
+      }
+    });
+    await tester.runAsync(() async {
+      await container.read(musicIndexCountProvider(count).future);
+      await container.read(musicIndexProvider(index).future);
+    });
+    final before = repo.facetReads.length;
+
+    await _confirm(tester);
+    await tester.runAsync(() async {
+      await container.read(musicIndexCountProvider(count).future);
+      await container.read(musicIndexProvider(index).future);
+    });
+
+    // An item that changed kind left one scope's buckets for the other's,
+    // and the books hub it lands on counts its two tiles; nothing else.
+    expect(
+      repo.facetReads.sublist(before),
+      unorderedEquals(<Object>[
+        (dimension: 'artist', sort: null, facet: 'kind', facetKey: 'track'),
+        (
+          dimension: 'artist',
+          sort: FacetSort.label,
+          facet: 'kind',
+          facetKey: 'book',
+        ),
+        (dimension: 'artist', sort: null, facet: 'kind', facetKey: 'book'),
+        (dimension: 'genre', sort: null, facet: 'kind', facetKey: 'book'),
+      ]),
+    );
+  });
+
+  testWidgets('a kind change re-reads the series', (tester) async {
+    const series = 'bs-01JZX5N8QW3F4V9T2B7KDKINDS1';
+    final repo = _repo();
+    repo.bookSeries.add(
+      const BookSeries(pid: series, name: 'Tidewater', bookCount: 1),
+    );
+    repo.bookSeriesDetails[series] = const BookSeriesDetail(
+      pid: series,
+      name: 'Tidewater',
+      books: <BookSeriesEntry>[],
+    );
+    final harness = await _pump(tester, repo, pids: [_a, _b], to: 'audiobook');
+    final container = harness.container;
+    Future<void> readAll() => Future.wait<Object?>([
+      container.read(bookSeriesCountProvider.future),
+      container.read(bookSeriesShelfProvider.future),
+      container.read(bookSeriesProvider.future),
+      container.read(bookSeriesDetailProvider(series).future),
+    ]);
+    final held = <ProviderSubscription<Object?>>[
+      container.listen(bookSeriesCountProvider, (_, _) {}),
+      container.listen(bookSeriesShelfProvider, (_, _) {}),
+      container.listen(bookSeriesProvider, (_, _) {}),
+      container.listen(bookSeriesDetailProvider(series), (_, _) {}),
+    ];
+    addTearDown(() {
+      for (final subscription in held) {
+        subscription.close();
+      }
+    });
+    await tester.runAsync(readAll);
+    final listsBefore = repo.bookSeriesReads.length;
+    final detailBefore = repo.bookSeriesDetailReads.length;
+
+    await _confirm(tester);
+    await tester.runAsync(readAll);
+
+    // A book that joins or leaves a series moves its count, the hub's
+    // shelf and tile, and the index: the tile, the shelf and the index
+    // each read again, and so does the open series.
+    expect(repo.bookSeriesReads.length - listsBefore, 3);
+    expect(repo.bookSeriesDetailReads.sublist(detailBefore), [series]);
   });
 
   testWidgets('a change whose job was cleared meanwhile still opens the book', (

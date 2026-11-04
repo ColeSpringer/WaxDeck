@@ -96,10 +96,12 @@ func TestWatchSkipsTrash(t *testing.T) {
 	}
 	// Events under the trash never schedule a scan.
 	p := newWatchPending(time.Second)
-	noteWatchEvent(w, p, fsnotify.Event{
+	if created := takeWatchEvent(w, p, fsnotify.Event{
 		Name: filepath.Join(root, model.TrashDirName, "tr-1", "song.flac"),
 		Op:   fsnotify.Create,
-	})
+	}, nil); created != "" {
+		t.Fatalf("a trash create was handed on to arm: %s", created)
+	}
 	if due := p.due(time.Now().Add(2 * time.Second)); len(due) != 0 {
 		t.Fatalf("a trash event was scheduled: %v", due)
 	}

@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/paged_scroll.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'stats_controller.dart';
@@ -23,31 +24,18 @@ class ListenLogScreen extends ConsumerStatefulWidget {
   ConsumerState<ListenLogScreen> createState() => _ListenLogScreenState();
 }
 
-class _ListenLogScreenState extends ConsumerState<ListenLogScreen> {
-  final _scroll = ScrollController();
-
+class _ListenLogScreenState extends ConsumerState<ListenLogScreen>
+    with PagedScroll {
   @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_maybeLoadMore);
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  void _maybeLoadMore() {
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    if (position.pixels < position.maxScrollExtent - 400) return;
-    ref.read(listenLogProvider.notifier).loadMore();
-  }
+  void loadMore() => ref.read(listenLogProvider.notifier).loadMore();
 
   @override
   Widget build(BuildContext context) {
     final log = ref.watch(listenLogProvider);
+    fillViewportWhile(
+      (log.value?.hasMore ?? false) && !(log.value?.loadingMore ?? true),
+      at: log.value?.entries,
+    );
     final filter = ref.watch(listenLogClientProvider);
     final entries = log.value?.entries ?? const <ListenLogEntry>[];
     // Clients seen in the loaded pages; the active filter stays listed
@@ -70,7 +58,7 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen> {
     return WaxScaffold(
       title: l10n.statsDoorListenLog,
       largeTitle: false,
-      controller: _scroll,
+      controller: pagedScroll,
       onBack: () => context.leave(fallback: WaxRoute.stats),
       actions: <Widget>[
         WaxChoice<String>(

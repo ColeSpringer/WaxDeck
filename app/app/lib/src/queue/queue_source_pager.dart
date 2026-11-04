@@ -139,6 +139,9 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
   _Listing? _listing(QueueSource source) {
     switch (source.kind) {
       case QueueSourceKind.library:
+        // The music library is all a library source has ever been minted
+        // over, stored before sources named their scope or since.
+        final libraryScope = source.mediaType ?? MediaType.music;
         // A seeded window is walking a permutation, and the seed is what
         // keeps the pages of it from overlapping. Without one the
         // library lists in its own order.
@@ -150,7 +153,7 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
           return (cursor, limit) => _repository
               .browse(
                 DiscoveryList.random,
-                mediaType: MediaType.music,
+                mediaType: libraryScope,
                 cursor: cursor,
                 limit: limit,
                 seed: seed,
@@ -158,7 +161,7 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
               .then((page) => _pageOf(page, null));
         }
         return (cursor, limit) => _repository
-            .listItems(mediaType: MediaType.music, cursor: cursor, limit: limit)
+            .listItems(mediaType: libraryScope, cursor: cursor, limit: limit)
             .then((page) => _pageOf(page, null));
       case QueueSourceKind.artist:
       case QueueSourceKind.album:
@@ -170,11 +173,16 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
         if (dimension == null || segment == null) return null;
         final facet = dimension.wireName;
         final facetKey = musicFacetKey(dimension, segment);
-        // A bucket counts whatever carried its artist or its year, books
+        // The scope the listing's cursor was minted under.
+        final mediaType = source.mediaType;
+        // An unscoped bucket counts whatever carried its artist, books
         // included, and the screens that queue one leave them out for
         // the same reason a draw does: a twelve-hour file arriving
-        // between two tracks is not what was asked for.
-        bool keep(ItemSummary i) => i.mediaType != MediaType.audiobook;
+        // between two tracks is not what was asked for. A books bucket
+        // is its books.
+        bool keep(ItemSummary i) =>
+            mediaType == MediaType.audiobook ||
+            i.mediaType != MediaType.audiobook;
         final seed = source.seed;
         if (seed != null) {
           // Paging the bucket's own listing shuffled each arriving page
@@ -183,6 +191,7 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
           return (cursor, limit) => _repository
               .browse(
                 DiscoveryList.random,
+                mediaType: mediaType,
                 facet: facet,
                 facetKey: facetKey,
                 cursor: cursor,
@@ -193,6 +202,7 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
         }
         return (cursor, limit) => _repository
             .listItems(
+              mediaType: mediaType,
               facet: facet,
               facetKey: facetKey,
               cursor: cursor,

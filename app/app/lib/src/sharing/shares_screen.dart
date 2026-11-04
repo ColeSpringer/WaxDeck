@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/paged_scroll.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -26,27 +27,9 @@ class SharesScreen extends ConsumerStatefulWidget {
   ConsumerState<SharesScreen> createState() => _SharesScreenState();
 }
 
-class _SharesScreenState extends ConsumerState<SharesScreen> {
-  final _scroll = ScrollController();
-
+class _SharesScreenState extends ConsumerState<SharesScreen> with PagedScroll {
   @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_maybeLoadMore);
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  void _maybeLoadMore() {
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    if (position.pixels < position.maxScrollExtent - 400) return;
-    ref.read(sharesProvider.notifier).loadMore();
-  }
+  void loadMore() => ref.read(sharesProvider.notifier).loadMore();
 
   void _report(String message) {
     ref
@@ -76,11 +59,15 @@ class _SharesScreenState extends ConsumerState<SharesScreen> {
   @override
   Widget build(BuildContext context) {
     final shares = ref.watch(sharesProvider);
+    fillViewportWhile(
+      (shares.value?.hasMore ?? false) && !(shares.value?.loadingMore ?? true),
+      at: shares.value?.shares,
+    );
 
     return WaxScaffold(
       title: context.l10n.sharingTitle,
       largeTitle: false,
-      controller: _scroll,
+      controller: pagedScroll,
       onBack: () => context.leave(fallback: WaxRoute.settings),
       slivers: <Widget>[
         AsyncSliverFace<SharesState>(

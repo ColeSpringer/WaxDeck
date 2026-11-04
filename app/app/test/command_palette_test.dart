@@ -442,6 +442,42 @@ void main() {
     );
   });
 
+  testWidgets('the palette lists Books on a library with no books', (
+    tester,
+  ) async {
+    await _pumpShell(tester);
+
+    await _openPalette(tester);
+    await _type(tester, 'books');
+    expect(_row('go-books'), findsOne);
+  });
+
+  testWidgets('two indexes of one name say which hub they are under', (
+    tester,
+  ) async {
+    await _pumpShell(tester);
+
+    await _openPalette(tester);
+    await _type(tester, 'gen');
+    expect(
+      find.descendant(of: _row('go-genres'), matching: find.text('In Music')),
+      findsOne,
+    );
+    expect(
+      find.descendant(
+        of: _row('go-bookGenres'),
+        matching: find.text('In Books'),
+      ),
+      findsOne,
+    );
+    // A destination with no hub above it keeps its plain detail.
+    await _type(tester, 'books');
+    expect(
+      find.descendant(of: _row('go-books'), matching: find.text('Go to')),
+      findsOne,
+    );
+  });
+
   testWidgets('the palette leads with the album named as the query', (
     tester,
   ) async {

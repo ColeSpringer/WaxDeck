@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { J, T } from './driver';
+import { J, T, wheelIntoReach } from './driver';
 
 // The audiobook journey: the scanned multi-part fixture book presents
 // one timeline, a position written by another device resolves to the
@@ -62,6 +62,30 @@ test('a multi-part book resumes at the right chapter across devices', async ({ a
       { timeout: T.fetch, message: 'resumed playback should checkpoint past the handoff' },
     )
     .toBeGreaterThanOrEqual(target);
+});
+
+test('a book cover plays where the hub stands', async ({ app }) => {
+  const book = await app.seed.book('The Fixture Book');
+  await app.seed.setPosition(book.pid, 0);
+
+  // The play a pointer raises over the cover is its own node, so a web
+  // click on it starts the book rather than reaching the card under it,
+  // whose tap opens the book.
+  await app.nav.enter('books');
+  await app.books.playCover(book.pid);
+  await expect(app.queue.deckBar()).toBeVisible({ timeout: T.nav });
+  await app.nav.expectAt('books');
+});
+
+test('continue listening carries a book on where the hub stands', async ({ app }) => {
+  const book = await app.seed.book('The Fixture Book');
+  // Part way through, so the shelf holds it.
+  await app.seed.setPosition(book.pid, Math.floor(book.durationMs / 2));
+
+  await app.nav.enter('books');
+  await app.books.continueResume(book.pid);
+  await expect(app.queue.deckBar()).toBeVisible({ timeout: T.nav });
+  await app.nav.expectAt('books');
 });
 
 test('the hub sorts, filters, and marks a book finished', async ({ app }) => {
@@ -257,20 +281,39 @@ test('a series holds its books, and the hub shelf opens the index', async ({ app
   await expect(app.books.seriesRow(2)).toBeVisible();
   // In sequence order, so the first row is book one.
   await expect(app.books.seriesRow(0)).toContainText('Tidewater Book 1');
-  // `go`, so a stranger can open the location the link reached.
-  expect(app.nav.location()).toContain(`/books/series/${series!.pid}`);
+  // Pushed from the book, whose page is not the series' declared parent,
+  // so the address bar keeps the book and back returns to it.
+  expect(new URL(app.nav.location()).pathname).toBe(app.books.bookLocation(first.pid));
 
   // Pushed, not gone to: back from a book lands on the series it was
   // opened from, which is what walking one book by book needs.
   await app.books.openFromSeries(0);
   await app.page.goBack();
   await expect(app.books.series(series!.pid)).toBeVisible({ timeout: T.nav });
+  await app.page.goBack();
+  await expect(app.books.resume()).toBeVisible({ timeout: T.nav });
 
   // And the hub's shelf reaches every series rather than the twelve it
   // draws.
   await app.nav.enter('books');
   await app.books.openSeriesIndex();
   await expect(app.books.seriesCard(series!.pid)).toBeVisible();
+});
+
+test('the Authors index opens an author to their books', async ({ app }) => {
+  const book = await app.seed.book('The Fixture Book');
+  const detail = await app.api.get('/books/{pid}', { path: { pid: book.pid } });
+  const author = detail.authorPid;
+  expect(author, 'the book is filed under its first author').toBeTruthy();
+
+  await app.nav.enter('books');
+  await app.books.openIndex('authors');
+  await app.books.openAuthor(detail.authors[0], author!);
+
+  // `go`, so a stranger can open the location the row reached.
+  expect(new URL(app.nav.location()).pathname).toBe(app.books.authorLocation(author!));
+  await wheelIntoReach(app.page, app.books.card(book.pid));
+  await expect(app.books.card(book.pid)).toBeVisible();
 });
 
 test('end of chapter stops a multi-file book at the file boundary at 1.5x', async ({ app }) => {

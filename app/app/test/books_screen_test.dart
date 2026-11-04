@@ -2,16 +2,27 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/admin/libraries_screen.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/books/book_dimension.dart';
+import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_controller.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
+import 'package:waxdeck/src/books/series_index_screen.dart';
+import 'package:waxdeck/src/books/series_screen.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
+import 'package:waxdeck/src/music/index_screen.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/sync/sync_providers.dart';
+import 'package:waxdeck/src/uploads/add_to_library.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -63,8 +74,9 @@ FakeRepository _paged() => FakeRepository(
   ],
 );
 
-Widget _host(FakeRepository repo) => ProviderScope(
+Widget _host(FakeRepository repo, {bool offline = false}) => ProviderScope(
   overrides: [
+    if (offline) offlineProvider.overrideWithValue(true),
     repositoryProvider.overrideWithValue(repo),
     audioEngineProvider.overrideWithValue(FakeEngine()),
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
@@ -74,6 +86,12 @@ Widget _host(FakeRepository repo) => ProviderScope(
 
 Finder _byId(String id) => find.byWidgetPredicate(
   (widget) => widget is Semantics && widget.properties.identifier == id,
+);
+
+/// The empty hub's action buttons.
+final _emptyActions = find.descendant(
+  of: find.byType(EmptyState),
+  matching: find.byType(WaxButton),
 );
 
 Future<void> _tap(WidgetTester tester, String id) async {
@@ -89,6 +107,50 @@ List<String> _order(WidgetTester tester) => <String>[
   for (final card in tester.widgetList<MediaCard>(find.byType(MediaCard)))
     card.data.title,
 ];
+
+/// The hub at its own location over a playback container, for the tests
+/// that ask where a press left the listener and what it started.
+Future<ProviderContainer> _pumpPlaying(
+  WidgetTester tester,
+  FakeRepository repo, {
+  FakeEngine? engine,
+}) async {
+  final container = playbackContainer(
+    repo: repo,
+    engine: engine ?? FakeEngine(),
+    extra: [
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    ],
+  );
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: routedHost(const BooksScreen(), at: WaxRoute.books),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return container;
+}
+
+/// Where the app's router stands, whichever screen it shows.
+String _routerPath(WidgetTester tester) =>
+    (tester.widget<MaterialApp>(find.byType(MaterialApp)).routerConfig!
+            as GoRouter)
+        .routerDelegate
+        .currentConfiguration
+        .uri
+        .path;
+
+/// [book] started the way its cover starts it.
+void _start(ProviderContainer container, ItemSummary book) =>
+    PlayerHarness(container).play(
+      [book],
+      source: QueueSource(
+        kind: QueueSourceKind.book,
+        label: book.title,
+        pid: book.pid,
+      ),
+    );
 
 void main() {
   testWidgets('a refresh redraws the books it already has', (tester) async {
@@ -154,6 +216,189 @@ void main() {
       findsNothing,
       reason: 'the music in the library is not on the books hub',
     );
+  });
+
+  group('the ways in', () {
+    FakeRepository seeded() => _repo()
+      ..facets['artist|kind|book'] = const <FacetBucket>[
+        FacetBucket(
+          key: 'k-baggins',
+          label: 'B. Baggins',
+          count: 2,
+          entityPid: 'ar-1',
+        ),
+        FacetBucket(
+          key: 'k-herbert',
+          label: 'F. Herbert',
+          count: 1,
+          entityPid: 'ar-2',
+        ),
+      ]
+      ..facets['genre|kind|book'] = const <FacetBucket>[
+        FacetBucket(key: 'g-fantasy', label: 'Fantasy', count: 3),
+      ]
+      ..bookSeries.addAll(const <BookSeries>[
+        BookSeries(pid: 'sr-1', name: 'Harbour'),
+        BookSeries(pid: 'sr-2', name: 'Tide'),
+        BookSeries(pid: 'sr-3', name: 'Shore'),
+      ]);
+
+    Finder tileText(String name, String text) => find.descendant(
+      of: _byId(SemanticsIds.bookTile(name)),
+      matching: find.text(text),
+    );
+
+    testWidgets('Authors, Genres and Series lead the hub, counted', (
+      tester,
+    ) async {
+      final repo = seeded();
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      expect(tileText('authors', 'Authors'), findsOneWidget);
+      expect(tileText('authors', '2'), findsOneWidget);
+      expect(tileText('genres', 'Genres'), findsOneWidget);
+      expect(tileText('genres', '1'), findsOneWidget);
+      expect(tileText('series', 'Series'), findsOneWidget);
+      expect(tileText('series', '3'), findsOneWidget);
+      // Counted over the books alone: an author's music is not theirs here.
+      expect(repo.facetScopes, contains(('artist', 'kind', 'book')));
+      expect(repo.facetScopes, contains(('genre', 'kind', 'book')));
+      expect(
+        tester.getTopLeft(_byId(SemanticsIds.bookTile('authors'))).dy,
+        lessThan(
+          tester.getTopLeft(_byId(SemanticsIds.bookSeriesCard('sr-1'))).dy,
+        ),
+        reason: 'over the shelves',
+      );
+      expect(
+        tester.getTopLeft(find.text('All books')).dy,
+        lessThan(tester.getTopLeft(_byId(SemanticsIds.book(_hobbit))).dy),
+        reason: 'the grid is headed as the whole shelf',
+      );
+    });
+
+    test('a dimension is titled by its name in every language', () {
+      for (final locale in const <Locale>[Locale('en'), Locale('es')]) {
+        final l10n = lookupAppLocalizations(locale);
+        final fallback = l10n.booksDimensionTitle('');
+        for (final dimension in BookDimension.values) {
+          expect(
+            dimension.titleOf(l10n),
+            isNot(fallback),
+            reason: '$locale ${dimension.name}',
+          );
+        }
+      }
+    });
+
+    testWidgets('a tile and the index it opens share one title', (
+      tester,
+    ) async {
+      for (final dimension in BookDimension.values) {
+        await tester.pumpWidget(_host(seeded()));
+        await tester.pumpAndSettle();
+        final label = tester
+            .widgetList<Text>(
+              find.descendant(
+                of: _byId(SemanticsIds.bookTile(dimension.segment)),
+                matching: find.byType(Text),
+              ),
+            )
+            .first
+            .data!;
+
+        await _tap(tester, SemanticsIds.bookTile(dimension.segment));
+        expect(find.byType(MusicIndexScreen), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(MusicIndexScreen),
+            matching: find.text(label),
+          ),
+          findsWidgets,
+          reason: dimension.name,
+        );
+      }
+    });
+
+    testWidgets('a series on the hub\'s shelf opens over the hub', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(seeded()));
+      await tester.pumpAndSettle();
+
+      await _tap(tester, SemanticsIds.bookSeriesCard('sr-1'));
+      expect(find.byType(BookSeriesScreen), findsOneWidget);
+      // Pushed: the series page's declared parent is the series index, so
+      // going there would put the index under it and lose the hub.
+      GoRouter.of(tester.element(find.byType(BookSeriesScreen))).pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(BooksScreen), findsOneWidget);
+      expect(find.byType(BookSeriesIndexScreen), findsNothing);
+    });
+
+    testWidgets('the series count is one page, never the whole list', (
+      tester,
+    ) async {
+      final repo = _repo()
+        ..bookSeries.addAll(<BookSeries>[
+          for (var i = 0; i < 501; i++)
+            BookSeries(pid: 'sr-$i', name: 'Series $i'),
+        ]);
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      // A page that reports more reads as a floor, as the music tiles do.
+      expect(tileText('series', '500+'), findsOneWidget);
+      // The shelf's first page and the count's: nothing follows a cursor.
+      expect(repo.bookSeriesReads, hasLength(2));
+      expect(repo.bookSeriesReads.map((r) => r.cursor), everyElement(isNull));
+    });
+
+    for (final (name, location, screen, row)
+        in <(String, String, Type, String)>[
+          (
+            'authors',
+            WaxRoute.bookIndex(BookDimension.authors),
+            MusicIndexScreen,
+            'B. Baggins',
+          ),
+          (
+            'genres',
+            WaxRoute.bookIndex(BookDimension.genres),
+            MusicIndexScreen,
+            'Fantasy',
+          ),
+          (
+            'series',
+            WaxRoute.bookSeriesIndex,
+            BookSeriesIndexScreen,
+            'Harbour',
+          ),
+        ]) {
+      testWidgets('the $name tile goes to its index', (tester) async {
+        await tester.pumpWidget(_host(seeded()));
+        await tester.pumpAndSettle();
+
+        await _tap(tester, SemanticsIds.bookTile(name));
+        expect(find.byType(screen), findsOneWidget);
+        expect(_routerPath(tester), location);
+        // The index's own rows, read under the books scope the seed sits in.
+        expect(find.text(row), findsOneWidget);
+      });
+    }
+
+    testWidgets('a compact hub draws them as tiles too', (tester) async {
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(_host(seeded()));
+      await tester.pumpAndSettle();
+
+      expect(tileText('authors', '2'), findsOneWidget);
+      await _tap(tester, SemanticsIds.bookTile('genres'));
+      expect(_routerPath(tester), WaxRoute.bookIndex(BookDimension.genres));
+    });
   });
 
   testWidgets('reads past a first page the listing emptied', (tester) async {
@@ -321,33 +566,83 @@ void main() {
     );
   });
 
-  testWidgets('an empty library says how books arrive', (tester) async {
+  testWidgets('an empty hub offers the upload to an uploader', (tester) async {
+    final repo = FakeRepository()
+      ..sessionState = const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-01JZX5N8QW3F4V9T2B7KDUPLOAD',
+          username: 'uploader',
+          roles: <String>['member'],
+          uploadEnabled: true,
+        ),
+      );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+    expect(find.text('No audiobooks yet'), findsOneWidget);
+    expect(_emptyActions, findsOneWidget);
+
+    await tester.tap(find.text('Add audiobooks'));
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.addFromUrl), findsOneWidget);
+    await _tap(tester, SemanticsIds.addFromUrl);
+    final dialog = tester.widget<AcquireDialog>(find.byType(AcquireDialog));
+    expect(dialog.initial, MediaType.audiobook);
+    expect(dialog.kindFixed, isTrue);
+  });
+
+  testWidgets('an empty hub offers nothing to a listener', (tester) async {
     await tester.pumpWidget(_host(FakeRepository()));
     await tester.pumpAndSettle();
     expect(find.text('No audiobooks yet'), findsOneWidget);
-    expect(
-      find.textContaining('every audio file becomes a book'),
-      findsOneWidget,
-    );
-    // Adding a library is an administrator's.
-    expect(find.text('Add a library'), findsNothing);
+    expect(_emptyActions, findsNothing);
   });
 
-  testWidgets('an administrator is pointed at the libraries', (tester) async {
+  testWidgets('an administrator who can upload is offered the upload', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _host(
         FakeRepository(
           sessionState: const SessionState(
             authenticated: true,
-            user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
+            user: WaxDeckUser(
+              id: 'us-1',
+              username: 'admin',
+              roles: ['admin'],
+              uploadEnabled: true,
+            ),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add a library'));
+    expect(find.text('Add audiobooks'), findsOneWidget);
+    expect(_emptyActions, findsOneWidget);
+  });
+
+  testWidgets('offline, an empty hub offers nothing', (tester) async {
+    // An administrator holds the right, but there is no server to hand
+    // files to, and the libraries screen would need one too.
+    await tester.pumpWidget(
+      _host(
+        FakeRepository(
+          sessionState: const SessionState(
+            authenticated: true,
+            user: WaxDeckUser(
+              id: 'us-1',
+              username: 'admin',
+              roles: ['admin'],
+              uploadEnabled: true,
+            ),
+          ),
+        ),
+        offline: true,
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.byType(LibrariesScreen), findsOneWidget);
+    expect(find.text('No audiobooks yet'), findsOneWidget);
+    expect(_emptyActions, findsNothing);
   });
 
   testWidgets('a server that will not answer offers a retry', (tester) async {
@@ -399,37 +694,6 @@ void main() {
   });
 
   group('filters', () {
-    testWidgets('an author chip narrows the shelf and clears again', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_host(_repo()));
-      await tester.pumpAndSettle();
-
-      await _tap(tester, SemanticsIds.bookAuthorFilter('B. Baggins'));
-      expect(_order(tester), ['Trantor', 'There And Back Again']);
-
-      // The same chip again clears it: the row is single-select, so this
-      // is the only way back to everything.
-      await _tap(tester, SemanticsIds.bookAuthorFilter('B. Baggins'));
-      expect(_order(tester), hasLength(3));
-    });
-
-    test('narrowing to an author is not a toggle', () {
-      // Following a series from a book whose author the hub already held
-      // must narrow, not clear.
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-      final view = container.read(bookViewProvider.notifier);
-
-      view.narrowToAuthor('B. Baggins');
-      expect(container.read(bookViewProvider).author, 'B. Baggins');
-      view.narrowToAuthor('B. Baggins');
-      expect(container.read(bookViewProvider).author, 'B. Baggins');
-      // The chip row still toggles.
-      view.toggleAuthor('B. Baggins');
-      expect(container.read(bookViewProvider).author, isNull);
-    });
-
     testWidgets('finished and unfinished read the play states', (tester) async {
       final repo = _repo()..finishedPids.add(_dune);
       await tester.pumpWidget(_host(repo));
@@ -567,17 +831,6 @@ void main() {
       repo.listItemsGate = null;
       await tester.pumpAndSettle();
     });
-
-    testWidgets('one author gets no chip row at all', (tester) async {
-      final repo = FakeRepository(
-        items: <ItemSummary>[
-          _book(_hobbit, title: 'There And Back Again', author: 'B. Baggins'),
-        ],
-      );
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
-      expect(_byId(SemanticsIds.bookAuthorFilter('B. Baggins')), findsNothing);
-    });
   });
 
   testWidgets('a book cover opens the item menu, which pins the book', (
@@ -614,10 +867,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await hoverPlay(
+    // A book part way through says the cover carries on.
+    await semanticsPlay(
       tester,
-      _byId(SemanticsIds.book(_hobbit)).first,
-      label: 'Play There And Back Again',
+      _byId(SemanticsIds.book(_hobbit)),
+      playId: SemanticsIds.bookPlay(_hobbit),
+      label: 'Resume There And Back Again',
     );
     final queue = container.read(queueControllerProvider);
     expect(<String>[for (final e in queue.entries) e.pid], <String>[_hobbit]);
@@ -647,9 +902,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await hoverPlay(
+    await semanticsPlay(
       tester,
-      _byId(SemanticsIds.book(_hobbit)).first,
+      _byId(SemanticsIds.book(_hobbit)),
+      playId: SemanticsIds.bookPlay(_hobbit),
       label: 'Play There And Back Again',
     );
     expect(engine.loadedUrl, isNotNull);
@@ -657,7 +913,212 @@ void main() {
     await PlayerHarness(container).endPlayback(tester);
   });
 
+  testWidgets('a book cover\'s tap still opens the book', (tester) async {
+    await tester.pumpWidget(_host(_repo()));
+    await tester.pumpAndSettle();
+
+    await _tap(tester, SemanticsIds.book(_hobbit));
+    expect(find.byType(BookScreen), findsOneWidget);
+  });
+
+  testWidgets('a paused current book resumes rather than restarts', (
+    tester,
+  ) async {
+    final repo = _repo()..playPositions[_hobbit] = 900000;
+    final engine = FakeEngine();
+    final container = await _pumpPlaying(tester, repo, engine: engine);
+    final book = repo.libraryItems.firstWhere((item) => item.pid == _hobbit);
+    _start(container, book);
+    await tester.pumpAndSettle();
+    final playback = container.read(nowPlayingProvider.notifier);
+    await playback.transportPause();
+    await tester.pumpAndSettle();
+    expect(engine.playing, isFalse);
+    final starts = playback.startGeneration;
+
+    await semanticsPlay(
+      tester,
+      _byId(SemanticsIds.book(_hobbit)),
+      playId: SemanticsIds.bookPlay(_hobbit),
+    );
+    expect(playback.startGeneration, starts, reason: 'no new start');
+    expect(engine.playing, isTrue);
+    expect(_routerPath(tester), WaxRoute.books);
+    await PlayerHarness(container).endPlayback(tester);
+  });
+
+  testWidgets('a finished current book starts again from its head', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..playPositions[_hobbit] = 3600000
+      ..finishedPids.add(_hobbit);
+    final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
+    final container = await _pumpPlaying(tester, repo, engine: engine);
+    final book = repo.libraryItems.firstWhere((item) => item.pid == _hobbit);
+    _start(container, book);
+    await tester.pumpAndSettle();
+    final playback = container.read(nowPlayingProvider.notifier);
+    await playback.liveSession!.seek(const Duration(minutes: 5));
+    await playback.transportPause();
+    await tester.pumpAndSettle();
+    final starts = playback.startGeneration;
+
+    // Carried on, it would play from where its session stands.
+    await semanticsPlay(
+      tester,
+      _byId(SemanticsIds.book(_hobbit)),
+      playId: SemanticsIds.bookPlay(_hobbit),
+      label: 'Play There And Back Again',
+    );
+    await tester.pumpAndSettle();
+    expect(playback.startGeneration, starts + 1);
+    expect(engine.position, Duration.zero);
+    await PlayerHarness(container).endPlayback(tester);
+  });
+
+  testWidgets('a second press while the book loads does not start it again', (
+    tester,
+  ) async {
+    final repo = _repo()..playPositions[_hobbit] = 900000;
+    final gate = Completer<void>();
+    repo.playInfoGate = gate;
+    final engine = FakeEngine();
+    final container = await _pumpPlaying(tester, repo, engine: engine);
+    final playback = container.read(nowPlayingProvider.notifier);
+
+    await semanticsPlay(
+      tester,
+      _byId(SemanticsIds.book(_hobbit)),
+      playId: SemanticsIds.bookPlay(_hobbit),
+    );
+    expect(container.read(nowPlayingProvider).loading, isTrue);
+    final starts = playback.startGeneration;
+    await semanticsPlay(
+      tester,
+      _byId(SemanticsIds.book(_hobbit)),
+      playId: SemanticsIds.bookPlay(_hobbit),
+    );
+    expect(playback.startGeneration, starts, reason: 'folded into the load');
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(engine.loadedUrl, contains(_hobbit));
+    expect(engine.playing, isTrue);
+    await PlayerHarness(container).endPlayback(tester);
+  });
+
   group('continue listening', () {
+    testWidgets('the hub\'s continue card resumes in place', (tester) async {
+      final repo = _repo()..playPositions[_hobbit] = 900000;
+      final container = await _pumpPlaying(tester, repo);
+
+      await _tap(tester, SemanticsIds.bookContinue(_hobbit));
+      final queue = container.read(queueControllerProvider);
+      expect(<String>[for (final e in queue.entries) e.pid], <String>[_hobbit]);
+      expect(queue.source.kind, QueueSourceKind.book);
+      expect(find.byType(BookScreen), findsNothing);
+      expect(_routerPath(tester), WaxRoute.books);
+      await PlayerHarness(container).endPlayback(tester);
+    });
+
+    testWidgets('its cover play carries on too', (tester) async {
+      final repo = _repo()..playPositions[_hobbit] = 900000;
+      final container = await _pumpPlaying(tester, repo);
+
+      await semanticsPlay(
+        tester,
+        _byId(SemanticsIds.bookContinue(_hobbit)),
+        playId: SemanticsIds.bookContinuePlay(_hobbit),
+        label: 'Resume There And Back Again',
+      );
+      final queue = container.read(queueControllerProvider);
+      expect(<String>[for (final e in queue.entries) e.pid], <String>[_hobbit]);
+      expect(_routerPath(tester), WaxRoute.books);
+      await PlayerHarness(container).endPlayback(tester);
+    });
+
+    testWidgets('a fresh resume reads the checkpoint, not the shelf\'s copy', (
+      tester,
+    ) async {
+      final repo = _repo()..playPositions[_hobbit] = 900000;
+      final engine = FakeEngine();
+      final container = await _pumpPlaying(tester, repo, engine: engine);
+      // Another device listened on after the shelf read its window.
+      repo.playPositions[_hobbit] = 1500000;
+
+      await _tap(tester, SemanticsIds.bookContinue(_hobbit));
+      expect(repo.playStateReads, contains(_hobbit));
+      expect(engine.position, const Duration(milliseconds: 1500000));
+      await PlayerHarness(container).endPlayback(tester);
+    });
+
+    testWidgets('and rewinds it by the break, as the deck\'s Resume does', (
+      tester,
+    ) async {
+      final repo = _repo()
+        ..playPositions[_hobbit] = 900000
+        ..playStateUpdatedAt[_hobbit] = DateTime.now().subtract(
+          const Duration(days: 3),
+        );
+      final engine = FakeEngine();
+      final container = await _pumpPlaying(tester, repo, engine: engine);
+
+      await semanticsPlay(
+        tester,
+        _byId(SemanticsIds.bookContinue(_hobbit)),
+        playId: SemanticsIds.bookContinuePlay(_hobbit),
+      );
+      await tester.pumpAndSettle();
+      expect(engine.position, lessThan(const Duration(milliseconds: 900000)));
+      await PlayerHarness(container).endPlayback(tester);
+    });
+
+    testWidgets('a book a station parked resumes through the park', (
+      tester,
+    ) async {
+      final repo = _repo()..playPositions[_hobbit] = 900000;
+      final engine = FakeEngine();
+      final container = await _pumpPlaying(tester, repo, engine: engine);
+      final book = repo.libraryItems.firstWhere((item) => item.pid == _hobbit);
+      _start(container, book);
+      await tester.pumpAndSettle();
+      await container
+          .read(radioPlaybackProvider.notifier)
+          .play(
+            RadioStation(
+              pid: 'st-1',
+              name: 'Prancing Pony FM',
+              streamUrl: 'https://pony.example/stream',
+              createdAt: DateTime.utc(2026, 7, 25),
+            ),
+          );
+      await tester.pumpAndSettle();
+      expect(container.read(parkedEntryProvider)?.entry.pid, _hobbit);
+      final queued = <String>[
+        for (final e in container.read(queueControllerProvider).entries)
+          e.queueId,
+      ];
+      final starts = container
+          .read(nowPlayingProvider.notifier)
+          .startGeneration;
+
+      await _tap(tester, SemanticsIds.bookContinue(_hobbit));
+      // The park's own entry, not a fresh queue: a play would mint new
+      // entries for the same book.
+      expect(<String>[
+        for (final e in container.read(queueControllerProvider).entries)
+          e.queueId,
+      ], queued);
+      expect(
+        container.read(nowPlayingProvider.notifier).startGeneration,
+        starts + 1,
+      );
+      expect(container.read(radioPlaybackProvider).station, isNull);
+      expect(engine.loadedUrl, contains(_hobbit));
+      await PlayerHarness(container).endPlayback(tester);
+    });
+
     testWidgets('holds what is part way through, most recent first', (
       tester,
     ) async {
@@ -704,13 +1165,32 @@ void main() {
       expect(card.data.trailingSpoken, '45 minutes left');
     });
 
-    testWidgets('a card on it opens the item menu', (tester) async {
+    testWidgets('a card on it opens the item menu, which opens the book', (
+      tester,
+    ) async {
       final repo = _repo()..playPositions[_hobbit] = 900000;
       await tester.pumpWidget(_host(repo));
       await tester.pumpAndSettle();
 
       await rightClick(tester, _byId(SemanticsIds.bookContinue(_hobbit)).first);
       expect(find.text('Pin book to Home'), findsOneWidget);
+      expect(find.text('Resume'), findsOneWidget);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemMenuOpenBook),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(BookScreen), findsOneWidget);
+    });
+
+    testWidgets('a grid card\'s menu has no Open book: its tap is that', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(_repo()));
+      await tester.pumpAndSettle();
+
+      await rightClick(tester, _byId(SemanticsIds.book(_hobbit)).first);
+      expect(_byId(SemanticsIds.itemMenuSheet(_hobbit)), findsOneWidget);
+      expect(_byId(SemanticsIds.itemMenuOpenBook), findsNothing);
     });
 
     testWidgets('is absent until something has been started', (tester) async {
@@ -747,18 +1227,6 @@ void main() {
         PlayProgressView.empty,
       );
       expect(sorted.map((b) => b.title), ['Arrakis', 'Anon']);
-    });
-
-    test('authors come biggest first, alphabetical within a count', () {
-      final authors = bookAuthors(<ItemSummary>[
-        _book('bk-1', title: 'One', author: 'Zed'),
-        _book('bk-2', title: 'Two', author: 'Ann'),
-        _book('bk-3', title: 'Three', author: 'Ann'),
-        _book('bk-4', title: 'Four', author: 'Mo'),
-        _book('bk-5', title: 'Five'),
-      ]);
-      expect(authors.map((a) => a.name), ['Ann', 'Mo', 'Zed']);
-      expect(authors.first.count, 2);
     });
   });
 }

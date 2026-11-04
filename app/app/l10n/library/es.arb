@@ -54,6 +54,7 @@
   "libraryFileRolePart": "Parte",
   "libraryFileRolePrimary": "Principal",
   "libraryFilesCount": "{count, plural, =1{1 archivo} other{{count} archivos}}",
+  "libraryHubTileSpoken": "{name}, {count}",
   "libraryKindAlbum": "álbum",
   "libraryKindAlbumToBook": "Tratar el álbum como un audiolibro",
   "libraryKindAlbumTooLarge": "Este álbum tiene más de {max} pistas, demasiadas para cambiarlas de una vez.",
@@ -83,5 +84,11 @@
   "libraryMenuDetails": "Detalles",
   "libraryMenuGoToAlbum": "Ir al álbum",
   "libraryMenuGoToArtist": "Ir al artista",
-  "libraryMenuShareAlbum": "Compartir el álbum"
+  "libraryMenuGoToAuthor": "Ir al autor",
+  "libraryMenuOpenBook": "Abrir el libro",
+  "libraryMenuOpenEpisode": "Abrir el episodio",
+  "libraryMenuPlay": "Reproducir",
+  "libraryMenuResume": "Reanudar",
+  "libraryMenuShareAlbum": "Compartir el álbum",
+  "libraryResumeItem": "Reanudar {title}"
 }

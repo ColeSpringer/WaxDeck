@@ -931,8 +931,14 @@ class _EntityDoors extends StatelessWidget {
             WaxPill(
               label: l10n.metadataOpenReleaseGroup,
               semanticsId: SemanticsIds.metadataOpenReleaseGroup,
+              // A track's release group lists music; anything else's
+              // medium is not the music index's, so it lists them all.
               onPressed: () => context.push(
-                WaxRoute.musicBucket(MusicDimension.releaseGroups, rgPid),
+                WaxRoute.musicBucket(
+                  MusicDimension.releaseGroups,
+                  rgPid,
+                  wholeLibrary: metadata.mediaType != MediaType.music,
+                ),
               ),
             ),
         ],

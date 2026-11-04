@@ -41,6 +41,7 @@ final _rewriteSeedProvider = FutureProvider.autoDispose
         musicItemsProvider((
           dimension: MusicDimension.albums,
           segment: albumPid,
+          domain: BrowseDomain.wholeLibrary,
         )).future,
       );
       final first = albumOrder(members.items).firstOrNull;
@@ -445,7 +446,11 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
     // scrolled that far.
     final members =
         ref.watch(albumDetailProvider(widget.pid)).value?.itemCount ?? 0;
-    final listing = (dimension: MusicDimension.albums, segment: widget.pid);
+    final listing = (
+      dimension: MusicDimension.albums,
+      segment: widget.pid,
+      domain: BrowseDomain.wholeLibrary,
+    );
     return EntityRenameSection(
       entityType: 'album',
       pid: widget.pid,
@@ -510,6 +515,7 @@ class _AlbumSummary extends ConsumerWidget {
                 musicItemsProvider((
                   dimension: MusicDimension.albums,
                   segment: pid,
+                  domain: BrowseDomain.wholeLibrary,
                 )),
               )
               .value
@@ -600,6 +606,7 @@ class _DerivedTotalTracks extends ConsumerWidget {
               musicItemsProvider((
                 dimension: MusicDimension.albums,
                 segment: pid,
+                domain: BrowseDomain.wholeLibrary,
               )),
             )
             .value

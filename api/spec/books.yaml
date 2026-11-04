@@ -485,6 +485,13 @@ components:
           description: Author display names, in credit order.
           items:
             type: string
+        authorPid:
+          type: string
+          description: >
+            The book's first author as an artist pid (`ar-`), the author
+            the `artist` browse dimension files the book under. Absent
+            when the book names no author.
+          example: ar-01JZX5N8QW3F4V9T2B7KD3M9R6
         narrators:
           type: array
           description: Narrator display names, in credit order.

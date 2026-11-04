@@ -15,6 +15,7 @@ import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/paged_scroll.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -34,6 +35,7 @@ class MusicListingScreen extends ConsumerStatefulWidget {
     this.dimension,
     this.segment = '',
     this.label,
+    this.domain = BrowseDomain.music,
     super.key,
   });
 
@@ -49,34 +51,37 @@ class MusicListingScreen extends ConsumerStatefulWidget {
   /// listing itself never depends on this.
   final String? label;
 
+  /// What the bucket drills over: music, or the whole library where the
+  /// location says so. The router reads it off the location, and the
+  /// queue source this listing mints carries it on.
+  final BrowseDomain domain;
+
   @override
   ConsumerState<MusicListingScreen> createState() => _MusicListingScreenState();
 }
 
-class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
-  MusicListing get _listing =>
-      (dimension: widget.dimension, segment: widget.segment);
+class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
+    with PagedScroll {
+  MusicListing get _listing => (
+    dimension: widget.dimension,
+    segment: widget.segment,
+    domain: widget.domain,
+  );
 
   /// This screen's own precacher, released with the screen.
   final ArtworkPrecacher _precacher = ArtworkPrecacher();
 
-  final ScrollController _scroll = ScrollController();
-
   @override
   void dispose() {
     _precacher.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
-  /// A list that does not reach past the viewport cannot scroll, so it
-  /// never asks for more as it scrolls: asked here, once it is laid out.
-  void _fillViewport() {
-    if (!mounted || !_scroll.hasClients) return;
-    final position = _scroll.position;
-    if (position.maxScrollExtent > position.minScrollExtent) return;
-    ref.read(musicItemsProvider(_listing).notifier).loadMore();
-  }
+  @override
+  double get pageAhead => 600;
+
+  @override
+  void loadMore() => ref.read(musicItemsProvider(_listing).notifier).loadMore();
 
   /// What to call this list when nothing handed it a name.
   ///
@@ -162,6 +167,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         rolling: cursor != null,
         cursor: cursor ?? '',
         seed: seed,
+        mediaType: MediaType.music,
       );
     }
     return QueueSource(
@@ -177,13 +183,15 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       rolling: cursor != null,
       cursor: cursor ?? '',
       seed: seed,
+      // The scope this listing paged under, which its cursor names.
+      mediaType: widget.domain.drillMediaType,
     );
   }
 
   void _play(MusicItemsState state, int index) {
     final items = state.items;
-    // A bucket holds whatever carried the artist or the year it counts,
-    // and a book is one of those. Books resume on their own screen -
+    // The artist's whole-library listing holds their books too; a music
+    // index bucket holds none. Books resume on their own screen -
     // chapters, speed, position - so a row that is one opens it rather
     // than dropping a twelve-hour file into the queue.
     if (items[index].mediaType == MediaType.audiobook) {
@@ -195,10 +203,9 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
     // cursor rides with it, which is how the tracks index plays on
     // without queueing forty thousand tracks.
     //
-    // Books are left out of the sequence: a bucket counts whatever
-    // carries its artist or its year, and a twelve-hour file arriving
-    // between two tracks is not what the tap asked for. The tracks index
-    // has none to leave out.
+    // Books are left out of the sequence: the artist's whole-library
+    // listing carries them, and a twelve-hour file arriving between two
+    // tracks is not what the tap asked for.
     final playable = <ItemSummary>[];
     var start = 0;
     for (final item in items) {
@@ -247,6 +254,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
             )
           : await repository.browse(
               DiscoveryList.random,
+              mediaType: widget.domain.drillMediaType,
               facet: dimension.wireName,
               facetKey: musicFacetKey(dimension, widget.segment),
               limit: kQueueCap,
@@ -290,9 +298,10 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
     final state = ref.watch(musicItemsProvider(_listing));
     final dimension = widget.dimension;
     final items = state.value?.items ?? const <ItemSummary>[];
-    if (state.value case MusicItemsState(hasMore: true, loadingMore: false)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
-    }
+    fillViewportWhile(
+      (state.value?.hasMore ?? false) && !(state.value?.loadingMore ?? true),
+      at: state.value?.items,
+    );
     // Watched here and nowhere else. Only for an artist bucket that is
     // one: the absent-value bucket travels as a sentinel, and resolving
     // that as a pid is a request for something that cannot exist.
@@ -302,18 +311,13 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         ? ref.watch(entityCardProvider(widget.segment)).value?.title
         : null;
 
-    return NotificationListener<ScrollNotification>(
-      // Paging belongs to the scroll, not to the item builder: asking a
-      // notifier for another page while it is building a row mutates
-      // state mid-frame.
+    return NotificationListener<ScrollEndNotification>(
+      // Warms the artwork a settled scroll is about to reach. Vertical
+      // only: a horizontal scroller inside the page would warm by its
+      // own offset.
       onNotification: (notification) {
         final metrics = notification.metrics;
-        // Vertical only, for the same reason the index guards: a
-        // horizontal scroller inside the page sits at pixel zero of a
-        // short extent, which reads as "near the end" of the page.
-        if (metrics.axis != Axis.vertical) return false;
-        _pageNearEnd(metrics);
-        if (notification is ScrollEndNotification) {
+        if (metrics.axis == Axis.vertical) {
           warmArtworkAhead(
             context: context,
             precacher: _precacher,
@@ -328,7 +332,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       child: WaxScaffold(
         title: _title(items),
         largeTitle: false,
-        controller: _scroll,
+        controller: pagedScroll,
         // Pops what is beneath, which is the screen this was opened
         // from: an artist's own screen for their full track list, the
         // dimension's index for a bucket. The fallback covers a
@@ -363,16 +367,6 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         ],
       ),
     );
-  }
-
-  /// Asks for the next page once [metrics] reach near the end of a
-  /// vertical scroll: a horizontal scroller inside the page sits at pixel
-  /// zero of a short extent, which would read as the end of the page.
-  void _pageNearEnd(ScrollMetrics metrics) {
-    if (metrics.axis != Axis.vertical) return;
-    if (metrics.pixels >= metrics.maxScrollExtent - 600) {
-      ref.read(musicItemsProvider(_listing).notifier).loadMore();
-    }
   }
 
   Widget _list(MusicItemsState state) {

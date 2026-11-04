@@ -70,6 +70,11 @@ void main() {
     await _pump(tester, repo);
 
     expect(_byId(SemanticsIds.albumEditor), findsOneWidget);
+    // The workbench and its album pane read the release whole-library,
+    // the key the bulk pane's save invalidates.
+    final reads = repo.listItemsCalls.where((call) => call.facet == 'album');
+    expect(reads, isNotEmpty);
+    expect(reads.map((call) => call.mediaType), everyElement(isNull));
     expect(find.text('036000291452'), findsOneWidget);
     expect(find.text('Meridian Sound'), findsOneWidget);
     // Shown as stored, never client-validated: a scan keeps the tag

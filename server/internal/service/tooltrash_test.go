@@ -109,6 +109,9 @@ func TestAMergeOfABookPartlyInAReadOnlyLibraryIsRefused(t *testing.T) {
 			}
 		}
 	}
+	// The flag reaches the write checks on the catalog's change event,
+	// which a loaded run can deliver after the merge asks; read it now.
+	svc.refreshLibraryState(ctx)
 	svc.SetFlowJobs(newFakeBookEngine(t))
 	if _, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false); KindOf(err) != KindReadOnly {
 		t.Fatalf("merge = %v (kind %q), want read-only", err, KindOf(err))

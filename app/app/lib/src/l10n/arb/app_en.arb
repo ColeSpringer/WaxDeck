@@ -3895,13 +3895,41 @@
   "@bellUploadChanged": {
     "description": "What a bell row says. Generic because the marker carries no detail."
   },
+  "bookAuthorUnknown": "Unknown author",
+  "@bookAuthorUnknown": {
+    "description": "Title of the author page holding the books with no author tagged, and the name of its row in the Authors index."
+  },
   "bookBackToBeginning": "Back to the beginning",
   "@bookBackToBeginning": {
     "description": "Snackbar after putting a book's position back at zero."
   },
+  "bookBucketEmptyTitle": "No books here",
+  "@bookBucketEmptyTitle": {
+    "description": "Empty state of an author or genre page whose books have moved or been removed."
+  },
+  "bookBucketFallbackTitle": "{dimension, select, authors{Author} genres{Genre} other{Books}}",
+  "@bookBucketFallbackTitle": {
+    "description": "Title of an author or genre page reached by a link with no name to go by: an author whose card could not be read, a genre whose key names nothing a reader knows.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "authors"
+      }
+    }
+  },
+  "bookBucketLoadError": "{dimension, select, authors{Could not load this author} genres{Could not load this genre} other{Could not load these books}}",
+  "@bookBucketLoadError": {
+    "description": "Title of the error state when an author's or a genre's page could not be read.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "authors"
+      }
+    }
+  },
   "bookByAuthors": "By {names}",
   "@bookByAuthors": {
-    "description": "Who wrote a book, under its title. {names} is the authors joined by commas.",
+    "description": "Who wrote a book, under its title on the book screen: the author link, naming the first author (whose page it opens), or, for a book whose author has no page, a plain line naming them all. {names} is that one author, or every author joined by commas.",
     "placeholders": {
       "names": {
         "type": "String",
@@ -3959,6 +3987,15 @@
   "@bookChaptersTitle": {
     "description": "Heading over a book's chapter list."
   },
+  "bookCount": "{count, plural, =1{1 book} other{{count} books}}",
+  "@bookCount": {
+    "description": "How many books an author or a genre holds: under its name in the Authors or Genres index, under the title of its own page, and beside the track count in the line under an artist's name on their page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "bookDownloadOffline": "Download for offline",
   "@bookDownloadOffline": {
     "description": "Control keeping a book's audio on this device."
@@ -3998,6 +4035,10 @@
   "bookFieldPublisher": "Publisher",
   "@bookFieldPublisher": {
     "description": "Who published an edition of a book."
+  },
+  "bookGenreUnknown": "No genre",
+  "@bookGenreUnknown": {
+    "description": "Title of the genre page holding the books with no genre tagged, and the name of its row in the Genres index."
   },
   "bookLoadError": "Could not load this book",
   "@bookLoadError": {
@@ -4191,7 +4232,7 @@
   },
   "bookSeriesTitle": "Series",
   "@bookSeriesTitle": {
-    "description": "The shelf on the audiobook hub that opens the series index, and that index's own title. One key for both: they name the same thing on two surfaces."
+    "description": "The audiobook hub's tile that opens the series index, the heading of the hub's series shelf, that index's own title, and a series page's title while its name loads. One key for all four: they name the same thing."
   },
   "bookSeriesUnknownSequence": "-",
   "@bookSeriesUnknownSequence": {
@@ -4277,38 +4318,45 @@
   "@bookVoiceBoostHelp": {
     "description": "Help under the voice-boost switch on a book."
   },
+  "bookWithAuthors": "With {names}",
+  "@bookWithAuthors": {
+    "description": "A co-authored book's other authors, on the book screen's own line above the narrators, under the author link that names the first. {names} is the authors after the first, joined by commas.",
+    "placeholders": {
+      "names": {
+        "type": "String",
+        "example": "Alma First"
+      }
+    }
+  },
   "bookYes": "Yes",
   "@bookYes": {
     "description": "The value of a yes-or-no row in a book's edition details."
-  },
-  "booksAddLibrary": "Add a library",
-  "@booksAddLibrary": {
-    "description": "Action on the empty Books hub, for administrators: opens the libraries screen where a Books library is added."
   },
   "booksAddToLibrary": "Add to library",
   "@booksAddToLibrary": {
     "description": "Accessible name of the add control on the audiobook hub, which opens the same sheet home's does with the audiobook type chosen."
   },
-  "booksAuthorChip": "{name} ({count})",
-  "@booksAuthorChip": {
-    "description": "Chip narrowing the hub to one author, with how many books they have on the shelf.",
-    "placeholders": {
-      "name": {
-        "type": "String",
-        "example": "Ursula K. Le Guin"
-      },
-      "count": {
-        "type": "int"
-      }
-    }
+  "booksAllTitle": "All books",
+  "@booksAllTitle": {
+    "description": "Heading on the audiobook hub over the grid of every book, under the shelves."
   },
   "booksContinueTitle": "Continue listening",
   "@booksContinueTitle": {
     "description": "Shelf on the audiobook hub holding the books part way through."
   },
-  "booksEmptyMessage": "In a library that holds Books every audio file becomes a book, parts and all. Elsewhere a file is a book when its tags say so, or when someone who may edit it chooses Treat as audiobook.",
-  "@booksEmptyMessage": {
-    "description": "Message of the Books hub when there are no audiobooks: how a file becomes a book. 'Treat as audiobook' is the menu row of that name (libraryKindToBook)."
+  "booksDimensionTitle": "{dimension, select, authors{Authors} genres{Genres} other{Books}}",
+  "@booksDimensionTitle": {
+    "description": "What each way of browsing the books is called: the audiobook hub's tile label and the title of the index it opens.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "authors"
+      }
+    }
+  },
+  "booksEmptyAdd": "Add audiobooks",
+  "@booksEmptyAdd": {
+    "description": "Action on the empty Books hub for anyone who may upload: opens the add sheet with the audiobook type chosen."
   },
   "booksEmptyTitle": "No audiobooks yet",
   "@booksEmptyTitle": {
@@ -4339,6 +4387,62 @@
   "booksFinished": "Finished",
   "@booksFinished": {
     "description": "Said under a book's cover, and in the line under its title, when it has been heard to the end."
+  },
+  "booksIndexCount": "{dimension, select, authors{{count, plural, =1{1 author} other{{count} authors}}} genres{{count, plural, =1{1 genre} other{{count} genres}}} other{{count, plural, =1{1 entry} other{{count} entries}}}}",
+  "@booksIndexCount": {
+    "description": "Caption over a books index saying how much of it is loaded, when the whole index is loaded.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "authors"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "booksIndexCountAtLeast": "{dimension, select, authors{{count, plural, =1{1+ author} other{{count}+ authors}}} genres{{count, plural, =1{1+ genre} other{{count}+ genres}}} other{{count, plural, =1{1+ entry} other{{count}+ entries}}}}",
+  "@booksIndexCountAtLeast": {
+    "description": "The same caption where the index runs past the page that was read, so the number is a floor rather than a total.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "authors"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "booksIndexEmptyTitle": "{dimension, select, authors{No authors yet} genres{No genres yet} other{Nothing here yet}}",
+  "@booksIndexEmptyTitle": {
+    "description": "Empty state of a books index, on a library that holds no books yet.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "authors"
+      }
+    }
+  },
+  "booksIndexLoadError": "{dimension, select, authors{Could not load authors} genres{Could not load genres} other{Could not load this index}}",
+  "@booksIndexLoadError": {
+    "description": "Title of the error state when a books index could not be read.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "authors"
+      }
+    }
+  },
+  "booksIndexStartOf": "{dimension, select, authors{Start of authors} genres{Start of genres} other{Start of the list}}",
+  "@booksIndexStartOf": {
+    "description": "The row at the top of a books index that was re-anchored on a letter, offering the way back to the head of the list.",
+    "placeholders": {
+      "dimension": {
+        "type": "String",
+        "example": "authors"
+      }
+    }
   },
   "booksLoadError": "Could not load your books",
   "@booksLoadError": {
@@ -6708,6 +6812,20 @@
       }
     }
   },
+  "libraryHubTileSpoken": "{name}, {count}",
+  "@libraryHubTileSpoken": {
+    "description": "One hub tile read as a whole for a screen reader: what it opens, then how much is behind it.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Albums"
+      },
+      "count": {
+        "type": "String",
+        "example": "500+"
+      }
+    }
+  },
   "libraryKindAlbum": "album",
   "@libraryKindAlbum": {
     "description": "The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case."
@@ -6851,9 +6969,39 @@
   "@libraryMenuGoToArtist": {
     "description": "Item-menu row opening the item's artist."
   },
+  "libraryMenuGoToAuthor": "Go to author",
+  "@libraryMenuGoToAuthor": {
+    "description": "Item-menu row opening an audiobook's author: the books filed under them."
+  },
+  "libraryMenuOpenBook": "Open book",
+  "@libraryMenuOpenBook": {
+    "description": "Item-menu row opening an audiobook's own screen, the way to it from a shelf whose tap plays."
+  },
+  "libraryMenuOpenEpisode": "Open episode",
+  "@libraryMenuOpenEpisode": {
+    "description": "Item-menu row opening an episode's own screen, the way to it from a shelf whose tap plays."
+  },
+  "libraryMenuPlay": "Play",
+  "@libraryMenuPlay": {
+    "description": "Item-menu row starting an audiobook that has not been started, or has been finished and starts again."
+  },
+  "libraryMenuResume": "Resume",
+  "@libraryMenuResume": {
+    "description": "Item-menu row carrying on with an audiobook part way through, where it was left."
+  },
   "libraryMenuShareAlbum": "Share album",
   "@libraryMenuShareAlbum": {
     "description": "Item-menu row minting a public share link for the item's album."
+  },
+  "libraryResumeItem": "Resume {title}",
+  "@libraryResumeItem": {
+    "description": "Spoken name of the cover play over a book or an episode part way through, whose press carries on where it was left: the home shelves, the Downloaded shelf, the books hub's Continue shelf and every books grid.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "The Hobbit"
+      }
+    }
   },
   "localeFontSample": "Music, podcasts, and audiobooks.",
   "@localeFontSample": {
@@ -7920,7 +8068,16 @@
   },
   "musicArtistAudiobooksSection": "Audiobooks",
   "@musicArtistAudiobooksSection": {
-    "description": "Heading over an author's books, drawn instead of the tracks heading where a bucket holds no tracks at all."
+    "description": "Heading over the shelf of an artist's audiobooks on their page, drawn only when they have any; its Show all opens the author's page under Books."
+  },
+  "musicArtistBookCountAtLeast": "{count, plural, =1{1+ book} other{{count}+ books}}",
+  "@musicArtistBookCountAtLeast": {
+    "description": "How many audiobooks an artist's page holds, beside the track count in the line under their name, where the read runs past the page it read, so the number is a floor rather than a total. The whole count reads bookCount.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "musicArtistEditMetadata": "Edit artist",
   "@musicArtistEditMetadata": {
@@ -7933,24 +8090,6 @@
   "musicArtistEmptyTitle": "Nothing by this artist",
   "@musicArtistEmptyTitle": {
     "description": "Empty state of an artist whose items have all gone."
-  },
-  "musicArtistItemCount": "{count, plural, =1{1 item} other{{count} items}}",
-  "@musicArtistItemCount": {
-    "description": "How much an artist's bucket holds, in the line under their name. Items rather than tracks, because a bucket holds whatever carried the artist, audiobooks included.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "musicArtistItemCountAtLeast": "{count, plural, =1{1+ item} other{{count}+ items}}",
-  "@musicArtistItemCountAtLeast": {
-    "description": "The same count where the listing runs past the page that was read, so the number is a floor rather than a total.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
   },
   "musicArtistLoadError": "Could not load this artist",
   "@musicArtistLoadError": {
@@ -7971,7 +8110,16 @@
   },
   "musicArtistShowAll": "Show all",
   "@musicArtistShowAll": {
-    "description": "Action beside an artist's track heading, opening the full listing where the screen shows only the first few."
+    "description": "Action on an artist's page: beside the tracks heading, opening the full track listing where the page shows only the first few; on the audiobooks shelf, opening the author's page under Books."
+  },
+  "musicArtistTrackCountAtLeast": "{count, plural, =1{1+ track} other{{count}+ tracks}}",
+  "@musicArtistTrackCountAtLeast": {
+    "description": "How many tracks an artist's page holds, in the line under their name, where the read runs past the page it read, so the number is a floor rather than a total. The whole count reads musicTrackCount.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "musicArtistTracksSection": "Tracks",
   "@musicArtistTracksSection": {
@@ -8187,20 +8335,6 @@
   "musicHubEmptyMessage": "Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.",
   "@musicHubEmptyMessage": {
     "description": "First-run invitation on the music hub, drawn when every shelf has answered and none of them holds anything."
-  },
-  "musicHubTileSpoken": "{name}, {count}",
-  "@musicHubTileSpoken": {
-    "description": "One hub tile read as a whole for a screen reader: what it opens, then how much is behind it.",
-    "placeholders": {
-      "name": {
-        "type": "String",
-        "example": "Albums"
-      },
-      "count": {
-        "type": "String",
-        "example": "500+"
-      }
-    }
   },
   "musicIndexCount": "{dimension, select, artists{{count, plural, =1{1 artist} other{{count} artists}}} albums{{count, plural, =1{1 album} other{{count} albums}}} releaseGroups{{count, plural, =1{1 release group} other{{count} release groups}}} genres{{count, plural, =1{1 genre} other{{count} genres}}} years{{count, plural, =1{1 year} other{{count} years}}} other{{count, plural, =1{1 entry} other{{count} entries}}}}",
   "@musicIndexCount": {
@@ -15854,7 +15988,7 @@
   },
   "shellNavAdmin": "Admin console",
   "@shellNavAdmin": {
-    "description": "Navigation entry for the administration console. Every shellNav* label draws in a 224px sidebar (about 150px of text room, 20px less for the indented music indexes), so translations stay short - a label past that ellipsizes."
+    "description": "Navigation entry for the administration console. Every shellNav* label draws in a 224px sidebar (about 150px of text room, 20px less for the indexes indented under Music and Books), so translations stay short - a label past that ellipsizes."
   },
   "shellNavAlbums": "Albums",
   "@shellNavAlbums": {
@@ -15863,6 +15997,14 @@
   "shellNavArtists": "Artists",
   "@shellNavArtists": {
     "description": "Navigation entry for the artist index, under Music."
+  },
+  "shellNavAuthors": "Authors",
+  "@shellNavAuthors": {
+    "description": "Navigation entry for the author index, under Books."
+  },
+  "shellNavBookGenres": "Genres",
+  "@shellNavBookGenres": {
+    "description": "Navigation entry for the genre index, under Books."
   },
   "shellNavBooks": "Books",
   "@shellNavBooks": {
@@ -15903,6 +16045,10 @@
   "shellNavReview": "Review queue",
   "@shellNavReview": {
     "description": "Navigation entry for the queue of imports waiting on an administrator's decision."
+  },
+  "shellNavSeries": "Series",
+  "@shellNavSeries": {
+    "description": "Navigation entry for the series index, under Books."
   },
   "shellNavSettings": "App settings",
   "@shellNavSettings": {
@@ -15959,6 +16105,16 @@
   "shellPaletteGroupSettings": "Settings",
   "@shellPaletteGroupSettings": {
     "description": "Command palette group holding matching settings."
+  },
+  "shellPaletteInHubDetail": "In {hub}",
+  "@shellPaletteInHubDetail": {
+    "description": "The second line of a palette row that is an index under a hub, naming the hub so two indexes of one name (Music's Genres, Books' Genres) read apart.",
+    "placeholders": {
+      "hub": {
+        "type": "String",
+        "example": "Music"
+      }
+    }
   },
   "shellPaletteNoMatch": "Nothing matches \"{query}\"",
   "@shellPaletteNoMatch": {

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
+import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
@@ -153,6 +155,7 @@ void main() {
       await _expectRefreshKeepsRows(tester, container, repository, (
         dimension: MusicDimension.albums,
         segment: 'al-1',
+        domain: BrowseDomain.wholeLibrary,
       ));
     });
 
@@ -188,6 +191,11 @@ void main() {
       await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
 
       expect(_rowTitles(tester), ['Bellwether', 'Cinder', 'Anthem']);
+      // The whole library: an album reached from search may hold a book.
+      expect(
+        repository.listItemsCalls.map((call) => call.mediaType),
+        everyElement(isNull),
+      );
     });
 
     testWidgets('a multi-disc release separates its discs', (tester) async {
@@ -899,6 +907,7 @@ void main() {
       await _expectRefreshKeepsRows(tester, container, repository, (
         dimension: MusicDimension.genres,
         segment: 'ge-1',
+        domain: BrowseDomain.music,
       ));
     });
   });
@@ -916,6 +925,7 @@ void main() {
       await _expectRefreshKeepsRows(tester, container, repository, (
         dimension: MusicDimension.artists,
         segment: 'ar-1',
+        domain: BrowseDomain.wholeLibrary,
       ));
     });
 
@@ -1267,7 +1277,14 @@ void main() {
       await tester.tap(find.text('Show all'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(MusicListingScreen), findsOneWidget);
+      // Music, like every listing under /music: the tracks this section
+      // listed, not the books beside them.
+      expect(
+        tester
+            .widget<MusicListingScreen>(find.byType(MusicListingScreen))
+            .domain,
+        BrowseDomain.music,
+      );
     });
 
     testWidgets('an artist whose whole catalogue fits offers no Show all', (
@@ -1281,23 +1298,28 @@ void main() {
       expect(find.text('Show all'), findsNothing);
     });
 
-    testWidgets('the audiobooks in an artist bucket stay out of the queue', (
+    ItemSummary book(String n) => ItemSummary(
+      pid: 'bk-$n',
+      mediaType: MediaType.audiobook,
+      title: 'A long book $n',
+      artist: 'Nightjar',
+      durationMs: 43200000,
+    );
+
+    testWidgets('an artist\'s page splits its tracks from its books', (
       tester,
     ) async {
       // A bucket counts whatever carried the artist, and a book carries
-      // one. The list shows all of it, so the count and the list agree;
-      // the queue is the different question, because a twelve-hour file
-      // dropped between two tracks is not what Play was asked for.
+      // one. The page reads it all, so an author still gets their books,
+      // but each medium is counted and listed as itself: the music index
+      // says "3 tracks" and so does this page.
       final repository = FakeRepository()
         ..facetItems['artist 1'] = <ItemSummary>[
           _track('One'),
-          ItemSummary(
-            pid: 'bk-1',
-            mediaType: MediaType.audiobook,
-            title: 'A long book',
-            artist: 'Nightjar',
-            durationMs: 43200000,
-          ),
+          book('1'),
+          _track('Two'),
+          book('2'),
+          _track('Three'),
         ];
       final container = await _pump(
         tester,
@@ -1305,12 +1327,60 @@ void main() {
         repository,
       );
 
-      expect(_rowTitles(tester), ['One', 'A long book']);
+      expect(find.textContaining('3 tracks · 2 books'), findsOneWidget);
+      expect(_rowTitles(tester), ['One', 'Two', 'Three']);
+      expect(find.text('Tracks'), findsOneWidget);
+      expect(find.text('Audiobooks'), findsOneWidget);
+      for (final pid in <String>['bk-1', 'bk-2']) {
+        expect(find.bySemanticsIdentifier(SemanticsIds.book(pid)), findsOne);
+      }
+
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.entityPlay));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
-      expect(container.read(queueControllerProvider).pids, ['tr-One']);
+      expect(container.read(queueControllerProvider).pids, [
+        'tr-One',
+        'tr-Two',
+        'tr-Three',
+      ]);
       await _stop(tester, container);
+    });
+
+    testWidgets('the books shelf goes to the author\'s books', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One'), book('1')];
+      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.entityAllBooks));
+      await tester.pumpAndSettle();
+      final page = tester.widget<BookBucketScreen>(
+        find.byType(BookBucketScreen),
+      );
+      expect((page.dimension, page.segment), (BookDimension.authors, 'ar-1'));
+    });
+
+    testWidgets('an author with no tracks draws the books shelf alone', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[book('1'), book('2')];
+      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
+
+      expect(find.textContaining('2 books'), findsOneWidget);
+      expect(find.textContaining('tracks'), findsNothing);
+      expect(find.text('Tracks'), findsNothing);
+      expect(_rowTitles(tester), isEmpty);
+      expect(find.text('Audiobooks'), findsOneWidget);
+    });
+
+    testWidgets('a music artist draws no books shelf', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One')];
+      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
+
+      expect(find.textContaining('1 track · '), findsOneWidget);
+      expect(find.textContaining('book'), findsNothing);
+      expect(find.text('Audiobooks'), findsNothing);
     });
 
     testWidgets('an artist bigger than a page hands the queue its cursor', (

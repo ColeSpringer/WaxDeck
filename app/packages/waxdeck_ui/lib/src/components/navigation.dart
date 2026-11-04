@@ -1080,6 +1080,7 @@ class _WaxSidebarState extends State<WaxSidebar> {
     final open = _isParentOpen(destination);
     return <Widget>[
       Row(
+        key: ValueKey<String>(destination.name),
         children: <Widget>[
           Expanded(child: _sidebarItem(destination, collapsed: false)),
           // Beside the row rather than inside it. The row excludes its own
@@ -1104,11 +1105,15 @@ class _WaxSidebarState extends State<WaxSidebar> {
     ];
   }
 
+  /// Keyed by name: a section's rows open and close in the slots another
+  /// section's held, and a row reused in place would keep the identifier
+  /// of the one it replaced, which Flutter does not resend.
   Widget _sidebarItem(
     WaxDestination destination, {
     required bool collapsed,
     bool indent = false,
   }) => Padding(
+    key: ValueKey<String>(destination.name),
     padding: const EdgeInsets.symmetric(vertical: 1),
     child: _NavItem(
       label: destination.label,
@@ -1140,6 +1145,7 @@ class _WaxSidebarState extends State<WaxSidebar> {
     final open = _isOpen(group);
     return <Widget>[
       Padding(
+        key: ValueKey<String>(group.name),
         padding: const EdgeInsets.symmetric(vertical: 1),
         child: _NavItem(
           label: group.label,

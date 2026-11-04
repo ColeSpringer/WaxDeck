@@ -495,6 +495,7 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
           musicItemsProvider((
             dimension: MusicDimension.albums,
             segment: widget.albumPid,
+            domain: BrowseDomain.wholeLibrary,
           )),
         );
       for (final pid in result.edited) {

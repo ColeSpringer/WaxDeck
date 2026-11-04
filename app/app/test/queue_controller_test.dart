@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck_api/waxdeck_api.dart' show MediaType;
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 const _album = QueueSource(
@@ -357,6 +358,37 @@ void main() {
       expect(restored.source.rolling, isTrue);
     });
 
+    test('the scope a cursor was minted under survives a restart', () {
+      for (final mediaType in <MediaType?>[
+        MediaType.music,
+        MediaType.audiobook,
+        null,
+      ]) {
+        for (final seed in <int?>[null, 4242]) {
+          queue.playNow(
+            _tracks(3),
+            source: QueueSource(
+              kind: QueueSourceKind.genre,
+              label: 'Jazz',
+              pid: 'ge-1',
+              rolling: true,
+              cursor: 'c-500',
+              seed: seed,
+              mediaType: mediaType,
+            ),
+          );
+          final restored = QueueState.fromStored(
+            get_().toStored(updatedAt: DateTime.utc(2026, 7, 28)),
+          );
+
+          expect(restored.source, get_().source, reason: '$mediaType $seed');
+          expect(restored.source.mediaType, mediaType);
+          expect(restored.source.cursor, 'c-500');
+          expect(restored.source.seed, seed);
+        }
+      }
+    });
+
     test('a stored cursor with no seed reads back as a plain cursor', () {
       final restored = QueueState.fromStored(
         StoredQueue(
@@ -377,6 +409,8 @@ void main() {
 
       expect(restored.source.cursor, 'YmFzZTY0dXJs');
       expect(restored.source.seed, isNull);
+      // Stored before a source named its scope: unscoped.
+      expect(restored.source.mediaType, isNull);
     });
   });
 

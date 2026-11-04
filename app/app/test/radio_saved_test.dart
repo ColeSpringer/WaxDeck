@@ -36,14 +36,23 @@ RadioSavedSong _song({
   hasArt: hasArt,
 );
 
+FakeRepository _seeded(int count) {
+  final repo = FakeRepository();
+  for (var i = 0; i < count; i++) {
+    repo.seedSavedSong(_song(pid: 'rw-$i', line: 'Artist - Song $i'));
+  }
+  return repo;
+}
+
 Future<ProviderContainer> _pump(
   WidgetTester tester,
   FakeRepository repo, {
   FakeEngine? engine,
+  Size size = const Size(1600, 1000),
 }) async {
   // Desktop-sized: the identify handoff pushes the review entry, which
   // sits inside the admin console's sidebar shell and wants the width.
-  tester.view.physicalSize = const Size(1600, 1000);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
@@ -589,6 +598,38 @@ void main() {
 
     expect(find.textContaining('No pending single tracks'), findsOneWidget);
     expect(repo.reidentifyCalls, isEmpty);
+  });
+  group('paging', () {
+    Future<void> toTheEnd(WidgetTester tester) async {
+      for (var i = 0; i < 20; i++) {
+        await tester.drag(
+          find.byType(CustomScrollView).first,
+          const Offset(0, -2000),
+        );
+        await tester.pumpAndSettle();
+      }
+    }
+
+    testWidgets('scrolling near the end reads the next page', (tester) async {
+      final repo = _seeded(120);
+      await _pump(tester, repo, size: const Size(800, 600));
+      expect(repo.radioSavedCursors, <String?>[null]);
+
+      await toTheEnd(tester);
+      expect(
+        repo.radioSavedCursors,
+        containsAllInOrder(<String?>[null, '50', '100']),
+      );
+    });
+
+    testWidgets('a window the first page cannot fill reads the next', (
+      tester,
+    ) async {
+      final repo = _seeded(60);
+      await _pump(tester, repo, size: const Size(800, 9000));
+
+      expect(repo.radioSavedCursors, <String?>[null, '50']);
+    });
   });
 }
 

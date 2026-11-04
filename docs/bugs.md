@@ -4,12 +4,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [10-16-26] - In general, there is too much explanatory text when visuals and intuitive UI design should suffice.
 
-[10-23-26] The books section doesn't appear until you upload a book. Inconsistent with the other sections that will always show even if empty (which is what we want since you can go to a section and upload files specfiic to that section. doing it on home requires you to select what youre uploading)
-
-[10-23-26] In the books section home page, if you click the play button of an audiobook it brings it to the informational page and doesnt just start playing. There is a play button that appears. Even when you pause and attempt to yout the continue listening function is goes to the informational page instead of just resuming where you left off. We need a way for people to be able to just play the book or to go to the informational page if they want. Currently the always have to go to the informatinal page before they can start/resume the book.
-
-[10-23-26] The books section doesn't have a genre or author sub sections like music has.
-
 [10-31-26] Each chapter (separate files) of a book now shows up in the recently added and never played sections under home. If a book contains a bunch of separate files it should really only show as the full book just like how it would if it were just in a singular file.
 
 [10-31-26] When adding music from a url, there should be a way to just accept the top / best match when choosing to identify against musicbrainz instead of putting it in the queue for the user.

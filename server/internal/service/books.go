@@ -38,6 +38,7 @@ type BookDetail struct {
 	Title           string
 	Subtitle        string
 	Authors         []string
+	AuthorPID       string
 	Narrators       []string
 	Series          string
 	SeriesPID       string
@@ -75,6 +76,7 @@ func (l *Library) BookDetailFor(ctx context.Context, uc *UserCtx, apiBookPID str
 		Title:           bd.Item.Title,
 		Subtitle:        bd.Subtitle,
 		Authors:         bd.Authors,
+		AuthorPID:       entityAPIPID(PrefixArtist, bd.Item.ArtistPID),
 		Narrators:       bd.Narrators,
 		Series:          bd.Series,
 		SeriesPID:       entityAPIPID(PrefixSeries, bd.SeriesPID),

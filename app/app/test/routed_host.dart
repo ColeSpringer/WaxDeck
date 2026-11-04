@@ -12,10 +12,11 @@ const _testPushed = '$_testRoot/pushed';
 /// Hosts one screen over the app's real route table.
 ///
 /// Screens navigate through the router, so a test that taps a row needs
-/// the same routes the app has, or the tap lands nowhere. The session
-/// shell is deliberately left out: a widget test exercises a screen, not
-/// the sync engine and share intake that wrap the signed-in app, which
-/// `router_test.dart` covers by mounting the whole app instead.
+/// the same routes the app has, or the tap lands nowhere. The signed-in
+/// scope's shell route is kept, with a bare builder: a widget test
+/// exercises a screen, not the sync engine and share intake that wrap the
+/// signed-in app, which `router_test.dart` covers by mounting the whole
+/// app instead.
 ///
 /// Pass [pushed] for a screen that pops itself when it is done, which
 /// the app only ever reaches by pushing: it puts a blank page underneath
@@ -52,7 +53,14 @@ Widget routedHost(
         ],
       ),
       ...publicRoutes,
-      ...shellRoutes(),
+      // Under a shell route of their own, as the app's router has them,
+      // so an in-shell location reads as in the shell rather than as an
+      // overlay, and a door taken there pushes as it does in the app.
+      ShellRoute(
+        navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'signed-in'),
+        builder: (context, state, child) => child,
+        routes: shellRoutes(),
+      ),
     ],
   );
   addTearDown(router.dispose);

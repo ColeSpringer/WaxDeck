@@ -2783,7 +2783,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bellUploadChanged => 'An upload changed.';
 
   @override
+  String get bookAuthorUnknown => 'Unknown author';
+
+  @override
   String get bookBackToBeginning => 'Back to the beginning';
+
+  @override
+  String get bookBucketEmptyTitle => 'No books here';
+
+  @override
+  String bookBucketFallbackTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'authors': 'Author',
+      'genres': 'Genre',
+      'other': 'Books',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String bookBucketLoadError(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'authors': 'Could not load this author',
+      'genres': 'Could not load this genre',
+      'other': 'Could not load these books',
+    });
+    return '$_temp0';
+  }
 
   @override
   String bookByAuthors(String names) {
@@ -2833,6 +2859,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bookChaptersTitle => 'Chapters';
 
   @override
+  String bookCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count books',
+      one: '1 book',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get bookDownloadOffline => 'Download for offline';
 
   @override
@@ -2861,6 +2898,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookFieldPublisher => 'Publisher';
+
+  @override
+  String get bookGenreUnknown => 'No genre';
 
   @override
   String get bookLoadError => 'Could not load this book';
@@ -3067,25 +3107,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bookVoiceBoostHelp => 'Lifts speech over a noisy room';
 
   @override
-  String get bookYes => 'Yes';
+  String bookWithAuthors(String names) {
+    return 'With $names';
+  }
 
   @override
-  String get booksAddLibrary => 'Add a library';
+  String get bookYes => 'Yes';
 
   @override
   String get booksAddToLibrary => 'Add to library';
 
   @override
-  String booksAuthorChip(String name, int count) {
-    return '$name ($count)';
-  }
+  String get booksAllTitle => 'All books';
 
   @override
   String get booksContinueTitle => 'Continue listening';
 
   @override
-  String get booksEmptyMessage =>
-      'In a library that holds Books every audio file becomes a book, parts and all. Elsewhere a file is a book when its tags say so, or when someone who may edit it chooses Treat as audiobook.';
+  String booksDimensionTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'authors': 'Authors',
+      'genres': 'Genres',
+      'other': 'Books',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get booksEmptyAdd => 'Add audiobooks';
 
   @override
   String get booksEmptyTitle => 'No audiobooks yet';
@@ -3111,6 +3160,92 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get booksFinished => 'Finished';
+
+  @override
+  String booksIndexCount(String dimension, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count authors',
+      one: '1 author',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count genres',
+      one: '1 genre',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count entries',
+      one: '1 entry',
+    );
+    String _temp3 = intl.Intl.selectLogic(dimension, {
+      'authors': '$_temp0',
+      'genres': '$_temp1',
+      'other': '$_temp2',
+    });
+    return '$_temp3';
+  }
+
+  @override
+  String booksIndexCountAtLeast(String dimension, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ authors',
+      one: '1+ author',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ genres',
+      one: '1+ genre',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ entries',
+      one: '1+ entry',
+    );
+    String _temp3 = intl.Intl.selectLogic(dimension, {
+      'authors': '$_temp0',
+      'genres': '$_temp1',
+      'other': '$_temp2',
+    });
+    return '$_temp3';
+  }
+
+  @override
+  String booksIndexEmptyTitle(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'authors': 'No authors yet',
+      'genres': 'No genres yet',
+      'other': 'Nothing here yet',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String booksIndexLoadError(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'authors': 'Could not load authors',
+      'genres': 'Could not load genres',
+      'other': 'Could not load this index',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String booksIndexStartOf(String dimension) {
+    String _temp0 = intl.Intl.selectLogic(dimension, {
+      'authors': 'Start of authors',
+      'genres': 'Start of genres',
+      'other': 'Start of the list',
+    });
+    return '$_temp0';
+  }
 
   @override
   String get booksLoadError => 'Could not load your books';
@@ -4887,6 +5022,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String libraryHubTileSpoken(String name, String count) {
+    return '$name, $count';
+  }
+
+  @override
   String get libraryKindAlbum => 'album';
 
   @override
@@ -5010,7 +5150,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get libraryMenuGoToArtist => 'Go to artist';
 
   @override
+  String get libraryMenuGoToAuthor => 'Go to author';
+
+  @override
+  String get libraryMenuOpenBook => 'Open book';
+
+  @override
+  String get libraryMenuOpenEpisode => 'Open episode';
+
+  @override
+  String get libraryMenuPlay => 'Play';
+
+  @override
+  String get libraryMenuResume => 'Resume';
+
+  @override
   String get libraryMenuShareAlbum => 'Share album';
+
+  @override
+  String libraryResumeItem(String title) {
+    return 'Resume $title';
+  }
 
   @override
   String get localeFontSample => 'Music, podcasts, and audiobooks.';
@@ -5830,6 +5990,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicArtistAudiobooksSection => 'Audiobooks';
 
   @override
+  String musicArtistBookCountAtLeast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ books',
+      one: '1+ book',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get musicArtistEditMetadata => 'Edit artist';
 
   @override
@@ -5838,28 +6009,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicArtistEmptyTitle => 'Nothing by this artist';
-
-  @override
-  String musicArtistItemCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count items',
-      one: '1 item',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String musicArtistItemCountAtLeast(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count+ items',
-      one: '1+ item',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get musicArtistLoadError => 'Could not load this artist';
@@ -5880,6 +6029,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicArtistShowAll => 'Show all';
+
+  @override
+  String musicArtistTrackCountAtLeast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count+ tracks',
+      one: '1+ track',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get musicArtistTracksSection => 'Tracks';
@@ -6076,11 +6236,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get musicHubEmptyMessage =>
       'Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.';
-
-  @override
-  String musicHubTileSpoken(String name, String count) {
-    return '$name, $count';
-  }
 
   @override
   String musicIndexCount(String dimension, int count) {
@@ -11906,6 +12061,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shellNavArtists => 'Artists';
 
   @override
+  String get shellNavAuthors => 'Authors';
+
+  @override
+  String get shellNavBookGenres => 'Genres';
+
+  @override
   String get shellNavBooks => 'Books';
 
   @override
@@ -11934,6 +12095,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellNavReview => 'Review queue';
+
+  @override
+  String get shellNavSeries => 'Series';
 
   @override
   String get shellNavSettings => 'App settings';
@@ -11976,6 +12140,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellPaletteGroupSettings => 'Settings';
+
+  @override
+  String shellPaletteInHubDetail(String hub) {
+    return 'In $hub';
+  }
 
   @override
   String shellPaletteNoMatch(String query) {

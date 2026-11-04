@@ -54,7 +54,9 @@ func TestFacetPublishesNeverRollTheCacheBack(t *testing.T) {
 	settleCatalogFeed(t, svc)
 	ctx := context.Background()
 	rolled := raceGenerations(t, svc,
-		func(gen facetGeneration) { svc.publishFacetBuckets(ctx, gen, "artist", FacetSortCount, nil) },
+		func(gen facetGeneration) {
+			svc.publishFacetBuckets(ctx, gen, facetCacheKey{dimension: "artist", sort: FacetSortCount}, nil)
+		},
 		func() facetGeneration {
 			svc.facets.mu.Lock()
 			defer svc.facets.mu.Unlock()

@@ -50,34 +50,13 @@ enum BookFilter {
 /// podcast hub's sort gives: the settings registry that would own a
 /// durable one lands with the settings phase.
 class BookView {
-  const BookView({
-    this.sort = BookSort.recent,
-    this.filter = BookFilter.all,
-    this.author,
-  });
+  const BookView({this.sort = BookSort.recent, this.filter = BookFilter.all});
 
   final BookSort sort;
   final BookFilter filter;
 
-  /// The author whose books the grid is narrowed to, by display name.
-  ///
-  /// A name rather than an artist pid, deliberately. The facet endpoint
-  /// enumerates artists across the whole library, so its buckets count
-  /// music too and its keys drill to a mixed listing; the authors worth
-  /// offering are the ones on the books this hub has actually loaded,
-  /// which is a set the screen already holds.
-  final String? author;
-
-  BookView copyWith({
-    BookSort? sort,
-    BookFilter? filter,
-    String? author,
-    bool clearAuthor = false,
-  }) => BookView(
-    sort: sort ?? this.sort,
-    filter: filter ?? this.filter,
-    author: clearAuthor ? null : author ?? this.author,
-  );
+  BookView copyWith({BookSort? sort, BookFilter? filter}) =>
+      BookView(sort: sort ?? this.sort, filter: filter ?? this.filter);
 }
 
 class BookViewController extends Notifier<BookView> {
@@ -87,16 +66,6 @@ class BookViewController extends Notifier<BookView> {
   void sortBy(BookSort sort) => state = state.copyWith(sort: sort);
 
   void filterBy(BookFilter filter) => state = state.copyWith(filter: filter);
-
-  /// Toggles the author narrowing, as a single-select chip row does. For
-  /// the chips only; a caller that means "show me this author" wants
-  /// [narrowToAuthor].
-  void toggleAuthor(String author) => state = state.author == author
-      ? state.copyWith(clearAuthor: true)
-      : state.copyWith(author: author);
-
-  /// Narrows to [author] whether or not it was already the choice.
-  void narrowToAuthor(String author) => state = state.copyWith(author: author);
 }
 
 final bookViewProvider = NotifierProvider<BookViewController, BookView>(
@@ -214,37 +183,6 @@ final booksProvider = AsyncNotifierProvider<BooksController, BooksState>(
   retry: retryUnlessRefused,
 );
 
-/// The authors on [books], each with how many they wrote, biggest first
-/// and in the order the catalog files them within a count.
-///
-/// Built from the loaded listing rather than from the facet endpoint,
-/// which counts an author's music alongside their books (the bug P11
-/// found from the other side: an artist bucket counting two audiobooks
-/// opened to an empty music list).
-List<({String name, int count})> bookAuthors(List<ItemSummary> books) {
-  final counts = <String, int>{};
-  // What equal counts are put in order by: each author's artist key, as
-  // the author sort has it.
-  final keys = <String, String>{};
-  for (final book in books) {
-    final author = book.artist?.trim();
-    if (author == null || author.isEmpty) continue;
-    counts[author] = (counts[author] ?? 0) + 1;
-    keys.putIfAbsent(author, () => book.artistOrderKey);
-  }
-  final names = counts.keys.toList()
-    ..sort((a, b) {
-      final byCount = counts[b]!.compareTo(counts[a]!);
-      if (byCount != 0) return byCount;
-      final byKey = keys[a]!.compareTo(keys[b]!);
-      // Names that differ in case alone share a key and keep one order.
-      return byKey != 0 ? byKey : a.compareTo(b);
-    });
-  return <({String name, int count})>[
-    for (final name in names) (name: name, count: counts[name]!),
-  ];
-}
-
 /// [books] as [view] asks for them: narrowed, then ordered.
 ///
 /// [progress] answers the finished filter, so a hub whose play states
@@ -258,16 +196,14 @@ List<ItemSummary> arrangeBooks(
   BookView view,
   PlayProgressView progress,
 ) {
-  final author = view.author;
   final out = <ItemSummary>[
     for (final book in books)
-      if (author == null || book.artist?.trim() == author)
-        if (switch (view.filter) {
-          BookFilter.all => true,
-          BookFilter.finished => progress[book.pid].finished,
-          BookFilter.unfinished => !progress[book.pid].finished,
-        })
-          book,
+      if (switch (view.filter) {
+        BookFilter.all => true,
+        BookFilter.finished => progress[book.pid].finished,
+        BookFilter.unfinished => !progress[book.pid].finished,
+      })
+        book,
   ];
   // The pid last, so books the catalog files under one key (it folds "The
   // Hobbit" and "Hobbit" together) keep one order however pages arrived.

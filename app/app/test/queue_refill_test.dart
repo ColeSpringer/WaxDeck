@@ -262,6 +262,65 @@ void main() {
       expect(draw!.pids, ['tr-1', 'tr-2']);
     });
 
+    // The scope a source names is the one its cursor was minted under:
+    // the listing that minted it stamps it, whatever the handle looks
+    // like.
+    QueueSource stamped(MediaType? mediaType, {int? seed}) => QueueSource(
+      kind: QueueSourceKind.genre,
+      label: 'Jazz',
+      pid: 'ge-1',
+      rolling: true,
+      cursor: '0',
+      seed: seed,
+      mediaType: mediaType,
+    );
+
+    test('a books-scoped bucket keeps its books', () async {
+      final repository = FakeRepository();
+      repository.facetItems['genre ge-1'] = [
+        testItem('bk-1', mediaType: MediaType.audiobook),
+      ];
+      final draw = await pagerOver(
+        repository,
+      ).draw(stamped(MediaType.audiobook));
+
+      expect(draw!.pids, ['bk-1']);
+    });
+
+    test('a bucket draws under the scope its source names', () async {
+      final repository = FakeRepository();
+      final pager = pagerOver(repository);
+      for (final mediaType in <MediaType?>[
+        null,
+        MediaType.music,
+        MediaType.audiobook,
+      ]) {
+        await pager.draw(stamped(mediaType));
+      }
+
+      expect(
+        repository.listItemsCalls.map((call) => call.mediaType).toList(),
+        <MediaType?>[null, MediaType.music, MediaType.audiobook],
+      );
+    });
+
+    test('a seeded bucket draws under the scope its shuffle paged', () async {
+      final repository = FakeRepository();
+      final pager = pagerOver(repository);
+      for (final mediaType in <MediaType?>[
+        null,
+        MediaType.music,
+        MediaType.audiobook,
+      ]) {
+        await pager.draw(stamped(mediaType, seed: 7));
+      }
+
+      expect(
+        repository.browseCalls.map((call) => call.mediaType).toList(),
+        <MediaType?>[null, MediaType.music, MediaType.audiobook],
+      );
+    });
+
     test('an entity bucket drills by its key, not by its pid', () async {
       final repository = FakeRepository();
       repository.facetItems['artist 01ABC'] = [testItem('tr-1')];

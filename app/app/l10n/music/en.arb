@@ -178,7 +178,16 @@
   },
   "musicArtistAudiobooksSection": "Audiobooks",
   "@musicArtistAudiobooksSection": {
-    "description": "Heading over an author's books, drawn instead of the tracks heading where a bucket holds no tracks at all."
+    "description": "Heading over the shelf of an artist's audiobooks on their page, drawn only when they have any; its Show all opens the author's page under Books."
+  },
+  "musicArtistBookCountAtLeast": "{count, plural, =1{1+ book} other{{count}+ books}}",
+  "@musicArtistBookCountAtLeast": {
+    "description": "How many audiobooks an artist's page holds, beside the track count in the line under their name, where the read runs past the page it read, so the number is a floor rather than a total. The whole count reads bookCount.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "musicArtistEditMetadata": "Edit artist",
   "@musicArtistEditMetadata": {
@@ -191,24 +200,6 @@
   "musicArtistEmptyTitle": "Nothing by this artist",
   "@musicArtistEmptyTitle": {
     "description": "Empty state of an artist whose items have all gone."
-  },
-  "musicArtistItemCount": "{count, plural, =1{1 item} other{{count} items}}",
-  "@musicArtistItemCount": {
-    "description": "How much an artist's bucket holds, in the line under their name. Items rather than tracks, because a bucket holds whatever carried the artist, audiobooks included.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "musicArtistItemCountAtLeast": "{count, plural, =1{1+ item} other{{count}+ items}}",
-  "@musicArtistItemCountAtLeast": {
-    "description": "The same count where the listing runs past the page that was read, so the number is a floor rather than a total.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
   },
   "musicArtistLoadError": "Could not load this artist",
   "@musicArtistLoadError": {
@@ -229,7 +220,16 @@
   },
   "musicArtistShowAll": "Show all",
   "@musicArtistShowAll": {
-    "description": "Action beside an artist's track heading, opening the full listing where the screen shows only the first few."
+    "description": "Action on an artist's page: beside the tracks heading, opening the full track listing where the page shows only the first few; on the audiobooks shelf, opening the author's page under Books."
+  },
+  "musicArtistTrackCountAtLeast": "{count, plural, =1{1+ track} other{{count}+ tracks}}",
+  "@musicArtistTrackCountAtLeast": {
+    "description": "How many tracks an artist's page holds, in the line under their name, where the read runs past the page it read, so the number is a floor rather than a total. The whole count reads musicTrackCount.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "musicArtistTracksSection": "Tracks",
   "@musicArtistTracksSection": {
@@ -445,20 +445,6 @@
   "musicHubEmptyMessage": "Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.",
   "@musicHubEmptyMessage": {
     "description": "First-run invitation on the music hub, drawn when every shelf has answered and none of them holds anything."
-  },
-  "musicHubTileSpoken": "{name}, {count}",
-  "@musicHubTileSpoken": {
-    "description": "One hub tile read as a whole for a screen reader: what it opens, then how much is behind it.",
-    "placeholders": {
-      "name": {
-        "type": "String",
-        "example": "Albums"
-      },
-      "count": {
-        "type": "String",
-        "example": "500+"
-      }
-    }
   },
   "musicIndexCount": "{dimension, select, artists{{count, plural, =1{1 artist} other{{count} artists}}} albums{{count, plural, =1{1 album} other{{count} albums}}} releaseGroups{{count, plural, =1{1 release group} other{{count} release groups}}} genres{{count, plural, =1{1 genre} other{{count} genres}}} years{{count, plural, =1{1 year} other{{count} years}}} other{{count, plural, =1{1 entry} other{{count} entries}}}}",
   "@musicIndexCount": {

@@ -247,7 +247,7 @@ func servesFromCache(l *Library, dimension string) bool {
 	if l.facets.gen != gen {
 		return false
 	}
-	_, ok := l.facets.byDimension[facetCacheKey{dimension, FacetSortCount}]
+	_, ok := l.facets.byDimension[facetCacheKey{dimension: dimension, sort: FacetSortCount}]
 	return ok
 }
 
@@ -344,7 +344,7 @@ func TestStaleEnumerationCannotEvictACurrentOne(t *testing.T) {
 	}
 
 	// Now the slow reader publishes. It must be dropped on the floor.
-	f.svc.publishFacetBuckets(f.ctx, stale, "genre", FacetSortCount, staleBuckets)
+	f.svc.publishFacetBuckets(f.ctx, stale, facetCacheKey{dimension: "genre", sort: FacetSortCount}, staleBuckets)
 	if !servesFromCache(f.svc, "artist") {
 		t.Fatal("a superseded enumeration rolled the cache back and evicted a current one")
 	}

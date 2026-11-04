@@ -468,6 +468,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Share link'), findsOneWidget);
+    // The row's info button is the door to the episode.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuOpenEpisode),
+      findsNothing,
+    );
   });
 
   testWidgets('a right click on an episode row opens the same menu', (

@@ -380,20 +380,27 @@ class _ComponentsPageState extends State<ComponentsPage> {
           ],
         ),
         const SizedBox(height: WaxSpace.s24),
-        // The bar in its place: a book's header, where the series line is
-        // the one link in the text block and a long one wraps in line.
+        // The bar in its place: a book's header, where the author and the
+        // series are links in the text block and a long one wraps in line.
         EntityHeader(
           title: 'A History of Tides',
-          subtitle: 'Mirren Vaux',
+          subtitle: 'An Almanac of Coasts',
           metadata: 'Audiobook, 11h 42m',
           artwork: art.of('A History of Tides'),
           shape: ArtworkShape.portrait,
           domain: WaxDomain.audiobooks,
-          link: EntityHeaderLink(
-            label: 'Book 3 of The Long Chronicle of the Harbour and the Sea',
-            semanticsId: 'series-link',
-            onPressed: () {},
-          ),
+          links: <EntityHeaderLink>[
+            EntityHeaderLink(
+              label: 'By Mirren Vaux',
+              semanticsId: 'author-link',
+              onPressed: () {},
+            ),
+            EntityHeaderLink(
+              label: 'Book 3 of The Long Chronicle of the Harbour and the Sea',
+              semanticsId: 'series-link',
+              onPressed: () {},
+            ),
+          ],
           actions: <WaxAction>[
             WaxAction(
               label: 'Resume',

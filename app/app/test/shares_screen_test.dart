@@ -18,6 +18,23 @@ Widget _host(FakeRepository repo) => ProviderScope(
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
 
+FakeRepository _seeded(int count) => FakeRepository()
+  ..shares.addAll([
+    for (var i = 0; i < count; i++) _share('sh-$i', targetTitle: 'Link $i'),
+  ]);
+
+Future<void> _pumpAt(
+  WidgetTester tester,
+  FakeRepository repo, {
+  required Size size,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(_host(repo));
+  await tester.pumpAndSettle();
+}
+
 Share _share(
   String pid, {
   String targetTitle = 'Prancing Pony Blues',
@@ -168,5 +185,38 @@ void main() {
 
     expect(copied.single, 'http://server.test/s/SECRET-sh-1');
     expect(shellMessageText(raisedMessage(tester)), 'Link copied');
+  });
+
+  group('paging', () {
+    Future<void> toTheEnd(WidgetTester tester) async {
+      for (var i = 0; i < 20; i++) {
+        await tester.drag(
+          find.byType(CustomScrollView).first,
+          const Offset(0, -2000),
+        );
+        await tester.pumpAndSettle();
+      }
+    }
+
+    testWidgets('scrolling near the end reads the next page', (tester) async {
+      final repo = _seeded(120);
+      await _pumpAt(tester, repo, size: const Size(800, 600));
+      expect(repo.listSharesCursors, <String?>[null]);
+
+      await toTheEnd(tester);
+      expect(
+        repo.listSharesCursors,
+        containsAllInOrder(<String?>[null, '50', '100']),
+      );
+    });
+
+    testWidgets('a window the first page cannot fill reads the next', (
+      tester,
+    ) async {
+      final repo = _seeded(60);
+      await _pumpAt(tester, repo, size: const Size(800, 9000));
+
+      expect(repo.listSharesCursors, <String?>[null, '50']);
+    });
   });
 }

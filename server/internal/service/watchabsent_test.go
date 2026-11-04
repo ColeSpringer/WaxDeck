@@ -42,7 +42,9 @@ func TestTheWriteProbeWakesNoScan(t *testing.T) {
 		select {
 		case ev := <-w.Events:
 			seen++
-			noteWatchEvent(w, p, ev)
+			if created := takeWatchEvent(w, p, ev, nil); created != "" {
+				armCreated(w, p, created, nil)
+			}
 		case <-time.After(200 * time.Millisecond):
 			drained = true
 		}
@@ -59,6 +61,12 @@ func TestTheWriteProbeWakesNoScan(t *testing.T) {
 // and recheck, its log written to logs.
 func openWatched(t *testing.T, roots []Root, logs io.Writer) (context.Context, *Library) {
 	t.Helper()
+	return openWatchedEvery(t, roots, logs, 100*time.Millisecond)
+}
+
+// openWatchedEvery is openWatched with the recheck every recheck.
+func openWatchedEvery(t *testing.T, roots []Root, logs io.Writer, recheck time.Duration) (context.Context, *Library) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	dataDir := t.TempDir()
@@ -69,7 +77,7 @@ func openWatched(t *testing.T, roots []Root, logs io.Writer) (context.Context, *
 	group := supervise.NewGroup(log)
 	svc, err := Open(ctx, Config{
 		DataDir: dataDir, Roots: roots, WatchLibraries: true,
-		WatchSettle: 50 * time.Millisecond, WatchRecheck: 100 * time.Millisecond, Logger: log,
+		WatchSettle: 50 * time.Millisecond, WatchRecheck: recheck, Logger: log,
 	}, store, group)
 	if err != nil {
 		t.Fatal(err)

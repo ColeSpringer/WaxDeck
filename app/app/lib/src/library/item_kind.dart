@@ -6,6 +6,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../books/books_controller.dart';
+import '../books/series_controller.dart';
+import '../books/series_merge.dart';
 import '../connect/queue_gateway.dart';
 import '../home/home_shelves.dart';
 import '../l10n/l10n.dart';
@@ -61,9 +63,18 @@ Future<void> confirmSetKind(
   void invalidate() {
     container
       ..invalidate(musicItemsProvider)
+      // The indexes count by kind, so a changed item moves from one
+      // index's buckets to another's.
+      ..invalidate(musicIndexProvider)
+      ..invalidate(musicIndexCountProvider)
       ..invalidate(albumDetailProvider)
       ..invalidate(bookDetailProvider)
       ..invalidate(booksProvider)
+      // A book that joins or leaves a series moves the series reads.
+      ..invalidate(bookSeriesProvider)
+      ..invalidate(bookSeriesShelfProvider)
+      ..invalidate(bookSeriesCountProvider)
+      ..invalidate(bookSeriesDetailProvider)
       ..invalidate(mayCurateItemProvider);
     for (final provider in homeShelfProviders) {
       container.invalidate(provider);

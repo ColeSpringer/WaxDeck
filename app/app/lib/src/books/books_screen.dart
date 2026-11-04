@@ -6,20 +6,46 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
-import '../home/item_shelf.dart';
 import '../l10n/l10n.dart';
+import '../library/hub_tiles.dart';
 import '../library/item_menu.dart';
+import '../library/item_play.dart';
+import '../music/music_controllers.dart';
 import '../player/play_progress.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
-import '../settings/settings_registry.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/paged_scroll.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/add_to_library.dart';
+import 'book_dimension.dart';
 import 'books_controller.dart';
 import 'series_merge.dart';
+
+/// The ways into the shelf, ahead of the shelves. Counted over the books
+/// alone, as the indexes they open are.
+List<HubTile> _tiles(AppLocalizations l10n) => <HubTile>[
+  for (final dimension in BookDimension.values)
+    HubTile(
+      name: dimension.segment,
+      label: dimension.titleOf(l10n),
+      glyph: dimension.dimension.glyph,
+      location: WaxRoute.bookIndex(dimension),
+      count: musicIndexCountProvider((
+        dimension: dimension.dimension,
+        domain: BrowseDomain.books,
+      )),
+    ),
+  HubTile(
+    name: 'series',
+    label: l10n.bookSeriesTitle,
+    glyph: WaxIcons.library,
+    location: WaxRoute.bookSeriesIndex,
+    count: bookSeriesCountProvider,
+  ),
+];
 
 /// The audiobook domain's front door: what is being read, and everything
 /// there is to read.
@@ -30,34 +56,12 @@ class BooksScreen extends ConsumerStatefulWidget {
   ConsumerState<BooksScreen> createState() => _BooksScreenState();
 }
 
-class _BooksScreenState extends ConsumerState<BooksScreen> {
-  final _scroll = ScrollController();
+class _BooksScreenState extends ConsumerState<BooksScreen> with PagedScroll {
+  @override
+  double get pageAhead => 600;
 
   @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_maybeLoadMore);
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  void _fillViewport() {
-    if (!mounted || !_scroll.hasClients) return;
-    final position = _scroll.position;
-    if (position.maxScrollExtent > position.minScrollExtent) return;
-    ref.read(booksProvider.notifier).loadMore();
-  }
-
-  void _maybeLoadMore() {
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    if (position.pixels < position.maxScrollExtent - 600) return;
-    ref.read(booksProvider.notifier).loadMore();
-  }
+  void loadMore() => ref.read(booksProvider.notifier).loadMore();
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +77,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
     final progress = PlayProgressView(states);
     final shown = arrangeBooks(loaded, view, progress);
     final l10n = context.l10n;
+    final canUpload = canAddToLibrary(ref);
     // The chips narrow the loaded pages, so a shelf drawn shorter than
     // what it pages leaves nothing to scroll and the scroll listener
     // never fires. Read off the two lists rather than off the chips, so
@@ -80,22 +85,21 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
     final narrowed = shown.length < loaded.length;
     final more = state.value?.hasMore ?? false;
     final loadingMore = state.value?.loadingMore ?? false;
-    // A grid that does not reach past the viewport cannot scroll, so it
-    // never moves the scroll listener: asked here, once it is laid out.
     // Not while the chips narrow it, where a filter that matches little
     // would page the whole listing in; that view keeps its own button.
-    if (more && !loadingMore && !narrowed) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
-    }
+    fillViewportWhile(
+      more && !loadingMore && !narrowed,
+      at: state.value?.books,
+    );
 
     return WaxScaffold(
       title: l10n.booksTitle,
       semanticsId: SemanticsIds.booksHub,
-      controller: _scroll,
+      controller: pagedScroll,
       actions: <Widget>[
         // The hub add the music hub was also missing: same gate, same
         // sheet, this section's type already chosen.
-        if (canAddToLibrary(ref))
+        if (canUpload)
           WaxIconButton(
             glyph: WaxIcons.add,
             label: l10n.booksAddToLibrary,
@@ -108,12 +112,13 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
         const AccountAction(),
       ],
       slivers: <Widget>[
+        HubTiles(tiles: _tiles(l10n), semanticsIdOf: SemanticsIds.bookTile),
+        const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s16)),
         SliverToBoxAdapter(
           child: _ContinueShelf(books: loaded, states: states),
         ),
         const SliverToBoxAdapter(child: _SeriesShelf()),
-        if (loaded.isNotEmpty)
-          SliverToBoxAdapter(child: _Filters(books: loaded)),
+        if (loaded.isNotEmpty) const SliverToBoxAdapter(child: _AllHeader()),
         AsyncSliverFace<BooksState>(
           state: state,
           skeleton: SkeletonShape.grid,
@@ -123,22 +128,21 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           // Three empties, told apart by why nothing is showing: no
           // books at all, every book filtered out with pages still
           // unread, or every book filtered out with nothing left to
-          // fetch. The way out differs each time - a scan, a fetch, or
-          // the chips above.
+          // fetch. The way out differs each time: the upload where the
+          // account may, a fetch, or the chips above.
           empty: (context, _) => switch (loaded.isEmpty) {
             true => SliverFillRemaining(
               hasScrollBody: false,
               child: EmptyState(
                 title: l10n.booksEmptyTitle,
-                message: l10n.booksEmptyMessage,
                 glyph: WaxIcons.audiobooks,
-                // The way a folder of books arrives is a library that
-                // holds them, which an administrator adds.
-                actionLabel: ref.watch(isAdminProvider)
-                    ? l10n.booksAddLibrary
-                    : null,
-                onAction: ref.watch(isAdminProvider)
-                    ? () => context.go(WaxRoute.libraries)
+                actionLabel: canUpload ? l10n.booksEmptyAdd : null,
+                onAction: canUpload
+                    ? () => showAddToLibrarySheet(
+                        context,
+                        ref,
+                        fixed: MediaType.audiobook,
+                      )
                     : null,
               ),
             ),
@@ -174,7 +178,11 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           // otherwise draw a live control under a skeleton.
           builder: (context, _) => SliverMainAxisGroup(
             slivers: <Widget>[
-              _BookGrid(books: shown, progress: progress),
+              BookGrid(
+                books: shown,
+                progress: progress,
+                onOpen: (book) => context.go(WaxRoute.book(book.pid)),
+              ),
               // Under the grid, so a shelf long enough to scroll has
               // already paged by the time this is reached.
               if (narrowed && more)
@@ -224,24 +232,22 @@ class _HubOverflow extends ConsumerWidget {
   }
 }
 
-/// The finished/unfinished chips, and the authors on the shelf.
-///
-/// Two rows rather than one: they are different questions, and a single
-/// row would let an author scroll the finished filter out of reach.
-class _Filters extends ConsumerWidget {
-  const _Filters({required this.books});
-
-  final List<ItemSummary> books;
+/// The grid's heading, and the finished/unfinished chips under it.
+class _AllHeader extends ConsumerWidget {
+  const _AllHeader();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(bookViewProvider);
     final sizeClass = WaxSizeClass.of(context);
     final l10n = context.l10n;
-    final authors = bookAuthors(books);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        Padding(
+          padding: sizeClass.gutter,
+          child: SectionHeader(title: l10n.booksAllTitle),
+        ),
         FilterChipRow(
           padding: sizeClass.gutter,
           selected: view.filter.name,
@@ -257,28 +263,6 @@ class _Filters extends ConsumerWidget {
               .read(bookViewProvider.notifier)
               .filterBy(BookFilter.byName(name)),
         ),
-        // Only where there is a choice to make: one author is the whole
-        // shelf, and a chip that narrows to everything is a control that
-        // does nothing.
-        if (authors.length > 1) ...<Widget>[
-          const SizedBox(height: WaxSpace.s8),
-          FilterChipRow(
-            padding: sizeClass.gutter,
-            // The row is single-select and this one clears rather than
-            // switches, so "no author" needs a name of its own: an empty
-            // string is the selection when nothing is narrowed.
-            selected: view.author ?? '',
-            chips: <WaxFilterChip>[
-              for (final author in authors)
-                WaxFilterChip(
-                  name: author.name,
-                  label: l10n.booksAuthorChip(author.name, author.count),
-                  semanticsId: SemanticsIds.bookAuthorFilter(author.name),
-                ),
-            ],
-            onSelect: ref.read(bookViewProvider.notifier).toggleAuthor,
-          ),
-        ],
         const SizedBox(height: WaxSpace.s12),
       ],
     );
@@ -299,6 +283,14 @@ class _ContinueShelf extends ConsumerWidget {
     final store = ref.watch(artworkStoreProvider);
     final l10n = context.l10n;
     final wax = context.waxL10n;
+    // By position rather than by title: a tile carries no value equality,
+    // and two editions of one book share a name.
+    void resume(WidgetRef ref, int at) {
+      if (at < 0) return;
+      final book = reading[at];
+      playOrResumeItem(ref, book, states[book.pid] ?? PlayProgress.none);
+    }
+
     final tiles = <MediaTileData>[
       for (final book in reading)
         MediaTileData(
@@ -335,26 +327,35 @@ class _ContinueShelf extends ConsumerWidget {
       child: ShelfRow(
         title: l10n.booksContinueTitle,
         items: tiles,
-        // By position rather than by title: a tile carries no value
-        // equality, and two editions of one book share a name.
-        onTapItem: (tile) {
-          final at = tiles.indexOf(tile);
-          if (at < 0) return;
-          // Gone to, not pushed: a book is declared under this hub, so
-          // back lands here and the address bar follows.
-          context.go(WaxRoute.book(reading[at].pid));
-        },
-        onPlayItem: (tile) {
-          final at = tiles.indexOf(tile);
-          if (at < 0) return;
-          final book = reading[at];
-          playHomeItem(ref, book, states[book.pid] ?? PlayProgress.none);
-        },
+        // The shelf exists to carry on, so the card and its cover both
+        // do; the book's own screen is in the card's menu.
+        onTapItem: (tile) => resume(ref, tiles.indexOf(tile)),
+        onPlayItem: (tile) => resume(ref, tiles.indexOf(tile)),
+        playSemanticsIdAt: (at) =>
+            SemanticsIds.bookContinuePlay(reading[at].pid),
+        playLabelAt: (at) =>
+            playResumes(
+              reading[at],
+              states[reading[at].pid] ?? PlayProgress.none,
+            )
+            ? l10n.libraryResumeItem(reading[at].title)
+            : null,
         onMoreItem: (tile) {
           final at = tiles.indexOf(tile);
           if (at < 0) return;
           unawaited(
-            showItemMenuForSummary(context, ref, reading[at], withPin: true),
+            showItemMenuForSummary(
+              context,
+              ref,
+              reading[at],
+              withPin: true,
+              onPlay: (ref) => resume(ref, at),
+              inProgress: playResumes(
+                reading[at],
+                states[reading[at].pid] ?? PlayProgress.none,
+              ),
+              withOpen: true,
+            ),
           );
         },
       ),
@@ -419,11 +420,13 @@ class _SeriesShelf extends ConsumerWidget {
         actionSemanticsId: SemanticsIds.bookSeriesSeeAll,
         onAction: () => context.go(WaxRoute.bookSeriesIndex),
         // By position rather than by title: a tile carries no value
-        // equality, and two spellings of one series share a name.
+        // equality, and two spellings of one series share a name. Pushed:
+        // a series' declared parent is the index, so back should still
+        // find the hub.
         onTapItem: (tile) {
           final at = tiles.indexOf(tile);
           if (at < 0) return;
-          context.go(WaxRoute.bookSeries(shown[at].pid));
+          unawaited(context.push(WaxRoute.bookSeries(shown[at].pid)));
         },
       ),
     );
@@ -433,12 +436,21 @@ class _SeriesShelf extends ConsumerWidget {
 /// A card's key, so the card moves with its book (see [indexByKey]).
 Key _bookKey(ItemSummary book) => ValueKey(SemanticsIds.book(book.pid));
 
-/// Every book, as covers.
-class _BookGrid extends ConsumerWidget {
-  const _BookGrid({required this.books, required this.progress});
+/// Books as covers: the hub's whole shelf, or one author's or genre's.
+class BookGrid extends ConsumerWidget {
+  const BookGrid({
+    required this.books,
+    required this.progress,
+    required this.onOpen,
+    super.key,
+  });
 
   final List<ItemSummary> books;
   final PlayProgressView progress;
+
+  /// Gone to from the hub, which is a book's declared parent, and pushed
+  /// from anywhere else.
+  final ValueChanged<ItemSummary> onOpen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -492,10 +504,21 @@ class _BookGrid extends ConsumerWidget {
                   semanticsId: SemanticsIds.book(book.pid),
                 ),
                 width: grid.width,
-                onTap: () => context.go(WaxRoute.book(book.pid)),
-                onPlay: () => playHomeItem(ref, book, state),
+                onTap: () => onOpen(book),
+                onPlay: () => playOrResumeItem(ref, book, state),
+                playSemanticsId: SemanticsIds.bookPlay(book.pid),
+                playLabel: playResumes(book, state)
+                    ? l10n.libraryResumeItem(book.title)
+                    : null,
                 onMore: () => unawaited(
-                  showItemMenuForSummary(context, ref, book, withPin: true),
+                  showItemMenuForSummary(
+                    context,
+                    ref,
+                    book,
+                    withPin: true,
+                    onPlay: (ref) => playOrResumeItem(ref, book, state),
+                    inProgress: playResumes(book, state),
+                  ),
                 ),
               );
             },

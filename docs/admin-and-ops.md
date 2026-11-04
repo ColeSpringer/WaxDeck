@@ -571,7 +571,9 @@ the path is validated (absolute, an existing folder the server can read
 and list, answering within 15 seconds, writable by the server when the
 library is managed and the server is not read-only, not overlapping an
 existing root, the inbox, or the podcast download dir), cataloged, and
-scanned in the background.
+scanned in the background. A path that is a symlink, or runs through
+one, is stored as the folder the link points to, even when that folder
+is not there yet; repointing the link later does not move the library.
 **Folder mounted later** registers a path whose folder is not there yet,
 such as a drive that is mounted after the server starts: its scans
 report it unreachable until the folder appears, and once it does the

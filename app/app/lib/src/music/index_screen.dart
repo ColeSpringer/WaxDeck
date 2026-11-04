@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_precache.dart';
 import '../artwork/artwork_providers.dart';
+import '../books/book_dimension.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
@@ -30,6 +31,67 @@ String _railLetter(FacetBucket b) {
       : fastScrollLetter(b.label);
 }
 
+/// What an index calls its things, which is the domain's business: the
+/// books' artists are authors, and a bucket of them holds books.
+class _IndexCopy {
+  _IndexCopy(BuildContext context, this.dimension, BrowseDomain domain)
+    : l10n = context.l10n,
+      book = domain == BrowseDomain.books
+          ? BookDimension.byDimension(dimension)
+          : null;
+
+  final AppLocalizations l10n;
+  final MusicDimension dimension;
+
+  /// Null outside the books domain.
+  final BookDimension? book;
+
+  String get title => switch (book) {
+    final book? => book.titleOf(l10n),
+    null => dimension.titleOf(l10n),
+  };
+
+  String count(int count, {required bool atLeast}) => switch (book) {
+    final book? when atLeast => l10n.booksIndexCountAtLeast(book.name, count),
+    final book? => l10n.booksIndexCount(book.name, count),
+    null when atLeast => l10n.musicIndexCountAtLeast(dimension.name, count),
+    null => l10n.musicIndexCount(dimension.name, count),
+  };
+
+  String get startOf => switch (book) {
+    final book? => l10n.booksIndexStartOf(book.name),
+    null => l10n.musicIndexStartOf(dimension.name),
+  };
+
+  String get emptyTitle => switch (book) {
+    final book? => l10n.booksIndexEmptyTitle(book.name),
+    null => l10n.musicIndexEmptyTitle(dimension.name),
+  };
+
+  /// None for books: an empty books index means a library with no books,
+  /// which its title already says.
+  String? get emptyMessage => switch (book) {
+    _? => null,
+    null => l10n.musicIndexEmptyMessage(dimension.name),
+  };
+
+  String get loadError => switch (book) {
+    final book? => l10n.booksIndexLoadError(book.name),
+    null => l10n.musicIndexLoadError(dimension.name),
+  };
+
+  String bucketCaption(int count) =>
+      book == null ? l10n.musicTrackCount(count) : l10n.bookCount(count);
+
+  /// The bucket a dimension is absent from, named in the reader's
+  /// language rather than in the server's sentinel.
+  String get unknownName => switch (book) {
+    BookDimension.authors => l10n.bookAuthorUnknown,
+    BookDimension.genres => l10n.bookGenreUnknown,
+    null => l10n.musicBucketUnknownTitle(dimension.name),
+  };
+}
+
 /// A complete, fast enumeration of one dimension.
 ///
 /// Artists and albums lead with an alphabet, because that is how anyone
@@ -38,9 +100,17 @@ String _railLetter(FacetBucket b) {
 /// tracks in it is not where a visitor starts. Either way the toggle is
 /// there.
 class MusicIndexScreen extends ConsumerStatefulWidget {
-  const MusicIndexScreen({required this.dimension, super.key});
+  const MusicIndexScreen({
+    required this.dimension,
+    this.domain = BrowseDomain.music,
+    super.key,
+  });
 
   final MusicDimension dimension;
+
+  /// Whose things the index lists: the scope it is counted over, where
+  /// back and a bucket lead, and what its copy calls them.
+  final BrowseDomain domain;
 
   @override
   ConsumerState<MusicIndexScreen> createState() => _MusicIndexScreenState();
@@ -70,7 +140,13 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
 
   MusicIndexKey get _key => (
     dimension: widget.dimension,
-    sort: ref.read(musicIndexSortProvider(widget.dimension)),
+    sort: ref.read(
+      musicIndexSortProvider((
+        dimension: widget.dimension,
+        domain: widget.domain,
+      )),
+    ),
+    domain: widget.domain,
   );
 
   void _onScroll(ScrollNotification notification) {
@@ -198,17 +274,24 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
     // queue's stored source label, which is what the destination's
     // localized fallback is there to prevent.
     final segment = musicBucketSegment(widget.dimension, bucket);
+    final book = _copy.book;
     context.go(
-      WaxRoute.musicBucket(widget.dimension, segment),
+      book == null
+          ? WaxRoute.musicBucket(widget.dimension, segment)
+          : WaxRoute.bookBucket(book, segment),
       extra: segment == musicUnknownSegment ? null : bucket.label,
     );
   }
 
+  _IndexCopy get _copy => _IndexCopy(context, widget.dimension, widget.domain);
+
   @override
   Widget build(BuildContext context) {
     final dimension = widget.dimension;
-    final sort = ref.watch(musicIndexSortProvider(dimension));
-    final key = (dimension: dimension, sort: sort);
+    final copy = _copy;
+    final sortKey = (dimension: dimension, domain: widget.domain);
+    final sort = ref.watch(musicIndexSortProvider(sortKey));
+    final key = (dimension: dimension, sort: sort, domain: widget.domain);
     final state = ref.watch(musicIndexProvider(key));
 
     // The rail only means anything over an alphabet. In biggest-first
@@ -226,8 +309,9 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
       child: Stack(
         children: <Widget>[
           WaxScaffold(
-            title: dimension.titleOf(context.l10n),
-            onBack: () => context.go(WaxRoute.music),
+            title: copy.title,
+            onBack: () =>
+                context.go(copy.book == null ? WaxRoute.music : WaxRoute.books),
             largeTitle: false,
             controller: _scroll,
             actions: const <Widget>[SearchAction()],
@@ -235,11 +319,12 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
               SliverToBoxAdapter(
                 child: _Toolbar(
                   dimension: dimension,
+                  domain: widget.domain,
                   sort: sort,
                   count: state.value?.buckets.length,
                   hasMore: state.value?.hasMore ?? false,
                   onSort: (value) => ref
-                      .read(musicIndexSortProvider(dimension).notifier)
+                      .read(musicIndexSortProvider(sortKey).notifier)
                       .select(value),
                 ),
               ),
@@ -254,7 +339,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
                   // The whole body of this screen, so the wait is the
                   // page rather than six rows above empty space.
                   skeletonFills: true,
-                  errorTitle: context.l10n.musicIndexLoadError(dimension.name),
+                  errorTitle: copy.loadError,
                   onRetry: () => ref.invalidate(musicIndexProvider(key)),
                   builder: (context, value) => _list(value),
                 ),
@@ -292,12 +377,13 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
 
   Widget _list(MusicIndexState state) {
     final dimension = widget.dimension;
+    final copy = _copy;
     if (state.buckets.isEmpty && !state.hasFloor) {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: EmptyState(
-          title: context.l10n.musicIndexEmptyTitle(dimension.name),
-          message: context.l10n.musicIndexEmptyMessage(dimension.name),
+          title: copy.emptyTitle,
+          message: copy.emptyMessage,
           glyph: dimension.glyph,
         ),
       );
@@ -314,6 +400,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
           SliverToBoxAdapter(
             child: _StartOfIndex(
               dimension: dimension,
+              domain: widget.domain,
               onTap: () {
                 ref.read(musicIndexProvider(_key).notifier).reset();
                 setState(() => _letter = null);
@@ -328,6 +415,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
             }
             return _BucketRow(
               dimension: dimension,
+              domain: widget.domain,
               bucket: state.buckets[at],
               index: at,
               onTap: () => _open(state.buckets[at]),
@@ -341,15 +429,20 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
 
 /// The way back past a re-anchored window's floor.
 class _StartOfIndex extends StatelessWidget {
-  const _StartOfIndex({required this.dimension, required this.onTap});
+  const _StartOfIndex({
+    required this.dimension,
+    required this.domain,
+    required this.onTap,
+  });
 
   final MusicDimension dimension;
+  final BrowseDomain domain;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final label = context.l10n.musicIndexStartOf(dimension.name);
+    final label = _IndexCopy(context, dimension, domain).startOf;
     return WaxInkTappable(
       label: label,
       semanticsId: SemanticsIds.indexRailStart,
@@ -376,6 +469,7 @@ class _StartOfIndex extends StatelessWidget {
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.dimension,
+    required this.domain,
     required this.sort,
     required this.count,
     required this.hasMore,
@@ -383,6 +477,7 @@ class _Toolbar extends StatelessWidget {
   });
 
   final MusicDimension dimension;
+  final BrowseDomain domain;
   final FacetSort sort;
   final int? count;
   final bool hasMore;
@@ -404,12 +499,11 @@ class _Toolbar extends StatelessWidget {
               child: Text(
                 // "of the ones loaded" is what a keyset list can honestly
                 // say: the page after this one may hold more.
-                hasMore
-                    ? context.l10n.musicIndexCountAtLeast(
-                        dimension.name,
-                        loaded,
-                      )
-                    : context.l10n.musicIndexCount(dimension.name, loaded),
+                _IndexCopy(
+                  context,
+                  dimension,
+                  domain,
+                ).count(loaded, atLeast: hasMore),
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ),
@@ -453,12 +547,14 @@ class _Toolbar extends StatelessWidget {
 class _BucketRow extends ConsumerWidget {
   const _BucketRow({
     required this.dimension,
+    required this.domain,
     required this.bucket,
     required this.index,
     required this.onTap,
   });
 
   final MusicDimension dimension;
+  final BrowseDomain domain;
   final FacetBucket bucket;
   final int index;
   final VoidCallback onTap;
@@ -474,50 +570,61 @@ class _BucketRow extends ConsumerWidget {
               .source(ref.watch(repositoryProvider).artUrlFor(entityPid))
         : null;
 
+    // A book queues as itself rather than as a bucket query, and an
+    // author's pin would open the music artist page, so a books row is
+    // neither dragged nor given a menu.
+    final books = domain == BrowseDomain.books;
+    final copy = _IndexCopy(context, dimension, domain);
+    final title = bucket.unknown ? copy.unknownName : bucket.label;
+    final row = MediaListRow(
+      data: MediaTileData(
+        title: title,
+        subtitle: copy.bucketCaption(bucket.count),
+        artwork: artwork,
+        shape: dimension.shape,
+        semanticsId: SemanticsIds.indexBucket(index),
+      ),
+      onTap: onTap,
+      // Acting without opening first. Only where the bucket stands
+      // for an entity: a genre or a year is a filter, not a thing,
+      // and the unknown bucket has nothing behind it. An album's
+      // menu adds what its pid supports from anywhere - a mix and a
+      // share link - beside the pin; an artist's pid supports only
+      // the pin, so its menu is the pin sheet.
+      onMore: switch (entityPid) {
+        null => null,
+        _ when books => null,
+        final entityPid when dimension.wireName == 'album' =>
+          () => showAlbumMenuSheet(
+            context,
+            ref,
+            pid: entityPid,
+            title: bucket.label,
+          ),
+        final entityPid => () => showPinSheet(
+          context,
+          ref,
+          targets: <PinTarget>[
+            (pid: entityPid, what: 'artist', name: bucket.label),
+          ],
+        ),
+      },
+      moreSemanticsId: SemanticsIds.indexBucketMore(index),
+    );
+    if (books) return row;
     return QueueDraggable(
       // A bucket is a name and a count with no items in hand, so what
       // it hands over is the query rather than the rows: the tracks
-      // arrive when the drop lands.
+      // arrive when the drop lands, under the scope the count was
+      // taken over.
       drop: QueueDrop.bucket(
-        label: bucket.label,
+        label: title,
         repository: ref.watch(repositoryProvider),
         facet: dimension.wireName,
         facetKey: bucket.key,
+        mediaType: domain.drillMediaType,
       ),
-      child: MediaListRow(
-        data: MediaTileData(
-          title: bucket.label,
-          subtitle: context.l10n.musicTrackCount(bucket.count),
-          artwork: artwork,
-          shape: dimension.shape,
-          semanticsId: SemanticsIds.indexBucket(index),
-        ),
-        onTap: onTap,
-        // Acting without opening first. Only where the bucket stands
-        // for an entity: a genre or a year is a filter, not a thing,
-        // and the unknown bucket has nothing behind it. An album's
-        // menu adds what its pid supports from anywhere - a mix and a
-        // share link - beside the pin; an artist's pid supports only
-        // the pin, so its menu is the pin sheet.
-        onMore: switch (entityPid) {
-          null => null,
-          final entityPid when dimension.wireName == 'album' =>
-            () => showAlbumMenuSheet(
-              context,
-              ref,
-              pid: entityPid,
-              title: bucket.label,
-            ),
-          final entityPid => () => showPinSheet(
-            context,
-            ref,
-            targets: <PinTarget>[
-              (pid: entityPid, what: 'artist', name: bucket.label),
-            ],
-          ),
-        },
-        moreSemanticsId: SemanticsIds.indexBucketMore(index),
-      ),
+      child: row,
     );
   }
 }

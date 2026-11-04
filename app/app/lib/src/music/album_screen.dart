@@ -52,7 +52,11 @@ class AlbumScreen extends ConsumerWidget {
   /// itself from what it loads.
   final String? label;
 
-  MusicListing get _listing => (dimension: MusicDimension.albums, segment: pid);
+  MusicListing get _listing => (
+    dimension: MusicDimension.albums,
+    segment: pid,
+    domain: BrowseDomain.wholeLibrary,
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -270,6 +274,7 @@ class _Header extends ConsumerWidget {
             musicItemsProvider((
               dimension: MusicDimension.albums,
               segment: pid,
+              domain: BrowseDomain.wholeLibrary,
             )).notifier,
           )
           .readThrough(atMost: kindChangeMaxItems);
@@ -297,6 +302,7 @@ class _Header extends ConsumerWidget {
             musicItemsProvider((
               dimension: MusicDimension.albums,
               segment: pid,
+              domain: BrowseDomain.wholeLibrary,
             )).notifier,
           )
           .readThrough(atMost: itemDeleteMaxItems);

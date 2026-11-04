@@ -1,3 +1,4 @@
+import 'package:waxdeck_api/waxdeck_api.dart' show MediaType;
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 /// The most items a local queue holds, mirroring the server's Connect
@@ -81,6 +82,7 @@ class QueueSource {
     this.rolling = false,
     this.cursor = '',
     this.seed,
+    this.mediaType,
   });
 
   static const QueueSource none = QueueSource(
@@ -116,6 +118,12 @@ class QueueSource {
   /// listings have no random order to ask for.
   final int? seed;
 
+  /// The media type the source's listing was paged under, stamped by
+  /// whoever minted [cursor]: the server binds a cursor to its scope, so a
+  /// draw has to ask under the same one. Null is unscoped, which is also
+  /// what a queue stored before sources named their scope reads as.
+  final MediaType? mediaType;
+
   QueueSource copyWith({
     bool? rolling,
     String? cursor,
@@ -128,6 +136,7 @@ class QueueSource {
     rolling: rolling ?? this.rolling,
     cursor: cursor ?? this.cursor,
     seed: clearSeed ? null : (seed ?? this.seed),
+    mediaType: mediaType,
   );
 
   @override
@@ -138,40 +147,59 @@ class QueueSource {
       other.pid == pid &&
       other.rolling == rolling &&
       other.cursor == cursor &&
-      other.seed == seed;
+      other.seed == seed &&
+      other.mediaType == mediaType;
 
   @override
-  int get hashCode => Object.hash(kind, label, pid, rolling, cursor, seed);
+  int get hashCode =>
+      Object.hash(kind, label, pid, rolling, cursor, seed, mediaType);
 
   @override
   String toString() => 'QueueSource(${kind.wireName}, $label, $pid)';
 }
 
-/// The separator between a seeded draw's seed and its cursor in the one
-/// stored string the two travel in.
+/// The separators in the one stored string a source's continuation
+/// travels in: its scope, then its seed, then its cursor.
 ///
-/// Both halves are the same fact - where the source's listing stands -
-/// and a cursor issued under one seed is invalid under another, so they
-/// are stored together or not at all. Safe as a separator because a
-/// cursor is base64url and never contains one.
+/// All three are the same fact - where the source's listing stands - and
+/// a cursor issued under one seed or one scope is invalid under another,
+/// so they are stored together or not at all, and stored beside the
+/// cursor rather than in a column of their own. Safe as separators
+/// because a cursor is base64url, a seed is digits, and a scope is a
+/// media type's wire name, none of which contains either.
 const String _seedSeparator = '|';
+const String _scopeSeparator = '@';
 
-/// The stored form of a source's continuation: the cursor, with the
-/// seed in front of it when the draw has one.
+/// The stored form of a source's continuation: the cursor, with the seed
+/// in front of it when the draw has one, and the scope in front of both
+/// when the source names one.
 String encodeQueueCursor(QueueSource source) {
   final seed = source.seed;
-  return seed == null ? source.cursor : '$seed$_seedSeparator${source.cursor}';
+  final scope = source.mediaType;
+  final seeded = seed == null
+      ? source.cursor
+      : '$seed$_seedSeparator${source.cursor}';
+  return scope == null ? seeded : '${scope.wireName}$_scopeSeparator$seeded';
 }
 
-/// The reverse. A value that carries no seed reads back as a plain
-/// cursor, which is what everything written before seeded draws existed
-/// (and every unseeded draw since) looks like.
-({String cursor, int? seed}) decodeQueueCursor(String stored) {
-  final at = stored.indexOf(_seedSeparator);
-  if (at < 0) return (cursor: stored, seed: null);
-  final seed = int.tryParse(stored.substring(0, at));
-  if (seed == null) return (cursor: stored, seed: null);
-  return (cursor: stored.substring(at + 1), seed: seed);
+/// The reverse. A value with no scope reads back unscoped and one with no
+/// seed as a plain cursor, which is what everything written before each
+/// existed (and every unscoped or unseeded draw since) looks like.
+({String cursor, int? seed, MediaType? mediaType}) decodeQueueCursor(
+  String stored,
+) {
+  MediaType? mediaType;
+  var rest = stored;
+  final scopeAt = stored.indexOf(_scopeSeparator);
+  if (scopeAt >= 0) {
+    final wire = stored.substring(0, scopeAt);
+    mediaType = MediaType.values.where((t) => t.wireName == wire).firstOrNull;
+    if (mediaType != null) rest = stored.substring(scopeAt + 1);
+  }
+  final at = rest.indexOf(_seedSeparator);
+  final seed = at < 0 ? null : int.tryParse(rest.substring(0, at));
+  if (seed == null) return (cursor: rest, seed: null, mediaType: mediaType);
+  return (cursor: rest.substring(at + 1), seed: seed, mediaType: mediaType);
 }
 
 /// One place in the queue. [queueId] is stable for the entry's life, so
@@ -405,6 +433,7 @@ class QueueState {
         rolling: stored.sourceRolling,
         cursor: continuation.cursor,
         seed: continuation.seed,
+        mediaType: continuation.mediaType,
       ),
       nextQueueId: next,
     );

@@ -78,6 +78,32 @@ func TestBookSeriesListAndMerge(t *testing.T) {
 		t.Fatalf("book seriesPid = %v, want %s", before.SeriesPid, loser)
 	}
 
+	// The author line names the bucket the artist dimension files the
+	// book under, so a client can link it to that bucket's books.
+	authors := facetPage(t, h, "?dimension=artist&facet=kind&facetKey=book")
+	var bucket *FacetBucket
+	for i, b := range authors.Buckets {
+		if b.Label == "Wren Vale" {
+			bucket = &authors.Buckets[i]
+		}
+	}
+	if bucket == nil || bucket.EntityPid == nil {
+		t.Fatalf("books-only artist buckets = %+v, want Wren Vale", authors.Buckets)
+	}
+	if before.AuthorPid == nil || *before.AuthorPid != *bucket.EntityPid {
+		t.Fatalf("book authorPid = %v, want the bucket's %s", before.AuthorPid, *bucket.EntityPid)
+	}
+	if !strings.HasPrefix(*before.AuthorPid, "ar-") {
+		t.Fatalf("authorPid %q carries no ar- prefix", *before.AuthorPid)
+	}
+	var filed []string
+	for _, it := range h.items(t, "?mediaType=audiobook&facet=artist&facetKey="+bucket.Key).Items {
+		filed = append(filed, it.Pid)
+	}
+	if !slices.Contains(filed, bookPid) {
+		t.Fatalf("the author's bucket lists %v, want it to hold %s", filed, bookPid)
+	}
+
 	resp = h.postJSON(t, "/api/v1/library/duplicates/merge", map[string]any{
 		"entityType":  "series",
 		"survivorPid": survivor,
@@ -390,4 +416,75 @@ func TestSeriesListingAndDetailAgreeForALibraryGrant(t *testing.T) {
 		}
 	}
 	wantStatus(t, get(t, h.ts, "/api/v1/series/"+series, reader), 404, "the detail of that series")
+}
+
+// TestBookDetailAuthorPidNamesItsArtistBucket holds authorPid to the
+// bucket the artist dimension files each book under when the credits are
+// more than one author: the first author, not the older artist and not
+// the narrator. A book naming no author has no authorPid at all.
+func TestBookDetailAuthorPidNamesItsArtistBucket(t *testing.T) {
+	t.Parallel()
+	books := t.TempDir()
+	for _, b := range []struct{ title, author string }{
+		{"Alma Solo", "Alma First"},
+		{"Zed Duo", "Wren Vale"},
+		{"Nameless", ""},
+	} {
+		tags := map[string]string{"TITLE": b.title, "ALBUM": b.title}
+		if b.author != "" {
+			tags["ARTIST"], tags["ALBUMARTIST"] = b.author, b.author
+		}
+		if _, err := fixtures.GenerateM4B(filepath.Join(books, b.title), fixtures.Spec{
+			Name: b.title, Duration: 2 * time.Second, Tags: tags,
+		}); err != nil {
+			t.Fatalf("generating %s: %v", b.title, err)
+		}
+	}
+	h := newHarness(t, service.Root{Name: "books", Path: books})
+
+	// Alma already exists as an artist when the second credit names her,
+	// so the first author is the newer entity of the two.
+	duo := bookInSeries(t, h, "Zed Duo")
+	resp := h.patchJSON(t, "/api/v1/items/"+duo+"/metadata", map[string]any{
+		"fields": map[string]string{"author": "Zed Second; Alma First", "narrator": "Aaron Reader"},
+	})
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("crediting the duo = %d: %s", resp.StatusCode, body)
+	}
+
+	filedUnder := map[string]string{}
+	labels := map[string]string{}
+	for _, b := range facetPage(t, h, "?dimension=artist&facet=kind&facetKey=book&limit=200").Buckets {
+		if b.EntityPid == nil {
+			continue
+		}
+		labels[b.Label] = *b.EntityPid
+		for _, it := range h.items(t, "?mediaType=audiobook&facet=artist&facetKey="+b.Key+"&limit=100").Items {
+			filedUnder[it.Pid] = *b.EntityPid
+		}
+	}
+
+	for _, it := range h.items(t, "?mediaType=audiobook&limit=100").Items {
+		detail := decode[BookDetail](t, get(t, h.ts, "/api/v1/books/"+it.Pid, h.token))
+		if it.Title == "Nameless" {
+			if detail.AuthorPid != nil || it.ArtistPid != nil {
+				t.Fatalf("a book naming no author has authorPid %v, artistPid %v", detail.AuthorPid, it.ArtistPid)
+			}
+			if _, filed := filedUnder[it.Pid]; filed {
+				t.Fatalf("a book naming no author is filed under %s", filedUnder[it.Pid])
+			}
+			continue
+		}
+		if detail.AuthorPid == nil || *detail.AuthorPid != filedUnder[it.Pid] {
+			t.Fatalf("%q authorPid = %v, want its bucket's %s", it.Title, detail.AuthorPid, filedUnder[it.Pid])
+		}
+		if it.ArtistPid == nil || *it.ArtistPid != *detail.AuthorPid {
+			t.Fatalf("%q summary artistPid = %v, want authorPid %s", it.Title, it.ArtistPid, *detail.AuthorPid)
+		}
+	}
+	detail := decode[BookDetail](t, get(t, h.ts, "/api/v1/books/"+duo, h.token))
+	if want := labels["Zed Second"]; want == "" || detail.AuthorPid == nil || *detail.AuthorPid != want {
+		t.Fatalf("the duo's authorPid = %v, want the first author's %q", detail.AuthorPid, want)
+	}
 }

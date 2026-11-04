@@ -13,7 +13,11 @@ import 'fakes.dart';
 /// music listing that read one page as the whole answer said "nothing
 /// here" over tracks one page further on.
 void main() {
-  const MusicListing tracks = (dimension: null, segment: '');
+  const MusicListing tracks = (
+    dimension: null,
+    segment: '',
+    domain: BrowseDomain.music,
+  );
   const page = MusicItemsController.pageSize;
 
   List<ItemSummary> hidden(String tag, int count) => <ItemSummary>[
