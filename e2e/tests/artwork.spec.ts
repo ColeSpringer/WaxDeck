@@ -98,10 +98,12 @@ test('a cover the standard library cannot sniff is set, measured, and served as 
   }
 });
 
-// Bravo Song's own front and back make a second picture on its
-// full-screen player, which no other spec opens.
+// Long Division's own front and back make a second picture on its
+// full-screen player. Its ten seconds leave a pause at once ample room to
+// land, before the player moves on to a track with no pictures. The
+// covers are the catalog's alone, and no spec that plays it reads its art.
 test('the full-screen artwork turns to the back cover', async ({ app }) => {
-  const { pid } = await app.seed.item('Bravo Song');
+  const { pid } = await app.seed.item('Long Division');
   const set: ('front' | 'back')[] = [];
   try {
     for (const role of ['front', 'back'] as const) {
@@ -113,9 +115,8 @@ test('the full-screen artwork turns to the back cover', async ({ app }) => {
       set.push(role);
     }
 
-    await app.nav.to('tracks');
-    await app.music.play(pid);
-    await app.player.ready();
+    await app.music.playAlbumOf(pid);
+    await app.player.pause();
     await expect(app.player.artwork()).toHaveAccessibleName('Artwork 1 of 2');
 
     await clickThrough(app.player.artwork(), app.player.text('Back cover: Set by hand'));

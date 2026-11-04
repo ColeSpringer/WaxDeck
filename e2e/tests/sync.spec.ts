@@ -160,15 +160,20 @@ test('the original bytes download with ranges and a strong validator', async ({
 });
 
 test('a server edit reaches a live client in about a second', async ({ app }) => {
-  const target = await app.seed.item('Bravo Song');
+  // Held on the track the star is read from: a queue moves on when its
+  // track ends, to one whose star never changes, and paused it cannot.
+  // Long Division's ten seconds leave the pause ample room to land.
+  const target = await app.seed.item('Long Division');
+  // Unstarred first: the account outlives the run, and a run that failed
+  // after starring would leave this one starting from Unstar.
+  await app.seed.star(target.pid, false);
 
   // The watching client: the web UI with the player open, its event
   // socket live. One browser is enough - the "other device" is the API
   // call below, which is what a phone, a Subsonic client or another
   // browser all look like from here.
-  await app.nav.enter('tracks');
-  await app.music.play(target.pid);
-  await app.player.ready();
+  await app.music.playAlbumOf(target.pid);
+  await app.player.pause();
   const star = app.player.star();
   await star.waitFor({ timeout: T.nav });
   await expect(star).toHaveAccessibleName('Star');

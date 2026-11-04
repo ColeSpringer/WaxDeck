@@ -177,25 +177,28 @@ test('removing rows one after another takes exactly the rows named', async ({ ap
   }
 });
 
+// The player adds the track it is on, so that track is held: a queue moves
+// on when its track ends (a two-second fixture did, before the sheet
+// opened on a slow runner), and paused it cannot. Long Division's ten
+// seconds leave the pause ample room to land.
 test('the player adds a track to a fresh manual playlist', async ({ app }) => {
   await app.seed.clearPlaylistsNamed('From The Player');
-  const target = await app.seed.item('Alpha Song');
+  const target = await app.seed.item('Long Division');
 
-  await app.nav.enter('tracks');
-  await app.music.play(target.pid);
-  await app.player.ready();
+  await app.music.playAlbumOf(target.pid);
+  await app.player.pause();
   await app.player.addToPlaylist();
   await app.playlists.createFromSheet('From The Player');
 
   // The snack text shows twice on flutter web (the visible span and the
   // polite live-region announcement); either one proves delivery.
   await expect(
-    app.playlists.text('Added "Alpha Song" to From The Player'),
+    app.playlists.text('Added "Long Division" to From The Player'),
   ).toBeVisible();
 
   const pid = await app.seed.playlistNamed('From The Player');
   const entries = await app.api.get('/playlists/{pid}/items', { path: { pid } });
-  expect((entries.entries ?? []).map((e) => e.item.title)).toContain('Alpha Song');
+  expect((entries.entries ?? []).map((e) => e.item.title)).toContain('Long Division');
   await app.seed.clearPlaylistsNamed('From The Player');
 });
 
