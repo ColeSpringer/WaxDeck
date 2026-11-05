@@ -14,6 +14,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 /// The per-submission identification choice, from the sheet that asks it
 /// to the review entry that explains itself when it was declined.
@@ -94,6 +95,11 @@ void main() {
       tester.widget<WaxSwitch>(switchFinder).value,
       isFalse,
       reason: 'the account opted out, so the sheet opens off',
+    );
+    expect(
+      infoTipContaining('with the tags it has'),
+      findsOne,
+      reason: 'what the switch does is its tip, not a line under it',
     );
 
     await tester.tap(

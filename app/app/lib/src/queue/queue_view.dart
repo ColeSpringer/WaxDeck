@@ -300,7 +300,6 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
             Expanded(
               child: EmptyState(
                 title: l10n.queueEmptyTitle,
-                message: l10n.queueEmptyMessage,
                 glyph: WaxIcons.queue,
               ),
             ),
@@ -452,17 +451,6 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
               Text(
                 provenance,
                 style: WaxType.caption.copyWith(color: colors.textSecondary),
-              ),
-            // A rolling queue is a window over something larger, and
-            // a listener counting what is left should not read the
-            // window as the whole of it. Deliberately silent about the
-            // refill: the window is over more than it holds in every
-            // case, and whether the scope can be drawn from again is
-            // the pager's answer, which this line is drawn before.
-            if (queue.source.rolling)
-              Text(
-                l10n.queueRollingWindow,
-                style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             const SizedBox(height: WaxSpace.s8),
             Row(

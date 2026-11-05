@@ -62,3 +62,77 @@ table; pointed at the directory's own template it checks es.arb against
 the sibling en.arb, live, the same parity `test/l10n_arb_test.dart`
 enforces at test time. It describes the fragment file, not the locale,
 so the merge drops it.
+
+## The house rule
+
+Explanatory text is the last resort; a layout, an icon or a label
+usually says it. The rule the app is written to:
+
+- An empty state is a title, at most one line of 8 words, and one
+  action; `EmptyState.message` is optional and dropped when the title
+  or the action already says it.
+- A setting gets help only for a consequence its label hides, in at
+  most 10 words.
+- A format or example hint lives in the field's hint, not under it. A
+  hint fits the lines its field shows on a phone, in every language
+  (one, in a one-line field), and goes at the first keystroke, so it
+  holds a format or an example and nothing else; what a blank box means
+  is help under the field.
+- An overline is at most three words and never restates the heading
+  below it; no blurb sits under a heading.
+- A paragraph belongs only in a first-run step or in a confirmation
+  that deletes, overwrites or sends data off the machine: at most 25
+  words, saying what is lost.
+- A tally or provenance line appears only where no per-item mark
+  exists; otherwise it sits behind a `WaxInfoTip`. Rows and headers hold
+  one in their own slot (`WaxSettingRow.info`, `SectionHeader.info`, a
+  button's `WaxButton.detail`); a free `WaxInfoTip` never sits under an
+  ancestor that merges or excludes semantics, where a tap on the web
+  goes to that ancestor and the tip never opens (`hasOwnSemanticsNode`
+  in the tests checks it).
+- A scope or state flag is an icon with an accessible name.
+- Errors, refusals and notification bodies are exempt, but say the
+  cause and the next step.
+
+## The prose budget
+
+`test/l10n_arb_test.dart` measures the en copy by key suffix, in the
+longest variant of a plural or select (a placeholder is one word):
+
+| Suffix         | Cap |
+| -------------- | --- |
+| `EmptyMessage` | 8   |
+| `Message`      | 8   |
+| `Help`         | 10  |
+| `Overline`     | 3   |
+| `Blurb`        | 0   |
+| `Body`         | 25  |
+
+The first suffix a key ends with is its class, so an empty state's
+line is an `EmptyMessage` before it is a `Message`. A key with none of
+these suffixes is not measured. Exempt: every key
+under `error/`, keys ending `Error`, `Refused`, `Invalid` or
+`Keywords`, and any notification body the test names (none today: the
+`notif*Help` keys double as inbox bodies and are measured as `Help`).
+
+Name a key by where its words draw, so the budget reads it: a key
+ending `Hint` draws inside a field (not measured: a format or an
+example, and `test/field_hints_test.dart` checks the settings dialogs'
+hints fit a phone in en and es), one ending `Help` under a control,
+behind an info tip or as a button's detail, one ending `EmptyMessage`
+under an empty state's title, one ending `Message` on a banner, a
+refusal page or a short dialog, and one ending `Body` in a confirmation.
+The test holds the slots to it: a key passed to `EmptyState(message:)`
+that does not end `EmptyMessage` fails, and so does one passed to an
+`info:` slot, `WaxInfoTip(message:)` or `WaxButton(detail:)` that does
+not end `Help` (errors are exempt). A class word inside a key ends it:
+`adminGenreParentHasChildrenHelp`, never
+`adminGenreParentHelpHasChildren`, which the test fails as a line that
+would otherwise escape its cap.
+
+A key over its cap is listed in `test/prose_budget.json` with its
+current word count as a ceiling, which only falls: more words fails, and
+fewer fails until the entry is lowered or, once the key fits its cap,
+removed. A key with no entry gets its cap and no tolerance, so a new
+blurb fails outright. After adding a class, re-seed with
+`WAXDECK_PROSE_BUDGET=write flutter test test/l10n_arb_test.dart`.

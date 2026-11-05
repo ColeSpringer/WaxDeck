@@ -147,6 +147,35 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    testWidgets('numbers an untitled chapter in the reader\'s language', (
+      tester,
+    ) async {
+      final repo = FakeRepository()
+        ..addSubscription(testShow(_showPid))
+        ..episodesByShow[_showPid] = [testEpisode(_episodePid)]
+        ..episodeDetails[_episodePid] = EpisodeDetail(
+          pid: _episodePid,
+          mediaType: MediaType.podcast,
+          title: 'Pipeweed Economics',
+          durationMs: 214000,
+          showPid: _showPid,
+          publishedAt: DateTime.utc(2026, 7, 1),
+          downloaded: true,
+          chapters: const <ChapterMark>[ChapterMark(index: 0, startMs: 0)],
+        );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(minutes: 4)),
+        item: testEpisode(_episodePid),
+        host: (player) => localizedHost(player, locale: const Locale('es')),
+      );
+
+      expect(find.text('Capítulo 1'), findsWidgets);
+      expect(find.text('Chapter 1'), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('offers notes, chapters, and a transcript as regions', (
       tester,
     ) async {
@@ -440,7 +469,7 @@ void main() {
       await harness.endPlayback(tester);
     });
 
-    testWidgets('each effect explains itself once and then stops', (
+    testWidgets('voice boost explains itself once, and trimming says nothing', (
       tester,
     ) async {
       final repo = FakeRepository()
@@ -453,28 +482,25 @@ void main() {
         item: testEpisode(_episodePid),
       );
 
-      expect(harness.container.read(trimSilenceExplainedProvider), isFalse);
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerTrim));
+      await tester.pump();
+      expect(raisedMessage(tester), isNull);
+
+      expect(harness.container.read(voiceBoostExplainedProvider), isFalse);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playerVoiceBoost),
+      );
       await tester.pump();
       expect(
         shellMessageText(raisedMessage(tester)),
-        contains('skips the mapped quiet parts'),
+        contains('Playback restarts'),
       );
 
       // Said once and remembered as said: the flag is what stops the
       // second press from repeating it, and it is written before the
       // message so a double press cannot say it twice.
-      expect(harness.container.read(trimSilenceExplainedProvider), isTrue);
-
-      // Turning it off says nothing at all - an effect being switched
-      // off has already explained itself.
-      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerTrim));
+      expect(harness.container.read(voiceBoostExplainedProvider), isTrue);
       await tester.pumpAndSettle();
-      expect(
-        harness.container.read(voiceBoostExplainedProvider),
-        isFalse,
-        reason: 'the two effects explain themselves separately',
-      );
       await harness.endPlayback(tester);
     });
   });

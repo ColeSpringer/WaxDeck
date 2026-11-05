@@ -170,14 +170,11 @@ void main() {
 
     await _tap(tester, unfold);
     expect(find.text('Unfold this name?'), findsOneWidget);
+    expect(find.textContaining('New or changed files spelled'), findsOneWidget);
     expect(
-      find.textContaining('added, moved, replaced or retagged'),
+      find.textContaining('stay until they change'),
       findsOneWidget,
-    );
-    expect(
-      find.textContaining('even through a rescan with Re-read unchanged files'),
-      findsOneWidget,
-      reason: 'the dialog says a rescan leaves the filed ones where they are',
+      reason: 'the dialog says the filed ones are left where they are',
     );
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();

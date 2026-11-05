@@ -156,7 +156,6 @@ class AlbumScreen extends ConsumerWidget {
               hasScrollBody: false,
               child: EmptyState(
                 title: context.l10n.musicAlbumEmptyTitle,
-                message: context.l10n.musicAlbumEmptyMessage,
                 glyph: WaxIcons.albums,
               ),
             ),
@@ -215,10 +214,7 @@ class _AlbumIdentity extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            SectionHeader(
-              title: l10n.musicAlbumReleaseTitle,
-              overline: l10n.musicAlbumReleaseOverline,
-            ),
+            SectionHeader(title: l10n.musicAlbumReleaseTitle),
             for (final field in AlbumIdentityField.values)
               if (albumIdentityValue(album, field) case final value
                   when value.isNotEmpty)

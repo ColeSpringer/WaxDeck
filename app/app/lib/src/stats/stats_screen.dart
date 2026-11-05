@@ -321,7 +321,6 @@ class _TopListsSection extends ConsumerWidget {
           builder: (context, value) => value.entries.isEmpty
               ? EmptyState(
                   title: l10n.statsTopEmptyTitle,
-                  message: l10n.statsTopEmptyMessage(kind),
                   glyph: WaxIcons.stats,
                 )
               : Column(

@@ -31,9 +31,7 @@ const int _maxDrawsPerDrain = 5;
 /// The queue is a pure state machine and the pager is I/O; this is the
 /// piece between them. It watches the queue drain, draws more of the
 /// source when it gets short, and seals the window when the source has
-/// no more to give - which is what turns the "window over a larger
-/// scope" caption off, so nothing claims there is more once there is
-/// not.
+/// no more to give, so nothing claims there is more once there is not.
 class QueueRefiller {
   QueueRefiller(this._ref);
 

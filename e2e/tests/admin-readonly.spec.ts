@@ -32,7 +32,7 @@ test('read-only mode refuses uploads, tells every account, and releases', async 
   await app.api.put('/admin/settings', { data: { ...settings, readOnly: true } });
   try {
     await expect(banner).toBeVisible({ timeout: T.fetch });
-    await expect(banner).toContainText('This server is read-only right now');
+    await expect(banner).toContainText('Read-only mode');
     const refused = await app.api.raw.post('/uploads', {
       data: { fileName: 'nope.mp3', sizeBytes: 1024, mediaType: 'music' },
     });

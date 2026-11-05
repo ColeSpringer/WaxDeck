@@ -182,7 +182,6 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
               child: EmptyState(
                 glyph: WaxIcons.info,
                 title: l10n.adminAuditEmptyTitle,
-                message: l10n.adminAuditEmptyMessage,
               ),
             ),
           AsyncData(:final value) => _list(sizeClass, value),

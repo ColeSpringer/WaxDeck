@@ -69,6 +69,7 @@ class AsyncFailureCard extends StatelessWidget {
     required this.failed,
     required this.onRetry,
     this.title,
+    this.message,
     this.detail,
     this.semanticsId,
     this.retrySemanticsId,
@@ -81,6 +82,7 @@ class AsyncFailureCard extends StatelessWidget {
     AsyncValue<Object?> state, {
     required this.onRetry,
     this.title,
+    this.message,
     this.detail,
     this.semanticsId,
     this.retrySemanticsId,
@@ -96,6 +98,10 @@ class AsyncFailureCard extends StatelessWidget {
   /// The heading; the design system's own where null.
   final String? title;
 
+  /// The sentence under the heading; the error's own explanation where
+  /// null.
+  final String? message;
+
   final VoidCallback onRetry;
 
   /// A technical line under the sentence; see [ErrorState.detail].
@@ -107,7 +113,7 @@ class AsyncFailureCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ErrorState(
     title: title,
-    message: context.explain(failed.error),
+    message: message ?? context.explain(failed.error),
     detail: detail,
     onRetry: failed.gone ? null : onRetry,
     retrying: failed.retrying,

@@ -1501,10 +1501,7 @@ class _MetadataCreditsSectionState extends State<MetadataCreditsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(
-          title: l10n.metadataCreditsTitle,
-          overline: l10n.metadataCreditsOverline,
-        ),
+        SectionHeader(title: l10n.metadataCreditsTitle),
         for (final credit in state.metadata.credits)
           if (!vocabulary.contains(credit.role))
             Padding(
@@ -1707,10 +1704,7 @@ class _MetadataTagsSectionState extends State<MetadataTagsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(
-          title: l10n.metadataTagsTitle,
-          overline: l10n.metadataTagsOverline,
-        ),
+        SectionHeader(title: l10n.metadataTagsTitle),
         for (final tag in state.metadata.customTags)
           _tagRow(
             context,

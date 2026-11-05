@@ -295,7 +295,6 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             SectionHeader(title: l10n.adminUserRoleGroup),
             WaxSettingRow(
               title: l10n.adminUserAdminTitle,
-              help: l10n.adminUserAdminHelp,
               control: WaxSwitch(
                 label: l10n.adminUserAdminTitle,
                 value: _admin,
@@ -348,7 +347,6 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             SectionHeader(title: l10n.adminUserUploadsGroup),
             WaxSettingRow(
               title: l10n.adminUserMayUploadTitle,
-              help: l10n.adminUserMayUploadHelp,
               control: WaxSwitch(
                 label: l10n.adminUserMayUploadTitle,
                 value: _uploadEnabled,
@@ -361,7 +359,6 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
               child: WaxTextField(
                 label: l10n.adminUserQuotaLabel,
                 hint: l10n.adminUserQuotaHint,
-                helperText: l10n.adminUserQuotaHelp,
                 keyboardType: TextInputType.number,
                 controller: _quotaMb,
                 semanticsId: SemanticsIds.userQuota,
@@ -372,7 +369,6 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             SectionHeader(title: l10n.adminUserPermissionsGroup),
             WaxSettingRow(
               title: l10n.adminUserPermDownloadTitle,
-              help: l10n.adminUserPermDownloadHelp,
               control: WaxSwitch(
                 label: l10n.adminUserPermDownloadTitle,
                 value: _download,
@@ -382,7 +378,6 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             ),
             WaxSettingRow(
               title: l10n.adminUserPermDeleteTitle,
-              help: l10n.adminUserPermDeleteHelp,
               control: WaxSwitch(
                 label: l10n.adminUserPermDeleteTitle,
                 value: _delete,
@@ -392,7 +387,9 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             ),
             WaxSettingRow(
               title: l10n.adminUserPermExplicitTitle,
-              help: l10n.adminUserPermExplicitHelp,
+              // A scope the title hides: the flag is the feeds'; music
+              // carries none, so the deny rules below are its control.
+              info: l10n.adminUserPermExplicitHelp,
               control: WaxSwitch(
                 label: l10n.adminUserPermExplicitTitle,
                 value: _explicitContent,
@@ -402,7 +399,6 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             ),
             WaxSettingRow(
               title: l10n.adminUserPermSharedOutputsTitle,
-              help: l10n.adminUserPermSharedOutputsHelp,
               control: WaxSwitch(
                 label: l10n.adminUserPermSharedOutputsTitle,
                 value: _sharedOutputs,
@@ -412,7 +408,6 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             ),
             WaxSettingRow(
               title: l10n.adminUserPermManagePodcastsTitle,
-              help: l10n.adminUserPermManagePodcastsHelp,
               control: WaxSwitch(
                 label: l10n.adminUserPermManagePodcastsTitle,
                 value: _managePodcasts,
@@ -442,7 +437,6 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
             const SizedBox(height: WaxSpace.s16),
             _TagRuleEditor(
               label: l10n.adminUserTagDenyLabel,
-              help: l10n.adminUserTagDenyHelp,
               keyPrefix: 'tag-deny',
               rules: _tagDeny,
               onChanged: () => setState(() {}),
@@ -573,14 +567,14 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
 class _TagRuleEditor extends StatefulWidget {
   const _TagRuleEditor({
     required this.label,
-    required this.help,
+    this.help,
     required this.keyPrefix,
     required this.rules,
     required this.onChanged,
   });
 
   final String label;
-  final String help;
+  final String? help;
   final String keyPrefix;
 
   /// Mutated in place; [onChanged] tells the owner to rebuild.
@@ -620,10 +614,11 @@ class _TagRuleEditorState extends State<_TagRuleEditor> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(title: widget.label),
-        Text(
-          widget.help,
-          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
-        ),
+        if (widget.help case final help?)
+          Text(
+            help,
+            style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+          ),
         const SizedBox(height: WaxSpace.s8),
         if (widget.rules.isNotEmpty)
           Wrap(

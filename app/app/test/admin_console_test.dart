@@ -133,6 +133,12 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.adminForbidden),
       findsOneWidget,
     );
+    // A title naming who may, and the next step.
+    expect(find.text('This area is for administrators'), findsOneWidget);
+    expect(
+      find.text('Ask an administrator if you need something here.'),
+      findsOneWidget,
+    );
     expect(find.bySemanticsIdentifier(SemanticsIds.adminConsole), findsNothing);
     expect(
       find.bySemanticsIdentifier(AdminSection.trash.semanticsId),
@@ -527,6 +533,14 @@ void main() {
     final container = _container(repo);
     await _pump(tester, container, const GenreTreeScreen());
 
+    // The catch-up note rides the button's detail, not a printed line.
+    expect(find.textContaining('use it to catch up'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is WaxButton && (w.detail ?? '').contains('catch up'),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.genreNormalizeDryRun),
     );

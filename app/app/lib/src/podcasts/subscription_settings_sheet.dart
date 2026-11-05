@@ -194,7 +194,6 @@ class _SubscriptionSettingsSheetState
             WaxSettingRow(
               key: const Key('podcast-settings-boost'),
               title: l10n.podcastVoiceBoost,
-              help: l10n.podcastVoiceBoostHelp,
               control: WaxSwitch(
                 value: _voiceBoost,
                 label: l10n.podcastVoiceBoost,
@@ -226,7 +225,6 @@ class _SubscriptionSettingsSheetState
             WaxSettingRow(
               key: const Key('podcast-settings-autodownload'),
               title: l10n.podcastAutoDownload,
-              help: l10n.podcastAutoDownloadHelp,
               control: WaxSwitch(
                 value: _autoDownload,
                 label: l10n.podcastAutoDownload,

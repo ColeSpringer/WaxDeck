@@ -350,11 +350,7 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen>
     final node = _current;
     if (node == null) {
       final l10n = context.l10n;
-      return EmptyState(
-        glyph: WaxIcons.info,
-        title: l10n.adminGenrePickTitle,
-        message: l10n.adminGenrePickMessage,
-      );
+      return EmptyState(glyph: WaxIcons.info, title: l10n.adminGenrePickTitle);
     }
     return _GenreDetail(
       // Keyed by the selection rather than by the name, so switching
@@ -398,13 +394,13 @@ class _Header extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          source == 'default'
-              ? l10n.adminGenreSourceDefault
-              : l10n.adminGenreSourceStored,
-          style: WaxType.body.copyWith(color: colors.textSecondary),
-        ),
-        const SizedBox(height: WaxSpace.s12),
+        if (source == 'default') ...<Widget>[
+          Text(
+            l10n.adminGenreSourceDefault,
+            style: WaxType.body.copyWith(color: colors.textSecondary),
+          ),
+          const SizedBox(height: WaxSpace.s12),
+        ],
         Wrap(
           spacing: WaxSpace.s8,
           runSpacing: WaxSpace.s8,
@@ -417,6 +413,7 @@ class _Header extends StatelessWidget {
             ),
             WaxButton(
               label: l10n.adminGenreNormalize,
+              detail: l10n.adminGenreNormalizeHelp,
               kind: WaxButtonKind.tonal,
               semanticsId: SemanticsIds.genreNormalize,
               onPressed: busy ? null : () => onNormalize(false),
@@ -429,11 +426,6 @@ class _Header extends StatelessWidget {
               onPressed: busy ? null : onRevert,
             ),
           ],
-        ),
-        const SizedBox(height: WaxSpace.s8),
-        Text(
-          l10n.adminGenreNormalizeBlurb,
-          style: WaxType.caption.copyWith(color: colors.textTertiary),
         ),
       ],
     );
@@ -597,8 +589,8 @@ class _GenreDetailState extends State<_GenreDetail> {
         WaxSettingRow(
           title: l10n.adminGenreParentTitle,
           help: widget.hasChildren
-              ? l10n.adminGenreParentHelpHasChildren
-              : l10n.adminGenreParentHelp,
+              ? l10n.adminGenreParentHasChildrenHelp
+              : null,
           control: WaxChoice<String>(
             label: l10n.adminGenreParentLabel,
             value: widget.node.parent ?? noParent,

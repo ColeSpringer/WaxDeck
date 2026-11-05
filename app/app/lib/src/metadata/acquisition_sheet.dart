@@ -156,11 +156,6 @@ class _AcquisitionSheetState extends State<_AcquisitionSheet> {
                   l10n.metadataOriginEditTitle,
                   style: WaxType.headline.copyWith(color: colors.textPrimary),
                 ),
-                const SizedBox(height: WaxSpace.s4),
-                WaxProse(
-                  l10n.metadataOriginEditHelp,
-                  style: WaxType.caption.copyWith(color: colors.textSecondary),
-                ),
                 const SizedBox(height: WaxSpace.s12),
                 Flexible(
                   child: SingleChildScrollView(
@@ -184,11 +179,8 @@ class _AcquisitionSheetState extends State<_AcquisitionSheet> {
                         const SizedBox(height: WaxSpace.s12),
                         WaxTextField(
                           label: l10n.metadataOriginUrl,
-                          // The read redacts, so what is in this box is
-                          // what the server was willing to show, not
-                          // necessarily what it stored. Saying so stops a
-                          // correction from silently dropping a token the
-                          // reader never saw.
+                          // Kept on purpose: the box holds the server's
+                          // redaction, and an edit drops the token in it.
                           helperText: l10n.metadataOriginUrlHelp,
                           controller: _url,
                           semanticsId: SemanticsIds.originUrl,
@@ -209,7 +201,7 @@ class _AcquisitionSheetState extends State<_AcquisitionSheet> {
                         const SizedBox(height: WaxSpace.s12),
                         WaxSettingRow(
                           title: l10n.metadataOriginWriteBack,
-                          help: l10n.metadataOriginWriteBackHelp,
+                          info: l10n.metadataOriginWriteBackHelp,
                           control: WaxSwitch(
                             label: l10n.metadataOriginWriteBack,
                             value: _writeBack,

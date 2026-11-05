@@ -32,10 +32,7 @@ class FoldsSection extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            SectionHeader(
-              title: l10n.adminFoldsTitle,
-              overline: l10n.adminFoldsOverline,
-            ),
+            SectionHeader(title: l10n.adminFoldsTitle),
             switch (folds) {
               AsyncData(:final value)
                   when value.folds.isEmpty && !value.hasMore =>

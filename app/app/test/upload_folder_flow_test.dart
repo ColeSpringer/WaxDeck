@@ -19,7 +19,8 @@ import 'fakes.dart';
 import 'routed_host.dart';
 
 /// The folder flow's honesty: what its filter dropped is said rather
-/// than silent, and an identify-on upload says where the files went.
+/// than silent, and an identify-on upload says it is identifying and
+/// offers review.
 
 final _l10n = AppLocalizationsEn();
 
@@ -488,31 +489,31 @@ void main() {
     expect(find.text(_l10n.uploadsSourceUrlInvalid), findsNothing);
   });
 
-  testWidgets('an identify-on upload says the files are in review', (
-    tester,
-  ) async {
-    final repo = _repo();
-    final (host, containerOf) = _host(
-      repo,
-      _FolderPicker(FolderPick(files: [_file('a.flac'), _file('b.flac')])),
-      pickFolderAndUpload,
-    );
-    await tester.pumpWidget(host);
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'an identify-on upload says it is identifying and offers review',
+    (tester) async {
+      final repo = _repo();
+      final (host, containerOf) = _host(
+        repo,
+        _FolderPicker(FolderPick(files: [_file('a.flac'), _file('b.flac')])),
+        pickFolderAndUpload,
+      );
+      await tester.pumpWidget(host);
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
 
-    // Identification defaults on; confirming the dialog runs the batch.
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
-    );
-    await tester.pumpAndSettle();
+      // Identification defaults on; confirming the dialog runs the batch.
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+      );
+      await tester.pumpAndSettle();
 
-    final message = containerOf().read(shellMessengerProvider);
-    expect(message?.resolve(_l10n), contains('Uploaded 2 files'));
-    expect(message?.resolve(_l10n), contains('review'));
-    expect(message?.actionLabel, 'Open review');
-    expect(message?.actionSemanticsId, SemanticsIds.uploadIdentifyingReview);
-  });
+      final message = containerOf().read(shellMessengerProvider);
+      expect(message?.resolve(_l10n), contains('Uploaded 2 files'));
+      expect(message?.actionLabel, 'Open review');
+      expect(message?.actionSemanticsId, SemanticsIds.uploadIdentifyingReview);
+    },
+  );
 
   testWidgets('an identify-off upload raises no review message', (
     tester,

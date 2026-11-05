@@ -11,18 +11,13 @@ class AppLocalizationsEs extends AppLocalizations {
   AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
-  String get aboutDefectsSubtitle =>
-      'Errores que la app ha detectado por su cuenta, los más recientes primero, con una forma de copiarlos a un informe de fallo.';
-
-  @override
   String get aboutDiagnosticsTitle => 'Diagnóstico';
 
   @override
   String get aboutLicenses => 'Licencias de código abierto';
 
   @override
-  String get aboutLicensesSubtitle =>
-      'WaxDeck es GPL-3.0-only. Esta página también lista los avisos de las tipografías y los iconos incluidos.';
+  String get aboutLicensesSubtitle => 'GPL-3.0-only';
 
   @override
   String get aboutLicensingTitle => 'Licencias';
@@ -44,10 +39,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aboutServerUnreachable => 'no disponible';
 
   @override
-  String get aboutTagline =>
-      'Un reproductor, gestor de biblioteca y completador de metadatos para música, pódcast y audiolibros.';
-
-  @override
   String get aboutTitle => 'Acerca de';
 
   @override
@@ -66,10 +57,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String adminAuditChange(String field, String from, String to) {
     return '$field: $from -> $to';
   }
-
-  @override
-  String get adminAuditEmptyMessage =>
-      'Las acciones administrativas se registran aquí según ocurren.';
 
   @override
   String get adminAuditEmptyTitle => 'Todavía no hay nada registrado';
@@ -218,25 +205,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminEnrichmentBuiltin => 'Integrada en el catálogo';
 
   @override
-  String get adminEnrichmentBuiltinMusicbrainz =>
-      'Integrada en el catálogo. Si se desactiva, sus géneros quedan fuera; las búsquedas de identidad siguen funcionando.';
-
-  @override
   String get adminEnrichmentBuiltinNeedsContact =>
-      'Integrada en el catálogo. Espera un contacto de MusicBrainz.';
+      'Espera un contacto de MusicBrainz';
 
   @override
   String get adminEnrichmentCacheAnswers => 'Respuestas guardadas';
 
   @override
-  String get adminEnrichmentCacheBlurb =>
-      'Lo que respondieron MusicBrainz y el Cover Art Archive, guardado para que una pasada no pregunte dos veces. Una respuesta podada cuesta una petición la próxima vez que haga falta.';
-
-  @override
   String get adminEnrichmentCacheBytesColumn => 'Tamaño';
-
-  @override
-  String get adminEnrichmentCacheEmpty => 'Todavía no hay nada en caché.';
 
   @override
   String get adminEnrichmentCacheExempt => 'Nunca se poda';
@@ -274,7 +250,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminEnrichmentCachePruneBody =>
-      'Las respuestas podadas se vuelven a pedir, una petición cada vez, la próxima vez que una pasada las necesite. Los valores del catálogo no cambian.';
+      'Las respuestas podadas se piden de nuevo cuando hacen falta. Los valores del catálogo no cambian.';
 
   @override
   String get adminEnrichmentCachePruneTitle => '¿Podar la caché de respuestas?';
@@ -358,6 +334,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminEnrichmentDeferred => 'Pendientes';
 
   @override
+  String get adminEnrichmentIdentityStillAsks =>
+      'La identificación sigue consultando MusicBrainz';
+
+  @override
   String adminEnrichmentLastRunFinished(String when) {
     return 'Terminó $when';
   }
@@ -378,22 +358,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminEnrichmentMusicbrainzOffHelp =>
-      'Apagado hasta que se configure WAXDECK_ENRICHMENT_CONTACT, que también mantiene cerradas las fuentes integradas en el catálogo';
-
-  @override
-  String get adminEnrichmentMusicbrainzOnHelp =>
-      'Identifica artistas, álbumes y libros, y abre las fuentes integradas en el catálogo';
+      'Apagado hasta que se configure WAXDECK_ENRICHMENT_CONTACT';
 
   @override
   String get adminEnrichmentMusicbrainzTitle => 'MusicBrainz';
 
   @override
   String get adminEnrichmentNothingToDo =>
-      'Una pasada no tiene nada que hacer: ninguna fuente puede funcionar. Configura un contacto de MusicBrainz o un proveedor y reinicia.';
+      'Nada puede ejecutarse: configura un contacto de MusicBrainz o un proveedor y reinicia.';
 
   @override
   String get adminEnrichmentNothingToDoSwitchedOff =>
-      'Una pasada no tiene nada que hacer: las fuentes que podrían funcionar están desactivadas. Activa una abajo, o configura un contacto de MusicBrainz y reinicia.';
+      'Nada puede ejecutarse: activa una fuente abajo o configura un contacto de MusicBrainz.';
 
   @override
   String get adminEnrichmentPhaseAlbumArt => 'Portadas de álbumes';
@@ -470,7 +446,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminEnrichmentRunAllHelp =>
-      'Todas las fuentes, sobre todo: lento en una biblioteca grande';
+      'Todo de nuevo; lento en una biblioteca grande';
 
   @override
   String get adminEnrichmentRunBusy => 'Ya hay una pasada en curso.';
@@ -482,16 +458,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminEnrichmentRunNormal => 'Completar lo que falta';
 
   @override
-  String get adminEnrichmentRunNormalHelp =>
-      'Pregunta por lo que no se ha buscado, o cuya falta ha caducado';
-
-  @override
   String get adminEnrichmentRunPhases =>
       'Volver a preguntar en las fases elegidas';
-
-  @override
-  String get adminEnrichmentRunPhasesHelp =>
-      'Solo las fases activadas abajo, que vuelven a preguntar por todo lo que alcanzan';
 
   @override
   String get adminEnrichmentRunStarted => 'Pasada de enriquecimiento iniciada';
@@ -515,11 +483,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get adminEnrichmentSourcesBlurb =>
-      'Se consultan en este orden, y una fuente desactivada no se consulta; al reactivarla, no se le pregunta por lo que una pasada ya resolvió hasta que una ejecución fuerce sus fases o, si no hubo respuesta, pase el plazo de reintento.';
+  String get adminEnrichmentSourcesGroup => 'Fuentes';
 
   @override
-  String get adminEnrichmentSourcesGroup => 'Fuentes';
+  String get adminEnrichmentSourcesHelp =>
+      'Las fuentes se consultan en este orden.';
 
   @override
   String get adminEnrichmentSourcesRevert => 'Revertir';
@@ -544,7 +512,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String adminEnrichmentStalled(String phases) {
-    return 'Se detuvo antes de tiempo: $phases. Todas las fuentes que las atienden fallaron tres veces seguidas y quedaron fuera de la pasada; lo que tienen pendiente se pregunta una vez más en la siguiente.';
+    return 'Se detuvo antes de tiempo: $phases. Sus fuentes fallaron tres veces; se vuelve a preguntar en la siguiente pasada.';
   }
 
   @override
@@ -601,7 +569,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminFoldsEmptyMessage =>
-      'Una fusión une los nombres que elimina a la entrada que conserva, y los archivos que aún se escriben así quedan bajo ella.';
+      'Las fusiones pliegan los nombres antiguos en la entrada conservada.';
 
   @override
   String get adminFoldsEmptyTitle => 'No hay nombres fusionados';
@@ -675,10 +643,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get adminFoldsOverline =>
-      'Grafías antiguas que quedan bajo otro nombre';
-
-  @override
   String adminFoldsQuoted(String spelling) {
     return '\"$spelling\"';
   }
@@ -701,7 +665,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String adminFoldsUnfoldBody(String fold, String name) {
-    return 'Los archivos escritos $fold que la biblioteca lea como nuevos o cambiados (añadidos, movidos, sustituidos o reetiquetados) vuelven a quedar bajo su propio nombre. Los que \"$name\" ya tiene se quedan con él, incluso al volver a escanear con Releer los archivos sin cambios, hasta que cambien o se muevan.';
+    return 'Los archivos nuevos o cambiados escritos $fold vuelven a quedar bajo su propio nombre; los que \"$name\" ya tiene se quedan hasta que cambien.';
   }
 
   @override
@@ -714,7 +678,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminForbiddenMessage =>
-      'La consola de administración es para las cuentas con el rol de administrador. Pide lo que necesites de ella a una persona administradora.';
+      'Pide a un administrador lo que necesites de aquí.';
 
   @override
   String get adminForbiddenTitle => 'Esta área es para administradores';
@@ -735,7 +699,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminGenreAliasesBlurb =>
-      'Las mayúsculas, los acentos y la puntuación ya se pliegan solos, así que enumera solo las grafías a las que ese plegado no llega: Rap por Hip Hop, R&B por Rhythm and Blues.';
+      'Mayúsculas, acentos y puntuación ya se pliegan; enumera solo otras grafías.';
 
   @override
   String get adminGenreAliasesHint => 'Separados por comas';
@@ -780,29 +744,21 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminGenreNormalize => 'Normalizar el catálogo';
 
   @override
-  String get adminGenreNormalizeBlurb =>
-      'Un barrido va plegando por su cuenta los géneros recién escaneados sobre el vocabulario. Normalizar es la pasada de puesta al día, para un catálogo más antiguo de lo que el registro de cambios conserva o para un árbol recién editado.';
+  String get adminGenreNormalizeHelp =>
+      'Pliega los géneros sobre el vocabulario; los escaneos nuevos ya lo hacen, así que úsalo para ponerte al día.';
 
   @override
   String get adminGenreNormalizing => 'Normalizando el catálogo';
 
   @override
-  String get adminGenreParentHelp =>
-      'El género de primer nivel al que pertenece este';
-
-  @override
-  String get adminGenreParentHelpHasChildren =>
-      'Hay géneros agrupados bajo este, y el árbol solo tiene dos niveles';
+  String get adminGenreParentHasChildrenHelp =>
+      'Hay géneros bajo este; el árbol solo tiene dos niveles';
 
   @override
   String get adminGenreParentLabel => 'Género superior';
 
   @override
   String get adminGenreParentTitle => 'Se agrupa bajo';
-
-  @override
-  String get adminGenrePickMessage =>
-      'Aquí se editan su nombre, su género superior y sus alias.';
 
   @override
   String get adminGenrePickTitle => 'Elige un género';
@@ -837,12 +793,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminGenreSaved => 'Se ha guardado el árbol de géneros';
 
   @override
-  String get adminGenreSourceDefault =>
-      'Funcionando con el vocabulario que trae WaxDeck. Al editarlo se guarda un árbol propio.';
-
-  @override
-  String get adminGenreSourceStored =>
-      'Funcionando con un vocabulario propio guardado.';
+  String get adminGenreSourceDefault => 'Vocabulario incluido';
 
   @override
   String get adminGenreTreeLoadError =>
@@ -865,10 +816,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminGroupServer => 'Servidor';
-
-  @override
-  String get adminInviteAccessAllHelp =>
-      'Al desactivarlo se eligen las bibliotecas que verá esta invitación';
 
   @override
   String get adminInviteAdminHelp =>
@@ -925,10 +872,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminInviteRevoked => 'revocada';
 
   @override
-  String get adminInviteUploadHelp =>
-      'Si esta cuenta puede añadir archivos a la biblioteca';
-
-  @override
   String adminInviteUses(int used, int total) {
     return 'usos $used/$total';
   }
@@ -968,10 +911,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminLibrariesColumnReadOnly => 'Solo lectura';
 
   @override
-  String get adminLibrariesEmptyMessage =>
-      'Añade abajo una carpeta raíz y WaxDeck escaneará lo que haya dentro.';
-
-  @override
   String get adminLibrariesEmptyTitle => 'Todavía no hay bibliotecas';
 
   @override
@@ -980,10 +919,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminLibrariesTitle => 'Bibliotecas';
-
-  @override
-  String get adminLibraryAbsentHelp =>
-      'Registra la ruta ahora; se escanea cuando la carpeta exista.';
 
   @override
   String get adminLibraryAbsentTitle => 'Carpeta montada más tarde';
@@ -1022,18 +957,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminLibraryFolderFallbackRescan =>
-      'Se aplica ya a los archivos nuevos. Usa Releer los archivos sin cambios al volver a escanear para aplicarlo a los ya escaneados.';
+      'Se aplica a los archivos nuevos; para el resto, vuelve a escanear con Releer los archivos sin cambios.';
 
   @override
   String get adminLibraryHoldsHelp =>
-      'Libros convierte cada archivo de audio de la carpeta en un audiolibro. Música y Mixta se guían por las etiquetas de cada archivo.';
+      'Libros trata cada archivo de audio como un audiolibro';
 
   @override
   String get adminLibraryHoldsTitle => 'Contiene';
 
   @override
   String get adminLibraryManagedHelp =>
-      'Permite que las subidas y la organización coloquen archivos en esta carpeta raíz';
+      'Las subidas y Organizar escriben y mueven archivos aquí; solo se elige al añadirla';
 
   @override
   String get adminLibraryManagedTitle => 'Gestionada por el catálogo';
@@ -1087,7 +1022,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String adminLibraryMediaRereadBody(String name) {
-    return 'Cada archivo de $name se vuelve a leer para ver qué contiene, lo que puede tardar. En Música, un libro que las etiquetas de sus partes no forman se lee como pistas; en Mixta, un libro cuyas partes ya lo forman se mantiene. Los elementos cuyo tipo se fijó a mano lo conservan.';
+    return 'Cada archivo de $name se vuelve a leer, lo que puede tardar. En Música, los libros que las etiquetas no respaldan pasan a ser pistas. Los tipos fijados a mano se conservan.';
   }
 
   @override
@@ -1102,7 +1037,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String adminLibraryMediaToBooksBody(String name) {
-    return 'Cada archivo de audio de $name se convierte en un libro en el escaneo que esto inicia: las partes que comparten álbum y autor son un libro, y las partes numeradas sin álbum se unen al libro de su carpeta. Los elementos cuyo tipo se fijó a mano lo conservan.';
+    return 'Cada archivo de audio de $name se convierte en un libro: las partes que comparten álbum y autor forman uno. Los tipos fijados a mano se conservan.';
   }
 
   @override
@@ -1124,7 +1059,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminLibraryPathRule =>
-      'La ruta debe ser absoluta y no puede solaparse con una carpeta raíz existente, con la bandeja de subidas ni con el directorio de descargas de pódcast.';
+      'Ruta absoluta, sin solaparse con otra raíz ni con la bandeja de subidas';
 
   @override
   String get adminLibraryProfileInPlace => 'En su sitio';
@@ -1147,7 +1082,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminLibraryRemoveBody =>
-      'Sus archivos se quedan en el disco. El catálogo olvida la biblioteca; los elementos sin otra copia se archivan y vuelven si la carpeta se añade de nuevo. Escribe el nombre de la biblioteca para confirmar.';
+      'Los archivos se quedan en el disco. Los elementos sin otra copia se archivan hasta que la carpeta vuelva. Escribe el nombre de la biblioteca para confirmar.';
 
   @override
   String get adminLibraryRemoveConfigured =>
@@ -1168,14 +1103,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminLibraryRescanBody =>
-      'Escanea todas las carpetas raíz de las bibliotecas, no solo esta. Los archivos sin cambios se omiten.';
+      'Escanea todas las carpetas raíz, no solo esta.';
 
   @override
   String get adminLibraryRescanForce => 'Releer los archivos sin cambios';
 
   @override
   String get adminLibraryRescanForceHelp =>
-      'La pasada de reparación: vuelve a leer cada archivo aunque nada haya cambiado, lo que tarda mucho más. Tus ediciones se conservan.';
+      'Vuelve a leer cada archivo, aunque no haya cambiado; mucho más lento. Tus ediciones se conservan.';
 
   @override
   String get adminLibraryRescanStart => 'Volver a escanear';
@@ -1192,10 +1127,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminLibraryUnwritable => 'El servidor no puede escribir aquí';
-
-  @override
-  String get adminMigrateAccountHelp =>
-      'Las estrellas, valoraciones, historial y progreso se guardan en esta cuenta.';
 
   @override
   String get adminMigrateAccountLabel => 'Importar en';
@@ -1225,9 +1156,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get adminMigrateHistoryHelp => 'Qué se reprodujo allí, y cuándo';
-
-  @override
   String get adminMigrateHistoryTitle => 'Historial de escucha';
 
   @override
@@ -1251,15 +1179,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminMigratePasswordLabel => 'Contraseña';
 
   @override
-  String get adminMigrateProgressHelp =>
-      'Por dónde iba el oyente en cada episodio y en cada libro';
-
-  @override
   String get adminMigrateProgressTitle => 'Progreso de reproducción';
-
-  @override
-  String get adminMigrateRatingsHelp =>
-      'Las valoraciones con estrellas dadas allí';
 
   @override
   String get adminMigrateRatingsTitle => 'Valoraciones';
@@ -1275,10 +1195,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminMigrateSpotifyExport => 'Exportación de datos de Spotify';
-
-  @override
-  String get adminMigrateStarsHelp =>
-      'Qué pistas y álbumes tenía marcados como favoritos el otro servidor';
 
   @override
   String get adminMigrateStarsTitle => 'Favoritos';
@@ -1357,14 +1273,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminScheduleAnalyzeBlurb =>
-      'Mide la sonoridad, las huellas digitales y las formas de onda. Descodifica todos los archivos de audio, así que una biblioteca grande tarda horas. Se puede reanudar: los archivos ya analizados se saltan.';
+      'Descodifica todos los archivos de audio: horas en una biblioteca grande';
 
   @override
   String get adminScheduleBackup => 'Copia de seguridad';
-
-  @override
-  String get adminScheduleBackupBlurb =>
-      'Escribe un archivo con la base de datos y sus archivos acompañantes.';
 
   @override
   String get adminScheduleCronHint => 'minuto hora día mes día-de-la-semana';
@@ -1382,7 +1294,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminScheduleEnrichBlurb =>
-      'Rellena los metadatos, las carátulas y las letras que faltan a partir de los proveedores configurados. Se limita a 2000 elementos por noche, así que una biblioteca grande se completa a lo largo de varias noches; una ejecución iniciada a mano no tiene límite. La configuración del servidor fija cuánto espera lo que ningún proveedor pudo responder antes de volver a consultarse, 30 días por defecto.';
+      'Limitado a 2000 elementos por noche; una ejecución manual no tiene límite';
 
   @override
   String adminScheduleLastRun(String stamp) {
@@ -1404,7 +1316,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminSchedulePruneBlurb =>
-      'Borra las subidas caducadas, los tokens gastados y los archivos de la papelera que ya han pasado su plazo de conservación.';
+      'Borra de forma permanente las subidas caducadas, los tokens y la papelera antigua';
 
   @override
   String adminScheduleSaved(String name) {
@@ -1415,18 +1327,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminScheduleScan => 'Escaneo de la biblioteca';
 
   @override
-  String get adminScheduleScanBlurb =>
-      'Busca archivos nuevos y modificados, lee sus etiquetas y los indexa. Barato: no descodifica el audio.';
+  String get adminScheduleScanBlurb => 'Barato: no descodifica el audio';
 
   @override
   String get adminScheduleStatusFailed => 'fallida';
 
   @override
   String get adminScheduleStatusOk => 'correcta';
-
-  @override
-  String get adminSchedulesEmptyMessage =>
-      'Este servidor no ejecuta nada de forma programada.';
 
   @override
   String get adminSchedulesEmptyTitle => 'No hay tareas programadas';
@@ -1442,106 +1349,50 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminSectionAudit => 'Registro de auditoría';
 
   @override
-  String get adminSectionAuditBlurb => 'Quién hizo qué, y sobre qué';
-
-  @override
-  String get adminSectionBackupsBlurb =>
-      'Archivos, importaciones y restauraciones preparadas';
-
-  @override
   String get adminSectionDashboard => 'Panel';
-
-  @override
-  String get adminSectionDashboardBlurb =>
-      'Qué necesita atención y qué se está ejecutando';
 
   @override
   String get adminSectionDiagnostics => 'Diagnóstico';
 
   @override
-  String get adminSectionDiagnosticsBlurb =>
-      'Archivos que el catálogo no ha podido leer';
-
-  @override
-  String get adminSectionEnrichmentBlurb =>
-      'De dónde salen las imágenes, las letras y los datos';
-
-  @override
-  String get adminSectionGenresBlurb =>
-      'El vocabulario canónico sobre el que se pliega cada género';
-
-  @override
   String get adminSectionHealth => 'Salud';
-
-  @override
-  String get adminSectionHealthBlurb =>
-      'Qué falta, qué está mal etiquetado y qué está duplicado';
-
-  @override
-  String get adminSectionLibrariesBlurb =>
-      'Las carpetas raíz que escanea WaxDeck y lo que hay en cada una';
-
-  @override
-  String get adminSectionMigrateBlurb =>
-      'Traer una biblioteca, sus favoritos y su historial';
 
   @override
   String get adminSectionNotifications => 'Notificaciones';
 
   @override
-  String get adminSectionNotificationsBlurb =>
-      'Dónde informa este servidor de los eventos de operación';
-
-  @override
   String get adminSectionOrganize => 'Organizar';
-
-  @override
-  String get adminSectionOrganizeBlurb =>
-      'Mover los archivos a un esquema de nombres';
 
   @override
   String get adminSectionReview => 'Cola de revisión';
 
   @override
-  String get adminSectionSchedulesBlurb =>
-      'Cuándo se ejecutan los escaneos, las copias de seguridad y la limpieza';
-
-  @override
-  String get adminSectionSettingsBlurb =>
-      'Registros, modo de solo lectura, transcodificación, conservación';
-
-  @override
   String get adminSectionShares => 'Enlaces compartidos';
-
-  @override
-  String get adminSectionSharesBlurb =>
-      'Todos los enlaces públicos de este servidor y quién los creó';
-
-  @override
-  String get adminSectionTrashBlurb =>
-      'Archivos eliminados, hasta que se purgan';
-
-  @override
-  String get adminSectionUsersBlurb =>
-      'Cuentas, invitaciones y lo que puede hacer cada una';
 
   @override
   String get adminServerAccessGroup => 'Acceso';
 
   @override
-  String get adminServerActivityCaveat =>
-      'Cuenta lo que el motor está transcodificando o remultiplexando, incluido un cliente que forzó el formato original, y quien reproduce una cola sin pausas ocupa una plaza por muchas representaciones que tenga activas.';
-
-  @override
-  String adminServerActivityCount(int count) {
+  String adminServerActivityCount(int count, int timelines) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count sesiones con motor ahora mismo.',
       one: '1 sesión con motor ahora mismo.',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      timelines,
+      locale: localeName,
+      other: ' $timelines de ellas son colas sin pausas.',
+      one: ' Una de ellas es una cola sin pausas.',
+      zero: '',
+    );
+    return '$_temp0$_temp1';
   }
+
+  @override
+  String get adminServerActivityHelp =>
+      'Cuenta sesiones del motor, incluidos los formatos originales forzados; una cola sin pausas ocupa una plaza por muchas representaciones que tenga activas.';
 
   @override
   String get adminServerActivityReading =>
@@ -1552,23 +1403,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Actualizar lo que se está ejecutando';
 
   @override
-  String adminServerActivitySpoken(String headline, String caveat) {
-    return '$headline $caveat';
-  }
-
-  @override
-  String adminServerActivityTimelines(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count de ellas son colas sin pausas.',
-      one: 'Una de ellas es una cola sin pausas.',
-      zero: 'Ninguna de ellas es una cola sin pausas.',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get adminServerActivityUnknown =>
       'El servidor no ha dicho qué se está ejecutando.';
 
@@ -1576,7 +1410,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminServerAnalysisGroup => 'Análisis';
 
   @override
-  String get adminServerDefaultKbpsHint => '0 significa sin límite';
+  String get adminServerDefaultKbpsHelp => '0 significa sin límite';
 
   @override
   String get adminServerDefaultKbpsLabel =>
@@ -1588,17 +1422,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminServerRadioArtHelp =>
-      'Cuando una emisora anuncia una pista que esta biblioteca no tiene, pregunta a Deezer, MusicBrainz y Cover Art Archive por su carátula. Esto envía fuera del servidor el artista y el título que anunció la emisora. Activado de forma predeterminada; con la opción desactivada el reproductor dibuja el logotipo de la emisora.';
+      'Pregunta a Deezer, MusicBrainz y Cover Art Archive por las portadas de pistas desconocidas, enviando artista y título';
 
   @override
-  String get adminServerRadioArtTitle => 'Buscar carátulas en internet';
+  String get adminServerRadioArtTitle => 'Buscar portadas en internet';
 
   @override
   String get adminServerRadioGroup => 'Radio';
 
   @override
   String get adminServerReadOnlyHelp =>
-      'Rechaza cualquier cambio en el contenido de la biblioteca, en todo el servidor. La reproducción, las valoraciones y el progreso siguen funcionando';
+      'Rechaza cualquier cambio en la biblioteca; la reproducción sigue funcionando';
 
   @override
   String get adminServerReadOnlyTitle => 'Modo de solo lectura';
@@ -1617,21 +1451,16 @@ class AppLocalizationsEs extends AppLocalizations {
       'Guardar los límites de transcodificación';
 
   @override
-  String get adminServerSignupHelp =>
-      'Cualquiera puede solicitar una cuenta; las solicitudes esperan aprobación';
+  String get adminServerSignupHelp => 'Las solicitudes esperan aprobación';
 
   @override
   String get adminServerSignupTitle => 'Registro abierto';
 
   @override
-  String get adminServerSonicHelp =>
-      'Analiza la biblioteca en segundo plano para las mezclas instantáneas, las pistas similares y los recorridos sonoros';
-
-  @override
   String get adminServerSonicTitle => 'Análisis sonoro';
 
   @override
-  String get adminServerTaskDaysHint =>
+  String get adminServerTaskDaysHelp =>
       '0 conserva todas las tareas terminadas';
 
   @override
@@ -1654,10 +1483,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Transcodificaciones a la vez, por oyente';
 
   @override
-  String get adminServerTranscodingBlurb =>
-      'Una transcodificación es lo que ocurre cuando un cliente no puede reproducir un archivo tal como está guardado. Estos límites acotan cuántas se ejecutan a la vez, para que una noche concurrida no acabe siendo lenta.';
-
-  @override
   String get adminServerTranscodingGroup => 'Transcodificación';
 
   @override
@@ -1665,7 +1490,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Se han guardado los límites de transcodificación';
 
   @override
-  String get adminServerTrashDaysHint =>
+  String get adminServerTrashDaysHelp =>
       '0 los conserva hasta que se vacíe la papelera a mano';
 
   @override
@@ -1681,10 +1506,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminShareRevoked => 'Enlace revocado';
-
-  @override
-  String get adminSharesEmptyMessage =>
-      'Nadie de este servidor ha creado un enlace público. Cuando alguien lo haga aparecerá aquí, con quién lo creó y una forma de desactivarlo.';
 
   @override
   String get adminSharesEmptyTitle => 'No hay nada compartido';
@@ -1707,15 +1528,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminStreamingUnreachable => 'Inaccesible';
 
   @override
-  String get adminThumbsBlurb =>
-      'Copias redimensionadas de tus portadas, generadas a demanda. Vaciarlas cuesta un momento de decodificación la próxima vez que se dibuje cada una, nunca una imagen.';
-
-  @override
   String get adminThumbsClearAction => 'Vaciar la caché';
 
   @override
   String get adminThumbsClearBody =>
-      'Cada copia generada se descarta y se vuelve a generar la próxima vez que se dibuje una portada. No se pierde ninguna imagen. El espacio se libera dentro del archivo del catálogo, no se devuelve al disco.';
+      'Las copias se regeneran al dibujarse de nuevo. No se pierde ninguna imagen.';
 
   @override
   String get adminThumbsClearTitle => '¿Vaciar la caché de portadas?';
@@ -1908,10 +1725,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Todos los archivos de la papelera fuera de las bibliotecas de solo lectura se eliminan para siempre, incluidos los que todavía se pueden restaurar. Esto no se puede deshacer.';
 
   @override
-  String get adminTrashEmptyStateMessage =>
-      'Los archivos eliminados esperan aquí antes de purgarse.';
-
-  @override
   String get adminTrashEmptyStateTitle => 'La papelera está vacía';
 
   @override
@@ -1976,10 +1789,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get adminTrashShowRestoredHelp =>
-      'Entradas que ya se han devuelto a su sitio, como registro';
-
-  @override
   String get adminTrashShowRestoredTitle => 'Mostrar las entradas restauradas';
 
   @override
@@ -1997,10 +1806,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminUserActionsGroup => 'Acciones de la cuenta';
-
-  @override
-  String get adminUserAdminHelp =>
-      'Ve toda la biblioteca y la consola de administración';
 
   @override
   String get adminUserAdminTitle => 'Administrador';
@@ -2021,7 +1826,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminUserChildPresetHelp =>
-      'Deja sin contenido explícito, sin borrar, descargar ni subir, y con una regla de bloqueo para las pistas con etiqueta de advertencia. Todo lo de abajo se puede seguir editando.';
+      'Restringe el contenido explícito, el borrado, las descargas y las subidas; editable abajo.';
 
   @override
   String get adminUserDeleteAccount => 'Eliminar la cuenta';
@@ -2039,7 +1844,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminUserDeletePlaylistsDeleteHelp =>
-      'Compartidas y privadas por igual. Quien las tuviera compartidas las pierde.';
+      'Compartidas y privadas por igual; los demás pierden el acceso';
 
   @override
   String get adminUserDeletePlaylistsTransfer =>
@@ -2047,14 +1852,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminUserDeletePlaylistsTransferHelp =>
-      'Conservan sus elementos y siguen compartidas. Una lista inteligente que depende de sus favoritos, valoraciones, reproducciones o listas privadas pasa a ser una lista fija con sus pistas. Sus listas privadas se eliminan.';
+      'Las listas inteligentes que dependen de esta cuenta pasan a ser listas fijas. Las privadas se eliminan.';
 
   @override
   String get adminUserDeleteTitle => '¿Eliminar la cuenta?';
 
   @override
   String get adminUserDisabledHelp =>
-      'Una cuenta deshabilitada no puede iniciar sesión, y sus sesiones activas se revocan';
+      'No puede iniciar sesión; se revocan sus sesiones';
 
   @override
   String get adminUserDisabledTitle => 'Deshabilitada';
@@ -2072,10 +1877,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminUserMaxKbpsLabel => 'Límite de transcodificación (kbps)';
 
   @override
-  String get adminUserMayUploadHelp =>
-      'Añadir archivos a la biblioteca, pasando por revisión';
-
-  @override
   String get adminUserMayUploadTitle => 'Puede subir archivos';
 
   @override
@@ -2085,46 +1886,26 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminUserPasswordSet => 'Contraseña establecida';
 
   @override
-  String get adminUserPermDeleteHelp =>
-      'Mover archivos del catálogo a la papelera';
-
-  @override
   String get adminUserPermDeleteTitle => 'Eliminar archivos de la biblioteca';
-
-  @override
-  String get adminUserPermDownloadHelp =>
-      'Quedarse con el archivo guardado, no solo con la transmisión';
 
   @override
   String get adminUserPermDownloadTitle => 'Descargar los originales';
 
   @override
   String get adminUserPermExplicitHelp =>
-      'Al desactivarlo se oculta lo que coincida con las reglas de bloqueo';
+      'Solo pódcast; la música necesita una regla de contenido bloqueado';
 
   @override
   String get adminUserPermExplicitTitle => 'Contenido explícito';
 
   @override
-  String get adminUserPermManagePodcastsHelp =>
-      'Suscribirse, cancelar la suscripción y cambiar los ajustes del feed';
-
-  @override
   String get adminUserPermManagePodcastsTitle => 'Gestionar pódcast';
-
-  @override
-  String get adminUserPermSharedOutputsHelp =>
-      'Puede reproducir en dispositivos que también usan otras personas';
 
   @override
   String get adminUserPermSharedOutputsTitle => 'Salidas compartidas';
 
   @override
   String get adminUserPermissionsGroup => 'Permisos';
-
-  @override
-  String get adminUserQuotaHelp =>
-      'Cuánto puede quedarse en la zona de espera aguardando una decisión. Importar una subida a la biblioteca libera ese espacio otra vez, así que esto limita la cola y no lo que aporta la cuenta.';
 
   @override
   String get adminUserQuotaHint => 'Vacío significa sin límite';
@@ -2166,10 +1947,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminUserTagAllowLabel => 'Reglas de contenido permitido';
 
   @override
-  String get adminUserTagDenyHelp =>
-      'El contenido que coincide se oculta a esta cuenta';
-
-  @override
   String get adminUserTagDenyLabel => 'Reglas de contenido bloqueado';
 
   @override
@@ -2192,10 +1969,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminUsersColumnUploads => 'Subidas';
-
-  @override
-  String get adminUsersEmptyMessage =>
-      'Invita a alguien o abre el registro en los ajustes del servidor.';
 
   @override
   String get adminUsersEmptyTitle => 'No hay cuentas';
@@ -2278,7 +2051,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminWarmingBlurb =>
-      'Los archivos van apareciendo según se indexan. Las carátulas, las coincidencias y la puntuación de salud se completan después: los álbumes que encuentra el escaneo se identifican solos, y lo que el emparejador no tenga claro llega a la cola de revisión.';
+      'Los archivos aparecen según se indexan; después llegan las portadas y las coincidencias.';
 
   @override
   String get adminWarmingScanning => 'Escaneando tu biblioteca';
@@ -2291,7 +2064,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminWizardAddLibraryBlurb =>
-      'Una biblioteca es una carpeta que WaxDeck lee. Añade una y todo lo demás de esta página empezará a tener algo que decir.';
+      'Una biblioteca es una carpeta que WaxDeck lee. Añade una.';
 
   @override
   String get adminWizardAddLibraryTitle =>
@@ -2302,7 +2075,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminWizardScanBlurb =>
-      'El escaneo indexa los archivos, extrae sus etiquetas e identifica los álbumes que reconoce. Se ejecuta en segundo plano: puedes salir de esta página.';
+      'El escaneo indexa los archivos e identifica los álbumes, en segundo plano.';
 
   @override
   String get adminWizardScanTitle => 'Leer lo que hay';
@@ -2317,7 +2090,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminWizardWarmingBlurb =>
-      'Los archivos van apareciendo según se indexan, y las carátulas, las coincidencias y la puntuación de salud se completan después. Dos cosas que merece la pena hacer entretanto: invitar a quienes van a escuchar y echar un vistazo a los álbumes que el emparejador no tuvo claros.';
+      'Los archivos aparecen según se indexan. Mientras tanto, invita a quienes van a escuchar y revisa las coincidencias dudosas.';
 
   @override
   String get adminWizardWarmingTitle => 'Mientras se prepara';
@@ -2404,12 +2177,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get artworkClearAction => 'Borrar';
 
   @override
-  String get artworkClearBody =>
-      'El hueco queda vacío. No se hereda nada en su lugar.';
-
-  @override
   String get artworkClearFrontBody =>
-      'El elemento pasa a usar la portada de su álbum o de su artista. La imagen se elimina del catálogo.';
+      'Quita la imagen; el elemento pasa a usar otra portada.';
 
   @override
   String artworkClearSlot(String slot) {
@@ -2454,9 +2223,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String artworkOneImageOnly(String slot, String file) {
     return '$slot admite una sola imagen; se usa $file';
   }
-
-  @override
-  String get artworkOverline => 'Una imagen por hueco';
 
   @override
   String get artworkPickLabel => 'Imagen';
@@ -2580,10 +2346,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get authHaveInvite => '¿Tienes una invitación?';
-
-  @override
-  String get authInviteHelp =>
-      'Con una invitación válida la cuenta funciona al momento';
 
   @override
   String get authInviteToken => 'Código de invitación (opcional)';
@@ -2714,7 +2476,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bellActivityBlurb =>
-      'Lo que le ha pasado a esta cuenta, lo más reciente primero. Las transferencias de este dispositivo solo aparecen mientras la aplicación está abierta.';
+      'Las transferencias de este dispositivo solo aparecen con la app abierta.';
 
   @override
   String get bellActivityTitle => 'Actividad reciente';
@@ -2724,7 +2486,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bellClearConfirm =>
-      '¿Eliminar todas las notificaciones de esta cuenta, en todos los dispositivos? Esto no se puede deshacer.';
+      '¿Eliminar todas las notificaciones en todos los dispositivos? No se puede deshacer.';
 
   @override
   String get bellClearTitle => 'Vaciar notificaciones';
@@ -2736,7 +2498,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bellDownloadFinished => 'Ha terminado una descarga.';
 
   @override
-  String get bellEmpty => 'Todavía no ha pasado nada.';
+  String get bellEmptyMessage => 'Todavía no ha pasado nada.';
 
   @override
   String get bellEmptyTitle => 'Nada que contar';
@@ -2873,11 +2635,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bookChapterEditorHelp =>
-      'Los capítulos se ordenan por reproducción, se escriban donde se escriban. Un capítulo nuevo o movido llega hasta el inicio del siguiente; el resto conserva su duración guardada.';
+      'Los capítulos se ordenan por reproducción. Un capítulo nuevo o movido llega hasta el inicio del siguiente.';
 
   @override
   String get bookChapterEditorInvalid =>
-      'Los inicios de capítulo deben ser marcas como 1:02:03, cada una distinta. Los capítulos quedan fuera del guardado hasta que lo sean.';
+      'Usa marcas distintas como 1:02:03; los capítulos no se guardan hasta corregirlo';
 
   @override
   String get bookChapterEditorRemove => 'Quitar este capítulo';
@@ -2972,14 +2734,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bookMergeBody =>
-      'Las partes se unen en un solo archivo con capítulos junto a ellas, en la misma biblioteca; la posición de cada oyente se conserva. Los archivos originales van a la papelera salvo que los conserves.';
+      'Las partes se unen en un archivo con capítulos; las posiciones se conservan. Los originales van a la papelera salvo que se conserven.';
 
   @override
   String get bookMergeKeep => 'Conservar los archivos originales';
-
-  @override
-  String get bookMergeKeepHelp =>
-      'La copia fusionada va a una carpeta propia junto a ellos';
 
   @override
   String bookMergeTitle(int count) {
@@ -2998,17 +2756,6 @@ class AppLocalizationsEs extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count partes',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String bookPartsNote(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other:
-          'Este libro son $count archivos, reproducidos como una sola línea de tiempo. Las posiciones y los capítulos abarcan todos.',
     );
     return '$_temp0';
   }
@@ -3053,7 +2800,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bookSeriesEmptyMessage =>
-      'Un libro entra en una serie cuando sus etiquetas la nombran. Puedes indicarla desde el editor de metadatos del libro.';
+      'Un libro entra en una serie por sus etiquetas.';
 
   @override
   String get bookSeriesIndexLoadError => 'No se pudieron cargar las series';
@@ -3074,7 +2821,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bookSeriesMergeHelp =>
-      'Los libros de esta serie pasan a la que elijas y esta grafía desaparece. Nada más de los libros cambia.';
+      'Los libros pasan a la serie elegida; esta grafía desaparece';
 
   @override
   String bookSeriesMergeTitle(String series) {
@@ -3085,8 +2832,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bookSeriesNoBooks => 'Aquí no hay nada que mostrar';
 
   @override
-  String get bookSeriesNoBooksMessage =>
-      'Esta serie no contiene nada que puedas abrir. Consulta con un administrador si esperabas verla.';
+  String get bookSeriesNoBooksEmptyMessage =>
+      'Consulta con un administrador si esperabas más.';
 
   @override
   String bookSeriesSequence(String number, String series) {
@@ -3121,14 +2868,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bookSplitBody =>
-      'Se escribe un archivo por capítulo junto al libro. El original va a la papelera salvo que lo conserves.';
+      'Un archivo por capítulo. El original va a la papelera salvo que se conserve.';
 
   @override
   String get bookSplitKeep => 'Conservar el archivo original';
-
-  @override
-  String get bookSplitKeepHelp =>
-      'Las partes van a una carpeta propia junto a él';
 
   @override
   String bookSplitTitle(int count) {
@@ -3148,17 +2891,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bookTrimSilence => 'Recortar los silencios';
 
   @override
-  String get bookTrimSilenceHelp => 'Acorta las pausas entre frases';
-
-  @override
   String get bookUndo => 'Deshacer';
 
   @override
   String get bookVoiceBoost => 'Realce de voz';
-
-  @override
-  String get bookVoiceBoostHelp =>
-      'Hace que la voz destaque en un sitio ruidoso';
 
   @override
   String bookWithAuthors(String names) {
@@ -3317,8 +3053,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get booksNothingMatchesYet => 'Todavía no coincide nada';
 
   @override
-  String booksNothingMatchesYetMessage(int count) {
-    return 'Los filtros se aplican a los $count libros cargados hasta ahora, y tu biblioteca tiene más.';
+  String booksNothingMatchesYetEmptyMessage(int count) {
+    return 'Los filtros cubren los $count libros cargados hasta ahora';
   }
 
   @override
@@ -3440,10 +3176,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get defectsCopySpoken => 'Copiar el registro de fallos';
 
   @override
-  String get defectsEmptyMessage =>
-      'Los errores que la app detecta por su cuenta aparecen aquí, para que un informe de fallo pueda llevarlos. Una lista vacía es la buena noticia.';
-
-  @override
   String get defectsEmptyTitle => 'No ha ido nada mal';
 
   @override
@@ -3486,11 +3218,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get devicesCastBlurb =>
-      'Un dispositivo de transmisión obtiene el audio de este servidor por dirección. Estas son las direcciones que probará, en orden.';
+      'Direcciones que probará un dispositivo de transmisión, en orden.';
 
   @override
-  String get devicesCastCaveat =>
-      'El servidor las ha comprobado por su cuenta. Una dirección a la que él no llega tampoco funcionará desde un altavoz; a la que sí llega puede fallar igualmente si el altavoz está en otra red.';
+  String get devicesCastHelp =>
+      'El servidor las ha comprobado por su cuenta; un altavoz en otra red aún puede fallar.';
 
   @override
   String get devicesCastingOverline => 'Transmisión';
@@ -3503,6 +3235,24 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get devicesCurrentlyElsewhere => 'Ahora mismo en otro sitio';
+
+  @override
+  String devicesEndpointControl(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'inUse': 'En uso',
+      'inUseVolume': 'En uso, control de volumen',
+      'inUseSpeed': 'En uso, control de velocidad',
+      'inUseBoth': 'En uso, control de volumen y velocidad',
+      'remoteVolume': 'Control remoto de volumen',
+      'remoteSpeed': 'Control remoto de velocidad',
+      'remoteBoth': 'Control remoto de volumen y velocidad',
+      'other': 'Control remoto',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get devicesEndpointOffline => 'Sin conexión';
 
   @override
   String get devicesGroupApps => 'Aplicaciones de WaxDeck';
@@ -3523,7 +3273,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get devicesListError => 'No se han podido listar los dispositivos';
 
   @override
-  String get devicesListErrorMessage =>
+  String get devicesListErrorBody =>
       'El servidor no ha respondido. La reproducción aquí no se ve afectada.';
 
   @override
@@ -3536,26 +3286,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String get devicesNoAddresses => 'No hay ninguna dirección que probar';
 
   @override
-  String get devicesNoAddressesMessage =>
-      'A este servidor no se le ha indicado una dirección pública y no ha podido detectar ninguna en la red. La transmisión necesita una; configúrala en los ajustes del servidor.';
+  String get devicesNoAddressesEmptyMessage =>
+      'Configura WAXDECK_ADVERTISE_BASE en el servidor.';
 
   @override
   String get devicesNoDevicesToTest => 'No hay dispositivos que probar';
 
   @override
-  String get devicesNoDevicesToTestMessage =>
-      'No ha aparecido ningún Chromecast ni reproductor en esta red. La detección necesita multidifusión, que no atraviesa la red predeterminada de Docker.';
+  String get devicesNoDevicesToTestEmptyMessage =>
+      'La detección necesita multidifusión, que la red predeterminada de Docker no tiene.';
 
   @override
   String get devicesNothingElsewhere => 'No hay nada sonando en otro sitio';
 
   @override
-  String get devicesNothingElsewhereMessage =>
-      'Elige un dispositivo en la barra de reproducción para enviar el sonido a otro sitio.';
+  String get devicesNothingElsewhereEmptyMessage =>
+      'Elige un dispositivo en la barra de reproducción.';
 
   @override
-  String get devicesNothingToSend =>
-      'Aquí no hay nada reproduciéndose que enviar. Empieza algo primero.';
+  String get devicesNothingToSend => 'Aquí no suena nada que enviar.';
 
   @override
   String devicesOnEndpoint(String endpoint) {
@@ -3615,21 +3364,14 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get devicesTakeOverBody =>
-      'Este dispositivo puede tomar el control, o puedes dejarlo sonando donde está.';
-
-  @override
-  String get devicesTakeOverOrLeave => 'Toma el control o déjalo sonando';
-
-  @override
   String get devicesTestOnDevice => 'Probar en un dispositivo';
 
   @override
-  String get devicesTestOnDeviceBlurb =>
-      'La comprobación de arriba es este servidor accediéndose a sí mismo. Elige un altavoz y buscará un segundo de silencio por cada dirección y dirá qué ha pasado.';
+  String get devicesTestOnDeviceHelp =>
+      'Elige un altavoz y buscará un segundo de silencio por cada dirección.';
 
   @override
-  String get devicesTesting => 'Probando. Tarda unos segundos por dirección.';
+  String get devicesTesting => 'Probando';
 
   @override
   String get devicesThisDevice => 'Este dispositivo';
@@ -3654,8 +3396,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get discoveryEmptyMessage =>
-      'Esta respuesta ha llegado vacía. Prueba con otra pista.';
+  String get discoveryEmptyMessage => 'Prueba con otra pista.';
 
   @override
   String get discoveryEmptyTitle => 'No se ha encontrado nada';
@@ -3715,7 +3456,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String downloadsClearBody(String size) {
-    return 'Esto libera $size. Nada sale de la biblioteca: todo esto se vuelve a reproducir cuando el servidor esté disponible.';
+    return 'Esto libera $size. Nada sale de la biblioteca.';
   }
 
   @override
@@ -3735,7 +3476,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get downloadsEmptyMessage =>
-      'Descarga un libro, un álbum o un episodio y se reproduce aquí aunque el servidor no esté disponible. Su portada viene con él.';
+      'Las descargas suenan aquí sin el servidor.';
 
   @override
   String get downloadsEmptyTitle => 'No hay nada descargado';
@@ -4032,7 +3773,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get errorFeedNotAFeed =>
-      'Esa dirección ha respondido, pero no con algo que una aplicación de podcasts pueda leer.';
+      'Esa dirección ha respondido, pero no con algo que una aplicación de pódcasts pueda leer.';
 
   @override
   String get errorFeedNotFound =>
@@ -4090,7 +3831,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get errorPodcastsOff =>
-      'Los podcasts están desactivados en este servidor.';
+      'Los pódcasts están desactivados en este servidor.';
 
   @override
   String get errorQuotaExceeded => 'Eso supera un límite de este servidor.';
@@ -4110,6 +3851,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get errorSourceUnavailable =>
       'Este servidor no tiene activa la fuente que hace falta.';
+
+  @override
+  String get errorStationDirectoryUnavailable =>
+      'El directorio de emisoras no ha respondido; añade una emisora por la URL de su stream en Radio.';
 
   @override
   String get errorStorageFull =>
@@ -4184,10 +3929,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get healthCatalogArtistTotals => 'Totales de artistas desactualizados';
 
   @override
-  String get healthCatalogBlurb =>
-      'Compara lo que el catálogo guarda junto a tus archivos (el índice de búsqueda, los totales, las claves de orden y los años) con un recuento nuevo a partir de sus propios registros. Rara vez hace falta: un catálogo que el servidor creó desde cero sale coherente.';
-
-  @override
   String get healthCatalogBookIsbnKeys =>
       'Claves ISBN de libros desactualizadas';
 
@@ -4203,11 +3944,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get healthCatalogClean => 'Coherente: nada desajustado.';
 
   @override
-  String get healthCatalogDrift =>
-      'Desajustado. Una reparación vuelve a calcular lo que aparece debajo.';
+  String get healthCatalogDrift => 'Desajustado';
 
   @override
   String get healthCatalogGenreTotals => 'Totales de géneros desactualizados';
+
+  @override
+  String get healthCatalogHelp =>
+      'Compara las cifras derivadas del catálogo con un recuento nuevo de sus propios registros; rara vez hace falta.';
 
   @override
   String get healthCatalogMissingFromSearch =>
@@ -4240,7 +3984,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get healthCatalogRepairBody =>
-      'La reparación vuelve a contar lo que cuenta la comprobación a partir de los propios registros del catálogo y elimina lo que nada usa. Mantiene el bloqueo de escritura del catálogo mientras escribe, así que las ediciones y los escaneos esperan. Tus archivos no se tocan.';
+      'Vuelve a contar lo que cuenta la comprobación y elimina las filas del catálogo que nada usa; tus archivos no se tocan. Las ediciones y los escaneos esperan mientras tanto.';
 
   @override
   String get healthCatalogRepairRunning =>
@@ -4264,8 +4008,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get healthCatalogSortKeys => 'Nombres que se ordenan fuera de lugar';
 
   @override
-  String get healthCatalogTidy =>
-      'Coherente. Una reparación ordena lo que aparece debajo.';
+  String get healthCatalogTidy => 'Coherente, pero desordenado';
 
   @override
   String get healthCatalogTitle => 'Comprobación del catálogo';
@@ -4330,10 +4073,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get healthDiagnosticsEmptyMessage =>
-      'Todos los archivos que ha visto el catálogo se han descodificado sin problemas.';
-
-  @override
   String get healthDiagnosticsEmptyTitle => 'No hay diagnósticos registrados';
 
   @override
@@ -4346,17 +4085,10 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get healthDuplicatesEmptyMessage =>
-      'Los artistas, los álbumes y los programas aparecen una sola vez.';
-
-  @override
   String get healthDuplicatesEmptyTitle => 'No se han detectado duplicados';
 
   @override
   String get healthDuplicatesError => 'No se han podido cargar los duplicados';
-
-  @override
-  String get healthDuplicatesOverline => 'Una misma cosa con dos nombres';
 
   @override
   String get healthDuplicatesTitle => 'Duplicados';
@@ -4405,7 +4137,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get healthFixBlockedArtSource =>
-      'Necesita sus fuentes de ilustraciones activadas en Enriquecimiento.';
+      'Necesita fuentes de ilustraciones en Enriquecimiento.';
 
   @override
   String get healthFixBlockedBookSource =>
@@ -4413,23 +4145,21 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get healthFixBlockedContact =>
-      'Necesita un contacto de enriquecimiento, que permite a este servidor consultar las fuentes públicas gratuitas.';
+      'Necesita un contacto de enriquecimiento configurado en el servidor.';
 
   @override
   String get healthFixBlockedGenreSource =>
-      'Necesita una fuente de géneros, MusicBrainz o ListenBrainz, activada en Enriquecimiento.';
+      'Necesita una fuente de géneros en Enriquecimiento.';
 
   @override
   String get healthFixBlockedLyricsSource =>
-      'Necesita una fuente de letras activada en Enriquecimiento.';
+      'Necesita una fuente de letras en Enriquecimiento.';
 
   @override
-  String get healthFixBlockedNoManaged =>
-      'Necesita una biblioteca gestionada: sin ninguna, no hay una estructura con la que coincidan las rutas.';
+  String get healthFixBlockedNoManaged => 'Necesita una biblioteca gestionada.';
 
   @override
-  String get healthFixBlockedOther =>
-      'Este servidor aún no puede ejecutar esta corrección.';
+  String get healthFixBlockedOther => 'Este servidor aún no puede ejecutarla.';
 
   @override
   String get healthFixBlockedReadOnly =>
@@ -4478,10 +4208,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get healthIssueFixTitle =>
       '¿Mover este archivo a donde lo coloca el perfil?';
-
-  @override
-  String get healthIssuesEmptyMessage =>
-      'Todo lo que ha visto el barrido la cumple.';
 
   @override
   String get healthIssuesEmptyTitle => 'Nada incumple esta regla';
@@ -4545,7 +4271,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get healthMissingArt => 'Sin carátula';
+  String get healthMissingArt => 'Sin portada';
 
   @override
   String get healthMissingAsin => 'Sin ASIN';
@@ -4604,14 +4330,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get healthResolveWord => 'resolver';
 
   @override
-  String get healthRulesEmptyMessage =>
-      'Las reglas aparecen cuando el barrido haya evaluado la biblioteca.';
+  String get healthRulesEmptyMessage => 'Las reglas aparecen tras un barrido.';
 
   @override
   String get healthRulesEmptyTitle => 'Todavía no hay nada que comprobar';
-
-  @override
-  String get healthRulesOverline => 'Lo que comprueba el barrido';
 
   @override
   String get healthRulesTitle => 'Reglas';
@@ -4621,8 +4343,8 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Salud de la biblioteca sobre $count elementos evaluados',
-      one: 'Salud de la biblioteca sobre 1 elemento evaluado',
+      other: '$count elementos evaluados',
+      one: '1 elemento evaluado',
     );
     return '$_temp0';
   }
@@ -4642,7 +4364,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get healthSeverityWarn => 'aviso';
 
   @override
-  String get healthSmallArt => 'Carátula de baja resolución';
+  String get healthSmallArt => 'Portada de baja resolución';
 
   @override
   String get healthSweepFailed =>
@@ -4669,10 +4391,6 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get healthUpgradesEmptyMessage =>
-      'Cada grabación se conserva una sola vez.';
 
   @override
   String get healthUpgradesEmptyTitle =>
@@ -4702,7 +4420,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeEmptyMessage =>
-      'Apunta una biblioteca a tu música, sigue un programa o suelta archivos aquí. Todo lo que añadas aparece en estos estantes.';
+      'Añade música, sigue un programa o suelta archivos aquí.';
 
   @override
   String get homeEmptyTitle => 'Todavía no hay nada aquí';
@@ -4745,8 +4463,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeNeverPlayedTitle => 'Sin reproducir';
 
   @override
-  String get homeOfflineMessage =>
-      'Sin conexión. Los estantes vuelven cuando vuelve el servidor; lo que hay en este dispositivo se sigue reproduciendo.';
+  String get homeOfflineMessage => 'Sin conexión. Lo descargado sigue sonando.';
 
   @override
   String get homePinAction => 'Fijar en Inicio';
@@ -4966,7 +4683,7 @@ class AppLocalizationsEs extends AppLocalizations {
       other: 'pistas de las que elegiste',
       one: 'la pista que elegiste',
     );
-    return '$_temp0 del mismo archivo que $_temp1, y las pistas que salen de un mismo archivo se eliminan juntas o ninguna.';
+    return '$_temp0 del mismo archivo que $_temp1; se eliminan juntas o ninguna.';
   }
 
   @override
@@ -5119,10 +4836,10 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Estos ya son audiolibros',
-      one: 'Esto ya es un audiolibro',
+      other: 'Ya son audiolibros',
+      one: 'Ya es un audiolibro',
     );
-    return '$_temp0, así que no ha cambiado nada.';
+    return '$_temp0';
   }
 
   @override
@@ -5130,10 +4847,10 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Estos ya son música',
-      one: 'Esto ya es música',
+      other: 'Ya son música',
+      one: 'Ya es música',
     );
-    return '$_temp0, así que no ha cambiado nada.';
+    return '$_temp0';
   }
 
   @override
@@ -5155,15 +4872,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Ahora forma parte de un elemento de una biblioteca que no puedes abrir.';
 
   @override
-  String get libraryKindQueued =>
-      'Continúa en segundo plano; se te avisará cuando termine.';
+  String get libraryKindQueued => 'Continúa en segundo plano';
 
   @override
   String get libraryKindStillRunning => 'Sigue cambiando. Síguelo en Tareas.';
 
   @override
   String get libraryKindStoppedPlaying =>
-      'Lo que sonaba ahora forma parte del libro; reprodúcelo desde aquí.';
+      'Ya está en el libro; reprodúcelo desde aquí';
 
   @override
   String get libraryKindToBook => 'Tratar como audiolibro';
@@ -5174,10 +4890,10 @@ class AppLocalizationsEs extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          'Estas $count pistas se convierten en un audiolibro en Libros, con las partes en orden.',
+          '$count pistas se convierten en un audiolibro en Libros, en orden.',
       one: 'Esta pista se convierte en un audiolibro en Libros.',
     );
-    return '$_temp0 Las reproducciones, los favoritos y las entradas de listas van con él, y los escaneos posteriores mantienen la elección.';
+    return '$_temp0 Las reproducciones, los favoritos y las listas van con él.';
   }
 
   @override
@@ -5188,7 +4904,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get libraryKindToMusicBody =>
-      'Las partes de este libro se convierten en pistas en Música. Las reproducciones y los favoritos se quedan con ellas, y los escaneos posteriores mantienen la elección.';
+      'Las partes se convierten en pistas en Música. Las reproducciones y los favoritos se quedan.';
 
   @override
   String get libraryKindToMusicTitle => '¿Convertir esto en música?';
@@ -5198,21 +4914,21 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get libraryKindWriteBackHelp =>
-      'Escribe la elección también en los archivos. Incluso un catálogo reconstruido desde cero leerá entonces un libro como libro, y una pista como música salvo que algo más en su archivo diga libro.';
+      'Escribe también la elección en los archivos, para que un catálogo reconstruido siga leyendo un libro como libro';
 
   @override
   String get libraryMenuDetach => 'Separar de la edición';
 
   @override
   String get libraryMenuDetachConfirmBody =>
-      'La pista deja la edición a la que la fija un identificador de MusicBrainz y pasa al álbum que implican sus propias etiquetas.';
+      'La pista deja su edición y pasa al álbum que implican sus etiquetas.';
 
   @override
   String get libraryMenuDetachConfirmTitle => '¿Separar esta pista?';
 
   @override
   String get libraryMenuDetachWriteBackHelp =>
-      'Borrar también las etiquetas de edición del archivo de la pista, para que el siguiente análisis no la devuelva';
+      'Borra también las etiquetas de edición del archivo de la pista, para que el siguiente escaneo no la devuelva';
 
   @override
   String get libraryMenuDetached => 'Separada de la edición.';
@@ -5262,6 +4978,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataAddTag => 'Añadir la etiqueta';
 
   @override
+  String get metadataArtistForbiddenTitle =>
+      'Solo los administradores pueden editar un artista';
+
+  @override
   String metadataBulkEdited(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -5277,7 +4997,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataBulkLockNote =>
-      'Guardar bloquea cada campo editado en cada pista seleccionada. Un lote admite como máximo 1.000 elementos.';
+      'Guardar bloquea los campos editados; máximo 1.000 elementos.';
 
   @override
   String get metadataBulkLockedFail => 'Rechazar el lote';
@@ -5291,10 +5011,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataBulkLockedPolicy => 'Campos bloqueados';
-
-  @override
-  String get metadataBulkLockedPolicyHelp =>
-      'Qué hacer cuando un campo que este lote escribe ya está bloqueado en una pista';
 
   @override
   String get metadataBulkLockedSkip => 'Omitir esas pistas';
@@ -5344,9 +5060,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataCreditRole => 'Rol del crédito';
 
   @override
-  String get metadataCreditsOverline => 'Quién más participa';
-
-  @override
   String get metadataCreditsTitle => 'Créditos';
 
   @override
@@ -5354,7 +5067,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataDiscardBody =>
-      'Esta selección tiene cambios que su barra de guardado no ha escrito; al cambiar se perderán.';
+      'Al cambiar se pierden los cambios sin guardar de esta selección.';
 
   @override
   String get metadataDiscardConfirm => 'Descartar';
@@ -5383,6 +5096,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataFetch => 'Obtener metadatos';
+
+  @override
+  String get metadataFetchHelp =>
+      'Aplica aquello en lo que coinciden los proveedores, tras una vista previa.';
 
   @override
   String get metadataFieldAlbum => 'Álbum';
@@ -5488,17 +5205,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataFieldYear => 'Año';
 
   @override
-  String get metadataFieldsOverline => 'Lo que este elemento dice ser';
-
-  @override
   String get metadataFieldsTitle => 'Campos';
 
   @override
-  String get metadataForbiddenMessage =>
-      'Editar una pista la cambia para todo el mundo en este servidor, así que quienes pueden hacerlo son los administradores y quien la trajo con su subida.';
-
-  @override
-  String get metadataForbiddenTitle => 'Esta no es tuya para editarla';
+  String metadataForbiddenTitle(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'audiobook':
+          'Solo los administradores y quien lo subió pueden editar este libro',
+      'podcast': 'Solo los administradores pueden editar este episodio',
+      'other':
+          'Solo los administradores y quien la subió pueden editar esta pista',
+    });
+    return '$_temp0';
+  }
 
   @override
   String get metadataForceHelp =>
@@ -5519,15 +5238,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataGenreSearchHint => 'Busca o escribe un género';
 
   @override
-  String get metadataIdentificationBlurb =>
-      'Volver a emparejar reabre la identificación y deja el resultado en la cola de revisión. Obtener metadatos aplica aquello en lo que los proveedores ya coinciden, sin preguntar.';
+  String get metadataGroupForbiddenTitle =>
+      'Solo los administradores pueden editar un grupo de lanzamiento';
 
   @override
   String get metadataIdentificationTitle => 'Identificación';
 
   @override
   String metadataKindPinned(String kind) {
-    return 'Tipo: $kind, fijado';
+    return 'Tipo fijado: $kind';
   }
 
   @override
@@ -5568,17 +5287,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataLockTitle => 'Bloquear los campos editados';
 
   @override
-  String get metadataLyricsEmptyClears =>
-      'Déjalo vacío para quitar la letra guardada al guardar.';
-
-  @override
   String get metadataLyricsHint => '[00:12.00] Primera línea';
 
   @override
   String get metadataLyricsLabel => 'LRC';
-
-  @override
-  String get metadataLyricsOverline => 'LRC con tiempos, o líneas sin más';
 
   @override
   String metadataLyricsSource(String source) {
@@ -5610,15 +5322,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataOriginClear => 'Quitar el origen';
 
   @override
-  String get metadataOriginEditHelp =>
-      'Cada casilla se guarda tal como queda, así que vaciar una borra su valor. La fecha de adquisición se conserva.';
+  String get metadataOriginEditAction => 'Corregir el origen';
 
   @override
   String get metadataOriginEditTitle => 'De dónde ha salido';
-
-  @override
-  String get metadataOriginEditable =>
-      'Constancia de cómo llegó esto. Toca para corregirlo.';
 
   @override
   String get metadataOriginId => 'Identificador';
@@ -5643,10 +5350,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataOriginProvider => 'Proveedor';
 
   @override
-  String get metadataOriginRecorded =>
-      'Evidencia registrada de cómo llegó esto; no es un campo editable.';
-
-  @override
   String get metadataOriginRemoved => 'Origen quitado';
 
   @override
@@ -5669,7 +5372,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataOriginUrlHelp =>
-      'Se muestra sin los datos de acceso que llevara';
+      'Se muestra parcialmente oculta; editarla reemplaza la dirección almacenada.';
 
   @override
   String get metadataOriginWriteBack => 'Escribir en los archivos';
@@ -5685,12 +5388,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataPreviewApply => 'Aplicar estos cambios';
 
   @override
-  String get metadataPreviewBuiltinsNote =>
+  String get metadataPreviewBuiltinsHelp =>
       'Las fuentes integradas del servidor no se pueden previsualizar; al aplicar aún pueden rellenar los huecos restantes.';
 
   @override
-  String get metadataPreviewEmpty =>
-      'Los proveedores no tienen nada nuevo para este elemento.';
+  String get metadataPreviewEmptyMessage =>
+      'Nada nuevo; las fuentes integradas aún pueden rellenar huecos';
 
   @override
   String get metadataPreviewFetchAnyway => 'Buscar de todos modos';
@@ -5711,6 +5414,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataRematch => 'Volver a emparejar';
+
+  @override
+  String get metadataRematchHelp =>
+      'Reabre la identificación y deja el resultado en la cola de revisión.';
 
   @override
   String metadataRemoveCredit(String name) {
@@ -5844,10 +5551,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataTagValues => 'Valores, separados por comas';
 
   @override
-  String get metadataTagsOverline =>
-      'Todo aquello para lo que el vocabulario no tiene un campo';
-
-  @override
   String get metadataTagsTitle => 'Etiquetas personalizadas';
 
   @override
@@ -5857,10 +5560,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String metadataUnlockField(String field) {
     return 'Desbloquear $field';
   }
-
-  @override
-  String get metadataUnofficialHelp =>
-      'Una grabación pirata, una promo u otra edición no oficial';
 
   @override
   String get metadataUnofficialTitle => 'Lanzamiento no oficial';
@@ -5873,7 +5572,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataWorkbenchSelectEmptyMessage =>
-      'Marca pistas en la lista para editarlas juntas.';
+      'Marca pistas para editarlas juntas.';
 
   @override
   String get metadataWorkbenchSelectEmptyTitle => 'Nada seleccionado';
@@ -5928,16 +5627,8 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get musicAlbumEditorForbiddenMessage =>
-      'Los códigos de barras, los sellos y los números de catálogo los comparte todo el que puede ver este álbum, así que el servidor los reserva a los administradores.';
-
-  @override
   String get musicAlbumEditorForbiddenTitle =>
       'Solo los administradores pueden editar una edición';
-
-  @override
-  String get musicAlbumEditorNamesOverline =>
-      'Cómo se ordena y con qué coincide';
 
   @override
   String get musicAlbumEditorNamesTitle => 'Nombre e identificador';
@@ -5957,17 +5648,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get musicAlbumEditorSaved => 'Guardado';
 
   @override
-  String get musicAlbumEditorSectionOverline => 'Qué es esta edición';
-
-  @override
   String get musicAlbumEditorSectionTitle => 'Identidad de la edición';
 
   @override
   String get musicAlbumEditorTotalTracks => 'Pistas en total';
-
-  @override
-  String get musicAlbumEditorTotalTracksHelp =>
-      'Se cuenta a partir de las pistas de este lanzamiento. Añade o quita pistas para cambiarlo; el total de pistas de cada pista se edita en la propia pista.';
 
   @override
   String musicAlbumEditorTracksMore(int count) {
@@ -5981,34 +5665,20 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get musicAlbumEditorTracksOverline => 'A qué llega una reescritura';
-
-  @override
   String get musicAlbumEditorTracksTitle => 'En esta edición';
 
   @override
   String get musicAlbumEditorWriteBackHelp =>
-      'Reescribe también las etiquetas correspondientes en todas las pistas de esta edición. El soporte no tiene forma de etiqueta y se queda aquí.';
-
-  @override
-  String get musicAlbumEditorWriteOverline =>
-      'Dónde caen los valores y qué anulan';
+      'Reescribe también las etiquetas correspondientes en todas las pistas de esta edición; el soporte se queda aquí';
 
   @override
   String get musicAlbumEditorWriteTitle => 'Cómo se escribe este cambio';
-
-  @override
-  String get musicAlbumEmptyMessage =>
-      'Las pistas que había aquí se han movido o se han eliminado.';
 
   @override
   String get musicAlbumEmptyTitle => 'No hay nada en este álbum';
 
   @override
   String get musicAlbumLoadError => 'No se ha podido cargar este álbum';
-
-  @override
-  String get musicAlbumReleaseOverline => 'Esta edición';
 
   @override
   String get musicAlbumReleaseTitle => 'Edición';
@@ -6026,21 +5696,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicAlbumRewriteConfirmBody =>
-      'Los campos editados se reescriben en todas las pistas de esta edición a la vez, así que conserva su entrada, junto con la portada, los anclajes y el historial de reproducción. Si el nombre nuevo ya pertenece a otra edición, ambas se fusionan y esta página la sigue. Los bloqueos de esos campos se anulan y la reescritura vuelve a ponerlos.';
+      'Se reescriben todas las pistas y se anulan los bloqueos de estos campos. Si el nombre nuevo ya pertenece a otra edición, ambas se fusionan para siempre.';
 
   @override
   String get musicAlbumRewriteConfirmTitle => '¿Reescribir esta edición?';
 
   @override
   String get musicAlbumRewriteHelp =>
-      'Estos viven en las pistas, no en la edición. Al guardar se reescriben en todos los miembros a la vez, lo que renombra la edición en su sitio y mantiene esta página en ella; un nombre que ya tenga otra edición fusiona las dos, y esta página la sigue.';
+      'Se reescribe en todas las pistas; un nombre que ya tenga otra edición fusiona las dos.';
 
   @override
-  String get musicAlbumRewriteMerged =>
-      'La edición se fusionó con la que ya tenía este nombre.';
-
-  @override
-  String get musicAlbumRewriteOverline => 'En las pistas';
+  String get musicAlbumRewriteMerged => 'Fusionada con la edición existente.';
 
   @override
   String musicAlbumRewriteRenamed(int count) {
@@ -6081,10 +5747,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicArtistEditMetadata => 'Editar el artista';
-
-  @override
-  String get musicArtistEmptyMessage =>
-      'Los elementos que había aquí se han movido o se han eliminado.';
 
   @override
   String get musicArtistEmptyTitle => 'No hay nada de este artista';
@@ -6176,10 +5838,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get musicEmptyMessage =>
-      'Añade música a tu biblioteca y aparecerá aquí.';
-
-  @override
   String get musicEmptyTitle => 'Todavía no hay música';
 
   @override
@@ -6187,11 +5845,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicEntityRenameArtistHelp =>
-      'El nombre del artista vive en las pistas que lo acreditan. Escribe el nombre nuevo completo: al renombrarlo se reescribe en todas a la vez, así que el artista conserva esta página, junto con su foto, sus anclajes y su historial de reproducción; un nombre que ya tenga otro artista fusiona los dos, y esta página lo sigue.';
+      'Se reescribe en todas las pistas; un nombre que ya tenga otro artista fusiona los dos.';
 
   @override
   String get musicEntityRenameConfirmBody =>
-      'Todos los miembros se reescriben a la vez, así que la entrada sobrevive con todo lo que lleva asociado. Si el nombre nuevo ya está ocupado, ambas se fusionan y esta página la sigue. Los bloqueos de estos campos se anulan y el renombrado vuelve a ponerlos.';
+      'Se reescriben todos los miembros y se anulan los bloqueos de estos campos. Si el nombre nuevo ya está ocupado, ambas se fusionan para siempre.';
 
   @override
   String get musicEntityRenameConfirmTitle => '¿Renombrar esta entrada?';
@@ -6209,113 +5867,72 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicEntityRenameGroupHelp =>
-      'Estos viven en las pistas, no en el grupo de edición. Al renombrar se reescriben en todos los miembros a la vez, así que el grupo conserva esta página; un nombre que ya tenga otro grupo fusiona los dos, y esta página lo sigue.';
+      'Se reescribe en todos los miembros; un nombre que ya tenga otro grupo fusiona los dos.';
 
   @override
   String get musicEntityRenameMerged =>
       'Se fusionó con la entrada que ya tenía este nombre.';
 
   @override
-  String get musicEntityRenameOverline => 'En los miembros';
-
-  @override
   String get musicEntityRenameTitle => 'Nombre';
 
   @override
   String get musicEntityRenameWriteBackHelp =>
-      'Reescribir también estas etiquetas dentro del archivo de cada miembro';
+      'Reescribe también estas etiquetas dentro del archivo de cada miembro';
 
   @override
   String get musicFieldArtistMbid => 'ID de artista de MusicBrainz';
 
   @override
-  String get musicFieldArtistMbidHelp =>
-      'El identificador con el que este artista coincidió en MusicBrainz. El enriquecimiento lo rellena; fijarlo aquí ancla la coincidencia a mano.';
-
-  @override
   String get musicFieldArtistName => 'Nombre del artista';
 
   @override
-  String get musicFieldArtistSortHelp =>
-      'Cómo se ordena este artista en una lista de la A a la Z. Vacío lo ordena por su nombre.';
-
-  @override
   String get musicFieldArtistWriteBackHelp =>
-      'Reescribe también la etiqueta de ordenación en los archivos que acreditan a este artista.';
+      'Reescribe también la etiqueta de ordenación en todos los archivos que acreditan a este artista';
 
   @override
   String get musicFieldBarcode => 'Código de barras';
 
   @override
-  String get musicFieldBarcodeHelp =>
-      'UPC o EAN, normalizado a dígitos al guardar';
+  String get musicFieldBarcodeHint => 'UPC o EAN';
 
   @override
   String get musicFieldCatalogNumber => 'Número de catálogo';
 
   @override
-  String get musicFieldCatalogNumberHelp =>
-      'El número que el sello da a esta edición';
-
-  @override
   String get musicFieldCountry => 'País';
 
   @override
-  String get musicFieldCountryHelp =>
-      'Código de dos letras (GB), un alias alfa-3 o UK, o XW/XE';
+  String get musicFieldCountryHint => 'Código de dos letras, p. ej. GB';
 
   @override
   String get musicFieldLabel => 'Sello';
 
   @override
-  String get musicFieldLabelHelp => 'El sello que la publicó';
-
-  @override
   String get musicFieldMbid => 'ID de edición de MusicBrainz';
-
-  @override
-  String get musicFieldMbidHelp =>
-      'El identificador con el que esta edición coincidió en MusicBrainz. El enriquecimiento lo rellena; ponerlo aquí fija una coincidencia a mano.';
 
   @override
   String get musicFieldMedia => 'Soporte';
 
   @override
-  String get musicFieldMediaHelp =>
-      'En qué se editó: CD, 2xVinyl, Digital Media';
+  String get musicFieldMediaHint => 'CD, 2xVinyl, Digital Media';
 
   @override
   String get musicFieldReleaseGroupMbid =>
       'ID de grupo de lanzamiento de MusicBrainz';
 
   @override
-  String get musicFieldReleaseGroupMbidHelp =>
-      'El identificador del grupo en MusicBrainz: el álbum a través de sus ediciones.';
-
-  @override
-  String get musicFieldReleaseGroupSortHelp =>
-      'Cómo se ordena este grupo en una lista de la A a la Z. Vacío lo ordena por su título.';
-
-  @override
   String get musicFieldReleaseGroupType => 'Tipo';
 
   @override
-  String get musicFieldReleaseGroupTypeHelp =>
-      'Qué es este grupo. Sin definir devuelve el valor a lo que el emparejamiento guardó.';
-
-  @override
   String get musicFieldSort => 'Nombre de ordenación';
-
-  @override
-  String get musicFieldSortHelp =>
-      'Cómo se ordena esta edición en una lista alfabética. Vacío la ordena por su título.';
 
   @override
   String get musicHubAddToLibrary => 'Añadir a la biblioteca';
 
   @override
   String get musicHubEmptyMessage =>
-      'Apunta una biblioteca a tu música o suelta archivos aquí. Estas estanterías se llenan solas según crece la colección y vas escuchando.';
+      'Añade una biblioteca o suelta archivos aquí.';
 
   @override
   String musicIndexCount(String dimension, int count) {
@@ -6416,20 +6033,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String musicIndexEmptyMessage(String dimension) {
-    String _temp0 = intl.Intl.selectLogic(dimension, {
-      'artists': 'Añade música a tu biblioteca y sus artistas aparecerán aquí.',
-      'albums': 'Añade música a tu biblioteca y sus álbumes aparecerán aquí.',
-      'releaseGroups':
-          'Añade música a tu biblioteca y sus grupos de lanzamiento aparecerán aquí.',
-      'genres': 'Añade música a tu biblioteca y sus géneros aparecerán aquí.',
-      'years': 'Añade música a tu biblioteca y sus años aparecerán aquí.',
-      'other': 'Añade música a tu biblioteca y aparecerá aquí.',
-    });
-    return '$_temp0';
-  }
-
-  @override
   String musicIndexEmptyTitle(String dimension) {
     String _temp0 = intl.Intl.selectLogic(dimension, {
       'artists': 'Todavía no hay artistas',
@@ -6467,10 +6070,6 @@ class AppLocalizationsEs extends AppLocalizations {
     });
     return '$_temp0';
   }
-
-  @override
-  String get musicListingBucketEmptyMessage =>
-      'Los elementos que había aquí se han movido o se han eliminado.';
 
   @override
   String musicListingBucketEmptyTitle(String dimension) {
@@ -6567,113 +6166,113 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get notifBackupCompletedHelp =>
-      'Un archivo de copia de seguridad ha terminado de crearse.';
+      'Un archivo de copia de seguridad ha terminado de crearse';
 
   @override
   String get notifBackupCompletedTitle => 'Copia de seguridad terminada';
 
   @override
   String get notifBackupFailedHelp =>
-      'Ha fallado un intento de copia de seguridad.';
+      'Ha fallado un intento de copia de seguridad';
 
   @override
   String get notifBackupFailedTitle => 'Copia de seguridad fallida';
 
   @override
   String get notifCatalogResetHelp =>
-      'Una actualización cambió el esquema del catálogo y el servidor creó un catálogo nuevo; las bibliotecas añadidas desde la consola deben añadirse de nuevo.';
+      'La actualización reconstruyó el catálogo; añade de nuevo las bibliotecas creadas desde la consola';
 
   @override
   String get notifCatalogResetTitle => 'Catálogo recreado';
 
   @override
   String get notifEpisodeArrivedHelp =>
-      'Un programa al que estás suscrito ha publicado un episodio nuevo.';
+      'Un programa al que estás suscrito ha publicado un episodio nuevo';
 
   @override
   String get notifEpisodeArrivedTitle => 'Episodio nuevo';
 
   @override
   String get notifEpisodeDownloadedHelp =>
-      'Un episodio que pediste ha terminado de descargarse.';
+      'Un episodio que pediste ha terminado de descargarse';
 
   @override
   String get notifEpisodeDownloadedTitle => 'Episodio descargado';
 
   @override
   String get notifFeedDisabledHelp =>
-      'Un feed al que estás suscrito ha fallado repetidamente y se ha desactivado.';
+      'Un feed al que estás suscrito ha fallado repetidamente y se ha desactivado';
 
   @override
   String get notifFeedDisabledTitle => 'Feed desactivado';
 
   @override
   String get notifGpodderDeviceRemovedHelp =>
-      'Un dispositivo nuevo de una app de podcasts ha ocupado el sitio del que llevaba más tiempo sin conectarse; lo que este seguía sigue suscrito.';
+      'Un dispositivo nuevo sustituyó al visto hace más tiempo';
 
   @override
-  String get notifGpodderDeviceRemovedTitle => 'App de podcasts quitada';
+  String get notifGpodderDeviceRemovedTitle => 'App de pódcasts quitada';
 
   @override
   String get notifHealthFixFinishedHelp =>
-      'Ha terminado una corrección de salud de la biblioteca que iniciaste.';
+      'Ha terminado una corrección de salud de la biblioteca que iniciaste';
 
   @override
   String get notifHealthFixFinishedTitle => 'Corrección de salud terminada';
 
   @override
   String get notifImportCompletedHelp =>
-      'Una subida o adquisición se ha identificado con suficiente confianza para archivarse sola, sin revisión.';
+      'Una importación se archivó sin revisión';
 
   @override
   String get notifImportCompletedTitle => 'Archivado sin revisión';
 
   @override
   String get notifJobFailedHelp =>
-      'Ha fallado un trabajo de la biblioteca que iniciaste.';
+      'Ha fallado un trabajo de la biblioteca que iniciaste';
 
   @override
   String get notifJobFailedTitle => 'Trabajo de la biblioteca fallido';
 
   @override
   String get notifJobFinishedHelp =>
-      'Ha terminado un trabajo de la biblioteca que iniciaste: un escaneo, un análisis, un enriquecimiento, una organización o el vaciado de la papelera.';
+      'Terminó un trabajo de la biblioteca que iniciaste';
 
   @override
   String get notifJobFinishedTitle => 'Trabajo de la biblioteca terminado';
 
   @override
   String get notifPlaylistSyncedHelp =>
-      'Una lista sincronizada ha incorporado cambios de su fuente, o su sincronización siguió fallando y se ha suspendido.';
+      'Una lista sincronizada incorporó cambios o se suspendió';
 
   @override
   String get notifPlaylistSyncedTitle => 'Lista sincronizada';
 
   @override
   String get notifReviewReadyHelp =>
-      'Una subida o adquisición ha terminado de identificarse y espera en la cola de revisión.';
+      'Una subida o adquisición ha terminado de identificarse y espera en la cola de revisión';
 
   @override
   String get notifReviewReadyTitle => 'Pendiente de revisión';
 
   @override
   String get notifSignupRequestedHelp =>
-      'Una solicitud de cuenta nueva espera aprobación.';
+      'Una solicitud de cuenta nueva espera aprobación';
 
   @override
   String get notifSignupRequestedTitle => 'Solicitud de cuenta';
 
   @override
   String get notifSubscriptionFailedHelp =>
-      'Una aplicación de podcasts que sincroniza por gpodder pidió añadir un feed al que no se ha podido suscribir, o cambiar suscripciones que esta cuenta no puede cambiar.';
+      'Falló o se rechazó un cambio de suscripción de una app de pódcasts';
 
   @override
   String get notifSubscriptionFailedTitle =>
-      'Suscripciones de podcasts sin modificar';
+      'Suscripciones de pódcasts sin modificar';
 
   @override
   String get notifToolTaskFailedHelp =>
-      'Ha fallado una fusión o división de libro, o una división CUE, que iniciaste, o se ha detenido porque sus ejecuciones terminaban con el servidor.';
+      'Falló una fusión o división de libro, o una división CUE';
 
   @override
   String get notifToolTaskFailedTitle => 'Tarea de herramientas fallida';
@@ -6696,8 +6295,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get organizeColumnWhy => 'Motivo';
 
   @override
-  String get organizeConfirmMessage =>
-      'Los archivos se mueven a sus nuevas ubicaciones en el servidor. El catálogo los sigue, pero nada más que apunte a las rutas antiguas lo hará.';
+  String get organizeConfirmBody =>
+      'Los archivos se mueven en el servidor. Lo demás que apunte a las rutas antiguas deja de funcionar.';
 
   @override
   String get organizeConfirmOwnWord => 'ORGANIZAR';
@@ -6720,10 +6319,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get organizeDiscard => 'Descartar la previsualización';
 
   @override
-  String get organizeEmptyMessage =>
-      'El servidor no ofrece ningún perfil con el que organizar los archivos.';
-
-  @override
   String get organizeEmptyTitle => 'No hay perfiles de organización';
 
   @override
@@ -6734,10 +6329,8 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          '$count archivos se quedan donde están mientras el servidor es de solo lectura.',
-      one:
-          '1 archivo se queda donde está mientras el servidor es de solo lectura.',
+      other: '$count archivos retenidos, servidor de solo lectura',
+      one: '1 archivo retenido, servidor de solo lectura',
     );
     return '$_temp0';
   }
@@ -6747,8 +6340,8 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count archivos quedan retenidos donde están.',
-      one: '1 archivo queda retenido donde está.',
+      other: '$count archivos retenidos',
+      one: '1 archivo retenido',
     );
     return '$_temp0';
   }
@@ -6758,14 +6351,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get organizeHint =>
-      'La previsualización comprueba cada biblioteca gestionada con este perfil, así que encuentra archivos añadidos o movidos desde la última vez aunque no haya cambiado nada más. No se mueve nada hasta que apliques.';
+      'Previsualiza primero. No se mueve nada hasta que apliques.';
 
   @override
   String get organizeHistoryMore => 'Mostrar ejecuciones anteriores';
-
-  @override
-  String get organizeHistoryOverline =>
-      'Una ejecución se puede deshacer mientras dure su registro';
 
   @override
   String organizeHistoryRow(int moved, String when) {
@@ -6850,24 +6439,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String get organizeMoved => 'Movidos';
 
   @override
-  String get organizeNoManagedMessage =>
-      'Organizar solo mueve archivos dentro de bibliotecas gestionadas, y este servidor no tiene ninguna.';
+  String get organizeNoManagedEmptyMessage =>
+      'Organizar solo funciona en bibliotecas gestionadas.';
 
   @override
   String get organizeNoManagedTitle => 'Ninguna biblioteca gestionada';
-
-  @override
-  String get organizeNothingMessage => 'Este perfil no movería nada.';
 
   @override
   String get organizeNothingTitle => 'Todo está ya en su sitio';
 
   @override
   String get organizeOwnProfiles => 'El perfil de cada biblioteca';
-
-  @override
-  String get organizeOwnProfilesHelp =>
-      'Cada biblioteca gestionada con el perfil elegido en la pantalla Bibliotecas';
 
   @override
   String organizePlannedMoves(int count) {
@@ -6885,10 +6467,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get organizeProfileAudiobookLabel => 'Plantilla de audiolibros';
-
-  @override
-  String get organizeProfileCompilationHelp =>
-      'Various Artists salvo que se indique; vacía, cada recopilatorio va bajo su artista del álbum etiquetado';
 
   @override
   String get organizeProfileCompilationLabel => 'Carpeta de recopilatorios';
@@ -6941,9 +6519,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get organizeProfileNew => 'Nuevo perfil';
-
-  @override
-  String get organizeProfileOverline => 'El esquema de nombres al que mover';
 
   @override
   String get organizeProfilePodcastLabel => 'Plantilla de pódcasts';
@@ -7001,8 +6576,8 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count bibliotecas de solo lectura se dejan como están.',
-      one: '1 biblioteca de solo lectura se deja como está.',
+      other: '$count bibliotecas de solo lectura sin tocar',
+      one: '1 biblioteca de solo lectura sin tocar',
     );
     return '$_temp0';
   }
@@ -7028,8 +6603,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get organizeUndo => 'Deshacer movimientos';
 
   @override
-  String get organizeUndoConfirmMessage =>
-      'Cada archivo que movió vuelve a donde estaba, con sus archivos asociados; uno que se haya movido después se queda donde está.';
+  String get organizeUndoConfirmBody =>
+      'Cada archivo movido vuelve, con sus archivos acompañantes; los movidos de nuevo se quedan.';
 
   @override
   String get organizeUndoConfirmTitle => '¿Deshacer esta ejecución?';
@@ -7113,8 +6688,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get playerBookmarksEmpty =>
-      'Todavía no hay nada marcado. Un marcador guarda un punto al que quieres volver; tu posición de escucha se guarda igualmente.';
+  String get playerBookmarksEmpty => 'Todavía no hay nada marcado';
 
   @override
   String get playerBookmarksError => 'No se han podido cargar los marcadores.';
@@ -7125,9 +6699,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerCancelTimer => 'Cancelar el temporizador';
-
-  @override
-  String get playerCarIdleMessage => 'Empieza algo y ocupará toda la pantalla.';
 
   @override
   String get playerCarMode => 'Modo coche';
@@ -7187,7 +6758,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerGaplessBusy =>
-      'El servidor está ocupado, así que esta cola se reproduce pista a pista. La reproducción sin pausas vuelve cuando se libera una transmisión.';
+      'El servidor está ocupado, así que las pistas suenan una a una';
 
   @override
   String get playerGaplessPaused =>
@@ -7200,10 +6771,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerGoToShow => 'Ir al programa';
-
-  @override
-  String get playerIdleMessage =>
-      'Elige algo de tu biblioteca y aparecerá aquí.';
 
   @override
   String get playerInstantMix => 'Mezcla instantánea';
@@ -7232,10 +6799,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerLyricsError => 'No se ha podido cargar la letra';
 
   @override
-  String get playerLyricsIdleMessage =>
-      'Las palabras aparecerán aquí en cuanto suene algo.';
-
-  @override
   String get playerMarkPlayed => 'Marcar como reproducido';
 
   @override
@@ -7256,19 +6819,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerNoLyrics => 'No hay letra para esta pista';
 
   @override
-  String get playerNoLyricsAdminMessage =>
-      'No se ha encontrado nada en un archivo acompañante ni en las etiquetas del archivo. Puedes añadirla en el editor de metadatos.';
-
-  @override
-  String get playerNoLyricsMessage =>
-      'No se ha encontrado nada en un archivo acompañante ni en las etiquetas del archivo.';
-
-  @override
   String get playerNoShape => 'No hay ninguna forma que dibujar';
 
   @override
-  String get playerNoShapeMessage =>
-      'El visualizador dibuja lo que midió la pasada de análisis, y este archivo no se ha medido. Ejecuta un análisis sobre la biblioteca y se rellenará.';
+  String get playerNoShapeEmptyMessage => 'Ejecuta un análisis para rellenarlo';
 
   @override
   String get playerNothingPlaying => 'No hay nada sonando';
@@ -7476,10 +7030,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se ha podido cargar la transcripción.';
 
   @override
-  String get playerTrimExplained =>
-      'El recorte de silencios se salta las partes calladas que se han mapeado en un episodio. Las posiciones siguen siendo fieles; el chip cuenta lo que se ha saltado.';
-
-  @override
   String get playerTrimSilence => 'Recortar los silencios';
 
   @override
@@ -7517,10 +7067,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Esta pista aún no se ha analizado.';
 
   @override
-  String get playerVisualizerIdleMessage =>
-      'Empieza una pista y su forma aparecerá aquí.';
-
-  @override
   String get playerVisualizerMode => 'Modo del visualizador';
 
   @override
@@ -7528,7 +7074,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerVoiceBoostExplained =>
-      'El realce de voz iguala una grabación baja o irregular. Lo aplica el servidor, así que lo que está sonando se vuelve a abrir.';
+      'La reproducción se reinicia para aplicar el realce de voz';
 
   @override
   String get playerVoiceBoostFailed =>
@@ -7544,8 +7090,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistAddLabel => 'Añadir a esta lista';
 
   @override
-  String get playlistAddNothing =>
-      'Aquí no hay nada que añadir. Los artistas y los álbumes no son miembros de una lista; sus pistas sí.';
+  String get playlistAddNothing => 'Nada que añadir. Solo se añaden pistas.';
 
   @override
   String get playlistAddToTitle => 'Añadir a una lista de reproducción';
@@ -7600,7 +7145,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistDeleteBody =>
-      'Desaparece para todo el mundo con quien esté compartida. Los elementos que contiene no se tocan.';
+      'Se borra para todos con quienes está compartida; sus elementos se conservan.';
 
   @override
   String get playlistDeleteTitle => '¿Eliminar esta lista de reproducción?';
@@ -7610,10 +7155,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistEditRules => 'Editar las reglas';
-
-  @override
-  String get playlistEditableEmptyMessage =>
-      'Busca arriba para añadir la primera pista, o usa \"Añadir a una lista de reproducción\" desde cualquier sitio donde esté sonando algo.';
 
   @override
   String get playlistEmptyTitle => 'Aquí no hay nada';
@@ -7696,17 +7237,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistFallbackTitle => 'Lista de reproducción';
 
   @override
-  String get playlistForeignEmptyMessage =>
-      'Quien la creó todavía no ha puesto nada en esta lista.';
-
-  @override
   String playlistImportBindFailed(String reason) {
     return 'Se ha creado la lista, pero no se ha podido mantenerla vinculada a la exportación: $reason';
   }
 
   @override
-  String get playlistImportBound =>
-      'Se mantiene vinculada a esta exportación. Puedes volver a emparejarla cuando quieras desde los ajustes de sincronización de la lista.';
+  String get playlistImportBound => 'Se mantiene vinculada a esta exportación.';
 
   @override
   String get playlistImportCheck => 'Comprobar';
@@ -7741,7 +7277,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistImportKeepMatchedHelp =>
-      'La exportación se guarda con la lista y se vuelve a emparejar con la biblioteca cuando lo pidas. La pertenencia sigue a la exportación, así que las pistas añadidas a mano se descartan';
+      'Las pistas añadidas a mano se quitan al volver a emparejar';
 
   @override
   String get playlistImportMenu => 'Importar una lista de reproducción';
@@ -7904,20 +7440,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistKindManual => 'Manual';
 
   @override
-  String get playlistKindManualHelp =>
-      'Una lista manual guarda lo que pones en ella, en el orden en que lo pones.';
-
-  @override
   String get playlistKindSmartHelp =>
-      'Una lista inteligente se mantiene sola: a continuación escribes las reglas y las evalúa cada vez que se abre.';
+      'Escribes las reglas después; se actualiza sola.';
 
   @override
   String get playlistLoadError =>
       'No se ha podido cargar esta lista de reproducción';
 
   @override
-  String get playlistM3uPreviewChecking =>
-      'Comprobando cada línea del archivo. Uno largo tarda un rato.';
+  String get playlistM3uPreviewChecking => 'Comprobando archivo';
 
   @override
   String playlistM3uPreviewCounts(int matched, int merged, int unmatched) {
@@ -7945,8 +7476,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get playlistM3uPreviewImporting =>
-      'Importando la lista. Un archivo largo tarda un rato.';
+  String get playlistM3uPreviewImporting => 'Importando lista';
 
   @override
   String playlistM3uPreviewItem(String artist, String title) {
@@ -7989,8 +7519,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Una lista de reproducción necesita un nombre.';
 
   @override
-  String get playlistNoManualLists =>
-      'Todavía no hay listas manuales. Crea una abajo y esto entrará directamente en ella.';
+  String get playlistNoManualLists => 'Todavía no hay listas manuales.';
 
   @override
   String get playlistNspGapBadLimit => 'El límite no es un número entero.';
@@ -8528,8 +8057,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistRuleNo => 'no';
 
   @override
-  String get playlistRuleNoMatches =>
-      'Todavía no hay nada en la biblioteca que responda a esto.';
+  String get playlistRuleNoMatches => 'Todavía no coincide nada.';
 
   @override
   String get playlistRuleNoPlaylists => 'No hay listas que elegir';
@@ -8620,8 +8148,8 @@ class AppLocalizationsEs extends AppLocalizations {
       'Un límite aleatorio establece su propio orden.';
 
   @override
-  String get playlistRuleReadOnlyMessage =>
-      'Usa algo que este editor todavía no sabe dibujar, así que se muestra en lugar de editarse. Nada de lo que hay aquí la cambiará.';
+  String get playlistRuleReadOnlyEmptyMessage =>
+      'Este editor aún no puede dibujarla.';
 
   @override
   String get playlistRuleReadOnlyTitle =>
@@ -8635,10 +8163,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistRuleRemoveSort => 'Quitar el orden';
-
-  @override
-  String get playlistRuleSeedHelp =>
-      'Fija qué pistas elige el presupuesto, para que la lista sea la misma en la siguiente reconstrucción';
 
   @override
   String get playlistRuleSeedTitle => 'Mantener la misma selección cada vez';
@@ -8684,10 +8208,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistRuleYes => 'sí';
 
   @override
-  String get playlistRulesLive =>
-      'Se evalúan en el momento, cada vez que se abre esta lista.';
-
-  @override
   String playlistRulesSpoken(String rules) {
     return 'Reglas: $rules';
   }
@@ -8710,10 +8230,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistSharedByYou => 'Compartida por ti';
 
   @override
-  String get playlistSharedHelp =>
-      'Cualquiera en este servidor puede verla y reproducirla';
-
-  @override
   String get playlistSharedWithEveryone => 'Compartida con todo el mundo';
 
   @override
@@ -8721,10 +8237,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistSmart => 'Inteligente';
-
-  @override
-  String get playlistSmartEmptyMessage =>
-      'Ningún elemento de la biblioteca responde a estas reglas. Suaviza una y la lista se llenará sola.';
 
   @override
   String get playlistSmartEmptyTitle => 'Todavía no coincide nada';
@@ -8812,28 +8324,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'La última sincronización no cambió nada.';
 
   @override
-  String get playlistSyncMatchedModeHelp =>
-      'Una exportación no descarga nada, así que no hay archivos que enviar a la papelera.';
-
-  @override
-  String playlistSyncMatchedNote(String source) {
-    return 'Una exportación de $source se vuelve a cotejar con la biblioteca bajo demanda y no descarga nada.';
-  }
-
-  @override
   String get playlistSyncModeAppend => 'Añadir';
 
   @override
-  String get playlistSyncModeHelpAppend =>
-      'Las entradas nuevas de la fuente se añaden al final; tus propios cambios no se tocan nunca.';
-
-  @override
-  String get playlistSyncModeHelpMirror =>
-      'Los miembros y el orden siguen a la fuente. Una entrada retirada sale de la lista pero su archivo se queda en la biblioteca.';
-
-  @override
-  String get playlistSyncModeHelpMirrorTrash =>
-      'Los miembros y el orden siguen a la fuente, y el archivo de una entrada retirada va a la papelera recuperable.';
+  String get playlistSyncModeAppendHelp =>
+      'Las entradas nuevas van al final; tus cambios se conservan.';
 
   @override
   String get playlistSyncModeLabel => 'Modo de sincronización';
@@ -8842,7 +8337,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistSyncModeMirror => 'Espejo';
 
   @override
+  String get playlistSyncModeMirrorHelp =>
+      'Sigue a la fuente; las entradas retiradas conservan sus archivos.';
+
+  @override
   String get playlistSyncModeMirrorTrash => 'Espejo y papelera';
+
+  @override
+  String get playlistSyncModeMirrorTrashHelp =>
+      'Sigue a la fuente; los archivos retirados van a la papelera recuperable.';
 
   @override
   String get playlistSyncNow => 'Sincronizar ahora';
@@ -8974,7 +8477,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistSyncSuspended =>
-      'La sincronización está suspendida tras fallos repetidos. Una sincronización con éxito la reactiva.';
+      'Suspendida tras fallos; una sincronización con éxito la reanuda.';
 
   @override
   String get playlistSyncUnbind => 'Dejar de sincronizar';
@@ -8988,10 +8491,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playlistSyncUrlLabel => 'URL de la lista de origen';
-
-  @override
-  String get playlistsEmptyMessage =>
-      'Crea una, o añade una pista a una lista nueva desde cualquier sitio donde esté sonando. Una lista inteligente se escribe sola a partir de reglas y se mantiene al día según crece la biblioteca.';
 
   @override
   String get playlistsEmptyTitle => 'Todavía no hay listas de reproducción';
@@ -9031,10 +8530,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get podcastAutoDownload =>
       'Descargar automáticamente los episodios nuevos';
-
-  @override
-  String get podcastAutoDownloadHelp =>
-      'Guarda en este dispositivo lo que va llegando según se actualiza el feed';
 
   @override
   String podcastBacklogReadError(String reason) {
@@ -9156,7 +8651,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get podcastFilterActiveHelp =>
-      'Se compara solo con los títulos de los episodios, y solo con lo que va llegando: editar esto nunca vuelve a evaluar el historial pendiente ni elimina nada ya descargado.';
+      'Solo lo que va llegando; no se elimina nada ya descargado';
 
   @override
   String get podcastFilterAll => 'Todos';
@@ -9228,7 +8723,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get podcastMarkOlderBody =>
-      'Borra los puntos de sin reproducir de un historial pendiente. Tus posiciones en los episodios que sí empezaste se sobrescriben, y no se elimina nada.';
+      'Sobrescribe tus posiciones en los episodios empezados; no se elimina nada';
 
   @override
   String get podcastMarkOlderMonth => 'De hace más de un mes';
@@ -9339,10 +8834,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastNoEpisodes => 'Todavía no hay episodios';
 
   @override
-  String get podcastNoEpisodesMessage =>
-      'Este feed no ha publicado nada que este servidor pueda ver.';
-
-  @override
   String get podcastNoMatches => 'Sin coincidencias';
 
   @override
@@ -9352,15 +8843,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastNothingMatches => 'No hay coincidencias';
 
   @override
-  String get podcastNothingMatchesMessage =>
-      'Amplía el filtro, o borra la búsqueda, para ver el resto.';
-
-  @override
   String get podcastNothingMatchesYet => 'Todavía no coincide nada';
 
   @override
-  String podcastNothingMatchesYetMessage(int count) {
-    return 'El filtro se aplica a los $count episodios cargados hasta ahora, y este programa tiene más.';
+  String podcastNothingMatchesYetEmptyMessage(int count) {
+    return 'Los filtros cubren los $count episodios cargados hasta ahora';
   }
 
   @override
@@ -9471,7 +8958,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get podcastRefreshPaused =>
-      'La actualización programada está en pausa para este feed tras varios fallos seguidos. Buscar episodios nuevos la vuelve a activar.';
+      'Actualización en pausa por fallos repetidos; buscar episodios la reanuda';
 
   @override
   String get podcastRemoveDownload => 'Quitar la descarga';
@@ -9504,7 +8991,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastRssUrlLabel => 'URL del feed';
 
   @override
-  String get podcastSearchDirectory => 'Buscar en los directorios de podcasts';
+  String get podcastSearchDirectory => 'Buscar en los directorios de pódcasts';
 
   @override
   String podcastSearchFailedHint(String reason) {
@@ -9641,12 +9128,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastTrimSilence => 'Recortar los silencios';
 
   @override
-  String get podcastTrimSilenceHelp =>
-      'Necesita que el episodio esté descargado: los silencios se calculan a partir del audio que guarda este servidor';
+  String get podcastTrimSilenceHelp => 'Necesita el episodio descargado';
 
   @override
   String get podcastUnfollowBody =>
-      'Hay episodios descargados en el servidor. ¿Quieres eliminar también esos archivos? Los archivos eliminados van a la papelera, y tu progreso de escucha se conserva en cualquier caso. Si otra persona está suscrita a este programa, los archivos se quedan igualmente.';
+      '¿Quieres eliminar también sus archivos descargados? Van a la papelera, salvo que otro suscriptor los conserve.';
 
   @override
   String get podcastUnfollowTitle => 'Dejar de seguir';
@@ -9669,19 +9155,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get podcastVoiceBoost => 'Realce de voz';
 
   @override
-  String get podcastVoiceBoostHelp =>
-      'Hace que la voz destaque en un sitio ruidoso';
-
-  @override
   String get podcastYoutubeUrlLabel =>
       'URL del canal o de la lista de reproducción';
 
   @override
   String get podcastsEmptyAction => 'Añadir un programa';
-
-  @override
-  String get podcastsEmptyMessage =>
-      'Sigue un programa y sus episodios nuevos aparecerán aquí según los publique el feed.';
 
   @override
   String get podcastsEmptyTitle => 'Todavía no hay programas';
@@ -9724,10 +9202,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get queueEarlier => 'ANTES';
-
-  @override
-  String get queueEmptyMessage =>
-      'Reproduce un álbum, un programa o una lista de reproducción y aparecerá aquí.';
 
   @override
   String get queueEmptyTitle => 'No hay nada en la cola';
@@ -9802,9 +9276,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String queueRestored(String name) {
     return 'Se ha restaurado $name';
   }
-
-  @override
-  String get queueRollingWindow => 'Una ventana sobre un conjunto mayor';
 
   @override
   String queueSelectedCount(int count) {
@@ -9882,10 +9353,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get radioEmptyAction => 'Añadir una emisora';
 
   @override
-  String get radioEmptyMessage =>
-      'Busca en el directorio para añadir la primera, o pega la URL de un stream si ya tienes una.';
-
-  @override
   String get radioEmptyTitle => 'Todavía no hay emisoras';
 
   @override
@@ -9904,8 +9371,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get radioMoreOptions => 'Nombre, sitio web y logotipo';
 
   @override
-  String get radioNameHint =>
-      'Se toma de la dirección del stream si se deja en blanco';
+  String get radioNameHint => 'Por defecto, la dirección del stream';
 
   @override
   String get radioNeedsName => 'Una emisora necesita un nombre.';
@@ -9937,16 +9403,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get radioSavedAcquire => 'Conseguirla desde una URL';
 
   @override
-  String get radioSavedAcquireHelp =>
-      'Descarga una copia que hayas encontrado; llegará a revisión';
-
-  @override
-  String get radioSavedDoorSubtitle =>
-      'Canciones que oíste en antena y quieres buscar';
-
-  @override
   String get radioSavedEmptyMessage =>
-      'Toca el corazón mientras suena una emisora y la canción que anunció aparecerá aquí, con una forma de buscarla.';
+      'Toca el corazón mientras suena una emisora';
 
   @override
   String get radioSavedEmptyTitle => 'Todavía no hay nada guardado';
@@ -9971,14 +9429,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Identificar una entrada de revisión como esta canción';
 
   @override
-  String get radioSavedIdentifyHelp =>
-      'Pasa su nombre a la búsqueda de una entrada pendiente';
-
-  @override
-  String get radioSavedIdentifyOverline =>
-      'Pistas sueltas pendientes en la cola de revisión';
-
-  @override
   String radioSavedIdentifyTitle(String title) {
     return 'Identificar como \"$title\"';
   }
@@ -9992,7 +9442,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get radioSavedNoPending =>
-      'No hay pistas sueltas pendientes a las que dar nombre. Consigue primero la canción desde una URL y aparecerá aquí mientras espera revisión.';
+      'No hay pistas sueltas pendientes a las que dar nombre';
 
   @override
   String get radioSavedReviewError =>
@@ -10331,7 +9781,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get reviewDuplicateHelp =>
-      'Añadir un archivo que la biblioteca ya tiene mantiene un solo elemento, con el archivo como otra copia. Sus datos, su portada y quién puede editarlo no cambian.';
+      'Añadir mantiene un solo elemento; el archivo pasa a ser una copia.';
 
   @override
   String reviewDuplicateMaybeTitle(int count) {
@@ -10365,7 +9815,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get reviewEmptyMessage =>
-      'Las subidas y las nuevas coincidencias llegan aquí cuando hay que decidir.';
+      'Aquí llegan las subidas y las nuevas coincidencias.';
 
   @override
   String get reviewEmptyTitle => 'No hay nada esperando revisión';
@@ -10471,8 +9921,8 @@ class AppLocalizationsEs extends AppLocalizations {
       'Solo se aplica mientras la coincidencia es automática';
 
   @override
-  String get reviewNoCandidatesMessage =>
-      'Nada en las fuentes coincide con lo que dicen estos archivos. Déjalos como están, u omítelos y vuelve a intentarlo más tarde.';
+  String get reviewNoCandidatesEmptyMessage =>
+      'Déjalos como están, u omítelos.';
 
   @override
   String get reviewNoCandidatesTitle => 'No se ha encontrado ningún candidato';
@@ -10515,12 +9965,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reviewSearchAgain => 'Buscar de nuevo';
 
   @override
-  String get reviewSearchStored =>
-      'Se busca esto en lugar de lo que dicen los archivos. Nada de esto se escribe en ellos.';
-
-  @override
-  String get reviewSearchSuggested =>
-      'Sugerido a partir del título de origen. Se busca esto en lugar de lo que dicen los archivos; nada de esto se escribe en ellos.';
+  String get reviewSearchSuggested => 'Sugerido por el título de origen';
 
   @override
   String get reviewSearchToggle => 'Buscar otra cosa';
@@ -10543,12 +9988,12 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get reviewSkippedDecided =>
-      'Esta entrega pidió aceptarse tal cual, así que no se ha buscado nada.';
+  String get reviewSkippedDecidedEmptyMessage =>
+      'Aceptado tal cual, así que no se buscó nada.';
 
   @override
-  String get reviewSkippedPending =>
-      'Esta entrega pidió aceptarse tal cual, así que no se ha buscado nada. No se ha podido añadir por su cuenta: lee el aviso de arriba si lo hay y luego añádela, omítela o descártala.';
+  String get reviewSkippedPendingEmptyMessage =>
+      'No se ha añadido; lee los avisos de arriba y decide.';
 
   @override
   String get reviewSkippedTitle => 'Se ha omitido la identificación';
@@ -10607,11 +10052,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get searchDirectoryDegraded =>
-      'No se ha podido acceder al directorio, así que solo se listan tus emisoras. Añadir una emisora por su URL de emisión sigue funcionando.';
-
-  @override
-  String get searchDirectoryErrorDetail =>
-      'Añadir una emisora por su URL de emisión sigue funcionando.';
+      'Directorio inaccesible; añade una emisora por URL en Radio';
 
   @override
   String get searchDirectoryErrorTitle =>
@@ -10621,15 +10062,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get searchDirectoryOverline => 'Directorio';
 
   @override
-  String get searchDirectoryPromptMessage =>
-      'Escribe el nombre de una emisora para buscarla en el directorio público y luego añadirla a este servidor.';
-
-  @override
   String get searchDirectoryPromptTitle => 'Busca en el directorio de emisoras';
-
-  @override
-  String get searchEmptyMessage =>
-      'Prueba a buscar un artista, un programa o un libro.';
 
   @override
   String get searchEmptyTitle => 'Busca en tu biblioteca';
@@ -10664,17 +10097,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get searchLibraryOverline => 'Biblioteca';
 
   @override
-  String get searchNoStationsMessage =>
-      'El directorio no tiene nada con ese nombre.';
-
-  @override
   String searchNoStationsTitle(String query) {
     return 'Ninguna emisora para \"$query\"';
   }
-
-  @override
-  String get searchNothingMessage =>
-      'Comprueba la ortografía o usa menos palabras.';
 
   @override
   String searchNothingTitle(String query) {
@@ -10683,7 +10108,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get searchPodcastDirectoryDegraded =>
-      'El directorio de pódcast no ha respondido, así que solo se listan tus episodios. Suscribirse por la URL del feed sigue funcionando.';
+      'Directorio de pódcast inaccesible; suscríbete por URL del feed en Pódcast';
 
   @override
   String get searchRecentOverline => 'Reciente';
@@ -10733,8 +10158,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get searchTopResult => 'Mejor resultado';
 
   @override
-  String get searchTruncated =>
-      'Hay más coincidencias de las que caben aquí. Afina la búsqueda para reducirlas.';
+  String get searchTruncated => 'Hay más coincidencias; afina la búsqueda';
 
   @override
   String get searchYourStations => 'Tus emisoras';
@@ -10748,10 +10172,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsAccountSignedIn => 'Sesión iniciada';
-
-  @override
-  String get settingsAdminConsoleBlurb =>
-      'Bibliotecas, usuarios, escaneos, copias de seguridad y el registro de auditoría';
 
   @override
   String get settingsAdminConsoleKeywords =>
@@ -10771,7 +10191,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsAppPasswordCreate => 'Crear';
 
   @override
-  String get settingsAppPasswordCreatedMessage =>
+  String get settingsAppPasswordCreatedBody =>
       'Cópiala ahora; el servidor la guarda sellada y no la vuelve a mostrar.';
 
   @override
@@ -10785,7 +10205,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsAppPasswordLabel => 'Etiqueta';
 
   @override
-  String get settingsAppPasswordLabelHelp => '¿Para qué aplicación es?';
+  String get settingsAppPasswordLabelHint => '¿Para qué aplicación es?';
 
   @override
   String get settingsAppPasswordNewAction => 'Nueva';
@@ -10803,7 +10223,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsAppPasswordsBlurb =>
-      'Para aplicaciones de Subsonic y clientes de sincronización de pódcast. Tu contraseña de inicio de sesión nunca funciona ahí.';
+      'Para clientes de Subsonic y de sincronización de pódcast';
 
   @override
   String get settingsAppPasswordsEmpty =>
@@ -10824,22 +10244,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsArtworkCacheClear => 'Vaciar';
 
   @override
-  String get settingsArtworkCacheCleared => 'Caché de carátulas vaciada';
-
-  @override
-  String get settingsArtworkCacheHelp =>
-      'Las carátulas se vuelven a descargar según se necesiten';
+  String get settingsArtworkCacheCleared => 'Caché de portadas vaciada';
 
   @override
   String get settingsArtworkCacheKeywords =>
       'carátulas, imágenes, vaciar, espacio';
 
   @override
-  String get settingsArtworkCacheTitle => 'Caché de carátulas';
-
-  @override
-  String get settingsArtworkCycleHelp =>
-      'El reproductor a pantalla completa pasa solo a la siguiente imagen cuando una pista o un libro tiene más de una';
+  String get settingsArtworkCacheTitle => 'Caché de portadas';
 
   @override
   String get settingsArtworkCycleKeywords =>
@@ -10849,26 +10261,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsArtworkCycleTitle => 'Alternar las ilustraciones';
 
   @override
-  String get settingsArtworkGlowHelp =>
-      'El color que la carátula proyecta detrás del reproductor';
-
-  @override
   String get settingsArtworkGlowKeywords =>
       'fondo, colorido, color, reproductor, baño de color';
 
   @override
-  String get settingsArtworkGlowTitle => 'Resplandor de la carátula';
-
-  @override
-  String get settingsAutoRemoveAfterHelp =>
-      'Cuánto tiempo se queda un episodio terminado antes de irse';
+  String get settingsArtworkGlowTitle => 'Resplandor de la portada';
 
   @override
   String get settingsAutoRemoveAfterTitle => 'Esperar antes de eliminar';
 
   @override
   String get settingsAutoRemoveFinishedHelp =>
-      'Recupera un episodio descargado cuando lleva un tiempo terminado. Los libros y los álbumes se quedan como están';
+      'Solo episodios; libros y álbumes se quedan';
 
   @override
   String get settingsAutoRemoveFinishedKeywords =>
@@ -10880,7 +10284,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsAutoplayHelp =>
-      'Deja que una cola que te pasa otro dispositivo empiece aquí. Desactivado significa que llega lista y espera a que la toques';
+      'Desactivado: una cola recibida espera a que la toques';
 
   @override
   String get settingsAutoplayKeywords =>
@@ -10890,19 +10294,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsAutoplayTitle => 'Empezar a reproducir sin preguntar';
 
   @override
-  String get settingsBookSpeedHelp =>
-      'La velocidad a la que suena un libro hasta que le pongas una propia';
-
-  @override
   String get settingsBookSpeedKeywords =>
       'ritmo, más rápido, predeterminada, narración';
 
   @override
   String get settingsBookSpeedTitle => 'Velocidad de los audiolibros';
-
-  @override
-  String get settingsBoostDefaultHelp =>
-      'Los programas y libros sin una elección guardada propia se abren con la normalización de sonoridad activada';
 
   @override
   String get settingsBoostDefaultKeywords =>
@@ -10917,18 +10313,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get settingsBrowseOrderHelp => 'El orden en que se abre este índice';
-
-  @override
   String get settingsBrowseOrderKeywords =>
       'ordenar, orden, alfabético, navegar, índice';
 
   @override
   String get settingsBrowseOrderTitle => 'Orden predeterminado';
-
-  @override
-  String get settingsBrowseUnknownHelp =>
-      'Muestra el grupo de lo que no tiene género, álbum ni año propios';
 
   @override
   String get settingsBrowseUnknownKeywords =>
@@ -10944,10 +10333,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsCaptionsOnHover => 'Al pasar el puntero';
 
   @override
-  String get settingsCarButtonHelp =>
-      'Pone el modo coche en el propio reproductor en vez de dentro de su menú';
-
-  @override
   String get settingsCarButtonKeywords =>
       'conducir, grande, salpicadero, reproductor';
 
@@ -10955,23 +10340,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsCarButtonTitle => 'Botón de modo coche';
 
   @override
-  String get settingsCardCaptionsHelp =>
-      'Las líneas debajo de una carátula en la cuadrícula';
-
-  @override
   String get settingsCardCaptionsKeywords =>
       'etiquetas, títulos, pasar el ratón, cuadrícula, carátulas';
 
   @override
   String get settingsCardCaptionsNoPointerHelp =>
-      'Siempre visibles: para ocultarlas hace falta un puntero que las recupere';
+      'Siempre visibles: ocultarlas requiere un puntero';
 
   @override
   String get settingsCardCaptionsTitle => 'Títulos de las tarjetas';
-
-  @override
-  String get settingsCastCheckBlurb =>
-      'Si un dispositivo de transmisión puede llegar a este servidor';
 
   @override
   String get settingsCastCheckKeywords =>
@@ -10982,7 +10359,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsCrossfadeHelp =>
-      'Encadena una pista con la siguiente allí donde el servidor renderiza la cola: un altavoz de transmisión y la reproducción sin pausas en el navegador';
+      'Se aplica a altavoces de transmisión y a la reproducción sin pausas del navegador';
 
   @override
   String get settingsCrossfadeKeywords =>
@@ -10996,10 +10373,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDensityCompact => 'Compacta';
-
-  @override
-  String get settingsDensityHelp =>
-      'Cómo de juntas van las filas; el tamaño del texto sigue siendo el del sistema';
 
   @override
   String get settingsDensityKeywords => 'compacta, cómoda, espaciado, filas';
@@ -11020,7 +10393,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsDeviceSignOutAction => 'Cerrar sesión en el dispositivo';
 
   @override
-  String get settingsDeviceSignOutCurrentMessage =>
+  String get settingsDeviceSignOutCurrentBody =>
       'Este es el dispositivo que estás usando ahora. Revocar su sesión cerrará tu sesión.';
 
   @override
@@ -11065,8 +10438,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsDevicesTitle => 'Dispositivos con la sesión iniciada';
 
   @override
-  String get settingsDiscordApplicationHelp =>
-      'Vacío publica como WaxDeck. Un ID de aplicación de discord.com/developers cambia el nombre que muestra Discord y la imagen de los álbumes sin carátula';
+  String get settingsDiscordApplicationHelp => 'Vacío publica como WaxDeck';
+
+  @override
+  String get settingsDiscordApplicationHint => 'ID de aplicación';
 
   @override
   String get settingsDiscordApplicationLabel =>
@@ -11074,14 +10449,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDiscordCoversHelp =>
-      'Este dispositivo pide al Cover Art Archive la portada de cada álbum que reproduce con un ID de lanzamiento de MusicBrainz. Desactivado, o si no la encuentra, Discord muestra la imagen propia de la aplicación.';
+      'Este dispositivo pide al Cover Art Archive la portada de cada álbum';
 
   @override
   String get settingsDiscordCoversTitle => 'Mostrar portadas de álbum';
-
-  @override
-  String get settingsDiscordPresenceHelp =>
-      'Pone tu estado de Discord mientras WaxDeck suena, a través de la aplicación de Discord de esta máquina';
 
   @override
   String get settingsDiscordPresenceKeywords =>
@@ -11102,19 +10473,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsDisplayNameTitle => 'Nombre visible';
 
   @override
-  String get settingsDownloadsManagerBlurb =>
-      'Qué guarda este dispositivo sin conexión y cómo liberarlo';
-
-  @override
   String get settingsDownloadsManagerKeywords =>
       'sin conexión, almacenamiento, espacio, eliminar';
 
   @override
   String get settingsDownloadsManagerTitle => 'Gestionar las descargas';
-
-  @override
-  String get settingsDownloadsWifiHelp =>
-      'Retiene las transferencias hasta que este dispositivo esté en wifi, en vez de hacerlas fallar';
 
   @override
   String get settingsDownloadsWifiKeywords =>
@@ -11124,10 +10487,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsDownloadsWifiTitle => 'Descargar solo con wifi';
 
   @override
-  String get settingsEndpointsBlurb =>
-      'Destinos de transmisión, reproductores y tus otros dispositivos';
-
-  @override
   String get settingsEndpointsKeywords =>
       'transmitir, chromecast, dlna, altavoz, conectar';
 
@@ -11135,15 +10494,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsEndpointsTitle => 'Destinos de reproducción';
 
   @override
+  String get settingsEngineLacksThese =>
+      'Algunos ajustes necesitan funciones que el motor de este servidor no ofrece';
+
+  @override
   String get settingsEngineLacksThis =>
       'El motor de transmisión de este servidor no ofrece esto';
 
   @override
   String get settingsEngineUnreachable =>
-      'El motor de transmisión no está accesible ahora mismo';
-
-  @override
-  String get settingsFollowsAccountHelp => 'Te sigue a tus otros dispositivos';
+      'Algunos ajustes esperan al motor de transmisión, que no responde';
 
   @override
   String get settingsGridLarge => 'Grande';
@@ -11152,15 +10512,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsGridMedium => 'Mediano';
 
   @override
-  String get settingsGridSizeHelp =>
-      'A qué tamaño se dibujan las carátulas en las cuadrículas';
-
-  @override
   String get settingsGridSizeKeywords =>
       'cuadrícula, mosaicos, carátulas, grande, pequeño';
 
   @override
-  String get settingsGridSizeTitle => 'Tamaño de las carátulas';
+  String get settingsGridSizeTitle => 'Tamaño de las portadas';
 
   @override
   String get settingsGridSmall => 'Pequeño';
@@ -11199,9 +10555,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsGroupPlayer => 'El reproductor';
 
   @override
-  String get settingsGroupScreenReaders => 'Lectores de pantalla';
-
-  @override
   String get settingsGroupSonicSimilarity => 'Similitud sonora';
 
   @override
@@ -11227,7 +10580,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsIdentifyUploadsHelp =>
-      'Compara lo que añades con MusicBrainz. Desactivado lo añade con las etiquetas que trae, sin revisión';
+      'Consulta MusicBrainz; desactivado, archiva las subidas sin revisión';
 
   @override
   String get settingsIdentifyUploadsKeywords =>
@@ -11235,10 +10588,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsIdentifyUploadsTitle => 'Identificar las subidas';
-
-  @override
-  String get settingsKeepPlayingHelp =>
-      'Cuando una cola de música se acaba, sigue con pistas parecidas a la última. El interruptor de la propia cola hace lo mismo.';
 
   @override
   String get settingsKeepPlayingKeywords =>
@@ -11280,14 +10629,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Guardado sellado; no se vuelve a mostrar';
 
   @override
-  String get settingsLibraryAccessAll =>
-      'Puedes ver todas las bibliotecas de este servidor';
-
-  @override
-  String get settingsLibraryAccessChecking => 'Comprobando';
-
-  @override
   String get settingsLibraryAccessError => 'No se ha podido leer tu acceso';
+
+  @override
+  String get settingsLibraryAccessEverything => 'Todas las bibliotecas';
 
   @override
   String get settingsLibraryAccessKeywords => 'permisos, bibliotecas, acceso';
@@ -11304,8 +10649,8 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Puedes ver $countString de las bibliotecas de este servidor',
-      one: 'Puedes ver 1 de las bibliotecas de este servidor',
+      other: '$countString bibliotecas',
+      one: '1 biblioteca',
     );
     return '$_temp0';
   }
@@ -11317,8 +10662,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsListenBrainzApi => 'Servidor de la API (opcional)';
 
   @override
-  String get settingsListenBrainzApiHelp =>
-      'Para un servidor compatible; vacío para listenbrainz.org';
+  String get settingsListenBrainzApiHelp => 'Vacío usa listenbrainz.org';
 
   @override
   String get settingsListenBrainzTitle => 'Conectar ListenBrainz';
@@ -11335,7 +10679,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsNeedsEngine =>
-      'Necesita el motor de transmisión, y este servidor funciona sin él';
+      'Algunos ajustes necesitan el motor de transmisión, que este servidor no tiene';
 
   @override
   String get settingsNotificationsKeywords =>
@@ -11358,7 +10702,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsNotifyAppriseTargetsHelp =>
-      'URLs de Apprise; vacío usa la configuración propia del servidor';
+      'Vacío usa la configuración propia del servidor';
+
+  @override
+  String get settingsNotifyAppriseTargetsHint => 'URLs de Apprise';
 
   @override
   String get settingsNotifyCatalogError =>
@@ -11368,8 +10715,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsNotifyDeliverVia => 'Enviar por';
 
   @override
-  String get settingsNotifyDiscordWebhookHelp =>
-      'Una URL de webhook de discord.com';
+  String get settingsNotifyDiscordWebhookHint =>
+      'URL de webhook de discord.com';
 
   @override
   String get settingsNotifyEndpointUrl => 'URL del endpoint';
@@ -11390,13 +10737,13 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get settingsNotifyGotifyPriorityHelp => 'De 0 a 10';
+  String get settingsNotifyGotifyPriorityHint => 'De 0 a 10';
 
   @override
   String get settingsNotifyHeaders => 'Cabeceras adicionales';
 
   @override
-  String get settingsNotifyHeadersHelp =>
+  String get settingsNotifyHeadersHint =>
       'Una por línea, como Nombre: valor. Ocho como máximo.';
 
   @override
@@ -11418,21 +10765,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsNotifyMinIntervalHelp =>
-      '0 envía todo al momento. Hasta 3600; un envío dentro del intervalo espera.';
+      '0 envía todo; los eventos dentro del intervalo esperan';
 
   @override
   String get settingsNotifyMuted => 'Silenciado';
 
   @override
   String get settingsNotifyMutedBadge => 'Silenciado';
-
-  @override
-  String get settingsNotifyMutedHelp =>
-      'No envía nada salvo la prueba, y deja el resto tal como está.';
-
-  @override
-  String get settingsNotifyMyBlurb =>
-      'Adónde se envían tus eventos (episodios nuevos, cola de revisión): Pushover, ntfy, Gotify, Discord, webhooks o el registro push de este dispositivo.';
 
   @override
   String get settingsNotifyMyEvents => 'Mis eventos';
@@ -11450,8 +10789,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsNotifyPriority => 'Prioridad';
 
   @override
-  String get settingsNotifyPushoverPriorityHelp =>
-      'De -2 (lo más silencioso) a 2 (emergencia)';
+  String get settingsNotifyPushoverPriorityHint =>
+      '-2 (mínima) a 2 (emergencia)';
 
   @override
   String get settingsNotifyPushoverToken => 'Token de la aplicación';
@@ -11463,15 +10802,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsNotifySecret => 'Secreto de firma';
 
   @override
-  String get settingsNotifySecretHelp =>
-      'Firma cada petición, para que quien la reciba sepa que viene de aquí.';
+  String get settingsNotifySecretHelp => 'Vacío envía los avisos sin firmar';
 
   @override
   String get settingsNotifySendTest => 'Enviar prueba';
-
-  @override
-  String get settingsNotifyServerBlurb =>
-      'Eventos de operaciones (solicitudes de cuenta, resultados de copias de seguridad) enviados a destinos de todo el servidor.';
 
   @override
   String get settingsNotifyServerEvents => 'Eventos del servidor';
@@ -11527,10 +10861,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'La prueba aún no tiene respuesta; el destino la mostrará cuando llegue';
 
   @override
-  String get settingsNotifyUnifiedPushHelp =>
-      'Normalmente la registra la aplicación a través de su distribuidor';
-
-  @override
   String get settingsNotifyUrl => 'URL';
 
   @override
@@ -11570,19 +10900,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsPasswordTitle => 'Cambiar contraseña';
 
   @override
-  String get settingsPodcastSpeedHelp =>
-      'La velocidad a la que suena un programa hasta que le pongas una propia';
-
-  @override
   String get settingsPodcastSpeedKeywords =>
       'ritmo, más rápido, predeterminada';
 
   @override
-  String get settingsPodcastSpeedTitle => 'Velocidad de los pódcast';
-
-  @override
-  String get settingsPreloadWifiHelp =>
-      'La reproducción sin pausas carga la siguiente pista con antelación; esto lo retiene con datos móviles';
+  String get settingsPodcastSpeedTitle => 'Velocidad de los pódcasts';
 
   @override
   String get settingsPreloadWifiKeywords =>
@@ -11593,10 +10915,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Preparar la siguiente pista solo con wifi';
 
   @override
-  String get settingsRadioScrobblingHelp =>
-      'Los segmentos de radio se envían como pistas cuando una emisora los nombra con honestidad';
-
-  @override
   String get settingsRadioScrobblingKeywords =>
       'last.fm, listenbrainz, emisora, emisión';
 
@@ -11604,23 +10922,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsRadioScrobblingTitle => 'Hacer scrobble de la radio';
 
   @override
-  String get settingsReduceMotionHelp =>
-      'Detiene las transiciones y el indicador de reproducción';
-
-  @override
   String get settingsReduceMotionKeywords =>
       'animación, transiciones, vestibular';
 
   @override
-  String get settingsReduceMotionPlatformHelp =>
-      'Ya está reducido: este dispositivo pide menos movimiento a todas las aplicaciones';
+  String get settingsReduceMotionPlatformHelp => 'Reducido por tu dispositivo';
 
   @override
   String get settingsReduceMotionTitle => 'Reducir el movimiento';
-
-  @override
-  String get settingsReplayGainHelp =>
-      'Reproduce una cola renderizada por el servidor a un solo volumen, donde los archivos se han analizado';
 
   @override
   String get settingsReplayGainKeywords =>
@@ -11630,11 +10939,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsReplayGainTitle => 'Igualar el volumen';
 
   @override
-  String get settingsScreenReaderBlurb =>
-      'Todos los controles tienen nombre, la cola se reordena desde el teclado y la barra del reproductor es un único punto de referencia';
-
-  @override
-  String get settingsScreenReaderTitle => 'Cómo se lee WaxDeck en voz alta';
+  String get settingsScopeAccountHelp => 'Va con tu cuenta';
 
   @override
   String get settingsScrobblerApprove =>
@@ -11695,8 +11000,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsSearchLabel => 'Buscar ajustes';
 
   @override
-  String get settingsSearchNoMatchMessage =>
-      'Los ajustes de todo el servidor están en la consola de administración, no aquí. Un ajuste de un programa o de un libro está en ese programa o libro.';
+  String get settingsSearchNoMatchEmptyMessage =>
+      'Los programas y los libros guardan sus propios ajustes';
 
   @override
   String settingsSearchNoMatchTitle(String query) {
@@ -11704,71 +11009,31 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get settingsSectionAccessibilityBlurb =>
-      'Movimiento y cómo se lee la aplicación en voz alta';
-
-  @override
   String get settingsSectionAccessibilityTitle => 'Accesibilidad';
-
-  @override
-  String get settingsSectionAccountBlurb =>
-      'Tú, tus dispositivos y cómo inicias sesión';
 
   @override
   String get settingsSectionAccountTitle => 'Cuenta';
 
   @override
-  String get settingsSectionAppearanceBlurb =>
-      'Tema, densidad y a qué tamaño se dibujan las carátulas';
-
-  @override
   String get settingsSectionAppearanceTitle => 'Apariencia';
-
-  @override
-  String get settingsSectionDevicesBlurb =>
-      'Por dónde más puede sonar lo que escuchas';
 
   @override
   String get settingsSectionDevicesTitle => 'Dispositivos y transmisión';
 
   @override
-  String get settingsSectionDownloadsBlurb =>
-      'Qué guarda este dispositivo sin conexión y cuánto espacio ocupa';
-
-  @override
   String get settingsSectionDownloadsTitle => 'Descargas y almacenamiento';
-
-  @override
-  String get settingsSectionIntegrationsBlurb =>
-      'Scrobbling, otras aplicaciones y notificaciones';
 
   @override
   String get settingsSectionIntegrationsTitle => 'Integraciones';
 
   @override
-  String get settingsSectionLibraryBlurb =>
-      'Qué te muestra la navegación y qué puedes ver';
-
-  @override
   String get settingsSectionLibraryTitle => 'Biblioteca y metadatos';
-
-  @override
-  String get settingsSectionPlaybackBlurb =>
-      'Velocidades, saltos, transmisión y qué suena después';
 
   @override
   String get settingsSectionPlaybackTitle => 'Reproducción';
 
   @override
-  String get settingsSectionServerBlurb =>
-      'Esta instancia, para administradores';
-
-  @override
   String get settingsSectionServerTitle => 'Servidor';
-
-  @override
-  String get settingsServerAdminOnlyMessage =>
-      'Esta sección trata del servidor en sí.';
 
   @override
   String get settingsServerAdminOnlyTitle => 'Solo para administradores';
@@ -11779,9 +11044,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsServerSummaryTitle => 'Este servidor';
-
-  @override
-  String get settingsShareLinksBlurb => 'Enlaces públicos que has repartido';
 
   @override
   String get settingsShareLinksTitle => 'Enlaces compartidos';
@@ -11860,10 +11122,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'No hay ningún trabajador de análisis configurado';
 
   @override
-  String get settingsSkipBackHelp =>
-      'Cuánto salta el control de retroceso en un pódcast o un libro';
-
-  @override
   String get settingsSkipBackKeywords =>
       'rebobinar, segundos, pódcast, audiolibro';
 
@@ -11871,18 +11129,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsSkipBackTitle => 'Retroceder';
 
   @override
-  String get settingsSkipForwardHelp => 'Cuánto salta el control de avance';
-
-  @override
   String get settingsSkipForwardKeywords =>
       'segundos, pódcast, audiolibro, anuncio';
 
   @override
   String get settingsSkipForwardTitle => 'Avanzar';
-
-  @override
-  String get settingsSmartRewindHelp =>
-      'Retrocede un poco cuando vuelves a un programa o a un libro tras una pausa, para que caigas antes de la frase que perdiste';
 
   @override
   String get settingsSmartRewindKeywords =>
@@ -11902,7 +11153,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsStreamQualityHelp =>
-      'Automática transmite el original siempre que es posible. Un límite recodifica para ajustarse (Alta 320 kbps, Normal 192, Baja 128), lo que puede desactivar la reproducción sin pausas y hace que saltar tarde un momento, se aplica a partir de la siguiente pista y nunca afecta a las descargas';
+      'Automática envía los originales; un límite recodifica y puede desactivar la reproducción sin pausas';
 
   @override
   String get settingsStreamQualityHigh => 'Alta';
@@ -11928,10 +11179,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsStreamQualityWifiTitle => 'Calidad de streaming por Wi-Fi';
 
   @override
-  String get settingsTechnicalDetailsHelp =>
-      'Dibuja etiquetas de códec y formato junto a lo que describen';
-
-  @override
   String get settingsTechnicalDetailsKeywords =>
       'códec, tasa de bits, formato, flac, procedencia';
 
@@ -11940,10 +11187,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsThemeDark => 'Oscuro';
-
-  @override
-  String get settingsThemeHelp =>
-      'Se define en este dispositivo; los demás conservan el suyo';
 
   @override
   String get settingsThemeKeywords => 'oscuro, claro, oled, negro';
@@ -11959,7 +11202,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsTimezoneFieldHelp =>
-      'Las estadísticas de calendario agrupan los días en esta zona horaria; vacío usa la predeterminada del servidor (UTC)';
+      'Vacío usa el valor del servidor (UTC)';
 
   @override
   String get settingsTimezoneFieldHint => 'Europe/Amsterdam';
@@ -11980,19 +11223,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsTitle => 'Ajustes';
 
   @override
-  String get settingsTrimDefaultHelp =>
-      'Los programas y libros sin una elección guardada propia se abren con el recorte de silencios activado';
-
-  @override
   String get settingsTrimDefaultKeywords =>
       'silencio, saltar, voz hablada, pódcast, libro';
 
   @override
   String get settingsTrimDefaultTitle => 'Recortar los silencios por defecto';
-
-  @override
-  String get settingsVisualizerIdleHelp =>
-      'Llena la pantalla con la pista cuando la música lleva unos minutos sonando sin que la toques';
 
   @override
   String get settingsVisualizerIdleKeywords =>
@@ -12004,41 +11239,29 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsWebGaplessBrowser =>
-      'Este navegador no puede reproducir una cola como una sola transmisión, así que las pistas se reproducen una a una';
+      'Este navegador no puede reproducir una cola sin pausas';
 
   @override
   String get settingsWebGaplessBusy =>
-      'El servidor alcanzó su límite de transcodificación, así que por ahora la reproducción sin pausas está desactivada';
+      'Límite de transcodificación alcanzado; reproducción sin pausas desactivada por ahora';
 
   @override
   String get settingsWebGaplessFormat =>
-      'Este servidor no renderiza ningún formato que este navegador pueda reproducir, así que las pistas se reproducen una a una';
-
-  @override
-  String get settingsWebGaplessHelp =>
-      'Reproduce una cola de música como una sola transmisión, para que las pistas se encadenen como fueron masterizadas';
+      'Este servidor no renderiza ningún formato que este navegador reproduzca';
 
   @override
   String get settingsWebGaplessKeywords =>
       'sin pausas, encadenado, unión, transmisión, navegador';
 
   @override
-  String get settingsWebGaplessNoEngine =>
-      'Este servidor funciona sin motor de transmisión, que es lo que reproduce una cola como un solo flujo';
-
-  @override
   String get settingsWebGaplessTitle => 'Reproducción sin pausas';
 
   @override
   String get settingsWebGaplessUnavailable =>
-      'Este servidor no puede renderizar una cola como una sola transmisión, así que las pistas se reproducen una a una';
+      'Este servidor no puede renderizar colas como una sola transmisión';
 
   @override
   String get sharingAllowDownload => 'Permitir la descarga';
-
-  @override
-  String get sharingAllowDownloadHelp =>
-      'La página ofrece el archivo original, no solo la reproducción';
 
   @override
   String get sharingCopyLink => 'Copiar el enlace';
@@ -12048,7 +11271,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get sharingDialogBody =>
-      'Cualquiera con el enlace puede reproducir esto. Se copia al portapapeles en cuanto se crea.';
+      'Cualquiera con el enlace puede reproducir esto.';
 
   @override
   String get sharingDialogTitle => 'Enlace para compartir';
@@ -12057,8 +11280,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get sharingDownloadAllowed => 'descarga permitida';
 
   @override
-  String get sharingEmptyMessage =>
-      'Comparte una pista, un episodio, un libro o una lista de reproducción y el enlace aparece aquí, con cuántas veces se ha reproducido y una forma de desactivarlo.';
+  String get sharingEmptyMessage => 'Comparte algo y su enlace aparece aquí.';
 
   @override
   String get sharingEmptyTitle => 'Todavía no hay enlaces compartidos';
@@ -12070,9 +11292,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get sharingExpires => 'Caduca';
-
-  @override
-  String get sharingExpiresHelp => 'Cuándo deja de funcionar el enlace';
 
   @override
   String sharingExpiresOn(String date) {
@@ -12135,9 +11354,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String sharingStartAt(String time) {
     return 'Empezar en $time';
   }
-
-  @override
-  String get sharingStartAtHelp => 'El enlace se abre donde estás ahora';
 
   @override
   String get sharingStartAtLabel => 'Empezar en esta posición';
@@ -12348,11 +11564,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shellReadOnlyBanner =>
-      'Este servidor está en modo de solo lectura: las subidas, las ediciones que escriben archivos y las eliminaciones están en pausa.';
+      'Modo de solo lectura: subidas, ediciones y eliminaciones en pausa';
 
   @override
-  String get shellReconnecting =>
-      'Reconectando con el servidor. Lo que ya se esté reproduciendo sigue sonando.';
+  String get shellReconnecting => 'Reconectando';
 
   @override
   String get shellReload => 'Volver a cargar';
@@ -12419,14 +11634,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get statsCardFormatSquare => 'Cuadrada';
 
   @override
-  String get statsCardFormatSquareBlurb => 'Para una publicación o un mensaje';
-
-  @override
   String get statsCardFormatStory => 'Historia';
-
-  @override
-  String get statsCardFormatStoryBlurb =>
-      'Para una historia a pantalla completa';
 
   @override
   String get statsCardMostPlayed => 'LO MÁS ESCUCHADO';
@@ -12439,9 +11647,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Esta versión no puede guardar imágenes, así que las tarjetas son solo una vista previa.';
 
   @override
-  String get statsCardOverline => 'Tu año, a la medida';
-
-  @override
   String statsCardPreviewSpoken(String format) {
     String _temp0 = intl.Intl.selectLogic(format, {
       'story': 'Tarjeta de historia, para una historia a pantalla completa',
@@ -12452,8 +11657,8 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get statsCardPrivacy =>
-      'Las tarjetas se dibujan aquí y no se envían a ninguna parte: lo que hagas después es cosa tuya.';
+  String get statsCardPrivacyHelp =>
+      'Se dibujan aquí y no se envían a ninguna parte; compartirlas es cosa tuya.';
 
   @override
   String get statsCardSaveUnsupported =>
@@ -12518,8 +11723,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get statsDoorYearInReviewSubtitle => 'Tu año de escuchas, resumido';
 
   @override
-  String get statsEmptyMessage =>
-      'Elige un periodo más largo, o ponte a escuchar algo.';
+  String get statsEmptyMessage => 'Elige un periodo más largo.';
 
   @override
   String get statsEmptyTitle => 'No se ha reproducido nada en este periodo';
@@ -12574,10 +11778,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get statsLogAllClients => 'Todos los clientes';
-
-  @override
-  String get statsLogEmptyMessage =>
-      'Cada sesión que un cliente termina aparece aquí, sea cual sea el dispositivo que la informó.';
 
   @override
   String get statsLogEmptyTitle => 'Todavía no hay escuchas registradas';
@@ -12678,24 +11878,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get statsTitle => 'Estadísticas de escucha';
 
   @override
-  String statsTopEmptyMessage(String kind) {
-    String _temp0 = intl.Intl.selectLogic(kind, {
-      'artists':
-          'Un periodo más largo, o un artista que hayas escuchado de verdad.',
-      'albums':
-          'Un periodo más largo, o un álbum que hayas escuchado de verdad.',
-      'genres':
-          'Un periodo más largo, o un género que hayas escuchado de verdad.',
-      'shows':
-          'Un periodo más largo, o un programa que hayas escuchado de verdad.',
-      'stations':
-          'Un periodo más largo, o una emisora que hayas sintonizado de verdad.',
-      'other': 'Un periodo más largo, o algo que hayas escuchado de verdad.',
-    });
-    return '$_temp0';
-  }
-
-  @override
   String get statsTopEmptyTitle => 'No hay nada en este periodo';
 
   @override
@@ -12787,7 +11969,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get toolsClearAllBody =>
-      'Se borran los recibos de tareas terminadas y fallidas de todas las cuentas, incluidos informes que aún no han leído. Las tareas en curso se quedan.';
+      'Elimina los recibos de tareas terminadas o fallidas de todas las cuentas, incluidos los no leídos.';
 
   @override
   String get toolsClearAllTitle => '¿Borrar las tareas terminadas de todos?';
@@ -12945,19 +12127,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String get toolsDismiss => 'Descartar';
 
   @override
-  String get toolsEmptyMessage =>
-      'Las fusiones, las divisiones, las descargas y las importaciones informan aquí de su progreso mientras se ejecutan, y aquí quedan cuando terminan.';
-
-  @override
   String get toolsEmptyTitle => 'No hay tareas de herramientas';
 
   @override
-  String get toolsFinishedTapForReport =>
-      'Terminada · toca para ver el informe';
-
-  @override
   String toolsItemsProduced(int count) {
-    return '$count elementos producidos · toca para abrirlos';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos',
+      one: '1 elemento',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -13018,6 +12198,20 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get toolsLoadError =>
       'No se han podido cargar las tareas de herramientas';
+
+  @override
+  String get toolsOpenReport => 'Abrir el informe';
+
+  @override
+  String toolsOpenResult(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Abrir los resultados',
+      one: 'Abrir el resultado',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get toolsOpenReviewQueue => 'Abrir la cola de revisión';
@@ -13135,12 +12329,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get toolsTapForReport => 'Toca para ver el informe';
-
-  @override
-  String get toolsTapToOpenResult => 'Toca para abrir lo que ha producido';
-
-  @override
   String get toolsTaskAcquire => 'Descarga desde una URL';
 
   @override
@@ -13192,9 +12380,8 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          '$count tareas se quedan: sus archivos no se pudieron mover; mira cada fila',
-      one: '1 tarea se queda: sus archivos no se pudieron mover; mira su fila',
+      other: '$count tareas se quedan: sus archivos no se pudieron mover',
+      one: '1 tarea se queda: sus archivos no se pudieron mover',
     );
     return '$_temp0';
   }
@@ -13206,16 +12393,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get toolsTitle => 'Tareas de herramientas';
 
   @override
-  String get toolsWaitCatalogBusy =>
-      'Otra tarea ocupa el catálogo; esto sigue en cuanto quede libre.';
+  String get toolsWaitCatalogBusy => 'Otro trabajo ocupa el catálogo.';
 
   @override
   String get toolsWaitCatalogMaintenance =>
-      'El catálogo está en mantenimiento; esto sigue cuando termine.';
+      'El catálogo está en mantenimiento.';
 
   @override
   String get toolsWaitEngineUnavailable =>
-      'El motor de audio no está disponible; esto sigue cuando vuelva.';
+      'El motor de audio no está disponible.';
 
   @override
   String toolsWaitNextTry(String time) {
@@ -13223,28 +12409,27 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get toolsWaitOther =>
-      'Algo pasajero se interpuso; esto lo vuelve a intentar por su cuenta.';
+  String get toolsWaitOther => 'Algo pasajero se ha interpuesto.';
 
   @override
   String get toolsWaitPartMissing =>
-      'Un archivo del libro no está donde lo tiene el catálogo. Si no vuelve, esto devuelve lo que movió y se detiene.';
+      'Falta un archivo del libro; si no vuelve, esto deshace sus movimientos y se detiene.';
 
   @override
   String get toolsWaitPutBackBlocked =>
-      'Un archivo no puede volver de la papelera: su sitio está ocupado o su carpeta no admite al servidor. Libera el sitio o corrige la carpeta y esto seguirá.';
+      'Un archivo no puede salir de la papelera: libera su sitio o arregla su carpeta.';
 
   @override
   String get toolsWaitReadOnly =>
-      'Una biblioteca en la que trabaja es de solo lectura. Quita la solo lectura de la biblioteca o del servidor y esto seguirá.';
+      'Una biblioteca en la que trabaja es de solo lectura. Desactiva la solo lectura en ella o en el servidor.';
 
   @override
   String get toolsWaitStopped =>
-      'Esto se interrumpió, porque el servidor se detuvo o porque se le acabó el tiempo; sigue donde estaba.';
+      'Interrumpida por una parada del servidor o un límite de tiempo.';
 
   @override
   String get toolsWaitStorageUnwritable =>
-      'Una carpeta en la que escribe no admite al servidor. Corrige el propietario y los permisos de la carpeta y esto seguirá.';
+      'Una carpeta en la que escribe rechaza al servidor. Arregla su propietario y permisos.';
 
   @override
   String get toolsWaitTryingNow => 'Lo intenta de nuevo ahora';
@@ -13266,13 +12451,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get uploadsAcquireQueued =>
-      'Descargando. Aparecerá en la cola de revisión cuando esté lista.';
+      'Descargando; aparecerá en revisión cuando esté listo';
 
   @override
   String get uploadsAcquireTasks => 'Tareas';
-
-  @override
-  String get uploadsAddOverline => 'Ambas vías acaban en la cola de revisión';
 
   @override
   String get uploadsAddTitle => 'Añadir a la biblioteca';
@@ -13290,7 +12472,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String uploadsDiscardBody(String fileName) {
-    return '\"$fileName\" y sus bytes en espera se eliminan, y el espacio que ocupaban en tu cuota queda libre.';
+    return '\"$fileName\" se elimina y se libera su espacio de cuota.';
   }
 
   @override
@@ -13332,7 +12514,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String uploadsDuplicateJoined(String what) {
-    return 'Ya está en la biblioteca: $what. Sus datos siguen como estaban.';
+    return 'Ya está en la biblioteca: $what';
   }
 
   @override
@@ -13341,14 +12523,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get uploadsDuplicateUnseen =>
       'un elemento de una biblioteca que no puedes abrir';
-
-  @override
-  String get uploadsEmptyMessage =>
-      'Elige archivos en la barra de arriba, o suéltalos en cualquier parte de esta página.';
-
-  @override
-  String get uploadsEmptyNoPermission =>
-      'Esta cuenta no puede subir archivos. Pídele el permiso a un administrador.';
 
   @override
   String get uploadsEmptyTitle => 'Todavía no hay subidas';
@@ -13394,15 +12568,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get uploadsFromUrlMusic => 'Añadir música desde una URL';
 
   @override
-  String get uploadsFromUrlSubtitle =>
-      'Un vídeo, una lista de reproducción o un canal';
-
-  @override
   String get uploadsGroupingAlbum => 'Un solo álbum';
-
-  @override
-  String get uploadsGroupingAlbumHelp =>
-      'Revisar todos los archivos como un solo lanzamiento';
 
   @override
   String get uploadsGroupingAuto => 'Detectar automáticamente';
@@ -13418,9 +12584,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get uploadsGroupingBookEach => 'Libros sueltos';
 
   @override
-  String get uploadsGroupingBookEachHelp => 'Cada archivo es un libro aparte';
-
-  @override
   String uploadsGroupingBookOne(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13432,41 +12595,32 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get uploadsGroupingBookOneHelp =>
-      'Partes de un libro, en orden de carpeta y pista';
-
-  @override
   String get uploadsGroupingTitle => '¿Cómo hay que agrupar estos archivos?';
 
   @override
   String get uploadsGroupingTracks => 'Pistas sueltas';
 
   @override
-  String get uploadsGroupingTracksHelp => 'Revisar cada archivo por separado';
-
-  @override
   String get uploadsIdentifyMusic => 'Identificar con MusicBrainz';
 
   @override
   String get uploadsIdentifyMusicHelp =>
-      'Lo busca y espera tu decisión. Desactivado, lo añade con las etiquetas que trae';
+      'Lo compara con MusicBrainz; desactivado, lo archiva con las etiquetas que trae, sin revisión';
 
   @override
   String get uploadsIdentifyOther => 'Revisar antes de añadir';
 
   @override
   String get uploadsIdentifyOtherHelp =>
-      'Espera tu decisión. Desactivado, lo añade con las etiquetas que trae';
+      'Espera tu revisión; desactivado, lo archiva con las etiquetas que trae';
 
   @override
   String uploadsIdentifying(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          'Se han subido $count archivos. Se están identificando y aparecerán cuando pasen la revisión',
-      one:
-          'Se ha subido 1 archivo. Se está identificando y aparecerá cuando pase la revisión',
+      other: 'Se han subido $count archivos; se están identificando',
+      one: 'Se ha subido 1 archivo; se está identificando',
     );
     return '$_temp0';
   }
@@ -13480,7 +12634,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get uploadsLibraryHelp =>
-      'Qué ajustes de biblioteca se aplican. Dónde se colocan los archivos lo decide el servidor.';
+      'Elige qué ajustes se aplican, no adónde van los archivos';
 
   @override
   String get uploadsLoadError => 'No se han podido cargar las subidas';
@@ -13495,6 +12649,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get uploadsMediaMusic => 'Música';
 
   @override
+  String get uploadsNoPermissionEmptyMessage =>
+      'Subir requiere un permiso; pídeselo a un administrador.';
+
+  @override
   String get uploadsOpenReview => 'Abrir la entrada de revisión';
 
   @override
@@ -13507,24 +12665,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get uploadsPickFolderFailed => 'No se ha podido leer la carpeta';
 
   @override
-  String get uploadsPickFolderSubtitle =>
-      'Conserva la organización de tus carpetas, subcarpetas de disco incluidas';
-
-  @override
-  String get uploadsPickSubtitle =>
-      'Pistas que eliges a mano, agrupadas por sus etiquetas';
-
-  @override
   String get uploadsQuotaFull =>
       'Ya tienes en espera todo lo que permite tu límite. Importa o descarta parte en Subidas anteriores y vuelve a intentarlo.';
-
-  @override
-  String get uploadsQuotaHelp =>
-      'Esto es lo que puede estar en espera a la vez, no lo que puedes aportar: importar una sesión libera el espacio que ocupaba.';
-
-  @override
-  String get uploadsQuotaHelpUncapped =>
-      'Los archivos en espera se guardan hasta que se importan o se descartan.';
 
   @override
   String uploadsQuotaOf(String used, String cap) {
@@ -13547,10 +12689,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get uploadsRetry => 'Reintentar la subida';
-
-  @override
-  String get uploadsSessionsSubtitle =>
-      'Cuota, lo que sigue subiendo y lo que hay que reintentar';
 
   @override
   String get uploadsSessionsTitle => 'Subidas anteriores';

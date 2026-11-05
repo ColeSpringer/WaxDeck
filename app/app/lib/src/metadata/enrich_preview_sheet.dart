@@ -43,11 +43,11 @@ class _EnrichPreviewSheet extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text(
-                l10n.metadataPreviewTitle,
-                style: WaxType.headline.copyWith(color: colors.textPrimary),
+              // Empty, the line under it says the same, so no tip.
+              SectionHeader(
+                title: l10n.metadataPreviewTitle,
+                info: preview.isEmpty ? null : l10n.metadataPreviewBuiltinsHelp,
               ),
-              const SizedBox(height: WaxSpace.s12),
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
@@ -55,7 +55,7 @@ class _EnrichPreviewSheet extends StatelessWidget {
                     children: <Widget>[
                       if (preview.isEmpty)
                         Text(
-                          l10n.metadataPreviewEmpty,
+                          l10n.metadataPreviewEmptyMessage,
                           style: WaxType.body.copyWith(
                             color: colors.textSecondary,
                           ),
@@ -77,13 +77,6 @@ class _EnrichPreviewSheet extends StatelessWidget {
                           ),
                         ),
                       ],
-                      const SizedBox(height: WaxSpace.s12),
-                      WaxProse(
-                        l10n.metadataPreviewBuiltinsNote,
-                        style: WaxType.caption.copyWith(
-                          color: colors.textSecondary,
-                        ),
-                      ),
                     ],
                   ),
                 ),

@@ -346,7 +346,7 @@ class _SetKindDialogState extends ConsumerState<_SetKindDialog> {
                 const SizedBox(height: WaxSpace.s12),
                 WaxSettingRow(
                   title: l10n.metadataWriteBackTitle,
-                  help: l10n.libraryKindWriteBackHelp,
+                  info: l10n.libraryKindWriteBackHelp,
                   control: WaxSwitch(
                     label: l10n.metadataWriteBackTitle,
                     value: _writeBack,

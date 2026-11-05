@@ -118,7 +118,6 @@ class _Switches extends ConsumerWidget {
         SectionHeader(title: l10n.adminServerAnalysisGroup),
         WaxSettingRow(
           title: l10n.adminServerSonicTitle,
-          help: l10n.adminServerSonicHelp,
           control: WaxSwitch(
             label: l10n.adminServerSonicTitle,
             value: settings.sonicAnalysis,
@@ -207,7 +206,6 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final limits = ref.watch(transcodingLimitsProvider).value;
     if (limits == null) return const SizedBox.shrink();
@@ -216,11 +214,6 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(title: l10n.adminServerTranscodingGroup),
-        Text(
-          l10n.adminServerTranscodingBlurb,
-          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
-        ),
-        const SizedBox(height: WaxSpace.s12),
         const _TranscodingActivityLine(),
         const SizedBox(height: WaxSpace.s16),
         ConstrainedBox(
@@ -251,7 +244,7 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
               const SizedBox(height: WaxSpace.s12),
               WaxTextField(
                 label: l10n.adminServerDefaultKbpsLabel,
-                helperText: l10n.adminServerDefaultKbpsHint,
+                helperText: l10n.adminServerDefaultKbpsHelp,
                 keyboardType: TextInputType.number,
                 controller: _defaultKbps,
                 semanticsId: SemanticsIds.transcodingDefaultKbps,
@@ -277,65 +270,41 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
 
 /// What the caps are bounding right now, above the caps themselves.
 ///
-/// The copy is careful because the number is: it over-counts what a
-/// person means by "transcoding". A client that pins the source's own
-/// format is routed through the engine and charged a session though
-/// nothing is re-encoded, and a listener playing a queue gaplessly is
-/// charged one session however many renderings they hold live, so the
-/// split below says how much of the count is that. Saying so is cheaper
-/// than an operator drawing the wrong conclusion from a number that
-/// looks exact.
+/// The number over-counts what a person means by "transcoding": a
+/// client that pins the source's own format is charged a session though
+/// nothing is re-encoded, and a gapless queue is charged one however
+/// many renderings it holds. The info tip beside the count says so, and
+/// the count says how many of its sessions are gapless queues.
 class _TranscodingActivityLine extends ConsumerWidget {
   const _TranscodingActivityLine();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final activity = ref.watch(transcodingActivityProvider);
     final count = activity.value?.activeSessions;
+    final timelines = activity.value?.activeTimelines ?? 0;
     final headline = switch (activity) {
       AsyncValue(hasError: true) => l10n.adminServerActivityUnknown,
       _ when count == null => l10n.adminServerActivityReading,
-      _ => l10n.adminServerActivityCount(count),
+      _ => l10n.adminServerActivityCount(count, timelines),
     };
-    // A gapless queue is one slot however many renderings a listener
-    // holds live, so the split is worth saying: the same number means
-    // something different depending on which it is.
-    final timelines = activity.value?.activeTimelines;
-    final caveat = timelines == null
-        ? l10n.adminServerActivityCaveat
-        : '${l10n.adminServerActivityTimelines(timelines)} '
-              '${l10n.adminServerActivityCaveat}';
+    final caveat = l10n.adminServerActivityHelp;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // The identifier and an explicit label ride the text region
-        // alone, MediaListRow's own placement rule: the label is built
-        // with excludeSemantics, and wrapping the refresh button too
-        // would take it out of reach of a screen reader and the suite
-        // both.
+        // The identifier rides the count's text alone, so the refresh button
+        // and the tip stay their own nodes: a tip under a merging or
+        // excluding node never opens.
         Expanded(
-          child: Semantics(
-            identifier: SemanticsIds.transcodingActivity,
-            container: true,
-            label: count != null
-                ? l10n.adminServerActivitySpoken(headline, caveat)
-                : headline,
-            excludeSemantics: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(headline, style: WaxType.titleItem),
-                if (count != null)
-                  Text(
-                    caveat,
-                    style: WaxType.bodySmall.copyWith(
-                      color: colors.textSecondary,
-                    ),
-                  ),
-              ],
+          child: titleWithInfo(
+            Semantics(
+              identifier: SemanticsIds.transcodingActivity,
+              container: true,
+              child: Text(headline, style: WaxType.titleItem),
             ),
+            count == null ? null : caveat,
+            semanticsId: SemanticsIds.transcodingActivityInfo,
           ),
         ),
         WaxIconButton(
@@ -434,7 +403,7 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
               // typed into the trash purge.
               WaxTextField(
                 label: l10n.adminServerTrashDaysLabel,
-                helperText: l10n.adminServerTrashDaysHint,
+                helperText: l10n.adminServerTrashDaysHelp,
                 keyboardType: TextInputType.number,
                 controller: _days,
                 semanticsId: SemanticsIds.trashRetentionDays,
@@ -445,7 +414,7 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
               // its use.
               WaxTextField(
                 label: l10n.adminServerTaskDaysLabel,
-                helperText: l10n.adminServerTaskDaysHint,
+                helperText: l10n.adminServerTaskDaysHelp,
                 keyboardType: TextInputType.number,
                 controller: _taskDays,
                 semanticsId: SemanticsIds.taskRetentionDays,

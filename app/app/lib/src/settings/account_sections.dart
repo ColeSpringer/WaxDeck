@@ -282,7 +282,7 @@ class _DeviceSessions extends ConsumerWidget {
         ),
         content: WaxProse(
           session.current
-              ? l10n.settingsDeviceSignOutCurrentMessage
+              ? l10n.settingsDeviceSignOutCurrentBody
               : l10n.settingsDeviceSignOutMessage(session.label),
         ),
         actions: <Widget>[

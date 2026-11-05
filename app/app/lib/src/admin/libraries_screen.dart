@@ -80,7 +80,6 @@ class _LibraryTable extends ConsumerWidget {
       empty: EmptyState(
         glyph: WaxIcons.albums,
         title: l10n.adminLibrariesEmptyTitle,
-        message: l10n.adminLibrariesEmptyMessage,
       ),
       columns: <WaxColumn<LibraryInfo>>[
         WaxColumn<LibraryInfo>(
@@ -803,6 +802,8 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
                       : (value) => setState(() => _media = value),
                 ),
               ),
+              // Set here only: the table has no switch for it, and on it
+              // WaxDeck rewrites the folder's layout.
               WaxSettingRow(
                 title: l10n.adminLibraryManagedTitle,
                 help: l10n.adminLibraryManagedHelp,
@@ -817,7 +818,6 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
               ),
               WaxSettingRow(
                 title: l10n.adminLibraryAbsentTitle,
-                help: l10n.adminLibraryAbsentHelp,
                 control: WaxSwitch(
                   label: l10n.adminLibraryAbsentTitle,
                   value: _absent,

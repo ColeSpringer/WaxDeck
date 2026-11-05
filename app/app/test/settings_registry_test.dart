@@ -293,6 +293,44 @@ void main() {
     }
   });
 
+  // The default fake answers the account read with not-found, so the
+  // loop above only sees the error line of the Access row. An account
+  // that sees every library is the common case and must draw its row too.
+  testWidgets('the library access entry is drawn for an all-access account', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(authenticated: true, user: _admin),
+          )
+          ..usersById[_admin.id] = UserAccount(
+            id: _admin.id,
+            username: _admin.username,
+            roles: const ['admin'],
+            createdAt: DateTime.utc(2026, 7, 15),
+            libraryAccess: const LibraryAccess(mode: 'all'),
+          );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        ],
+        child: routedHost(
+          const SettingsSectionScreen(section: SettingsSection.library),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final entry = entries.firstWhere((e) => e.id == 'library-access');
+    expect(find.bySemanticsIdentifier(entry.semanticsId), findsWidgets);
+    expect(find.text('All libraries'), findsOneWidget);
+  });
+
   testWidgets('a phone draws no switch for turning the artwork', (
     tester,
   ) async {

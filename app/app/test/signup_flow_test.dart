@@ -24,6 +24,7 @@ void main() {
     expect(find.text('Request an account'), findsOneWidget);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.signupOpen));
     await tester.pumpAndSettle();
+    expect(find.textContaining('works right away'), findsNothing);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.signupUsername),

@@ -14,6 +14,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 /// Which library a submission is filed under, on the servers where that
 /// is a question at all.
@@ -155,6 +156,11 @@ void main() {
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadLibrary),
+      findsOneWidget,
+    );
+    // "Library" reads as where the files go, which it is not.
+    expect(
+      infoTipHolding('Picks whose settings apply, not where files go'),
       findsOneWidget,
     );
     // The first candidate, since nothing is remembered.

@@ -132,6 +132,7 @@ abstract final class SemanticsIds {
   static const String thumbsClear = 'thumbs-clear';
   static const String thumbsClearConfirm = 'thumbs-clear-confirm';
   static const String transcodingActivity = 'transcoding-activity';
+  static const String transcodingActivityInfo = 'transcoding-activity-info';
   static const String transcodingActivityRefresh =
       'transcoding-activity-refresh';
   static const String transcodingDefaultKbps = 'transcoding-default-kbps';
@@ -210,12 +211,12 @@ abstract final class SemanticsIds {
   static const String bookEdition = 'book-edition';
   static String bookFinishedFilter(Object name) => 'book-finished-$name';
   static String bookGenreScreen(Object key) => 'book-genre-screen-$key';
+  static const String bookHeader = 'book-header';
   static const String bookMarkFinished = 'book-mark-finished';
   static const String bookMerge = 'book-merge';
   static const String bookMergeConfirm = 'book-merge-confirm';
   static const String bookMergeKeep = 'book-merge-keep';
   static const String bookOverflow = 'book-overflow';
-  static const String bookPartsNote = 'book-parts-note';
   static const String bookPin = 'book-pin';
   static String bookPlay(Object pid) => 'book-play-$pid';
   static const String bookResume = 'book-resume';

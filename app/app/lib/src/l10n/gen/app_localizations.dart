@@ -99,12 +99,6 @@ abstract class AppLocalizations {
     Locale('es'),
   ];
 
-  /// Second line of the row opening the defect log.
-  ///
-  /// In en, this message translates to:
-  /// **'Errors the app caught on its own, newest first, with a way to copy them into a bug report.'**
-  String get aboutDefectsSubtitle;
-
   /// Heading over the way into the defect log.
   ///
   /// In en, this message translates to:
@@ -120,7 +114,7 @@ abstract class AppLocalizations {
   /// Second line of the licences row. GPL-3.0-only is a licence identifier and stays as it is.
   ///
   /// In en, this message translates to:
-  /// **'WaxDeck is GPL-3.0-only. This page also lists the bundled type and icon notices.'**
+  /// **'GPL-3.0-only'**
   String get aboutLicensesSubtitle;
 
   /// Heading over the licence notices.
@@ -152,12 +146,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'unreachable'**
   String get aboutServerUnreachable;
-
-  /// One sentence saying what WaxDeck is, under the wordmark on the About page.
-  ///
-  /// In en, this message translates to:
-  /// **'A player, library manager, and metadata completer for music, podcasts, and audiobooks.'**
-  String get aboutTagline;
 
   /// Title of the About page.
   ///
@@ -194,12 +182,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{field}: {from} -> {to}'**
   String adminAuditChange(String field, String from, String to);
-
-  /// Empty state of the audit log, saying what will fill it.
-  ///
-  /// In en, this message translates to:
-  /// **'Administrative actions are recorded here as they happen.'**
-  String get adminAuditEmptyMessage;
 
   /// Empty state of the audit log.
   ///
@@ -471,16 +453,10 @@ abstract class AppLocalizations {
   /// **'Built into the catalog'**
   String get adminEnrichmentBuiltin;
 
-  /// Caption under the MusicBrainz genres entry, which ranks MusicBrainz's genres among the sources.
+  /// Caption under a built-in enrichment source that is switched on but cannot run until a MusicBrainz contact is set.
   ///
   /// In en, this message translates to:
-  /// **'Built into the catalog. Switched off, its genres are left out; the identity lookups still run.'**
-  String get adminEnrichmentBuiltinMusicbrainz;
-
-  /// Caption under a source the catalog registers itself once a MusicBrainz contact is set, shown while none is.
-  ///
-  /// In en, this message translates to:
-  /// **'Built into the catalog. Waits on a MusicBrainz contact.'**
+  /// **'Waits on a MusicBrainz contact'**
   String get adminEnrichmentBuiltinNeedsContact;
 
   /// Tile: how many answers the cache holds.
@@ -489,23 +465,11 @@ abstract class AppLocalizations {
   /// **'Answers kept'**
   String get adminEnrichmentCacheAnswers;
 
-  /// Line under the response cache heading.
-  ///
-  /// In en, this message translates to:
-  /// **'What MusicBrainz and the Cover Art Archive answered, kept so a pass does not ask twice. A pruned answer costs one request the next time it is needed.'**
-  String get adminEnrichmentCacheBlurb;
-
   /// Column header: how much room a kind takes.
   ///
   /// In en, this message translates to:
   /// **'Size'**
   String get adminEnrichmentCacheBytesColumn;
-
-  /// Shown in place of the cache table when it is empty.
-  ///
-  /// In en, this message translates to:
-  /// **'Nothing is cached yet.'**
-  String get adminEnrichmentCacheEmpty;
 
   /// Tile: what no prune removes.
   ///
@@ -558,7 +522,7 @@ abstract class AppLocalizations {
   /// Body of the dialog confirming a cache prune.
   ///
   /// In en, this message translates to:
-  /// **'Pruned answers are asked for again, one request at a time, the next time a pass needs them. The catalog\'s values stay as they are.'**
+  /// **'Pruned answers are asked for again when needed. Catalog values stay.'**
   String get adminEnrichmentCachePruneBody;
 
   /// Title of the dialog confirming a cache prune.
@@ -687,6 +651,12 @@ abstract class AppLocalizations {
   /// **'Left owed'**
   String get adminEnrichmentDeferred;
 
+  /// Closes the MusicBrainz source's caption, after the built-in mark: switching this source off leaves out only its genres, and identity lookups still ask MusicBrainz. No full stop.
+  ///
+  /// In en, this message translates to:
+  /// **'Identification still asks MusicBrainz'**
+  String get adminEnrichmentIdentityStillAsks;
+
   /// When the last pass finished. {when} is a relative time.
   ///
   /// In en, this message translates to:
@@ -720,14 +690,8 @@ abstract class AppLocalizations {
   /// Help under the MusicBrainz row when no contact is set.
   ///
   /// In en, this message translates to:
-  /// **'Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the sources built into the catalog closed'**
+  /// **'Off until WAXDECK_ENRICHMENT_CONTACT is set'**
   String get adminEnrichmentMusicbrainzOffHelp;
-
-  /// Help under the MusicBrainz row when its contact is set.
-  ///
-  /// In en, this message translates to:
-  /// **'Identifies artists, albums and books, and opens the sources built into the catalog'**
-  String get adminEnrichmentMusicbrainzOnHelp;
 
   /// Row naming the MusicBrainz identity service.
   ///
@@ -738,13 +702,13 @@ abstract class AppLocalizations {
   /// Banner when no enrichment phase can run on this server.
   ///
   /// In en, this message translates to:
-  /// **'A pass has nothing to do: no source can run. Set a MusicBrainz contact or configure a provider, then restart.'**
+  /// **'Nothing can run: set a MusicBrainz contact or provider, then restart.'**
   String get adminEnrichmentNothingToDo;
 
   /// Banner when no pass can run and some sources are switched off.
   ///
   /// In en, this message translates to:
-  /// **'A pass has nothing to do: the sources that could run are switched off. Switch one on below, or set a MusicBrainz contact and restart.'**
+  /// **'Nothing can run: switch a source on below or set a MusicBrainz contact.'**
   String get adminEnrichmentNothingToDoSwitchedOff;
 
   /// Front covers: a phase and a last-run row.
@@ -753,7 +717,7 @@ abstract class AppLocalizations {
   /// **'Album covers'**
   String get adminEnrichmentPhaseAlbumArt;
 
-  /// Help under the album-covers phase.
+  /// Info tip beside the album-covers phase.
   ///
   /// In en, this message translates to:
   /// **'Front covers for albums with none'**
@@ -765,7 +729,7 @@ abstract class AppLocalizations {
   /// **'Album details'**
   String get adminEnrichmentPhaseAlbumFields;
 
-  /// Help under the album details phase.
+  /// Info tip beside the album details phase.
   ///
   /// In en, this message translates to:
   /// **'Label and year for albums'**
@@ -777,7 +741,7 @@ abstract class AppLocalizations {
   /// **'Artist pictures'**
   String get adminEnrichmentPhaseArtistArt;
 
-  /// Help under the artist-pictures phase.
+  /// Info tip beside the artist-pictures phase.
   ///
   /// In en, this message translates to:
   /// **'Pictures for artists missing one'**
@@ -789,7 +753,7 @@ abstract class AppLocalizations {
   /// **'Book details'**
   String get adminEnrichmentPhaseBookFields;
 
-  /// Help under the book details phase.
+  /// Info tip beside the book details phase.
   ///
   /// In en, this message translates to:
   /// **'Publisher, narrator, description and more for books'**
@@ -801,7 +765,7 @@ abstract class AppLocalizations {
   /// **'Release-group artwork'**
   String get adminEnrichmentPhaseGroupArt;
 
-  /// Help under the release-group artwork phase.
+  /// Info tip beside the release-group artwork phase.
   ///
   /// In en, this message translates to:
   /// **'Covers, backs, discs, booklets and backgrounds for release groups missing them'**
@@ -813,7 +777,7 @@ abstract class AppLocalizations {
   /// **'Identity'**
   String get adminEnrichmentPhaseIdentity;
 
-  /// Help under the identity phase.
+  /// Info tip beside the identity phase.
   ///
   /// In en, this message translates to:
   /// **'Match artists, release groups and books against MusicBrainz'**
@@ -825,7 +789,7 @@ abstract class AppLocalizations {
   /// **'Lyrics'**
   String get adminEnrichmentPhaseLyrics;
 
-  /// Help under the lyrics phase.
+  /// Info tip beside the lyrics phase.
   ///
   /// In en, this message translates to:
   /// **'Lyrics for tracks without them'**
@@ -837,7 +801,7 @@ abstract class AppLocalizations {
   /// **'Release match'**
   String get adminEnrichmentPhaseReleases;
 
-  /// Help under the release match phase.
+  /// Info tip beside the release match phase.
   ///
   /// In en, this message translates to:
   /// **'Pin albums to the pressing their barcode or catalog number names'**
@@ -849,7 +813,7 @@ abstract class AppLocalizations {
   /// **'Track details'**
   String get adminEnrichmentPhaseTrackFields;
 
-  /// Help under the track details phase.
+  /// Info tip beside the track details phase.
   ///
   /// In en, this message translates to:
   /// **'Tempo, ISRC and composer where they are empty'**
@@ -876,7 +840,7 @@ abstract class AppLocalizations {
   /// Help under the ask-again-about-everything mode.
   ///
   /// In en, this message translates to:
-  /// **'Every source, about every entity: slow on a large library'**
+  /// **'Everything again; slow on a large library'**
   String get adminEnrichmentRunAllHelp;
 
   /// Said when a run was refused because an enrichment pass is already running.
@@ -897,23 +861,11 @@ abstract class AppLocalizations {
   /// **'Fill what is missing'**
   String get adminEnrichmentRunNormal;
 
-  /// Help under the fill-what-is-missing mode.
-  ///
-  /// In en, this message translates to:
-  /// **'Asks about what has not been looked up, or whose miss has expired'**
-  String get adminEnrichmentRunNormalHelp;
-
   /// Pass mode that re-asks only the phases switched on below it.
   ///
   /// In en, this message translates to:
   /// **'Ask again in chosen phases'**
   String get adminEnrichmentRunPhases;
-
-  /// Help under the chosen-phases mode: the pass walks only those phases and re-asks every target in them.
-  ///
-  /// In en, this message translates to:
-  /// **'Only the phases switched on below, asking again about everything they reach'**
-  String get adminEnrichmentRunPhasesHelp;
 
   /// Said when an enrichment pass has started.
   ///
@@ -945,17 +897,17 @@ abstract class AppLocalizations {
   /// **'Move {name} up'**
   String adminEnrichmentSourceUp(String name);
 
-  /// Line under the sources heading.
-  ///
-  /// In en, this message translates to:
-  /// **'Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already settled until a run forces its phases or, for a miss, the retry window passes.'**
-  String get adminEnrichmentSourcesBlurb;
-
   /// Heading over the table of enrichment sources.
   ///
   /// In en, this message translates to:
   /// **'Sources'**
   String get adminEnrichmentSourcesGroup;
+
+  /// Info tip on the enrichment Sources heading: the list is the order the sources are asked in.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources are asked in this order.'**
+  String get adminEnrichmentSourcesHelp;
 
   /// Button putting back the order the server holds.
   ///
@@ -996,7 +948,7 @@ abstract class AppLocalizations {
   /// Under the last run, when phases ended early because every source serving them kept failing.
   ///
   /// In en, this message translates to:
-  /// **'Stopped early: {phases}. Every source serving them failed three times in a row and sat out the pass; the lookups they owe are asked once more on the next pass.'**
+  /// **'Stopped early: {phases}. Their sources failed three times; asked again next pass.'**
   String adminEnrichmentStalled(String phases);
 
   /// Heading over whether a pass can run and the MusicBrainz switch.
@@ -1098,7 +1050,7 @@ abstract class AppLocalizations {
   /// Empty state of the folded names section, saying where folded names come from.
   ///
   /// In en, this message translates to:
-  /// **'A merge folds the names it does away with into the entry it keeps, so files still spelled the old way file under it.'**
+  /// **'Merges fold old names into the kept entry.'**
   String get adminFoldsEmptyMessage;
 
   /// Empty state of the folded names section.
@@ -1209,12 +1161,6 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 spelling now files under {survivor}} other{{count} spellings now file under {survivor}}}'**
   String adminFoldsMerged(int count, String survivor);
 
-  /// Line above the Folded names heading, saying what a folded name is.
-  ///
-  /// In en, this message translates to:
-  /// **'Old spellings that file under another name'**
-  String get adminFoldsOverline;
-
   /// A folded name quoted, as the unfold button, its dialog and its message name it.
   ///
   /// In en, this message translates to:
@@ -1245,10 +1191,10 @@ abstract class AppLocalizations {
   /// **'Unfold'**
   String get adminFoldsUnfoldAction;
 
-  /// Body of the unfold dialog: which files an unfold moves (those the library reads as new or changed), and that the ones already filed stay, a rescan with the re-read option (adminLibraryRescanForce) included. {fold} is the name quoted (adminFoldsQuoted).
+  /// Body of the unfold dialog: which files an unfold moves (those the library reads as new or changed), and that the ones already filed stay. {fold} is the name quoted (adminFoldsQuoted).
   ///
   /// In en, this message translates to:
-  /// **'Files spelled {fold} that the library reads as new or changed (added, moved, replaced or retagged) are filed under their own name again. The ones \"{name}\" holds already stay with it, even through a rescan with Re-read unchanged files, until they change or move.'**
+  /// **'New or changed files spelled {fold} are filed under their own name again; ones \"{name}\" holds stay until they change.'**
   String adminFoldsUnfoldBody(String fold, String name);
 
   /// Title of the dialog confirming that a folded name is unfolded.
@@ -1263,10 +1209,10 @@ abstract class AppLocalizations {
   /// **'{fold} is unfolded'**
   String adminFoldsUnfolded(String fold);
 
-  /// Body of the refusal an account without the role gets at a console location it followed a link to.
+  /// Line under the admin console's refusal title: the next step for an account without the administrator role.
   ///
   /// In en, this message translates to:
-  /// **'The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.'**
+  /// **'Ask an administrator if you need something here.'**
   String get adminForbiddenMessage;
 
   /// Heading of the refusal an account without the role gets at a console location it followed a link to.
@@ -1287,10 +1233,10 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 alias} other{{count} aliases}}'**
   String adminGenreAliasCount(int count);
 
-  /// Line under the aliases field. The two examples are genre names in English and stay as they are; swap them for spellings that make the same point in this language if better ones exist.
+  /// Line under the aliases field: what folds already, so only other spellings need listing.
   ///
   /// In en, this message translates to:
-  /// **'Case, accents, and punctuation already fold, so list only the spellings folding cannot reach: Rap for Hip Hop, R&B for Rhythm and Blues.'**
+  /// **'Case, accents, punctuation already fold; list other spellings only.'**
   String get adminGenreAliasesBlurb;
 
   /// Hint in the aliases field.
@@ -1365,11 +1311,11 @@ abstract class AppLocalizations {
   /// **'Normalize catalog'**
   String get adminGenreNormalize;
 
-  /// Line under the normalization buttons, saying that normalizing is a catch-up rather than the usual path.
+  /// Tooltip on the normalize button, saying that normalizing is a catch-up rather than the usual path.
   ///
   /// In en, this message translates to:
-  /// **'A sweeper folds newly scanned genres onto the vocabulary on its own. Normalizing is the catch-up pass, for a catalog older than the change log still holds or a tree you just edited.'**
-  String get adminGenreNormalizeBlurb;
+  /// **'Folds genres onto the vocabulary; new scans already do this, so use it to catch up.'**
+  String get adminGenreNormalizeHelp;
 
   /// Message after a genre normalization pass started for real.
   ///
@@ -1377,17 +1323,11 @@ abstract class AppLocalizations {
   /// **'Normalizing the catalog'**
   String get adminGenreNormalizing;
 
-  /// Line under the parent row.
+  /// Line under the parent row, whose picker is disabled, when other genres group under this one: the tree is only two levels deep. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'The top-level genre this one belongs to'**
-  String get adminGenreParentHelp;
-
-  /// Line under the parent row when the genre cannot take a parent because things already group under it.
-  ///
-  /// In en, this message translates to:
-  /// **'Genres group under this one, and the tree is two levels deep'**
-  String get adminGenreParentHelpHasChildren;
+  /// **'Genres sit under it; the tree is two levels deep'**
+  String get adminGenreParentHasChildrenHelp;
 
   /// Accessible name of the menu choosing a genre's parent.
   ///
@@ -1400,12 +1340,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Groups under'**
   String get adminGenreParentTitle;
-
-  /// Empty state of the detail pane, saying what it edits.
-  ///
-  /// In en, this message translates to:
-  /// **'Its name, its parent, and its aliases are edited here.'**
-  String get adminGenrePickMessage;
 
   /// Empty state of the detail pane, before a genre has been picked from the tree.
   ///
@@ -1470,14 +1404,8 @@ abstract class AppLocalizations {
   /// Line at the top of the genre screen while the server is on the shipped vocabulary.
   ///
   /// In en, this message translates to:
-  /// **'Running on the vocabulary WaxDeck ships. Editing it stores a tree of your own.'**
+  /// **'Shipped vocabulary'**
   String get adminGenreSourceDefault;
-
-  /// Line at the top of the genre screen once a vocabulary of the server's own has been stored.
-  ///
-  /// In en, this message translates to:
-  /// **'Running on a stored vocabulary of your own.'**
-  String get adminGenreSourceStored;
 
   /// Title of the error state when the genre vocabulary could not be read.
   ///
@@ -1520,12 +1448,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Server'**
   String get adminGroupServer;
-
-  /// Line under the all-libraries switch in the new-invite dialog.
-  ///
-  /// In en, this message translates to:
-  /// **'Off picks the libraries this invite can see'**
-  String get adminInviteAccessAllHelp;
 
   /// Line under the administrator switch in the new-invite dialog.
   ///
@@ -1629,12 +1551,6 @@ abstract class AppLocalizations {
   /// **'revoked'**
   String get adminInviteRevoked;
 
-  /// Line under the upload switch in the new-invite dialog.
-  ///
-  /// In en, this message translates to:
-  /// **'Whether this account can add files to the library'**
-  String get adminInviteUploadHelp;
-
   /// How many times an invite has been used, out of how many it allows. Sits in a comma-separated run of facts about one invite, so it is lower case.
   ///
   /// In en, this message translates to:
@@ -1707,12 +1623,6 @@ abstract class AppLocalizations {
   /// **'Read-only'**
   String get adminLibrariesColumnReadOnly;
 
-  /// Empty state of the library list, pointing at the form below it. A root is the top directory of a library.
-  ///
-  /// In en, this message translates to:
-  /// **'Add a root below and WaxDeck scans what is in it.'**
-  String get adminLibrariesEmptyMessage;
-
   /// Empty state of the library list.
   ///
   /// In en, this message translates to:
@@ -1730,12 +1640,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Libraries'**
   String get adminLibrariesTitle;
-
-  /// Line under the add form's switch for a folder that is not there yet, such as a drive mounted later.
-  ///
-  /// In en, this message translates to:
-  /// **'Register the path now; it is scanned once the folder is there.'**
-  String get adminLibraryAbsentHelp;
 
   /// Switch in the add form that registers a path whose folder is not there yet.
   ///
@@ -1791,16 +1695,16 @@ abstract class AppLocalizations {
   /// **'Name untagged files from folders: {name}'**
   String adminLibraryFolderFallbackLabel(String name);
 
-  /// Message after switching on a library's folder naming: files scanned from now on take it, and a rescan that re-reads unchanged files applies it to the rest.
+  /// Message after switching on a library's folder naming: new files take it now, and the files already scanned take it on a rescan with the Re-read unchanged files switch on, which the message names.
   ///
   /// In en, this message translates to:
-  /// **'Applies to new files now. Re-read unchanged files in Rescan to apply it to files already scanned.'**
+  /// **'Applies to new files; for the rest, Rescan with Re-read unchanged files.'**
   String get adminLibraryFolderFallbackRescan;
 
   /// Help under the Holds choice when adding a library: what each content class does to the files.
   ///
   /// In en, this message translates to:
-  /// **'Books makes every audio file in the folder an audiobook. Music and Mixed go by each file\'s tags.'**
+  /// **'Books reads every audio file as an audiobook'**
   String get adminLibraryHoldsHelp;
 
   /// Row in the add-library form choosing what the root holds.
@@ -1809,10 +1713,10 @@ abstract class AppLocalizations {
   /// **'Holds'**
   String get adminLibraryHoldsTitle;
 
-  /// Line under the catalog-managed switch.
+  /// Help line under the add-library form's Catalog-managed switch: what it lets WaxDeck do to the folder, and that it is chosen only when the library is added. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'Let uploads and organizing place files in this root'**
+  /// **'Uploads and Organize write and move files here; set once'**
   String get adminLibraryManagedHelp;
 
   /// Switch letting WaxDeck place files into this root itself, rather than only reading what is there.
@@ -1902,7 +1806,7 @@ abstract class AppLocalizations {
   /// Body of the dialog confirming a library becomes Music or Mixed. {name} is the library's name.
   ///
   /// In en, this message translates to:
-  /// **'Every file in {name} is read again to see what it holds, which can take a while. In Music, a book its parts\' tags do not make is read as tracks; in Mixed, a book whose parts already make one stays. Items whose kind was set by hand keep it.'**
+  /// **'Every file in {name} is read again, which can take a while. Books the tags cannot support become tracks in Music. Hand-set kinds are kept.'**
   String adminLibraryMediaRereadBody(String name);
 
   /// Message after a library became a Books library while another catalog job ran, so its scan did not start. {name} is the library's name.
@@ -1920,7 +1824,7 @@ abstract class AppLocalizations {
   /// Body of the dialog confirming a library becomes a Books library. {name} is the library's name.
   ///
   /// In en, this message translates to:
-  /// **'Every audio file in {name} becomes a book on the scan this starts: parts sharing an album and author are one book, and numbered parts with no album join the book their folder holds. Items whose kind was set by hand keep it.'**
+  /// **'Every audio file in {name} becomes a book: parts sharing an album and author join one book. Hand-set kinds are kept.'**
   String adminLibraryMediaToBooksBody(String name);
 
   /// Hint in the library name field. WaxFlow is the streaming sidecar and serves a root of the same name, so the name is not free-form decoration.
@@ -1956,7 +1860,7 @@ abstract class AppLocalizations {
   /// Line under the create button, saying what the server will refuse.
   ///
   /// In en, this message translates to:
-  /// **'The path must be absolute, and must not overlap an existing root, the upload inbox, or the podcast download directory.'**
+  /// **'Absolute path, not overlapping another root or upload inbox'**
   String get adminLibraryPathRule;
 
   /// Profile cell of a library that is not managed: organizing never moves its files.
@@ -1992,7 +1896,7 @@ abstract class AppLocalizations {
   /// Body of the remove-library dialog, which asks for the library's name typed back.
   ///
   /// In en, this message translates to:
-  /// **'Its files stay on disk. The catalog forgets the library; items with no other copy are archived and come back if the folder is added again. Type the library\'s name to confirm.'**
+  /// **'Files stay on disk. Items with no other copy are archived until the folder returns. Type the library\'s name to confirm.'**
   String get adminLibraryRemoveBody;
 
   /// Why the remove row is off for a library the server's configuration names. WAXDECK_LIBRARY_ROOTS is a setting's name; keep it as is.
@@ -2022,7 +1926,7 @@ abstract class AppLocalizations {
   /// Body of the rescan confirm dialog, honest that the button on one row scans everything.
   ///
   /// In en, this message translates to:
-  /// **'Scans every library root, not just this one. Files that haven\'t changed are skipped.'**
+  /// **'Scans every library root, not just this one.'**
   String get adminLibraryRescanBody;
 
   /// Label of the force switch in the rescan confirm dialog.
@@ -2034,7 +1938,7 @@ abstract class AppLocalizations {
   /// Line under the force switch. Names the cost and that curated fields survive.
   ///
   /// In en, this message translates to:
-  /// **'The repair pass: every file is read again even where nothing changed, which takes much longer. Edits you made are kept.'**
+  /// **'Re-reads every file, even unchanged; much slower. Edits kept.'**
   String get adminLibraryRescanForceHelp;
 
   /// Confirm button of the rescan dialog.
@@ -2066,12 +1970,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not writable by the server'**
   String get adminLibraryUnwritable;
-
-  /// Line under the account picker in the import form, saying what is written where.
-  ///
-  /// In en, this message translates to:
-  /// **'The stars, ratings, history, and progress land on this account.'**
-  String get adminMigrateAccountHelp;
 
   /// Picker naming which account the imported listening lands on.
   ///
@@ -2108,12 +2006,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{files, plural, =1{1 file ready to read from {name}} other{{files} files ready to read from {name}}}'**
   String adminMigrateExportStaged(int files, String name);
-
-  /// Line under the listen history switch in the import form.
-  ///
-  /// In en, this message translates to:
-  /// **'What was played there, and when'**
-  String get adminMigrateHistoryHelp;
 
   /// Switch including what was played in an import.
   ///
@@ -2157,23 +2049,11 @@ abstract class AppLocalizations {
   /// **'Password'**
   String get adminMigratePasswordLabel;
 
-  /// Line under the playback progress switch in the import form.
-  ///
-  /// In en, this message translates to:
-  /// **'How far into each episode and book the listener was'**
-  String get adminMigrateProgressHelp;
-
   /// Switch including how far into each episode and book the listener had got.
   ///
   /// In en, this message translates to:
   /// **'Playback progress'**
   String get adminMigrateProgressTitle;
-
-  /// Line under the ratings switch in the import form.
-  ///
-  /// In en, this message translates to:
-  /// **'The star ratings given there'**
-  String get adminMigrateRatingsHelp;
 
   /// Switch including star ratings in an import.
   ///
@@ -2204,12 +2084,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Spotify data export'**
   String get adminMigrateSpotifyExport;
-
-  /// Line under the stars switch in the import form.
-  ///
-  /// In en, this message translates to:
-  /// **'Which tracks and albums the other server had starred'**
-  String get adminMigrateStarsHelp;
 
   /// Switch including starred tracks and albums in an import. A star is how a listener marks something a favourite.
   ///
@@ -2343,10 +2217,10 @@ abstract class AppLocalizations {
   /// **'Analyze audio'**
   String get adminScheduleAnalyze;
 
-  /// What the analyze job does, and the warning that it is the one pass that decodes audio.
+  /// The cost warning on the analyze job: it is the one pass that decodes audio.
   ///
   /// In en, this message translates to:
-  /// **'Measures loudness, fingerprints, and waveforms. Decodes every audio file, so a large library takes hours. Resumable: files already analyzed are skipped.'**
+  /// **'Decodes every audio file: hours on a large library'**
   String get adminScheduleAnalyzeBlurb;
 
   /// Name of the scheduled job that writes a backup archive.
@@ -2354,12 +2228,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Backup'**
   String get adminScheduleBackup;
-
-  /// What the scheduled backup does. Sidecars are the small files stored beside the database.
-  ///
-  /// In en, this message translates to:
-  /// **'Writes an archive of the database and its sidecars.'**
-  String get adminScheduleBackupBlurb;
 
   /// Hint in the cron field, naming its five fields in order. Written as bare words separated by spaces, the way the field itself is.
   ///
@@ -2385,10 +2253,10 @@ abstract class AppLocalizations {
   /// **'Enrich metadata'**
   String get adminScheduleEnrich;
 
-  /// What the scheduled enrichment does, its nightly cap, and when something no provider could answer is asked about again.
+  /// The nightly cap on the scheduled enrichment.
   ///
   /// In en, this message translates to:
-  /// **'Fills missing metadata, artwork, and lyrics from the configured providers. Capped at 2000 items a night, so a large library fills in over several nights; a run started by hand is uncapped. The server\'s configuration sets how long something no provider could answer waits before it is asked about again, 30 days by default.'**
+  /// **'Capped at 2000 items a night; a manual run is uncapped'**
   String get adminScheduleEnrichBlurb;
 
   /// When a scheduled job last ran. {stamp} is an already-formatted date and time.
@@ -2415,10 +2283,10 @@ abstract class AppLocalizations {
   /// **'Prune'**
   String get adminSchedulePrune;
 
-  /// What the prune job does.
+  /// The consequence line on the prune job: what it clears for good.
   ///
   /// In en, this message translates to:
-  /// **'Clears expired staging, spent tokens, and trashed files past their retention.'**
+  /// **'Permanently clears expired staging, tokens and old trash'**
   String get adminSchedulePruneBlurb;
 
   /// Message after one schedule's cron or switch was written. {name} is the job's own name, such as the library scan.
@@ -2433,10 +2301,10 @@ abstract class AppLocalizations {
   /// **'Library scan'**
   String get adminScheduleScan;
 
-  /// What the library scan does, and that it costs little.
+  /// The cost note on the library scan job: it costs little.
   ///
   /// In en, this message translates to:
-  /// **'Finds new and changed files, reads their tags, and indexes them. Cheap: it does not decode audio.'**
+  /// **'Cheap: does not decode audio'**
   String get adminScheduleScanBlurb;
 
   /// Outcome of a scheduled run that failed. Lower case and inside brackets, agreeing with the word for a run.
@@ -2450,12 +2318,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ok'**
   String get adminScheduleStatusOk;
-
-  /// Empty state of the maintenance timetable, saying that the server has no scheduled work at all.
-  ///
-  /// In en, this message translates to:
-  /// **'This server runs nothing on a timetable.'**
-  String get adminSchedulesEmptyMessage;
 
   /// Empty state of the maintenance timetable.
   ///
@@ -2481,29 +2343,11 @@ abstract class AppLocalizations {
   /// **'Audit log'**
   String get adminSectionAudit;
 
-  /// Line under the audit log in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Who did what, and to what'**
-  String get adminSectionAuditBlurb;
-
-  /// Line under Backups in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Archives, imports, and staged restores'**
-  String get adminSectionBackupsBlurb;
-
   /// Name of the console's front page in the section list.
   ///
   /// In en, this message translates to:
   /// **'Dashboard'**
   String get adminSectionDashboard;
-
-  /// Line under the dashboard in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'What needs attention, and what is running'**
-  String get adminSectionDashboardBlurb;
 
   /// Name of the screen listing files the catalog could not read.
   ///
@@ -2511,47 +2355,11 @@ abstract class AppLocalizations {
   /// **'Diagnostics'**
   String get adminSectionDiagnostics;
 
-  /// Line under Diagnostics in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Files the catalog could not read'**
-  String get adminSectionDiagnosticsBlurb;
-
-  /// Line under Enrichment in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Where artwork, lyrics and details come from'**
-  String get adminSectionEnrichmentBlurb;
-
-  /// Line under the genre tree in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'The canonical vocabulary every genre folds onto'**
-  String get adminSectionGenresBlurb;
-
   /// Name of the screen listing what is missing, mistagged, or duplicated in the library.
   ///
   /// In en, this message translates to:
   /// **'Health'**
   String get adminSectionHealth;
-
-  /// Line under Health in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'What is missing, mistagged, or duplicated'**
-  String get adminSectionHealthBlurb;
-
-  /// Line under Libraries in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'The roots WaxDeck scans, and what each one holds'**
-  String get adminSectionLibrariesBlurb;
-
-  /// Line under the import screen in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Bring a library, its stars, and its history across'**
-  String get adminSectionMigrateBlurb;
 
   /// Name of the screen saying where this server reports operations events.
   ///
@@ -2559,23 +2367,11 @@ abstract class AppLocalizations {
   /// **'Notifications'**
   String get adminSectionNotifications;
 
-  /// Line under Notifications in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Where this server reports operations events'**
-  String get adminSectionNotificationsBlurb;
-
   /// Name of the screen that moves library files into a naming scheme.
   ///
   /// In en, this message translates to:
   /// **'Organize'**
   String get adminSectionOrganize;
-
-  /// Line under Organize in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Move files into a naming scheme'**
-  String get adminSectionOrganizeBlurb;
 
   /// Name of the screen holding albums waiting for an identification decision.
   ///
@@ -2583,41 +2379,11 @@ abstract class AppLocalizations {
   /// **'Review queue'**
   String get adminSectionReview;
 
-  /// Line under Schedules in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'When scans, backups, and pruning run'**
-  String get adminSectionSchedulesBlurb;
-
-  /// Line under server settings in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Signups, read-only mode, transcoding, retention'**
-  String get adminSectionSettingsBlurb;
-
   /// Name of the screen listing every public link on this server. The listener's own links are a different screen in settings.
   ///
   /// In en, this message translates to:
   /// **'Share links'**
   String get adminSectionShares;
-
-  /// Line under share links in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Every public link on this server, and who minted it'**
-  String get adminSectionSharesBlurb;
-
-  /// Line under Trash in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Deleted files, until they are purged'**
-  String get adminSectionTrashBlurb;
-
-  /// Line under Users in the console's section list.
-  ///
-  /// In en, this message translates to:
-  /// **'Accounts, invites, and what each one may do'**
-  String get adminSectionUsersBlurb;
 
   /// Heading over the settings deciding who may reach this server and what they may change.
   ///
@@ -2625,17 +2391,17 @@ abstract class AppLocalizations {
   /// **'Access'**
   String get adminServerAccessGroup;
 
-  /// The caveat under the running-session count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it.
+  /// How many sessions the audio engine is serving at this moment, then how many of them are listeners playing a whole queue as one continuous stream. {count} is the sessions, {timelines} the gapless queues among them; with none the second sentence is left out, so its arms carry their own leading space.
   ///
   /// In en, this message translates to:
-  /// **'Counts what the engine is transcoding or remuxing, including a client that forced the source\'s own format, and a listener playing a queue gaplessly holds one slot however many renderings they have live.'**
-  String get adminServerActivityCaveat;
+  /// **'{count, plural, =1{1 engine-backed session right now.} other{{count} engine-backed sessions right now.}}{timelines, plural, =0{} =1{ One of them is a gapless queue.} other{ {timelines} of them are gapless queues.}}'**
+  String adminServerActivityCount(int count, int timelines);
 
-  /// How many sessions the audio engine is serving at this moment.
+  /// Tooltip beside the running-session count: what the number includes and how a gapless queue is counted.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 engine-backed session right now.} other{{count} engine-backed sessions right now.}}'**
-  String adminServerActivityCount(int count);
+  /// **'Counts engine sessions, including forced source formats; a gapless queue holds one slot however many renderings are live.'**
+  String get adminServerActivityHelp;
 
   /// Drawn in place of the running-stream count while it is being read.
   ///
@@ -2649,18 +2415,6 @@ abstract class AppLocalizations {
   /// **'Refresh what is running'**
   String get adminServerActivityRefresh;
 
-  /// The running-stream count and its caveat read as one for a screen reader. Both halves are already-worded sentences.
-  ///
-  /// In en, this message translates to:
-  /// **'{headline} {caveat}'**
-  String adminServerActivitySpoken(String headline, String caveat);
-
-  /// How many of the running sessions are listeners playing a whole queue as one continuous stream.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =0{None of them is a gapless queue.} =1{One of them is a gapless queue.} other{{count} of them are gapless queues.}}'**
-  String adminServerActivityTimelines(int count);
-
   /// Drawn in place of the running-stream count when that read failed.
   ///
   /// In en, this message translates to:
@@ -2673,11 +2427,11 @@ abstract class AppLocalizations {
   /// **'Analysis'**
   String get adminServerAnalysisGroup;
 
-  /// Hint in the default bitrate field.
+  /// Help line under the default bitrate field.
   ///
   /// In en, this message translates to:
   /// **'0 means no ceiling'**
-  String get adminServerDefaultKbpsHint;
+  String get adminServerDefaultKbpsHelp;
 
   /// Field for the highest bitrate a transcode uses unless something asks for less. kbps is the unit.
   ///
@@ -2694,7 +2448,7 @@ abstract class AppLocalizations {
   /// Line under the radio cover-art switch. Says plainly what leaves the server, because the setting is on by default. Deezer, MusicBrainz and the Cover Art Archive are service names and stay as they are.
   ///
   /// In en, this message translates to:
-  /// **'When a station announces a track this library does not hold, ask Deezer, MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. On by default; with it off the player draws the station mark.'**
+  /// **'Asks Deezer, MusicBrainz and the Cover Art Archive for covers of unknown tracks, sending artist and title'**
   String get adminServerRadioArtHelp;
 
   /// Switch letting the server ask outside services for the cover of a track a radio station announced.
@@ -2712,7 +2466,7 @@ abstract class AppLocalizations {
   /// Line under the read-only switch, saying what still works while it is on.
   ///
   /// In en, this message translates to:
-  /// **'Refuse every change to library content, server-wide. Playback, stars, and progress keep working'**
+  /// **'Refuses every library change; playback keeps working'**
   String get adminServerReadOnlyHelp;
 
   /// Switch refusing every change to library content across the server.
@@ -2748,7 +2502,7 @@ abstract class AppLocalizations {
   /// Line under the open-signup switch, saying that a request is not yet an account.
   ///
   /// In en, this message translates to:
-  /// **'Anyone may request an account; requests wait for approval'**
+  /// **'Requests wait for approval'**
   String get adminServerSignupHelp;
 
   /// Switch letting anybody request an account on this server.
@@ -2757,23 +2511,17 @@ abstract class AppLocalizations {
   /// **'Open signup'**
   String get adminServerSignupTitle;
 
-  /// Line under the sonic-analysis switch, naming the three features that need it.
-  ///
-  /// In en, this message translates to:
-  /// **'Analyze the library in the background for instant mixes, similar tracks, and sonic paths'**
-  String get adminServerSonicHelp;
-
   /// Switch letting the server analyze how the library sounds, which is what instant mixes and similar tracks are built from.
   ///
   /// In en, this message translates to:
   /// **'Sonic analysis'**
   String get adminServerSonicTitle;
 
-  /// Hint in the task retention field.
+  /// Help line under the task retention field.
   ///
   /// In en, this message translates to:
   /// **'0 keeps every finished task'**
-  String get adminServerTaskDaysHint;
+  String get adminServerTaskDaysHelp;
 
   /// Refusal shown when the task retention field holds something that is not a whole number of days. It leads with the field's own name because one save writes two fields.
   ///
@@ -2805,12 +2553,6 @@ abstract class AppLocalizations {
   /// **'Transcodes at once, per listener'**
   String get adminServerTranscodesPerUserLabel;
 
-  /// Line under the transcoding heading, saying what a transcode is before the fields that bound it.
-  ///
-  /// In en, this message translates to:
-  /// **'A transcode is what happens when a client cannot play a file as stored. These bound how many run at once, so a busy evening does not become a slow one.'**
-  String get adminServerTranscodingBlurb;
-
   /// Heading over the limits on how much audio the server re-encodes at once.
   ///
   /// In en, this message translates to:
@@ -2823,11 +2565,11 @@ abstract class AppLocalizations {
   /// **'Transcoding limits saved'**
   String get adminServerTranscodingSaved;
 
-  /// Hint in the trash retention field.
+  /// Help line under the trash retention field.
   ///
   /// In en, this message translates to:
   /// **'0 keeps them until the trash is emptied by hand'**
-  String get adminServerTrashDaysHint;
+  String get adminServerTrashDaysHelp;
 
   /// Refusal shown when the trash retention field holds something that is not a whole number of days. It leads with the field's own name because one save writes two fields.
   ///
@@ -2852,12 +2594,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Link revoked'**
   String get adminShareRevoked;
-
-  /// Empty state of the server-wide share links screen, saying what would fill it.
-  ///
-  /// In en, this message translates to:
-  /// **'Nobody on this server has minted a public link. When somebody does it turns up here, with who made it and a way to switch it off.'**
-  String get adminSharesEmptyMessage;
 
   /// Empty state of the server-wide share links screen.
   ///
@@ -2895,12 +2631,6 @@ abstract class AppLocalizations {
   /// **'Unreachable'**
   String get adminStreamingUnreachable;
 
-  /// Line under the artwork-cache heading, saying what the cache is and what clearing it costs.
-  ///
-  /// In en, this message translates to:
-  /// **'Resized copies of your covers, generated on demand. Clearing them costs a moment of decoding the next time each one is drawn, never a picture.'**
-  String get adminThumbsBlurb;
-
   /// Button on the artwork-cache card that drops every generated thumbnail.
   ///
   /// In en, this message translates to:
@@ -2910,7 +2640,7 @@ abstract class AppLocalizations {
   /// Body of the clear-artwork-cache dialog.
   ///
   /// In en, this message translates to:
-  /// **'Every generated copy is dropped and regenerated the next time a cover is drawn. No artwork is lost. The space is freed inside the catalog file rather than returned to the disk.'**
+  /// **'Copies regenerate on next draw. No artwork is lost.'**
   String get adminThumbsClearBody;
 
   /// Title of the dialog confirming that every generated thumbnail is dropped.
@@ -3165,12 +2895,6 @@ abstract class AppLocalizations {
   /// **'Every trashed file outside read-only libraries is deleted for good, including the ones still restorable. This cannot be undone.'**
   String get adminTrashEmptyBody;
 
-  /// Empty state of the trash list, saying what the screen is for.
-  ///
-  /// In en, this message translates to:
-  /// **'Deleted files wait here before they are purged.'**
-  String get adminTrashEmptyStateMessage;
-
   /// Empty state of the trash list.
   ///
   /// In en, this message translates to:
@@ -3279,12 +3003,6 @@ abstract class AppLocalizations {
   /// **'Restored {name}'**
   String adminTrashRestored(String name);
 
-  /// Line under the show-restored switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Entries already put back, for the record'**
-  String get adminTrashShowRestoredHelp;
-
   /// Switch that keeps already-restored entries in the trash list.
   ///
   /// In en, this message translates to:
@@ -3321,12 +3039,6 @@ abstract class AppLocalizations {
   /// **'Account actions'**
   String get adminUserActionsGroup;
 
-  /// Line under the administrator switch in the account editor, saying what the role carries.
-  ///
-  /// In en, this message translates to:
-  /// **'Sees the whole library and the admin console'**
-  String get adminUserAdminHelp;
-
   /// Switch in the account editor making the account an administrator.
   ///
   /// In en, this message translates to:
@@ -3360,7 +3072,7 @@ abstract class AppLocalizations {
   /// Line under the child-account preset button, listing what the preset changes.
   ///
   /// In en, this message translates to:
-  /// **'Sets no explicit content, no deleting, downloading, or uploading, and a deny rule for advisory-tagged tracks. Everything below stays editable.'**
+  /// **'Restricts explicit content, deleting, downloads and uploads; editable below.'**
   String get adminUserChildPresetHelp;
 
   /// Button that opens the confirmation for deleting the account being edited.
@@ -3390,7 +3102,7 @@ abstract class AppLocalizations {
   /// Line under the choice that deletes the account's playlists, saying what it costs the people the playlists were shared with.
   ///
   /// In en, this message translates to:
-  /// **'Shared and private alike. Anyone they shared a playlist with loses it.'**
+  /// **'Shared and private alike; others lose access'**
   String get adminUserDeletePlaylistsDeleteHelp;
 
   /// Choice in the delete-account dialog, and the default: the account's shared playlists become the administrator's who deletes it.
@@ -3402,7 +3114,7 @@ abstract class AppLocalizations {
   /// Line under the choice that hands the account's shared playlists to the administrator, saying what happens to the rest.
   ///
   /// In en, this message translates to:
-  /// **'They keep their entries and stay shared. A smart playlist that depends on their stars, ratings, plays or private playlists becomes a fixed list of its tracks. Their private playlists are deleted.'**
+  /// **'Smart playlists depending on this account become fixed lists. Private ones are deleted.'**
   String get adminUserDeletePlaylistsTransferHelp;
 
   /// Title of the dialog confirming an account deletion.
@@ -3414,7 +3126,7 @@ abstract class AppLocalizations {
   /// Line under the disabled switch in the account editor.
   ///
   /// In en, this message translates to:
-  /// **'A disabled account cannot sign in, and its live sessions are revoked'**
+  /// **'Cannot sign in; sessions are revoked'**
   String get adminUserDisabledHelp;
 
   /// Switch in the account editor that disables the account. Describes the account, so it agrees with the word for an account in this language.
@@ -3441,12 +3153,6 @@ abstract class AppLocalizations {
   /// **'Transcode ceiling (kbps)'**
   String get adminUserMaxKbpsLabel;
 
-  /// Line under the upload switch in the account editor. Uploads wait in a review queue rather than landing directly.
-  ///
-  /// In en, this message translates to:
-  /// **'Add files to the library, through review'**
-  String get adminUserMayUploadHelp;
-
   /// Switch in the account editor letting the account upload files.
   ///
   /// In en, this message translates to:
@@ -3465,23 +3171,11 @@ abstract class AppLocalizations {
   /// **'Password set'**
   String get adminUserPasswordSet;
 
-  /// Line under the delete permission in the account editor.
-  ///
-  /// In en, this message translates to:
-  /// **'Move catalog files to the trash'**
-  String get adminUserPermDeleteHelp;
-
   /// Permission switch in the account editor for deleting library files.
   ///
   /// In en, this message translates to:
   /// **'Delete library files'**
   String get adminUserPermDeleteTitle;
-
-  /// Line under the download permission in the account editor.
-  ///
-  /// In en, this message translates to:
-  /// **'Keep the stored file, not just a stream'**
-  String get adminUserPermDownloadHelp;
 
   /// Permission switch in the account editor for downloading the stored files.
   ///
@@ -3489,10 +3183,10 @@ abstract class AppLocalizations {
   /// **'Download originals'**
   String get adminUserPermDownloadTitle;
 
-  /// Line under the explicit-content permission in the account editor.
+  /// Info tip on the account editor's Explicit content switch: off hides only the podcast shows and episodes their feed flags; music is hidden by a content deny rule further down the form.
   ///
   /// In en, this message translates to:
-  /// **'Off hides what the deny rules match'**
+  /// **'Podcasts only; music needs a content deny rule'**
   String get adminUserPermExplicitHelp;
 
   /// Permission switch in the account editor for content marked explicit.
@@ -3501,23 +3195,11 @@ abstract class AppLocalizations {
   /// **'Explicit content'**
   String get adminUserPermExplicitTitle;
 
-  /// Line under the manage-podcasts permission in the account editor.
-  ///
-  /// In en, this message translates to:
-  /// **'Subscribe, unsubscribe, and change feed settings'**
-  String get adminUserPermManagePodcastsHelp;
-
   /// Permission switch in the account editor for managing podcast subscriptions.
   ///
   /// In en, this message translates to:
   /// **'Manage podcasts'**
   String get adminUserPermManagePodcastsTitle;
-
-  /// Line under the shared-outputs permission in the account editor.
-  ///
-  /// In en, this message translates to:
-  /// **'May play to endpoints other people also use'**
-  String get adminUserPermSharedOutputsHelp;
 
   /// Permission switch in the account editor for playing to playback endpoints other accounts also use.
   ///
@@ -3530,12 +3212,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Permissions'**
   String get adminUserPermissionsGroup;
-
-  /// Line under the pending-upload limit in the account editor, saying that the limit bounds the review queue rather than the account's total contribution.
-  ///
-  /// In en, this message translates to:
-  /// **'How much may sit in staging waiting for a decision. Importing an upload into the library frees the space again, so this bounds the queue rather than what the account contributes.'**
-  String get adminUserQuotaHelp;
 
   /// Hint in the pending-upload limit field of the account editor.
   ///
@@ -3609,12 +3285,6 @@ abstract class AppLocalizations {
   /// **'Content allow rules'**
   String get adminUserTagAllowLabel;
 
-  /// Line under the content deny rules.
-  ///
-  /// In en, this message translates to:
-  /// **'Matching content is hidden from this account'**
-  String get adminUserTagDenyHelp;
-
   /// Heading over the tag rules that hide content from the account.
   ///
   /// In en, this message translates to:
@@ -3662,12 +3332,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Uploads'**
   String get adminUsersColumnUploads;
-
-  /// Empty state of the account list, naming the two ways an account comes to exist.
-  ///
-  /// In en, this message translates to:
-  /// **'Invite somebody, or open signup in server settings.'**
-  String get adminUsersEmptyMessage;
 
   /// Empty state of the account list.
   ///
@@ -3792,7 +3456,7 @@ abstract class AppLocalizations {
   /// Body of the first-hour card. It exists to tell "still working" from "apparently broken" on a new server.
   ///
   /// In en, this message translates to:
-  /// **'Files appear as they are indexed. Artwork, matching, and the health score fill in behind that: albums the scan finds are identified on their own, and anything the matcher is unsure of arrives in the review queue.'**
+  /// **'Files appear as indexed; artwork and matching follow.'**
   String get adminWarmingBlurb;
 
   /// Heading of the first-hour card while a library scan is running.
@@ -3816,7 +3480,7 @@ abstract class AppLocalizations {
   /// Body of the first guided step.
   ///
   /// In en, this message translates to:
-  /// **'A library is a folder WaxDeck reads. Add one and everything else on this page starts having something to say.'**
+  /// **'A library is a folder WaxDeck reads. Add one.'**
   String get adminWizardAddLibraryBlurb;
 
   /// Title of the first guided step, before any library exists.
@@ -3834,7 +3498,7 @@ abstract class AppLocalizations {
   /// Body of the second guided step.
   ///
   /// In en, this message translates to:
-  /// **'A scan indexes the files, pulls their tags, and identifies the albums it recognises. It runs in the background: you can leave this page.'**
+  /// **'A scan indexes files and identifies albums, in the background.'**
   String get adminWizardScanBlurb;
 
   /// Title of the second guided step, once a root exists and nothing has read it.
@@ -3858,7 +3522,7 @@ abstract class AppLocalizations {
   /// Body of the third guided step, naming the two things worth doing while waiting.
   ///
   /// In en, this message translates to:
-  /// **'Files appear as they are indexed, and artwork, matching, and the health score fill in behind them. Two things worth doing meanwhile: invite the people who will listen, and look in on the albums the matcher was unsure of.'**
+  /// **'Files appear as they are indexed. Meanwhile, invite listeners and review unsure matches.'**
   String get adminWizardWarmingBlurb;
 
   /// Title of the third guided step, shown while the scan and the first health sweep run.
@@ -4017,16 +3681,10 @@ abstract class AppLocalizations {
   /// **'Clear'**
   String get artworkClearAction;
 
-  /// Body of the clear dialog for every slot but the front cover.
-  ///
-  /// In en, this message translates to:
-  /// **'The slot becomes empty. Nothing falls back into it.'**
-  String get artworkClearBody;
-
   /// Body of the clear dialog for the front cover, which is the one slot that falls back to something else.
   ///
   /// In en, this message translates to:
-  /// **'The item falls back to its album or artist cover. The image itself is removed from the catalog.'**
+  /// **'Removes the image; the item falls back to another cover.'**
   String get artworkClearFrontBody;
 
   /// Accessible name of the control that empties one artwork slot. {slot} is the slot's inline form.
@@ -4065,7 +3723,7 @@ abstract class AppLocalizations {
   /// **'Held by the cover pin'**
   String get artworkHeldByCoverPin;
 
-  /// One-line help under the cover pin switch, no full stop. Says both facts: the pin holds every slot through scans and enrichment, and an empty pinned slot stays empty (a cleared-and-pinned cover refuses every later write).
+  /// Info tip beside the cover pin switch, no full stop. Says both facts: the pin holds every slot through scans and enrichment, and an empty pinned slot stays empty.
   ///
   /// In en, this message translates to:
   /// **'Holds every slot as it is, empty ones included, through scans and enrichment runs'**
@@ -4094,12 +3752,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{slot} takes one image; using {file}'**
   String artworkOneImageOnly(String slot, String file);
-
-  /// Line above the Artwork heading. A slot is one named place an image can go.
-  ///
-  /// In en, this message translates to:
-  /// **'One image per slot'**
-  String get artworkOverline;
 
   /// What the file picker calls the image it is asking for.
   ///
@@ -4293,12 +3945,6 @@ abstract class AppLocalizations {
   /// **'Have an invite?'**
   String get authHaveInvite;
 
-  /// Help under the invite field.
-  ///
-  /// In en, this message translates to:
-  /// **'With a valid invite the account works right away'**
-  String get authInviteHelp;
-
   /// The field for an invite code, which skips the wait for approval.
   ///
   /// In en, this message translates to:
@@ -4437,7 +4083,7 @@ abstract class AppLocalizations {
   /// **'Single sign-on did not go through. Try again.'**
   String get authSsoFailed;
 
-  /// Under the wordmark on the sign-in screen, saying what this is for.
+  /// Under the wordmark on the sign-in screen and on the About screen, saying what this is for.
   ///
   /// In en, this message translates to:
   /// **'Music, podcasts, and audiobooks'**
@@ -4539,10 +4185,10 @@ abstract class AppLocalizations {
   /// **'Queued item'**
   String get autoQueuedItem;
 
-  /// Line under the activity heading on the notifications screen, saying plainly that the list is this session's.
+  /// Line under the activity heading on the notifications screen: this device's own transfers are listed only while the app is open.
   ///
   /// In en, this message translates to:
-  /// **'What happened to this account, newest first. This device\'s own transfers are listed only while the app is open.'**
+  /// **'This device\'s transfers show only while the app is open.'**
   String get bellActivityBlurb;
 
   /// Heading over the list of what happened while the app was open.
@@ -4560,7 +4206,7 @@ abstract class AppLocalizations {
   /// Body of the confirmation before emptying the notification inbox, which is durable and shared across the account's devices.
   ///
   /// In en, this message translates to:
-  /// **'Delete every notification for this account, on every device? This cannot be undone.'**
+  /// **'Delete all notifications on every device? This cannot be undone.'**
   String get bellClearConfirm;
 
   /// Title of the confirmation before emptying the notification inbox.
@@ -4585,7 +4231,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Nothing has happened yet.'**
-  String get bellEmpty;
+  String get bellEmptyMessage;
 
   /// Heading of the empty state on the notifications screen. The bell's own menu needs no heading, so it draws the message alone.
   ///
@@ -4791,16 +4437,16 @@ abstract class AppLocalizations {
   /// **'Add a chapter'**
   String get bookChapterEditorAdd;
 
-  /// Line under the chapter editor saying how the rows' starts become ranges.
+  /// Info tip on the Chapters header: how rows file in playing order and where a new or moved chapter ends.
   ///
   /// In en, this message translates to:
-  /// **'Chapters file in playing order wherever they are typed. A new or moved chapter runs to the next one\'s start; the rest keep their stored lengths.'**
+  /// **'Chapters file in playing order. A new or moved chapter runs to the next one\'s start.'**
   String get bookChapterEditorHelp;
 
   /// Caution on the chapter editor while a start does not parse or the rows are out of order.
   ///
   /// In en, this message translates to:
-  /// **'Chapter starts must be stamps like 1:02:03, each one distinct. Chapters stay out of the save until they are.'**
+  /// **'Use distinct stamps like 1:02:03; chapters stay unsaved until fixed'**
   String get bookChapterEditorInvalid;
 
   /// Per-row button on the chapter editor taking the row out of the staged list.
@@ -4947,10 +4593,10 @@ abstract class AppLocalizations {
   /// **'Merge'**
   String get bookMergeAction;
 
-  /// Body of the dialog confirming a book merge: where the result goes, that positions survive, and what happens to the parts.
+  /// Body of the dialog confirming a book merge: one chaptered file, positions kept, originals trashed unless kept.
   ///
   /// In en, this message translates to:
-  /// **'The parts are joined into one chaptered file beside them, in the same library; every listener\'s position carries over. The original files move to the trash unless you keep them.'**
+  /// **'Parts join into one chaptered file; positions carry over. Originals go to the trash unless kept.'**
   String get bookMergeBody;
 
   /// Switch in the merge dialog that keeps the book's parts instead of moving them to the trash; the merged copy then gets its own folder beside them.
@@ -4958,12 +4604,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Keep the original files'**
   String get bookMergeKeep;
-
-  /// Help under the merge dialog's keep switch: where the merged copy goes when the parts stay.
-  ///
-  /// In en, this message translates to:
-  /// **'The merged copy goes into a folder of its own beside them'**
-  String get bookMergeKeepHelp;
 
   /// Title of the dialog confirming a book merge. {count} is how many files the book is now.
   ///
@@ -4988,12 +4628,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, other{{count} parts}}'**
   String bookPartsCount(int count);
-
-  /// Footnote on a book made of several files, so a listener who wonders why has the answer where they are looking.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, other{This book is {count} files, played as one timeline. Positions and chapters span all of them.}}'**
-  String bookPartsNote(int count);
 
   /// How far through a book the listener is, in the line under its title.
   ///
@@ -5046,7 +4680,7 @@ abstract class AppLocalizations {
   /// Line under that title, saying where a series comes from.
   ///
   /// In en, this message translates to:
-  /// **'A book joins a series when its tags name one. Set one from a book\'s metadata editor.'**
+  /// **'A book joins a series through its tags.'**
   String get bookSeriesEmptyMessage;
 
   /// Error state when the series index read failed.
@@ -5079,10 +4713,10 @@ abstract class AppLocalizations {
   /// **'There is no other series to merge into.'**
   String get bookSeriesMergeEmpty;
 
-  /// Line under that title: what the merge moves and what it leaves alone.
+  /// Line under the merge picker title: books move to the chosen series and this spelling goes away.
   ///
   /// In en, this message translates to:
-  /// **'The books in this series move to the one you pick, and this spelling goes away. Nothing else about the books changes.'**
+  /// **'Books move to the picked series; this spelling goes away'**
   String get bookSeriesMergeHelp;
 
   /// Title of that picker, naming the series being merged away.
@@ -5097,11 +4731,11 @@ abstract class AppLocalizations {
   /// **'Nothing to show here'**
   String get bookSeriesNoBooks;
 
-  /// Line under that title, naming the two things that can cause it: a library grant, or a content rule.
+  /// Line under the empty title of a series the account cannot open any book of: where to ask.
   ///
   /// In en, this message translates to:
-  /// **'This series holds nothing you can open. Ask an administrator if you expected to see it.'**
-  String get bookSeriesNoBooksMessage;
+  /// **'Ask an administrator if you expected more.'**
+  String get bookSeriesNoBooksEmptyMessage;
 
   /// Where a book sits in its series, as a link to the rest of it.
   ///
@@ -5157,10 +4791,10 @@ abstract class AppLocalizations {
   /// **'Split'**
   String get bookSplitAction;
 
-  /// Body of the dialog confirming a book split: where the pieces go and what happens to the original file.
+  /// Body of the dialog confirming a book split: one file per chapter, original trashed unless kept.
   ///
   /// In en, this message translates to:
-  /// **'One file per chapter is written beside the book. The original moves to the trash unless you keep it.'**
+  /// **'One file per chapter. The original goes to the trash unless kept.'**
   String get bookSplitBody;
 
   /// Switch in the split dialog that keeps the book's file instead of moving it to the trash; the pieces then get their own folder beside it.
@@ -5168,12 +4802,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Keep the original file'**
   String get bookSplitKeep;
-
-  /// Help under the split dialog's keep switch: where the pieces go when the original stays.
-  ///
-  /// In en, this message translates to:
-  /// **'The pieces go into a folder of their own beside it'**
-  String get bookSplitKeepHelp;
 
   /// Title of the dialog confirming a book split. {count} is how many chapters, so how many files it makes.
   ///
@@ -5205,12 +4833,6 @@ abstract class AppLocalizations {
   /// **'Trim silence'**
   String get bookTrimSilence;
 
-  /// Help under the trim-silence switch on a book.
-  ///
-  /// In en, this message translates to:
-  /// **'Shortens the pauses between sentences'**
-  String get bookTrimSilenceHelp;
-
   /// Action on the position snackbars, putting back where the listener was.
   ///
   /// In en, this message translates to:
@@ -5222,12 +4844,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Voice boost'**
   String get bookVoiceBoost;
-
-  /// Help under the voice-boost switch on a book.
-  ///
-  /// In en, this message translates to:
-  /// **'Lifts speech over a noisy room'**
-  String get bookVoiceBoostHelp;
 
   /// A co-authored book's other authors, on the book screen's own line above the narrators, under the author link that names the first. {names} is the authors after the first, joined by commas.
   ///
@@ -5370,8 +4986,8 @@ abstract class AppLocalizations {
   /// Why a filter can come up empty on a library with more pages behind it. The count rises with each fetch, so a press that finds nothing is still visibly progress.
   ///
   /// In en, this message translates to:
-  /// **'The filters run over the {count} books loaded so far, and your library has more.'**
-  String booksNothingMatchesYetMessage(int count);
+  /// **'Filters cover the {count} books loaded so far'**
+  String booksNothingMatchesYetEmptyMessage(int count);
 
   /// Button clearing the finished filter from the empty state it produced.
   ///
@@ -5508,12 +5124,6 @@ abstract class AppLocalizations {
   /// Empty state of the defect log.
   ///
   /// In en, this message translates to:
-  /// **'Errors the app catches on its own turn up here, so a bug report can carry them. An empty list is the good outcome.'**
-  String get defectsEmptyMessage;
-
-  /// Empty state of the defect log.
-  ///
-  /// In en, this message translates to:
   /// **'Nothing has gone wrong'**
   String get defectsEmptyTitle;
 
@@ -5589,17 +5199,17 @@ abstract class AppLocalizations {
   /// **'not reachable'**
   String get devicesBaseUnreachable;
 
-  /// Under the connection check heading, saying why the addresses matter.
+  /// Under the connection check heading: the addresses a cast device will try.
   ///
   /// In en, this message translates to:
-  /// **'A cast device fetches audio from this server by address. These are the addresses it will try, in order.'**
+  /// **'Addresses a cast device will try, in order.'**
   String get devicesCastBlurb;
 
-  /// The caveat over the address list: the server checking itself is not the speaker checking, and a reader deciding what to fix needs to know which of the two this is.
+  /// Info tip on the connection check heading: the server checking itself is not the speaker checking, and a reader deciding what to fix needs to know which of the two this is.
   ///
   /// In en, this message translates to:
-  /// **'The server checked these itself. An address it cannot reach will not work from a speaker either; one it can may still fail if the speaker is on another network.'**
-  String get devicesCastCaveat;
+  /// **'The server checked these itself; a speaker on another network may still fail.'**
+  String get devicesCastHelp;
 
   /// Line above the connection check heading, naming what it is about.
   ///
@@ -5624,6 +5234,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Currently elsewhere'**
   String get devicesCurrentlyElsewhere;
+
+  /// Line under an online device's name in the device picker: whether something is playing on it, and what can be changed on it from here (its volume, its speed, or both). {state} names the case.
+  ///
+  /// In en, this message translates to:
+  /// **'{state, select, inUse{In use} inUseVolume{In use, volume control} inUseSpeed{In use, speed control} inUseBoth{In use, volume and speed control} remoteVolume{Remote volume control} remoteSpeed{Remote speed control} remoteBoth{Remote volume and speed control} other{Remote control}}'**
+  String devicesEndpointControl(String state);
+
+  /// Line under an offline device's name in the device picker, whose row cannot be picked.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get devicesEndpointOffline;
 
   /// Heading over the devices running WaxDeck itself.
   ///
@@ -5665,7 +5287,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'The server did not answer. Playback here is unaffected.'**
-  String get devicesListErrorMessage;
+  String get devicesListErrorBody;
 
   /// Row in the device sheet while the device list is being read.
   ///
@@ -5685,11 +5307,11 @@ abstract class AppLocalizations {
   /// **'No addresses to try'**
   String get devicesNoAddresses;
 
-  /// Empty state of the connection check, saying what to do about it.
+  /// Line under the connection check's no-address title: the server setting that gives cast devices an address. The variable name stays as it is.
   ///
   /// In en, this message translates to:
-  /// **'This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.'**
-  String get devicesNoAddressesMessage;
+  /// **'Set WAXDECK_ADVERTISE_BASE on the server.'**
+  String get devicesNoAddressesEmptyMessage;
 
   /// Empty state in the connection check when no cast device or renderer has been found.
   ///
@@ -5700,8 +5322,8 @@ abstract class AppLocalizations {
   /// Body of the empty state when the connection check has no device to run against.
   ///
   /// In en, this message translates to:
-  /// **'No Chromecast or renderer has turned up on this network. Discovery needs multicast, which does not cross Docker\'s default network.'**
-  String get devicesNoDevicesToTestMessage;
+  /// **'Discovery needs multicast, which Docker\'s default network lacks.'**
+  String get devicesNoDevicesToTestEmptyMessage;
 
   /// Empty state of the remote playback screen.
   ///
@@ -5712,13 +5334,13 @@ abstract class AppLocalizations {
   /// Empty state of the remote playback screen, saying where the device list is.
   ///
   /// In en, this message translates to:
-  /// **'Pick a device from the now-playing bar to send playback somewhere else.'**
-  String get devicesNothingElsewhereMessage;
+  /// **'Pick a device from the now-playing bar.'**
+  String get devicesNothingElsewhereEmptyMessage;
 
   /// Snackbar when the device picker is asked to hand playback over with nothing playing.
   ///
   /// In en, this message translates to:
-  /// **'Nothing is playing here to send. Start something first.'**
+  /// **'Nothing playing here to send.'**
   String get devicesNothingToSend;
 
   /// Under a session running elsewhere, naming the device. Lower case: it continues the line above it.
@@ -5787,7 +5409,7 @@ abstract class AppLocalizations {
   /// **'The device never started playing'**
   String get devicesProbeTimeout;
 
-  /// Under every device row while live radio plays here: a station is not a session and cannot be sent anywhere.
+  /// One line at the top of the device sheet while live radio plays here: a station is not a session and cannot be sent anywhere.
   ///
   /// In en, this message translates to:
   /// **'Stations play on the device that tuned them'**
@@ -5811,34 +5433,22 @@ abstract class AppLocalizations {
   /// **'Stop playback on {endpoint}'**
   String devicesStopOn(String endpoint);
 
-  /// Body of the dialog asking what to do about playback already running elsewhere.
-  ///
-  /// In en, this message translates to:
-  /// **'This device can take over, or leave it playing where it is.'**
-  String get devicesTakeOverBody;
-
-  /// Under this device's row while something is playing elsewhere.
-  ///
-  /// In en, this message translates to:
-  /// **'Take over, or leave it playing'**
-  String get devicesTakeOverOrLeave;
-
   /// Section header in the connection check for the half a real device runs.
   ///
   /// In en, this message translates to:
   /// **'Test on a device'**
   String get devicesTestOnDevice;
 
-  /// Explains what the device half of the connection check does.
+  /// Info tip on the test-on-a-device heading: what the device half of the connection check does.
   ///
   /// In en, this message translates to:
-  /// **'The check above is this server reaching itself. Pick a speaker and it will fetch a second of silence through each address and say what happened.'**
-  String get devicesTestOnDeviceBlurb;
+  /// **'Pick a speaker and it fetches a second of silence through each address.'**
+  String get devicesTestOnDeviceHelp;
 
   /// Subtitle on a device row while its connection test runs, which is slow enough to say so.
   ///
   /// In en, this message translates to:
-  /// **'Testing. This takes a few seconds per address.'**
+  /// **'Testing'**
   String get devicesTesting;
 
   /// The row for the device the listener is holding, in the device sheet.
@@ -5880,7 +5490,7 @@ abstract class AppLocalizations {
   /// Empty state of a mix or similar-tracks list.
   ///
   /// In en, this message translates to:
-  /// **'This answer came back empty. Try another track.'**
+  /// **'Try another track.'**
   String get discoveryEmptyMessage;
 
   /// Empty state of a mix or similar-tracks list that came back with no tracks.
@@ -5976,7 +5586,7 @@ abstract class AppLocalizations {
   /// Body of the clear-downloads dialog. {size} is a formatted size.
   ///
   /// In en, this message translates to:
-  /// **'This frees {size}. Nothing leaves the library: everything here plays again with the server reachable.'**
+  /// **'This frees {size}. Nothing leaves the library.'**
   String downloadsClearBody(String size);
 
   /// Confirming button of the clear-downloads dialog.
@@ -6012,7 +5622,7 @@ abstract class AppLocalizations {
   /// Empty state of the downloads screen.
   ///
   /// In en, this message translates to:
-  /// **'Download a book, an album, or an episode and it plays here with the server unreachable. Its cover comes with it.'**
+  /// **'Downloads play here without the server.'**
   String get downloadsEmptyMessage;
 
   /// Empty state of the downloads screen.
@@ -6309,7 +5919,7 @@ abstract class AppLocalizations {
   /// **'The file this track is cut from has no CUE sheet of its own name beside it, so there is nothing to split it by.'**
   String get errorCueSplitNoSheet;
 
-  /// Error sentence for the spec code `directory-unavailable`, such as the radio station directory.
+  /// Error sentence for the spec code `directory-unavailable`, from the radio station directory or the podcast directory. Shared by both, so it names no way out; the surfaces asking add their own (see errorStationDirectoryUnavailable).
   ///
   /// In en, this message translates to:
   /// **'The directory service did not answer. Try again later.'**
@@ -6489,6 +6099,12 @@ abstract class AppLocalizations {
   /// **'This server is not running the source that request needs.'**
   String get errorSourceUnavailable;
 
+  /// Error sentence for the spec code `directory-unavailable` on the search screen's station results, whose one action is Retry: the cause, and the way round it that needs no directory (Radio's add-station dialog takes a stream URL). The podcast directory and the add dialogs keep the plain sentence, since they say their own way out.
+  ///
+  /// In en, this message translates to:
+  /// **'The station directory did not answer; add a station by its stream URL in Radio.'**
+  String get errorStationDirectoryUnavailable;
+
   /// Error sentence for the spec code `storage-full`: the server's own disk, not the reader's allowance, so there is nothing they can clear.
   ///
   /// In en, this message translates to:
@@ -6603,12 +6219,6 @@ abstract class AppLocalizations {
   /// **'Artist totals out of date'**
   String get healthCatalogArtistTotals;
 
-  /// Explanation under the Catalog check heading, saying what the check compares and that it is seldom needed.
-  ///
-  /// In en, this message translates to:
-  /// **'Compares what the catalog keeps beside your files (the search index, totals, sort keys and years) with a fresh count from its own records. Rarely needed: a catalog the server built fresh reads consistent.'**
-  String get healthCatalogBlurb;
-
   /// Row of the catalog check counting books whose stored ISBN match key is not the one their ISBN gives.
   ///
   /// In en, this message translates to:
@@ -6636,7 +6246,7 @@ abstract class AppLocalizations {
   /// Result of a catalog check that found derived data out of step with the catalog's records; the counts follow.
   ///
   /// In en, this message translates to:
-  /// **'Out of step. A repair recomputes what is listed below.'**
+  /// **'Out of step'**
   String get healthCatalogDrift;
 
   /// Row of the catalog check counting genres whose stored totals differ from a recount.
@@ -6644,6 +6254,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Genre totals out of date'**
   String get healthCatalogGenreTotals;
+
+  /// Info on the Catalog check heading, saying what the check compares and that it is seldom needed.
+  ///
+  /// In en, this message translates to:
+  /// **'Compares the catalog\'s derived figures with a fresh count from its own records; rarely needed.'**
+  String get healthCatalogHelp;
 
   /// Row of the catalog check counting items with no search index entry.
   ///
@@ -6693,10 +6309,10 @@ abstract class AppLocalizations {
   /// **'Repair'**
   String get healthCatalogRepair;
 
-  /// Body of the dialog confirming a catalog repair: what it does, that it holds up writes while it runs, and that it leaves the media files alone.
+  /// Body of the dialog confirming a catalog repair: what it deletes (catalog rows), that the files stay as they are, and that it holds up writes while it runs.
   ///
   /// In en, this message translates to:
-  /// **'The repair recounts what the check counts from the catalog\'s own records and deletes what nothing uses. It holds the catalog\'s write lock while it writes, so edits and scans wait for it. Your files are not touched.'**
+  /// **'Recounts what the check counts and deletes catalog rows nothing uses; your files are not touched. Edits and scans wait meanwhile.'**
   String get healthCatalogRepairBody;
 
   /// Message when a catalog repair was refused because one is already queued or running; the message offers the Tasks screen.
@@ -6738,7 +6354,7 @@ abstract class AppLocalizations {
   /// Result of a catalog check that found nothing out of step but unused rows or playlist gaps a repair clears; the counts follow.
   ///
   /// In en, this message translates to:
-  /// **'Consistent. A repair tidies what is listed below.'**
+  /// **'Consistent, but untidy'**
   String get healthCatalogTidy;
 
   /// Heading over the section that checks and repairs what the catalog derives from its own records.
@@ -6864,12 +6480,6 @@ abstract class AppLocalizations {
   /// Empty state of the diagnostics table.
   ///
   /// In en, this message translates to:
-  /// **'Every file the catalog has seen decoded cleanly.'**
-  String get healthDiagnosticsEmptyMessage;
-
-  /// Empty state of the diagnostics table.
-  ///
-  /// In en, this message translates to:
   /// **'No diagnostics recorded'**
   String get healthDiagnosticsEmptyTitle;
 
@@ -6888,12 +6498,6 @@ abstract class AppLocalizations {
   /// Empty state of the duplicates section.
   ///
   /// In en, this message translates to:
-  /// **'Artists, albums, and shows each appear once.'**
-  String get healthDuplicatesEmptyMessage;
-
-  /// Empty state of the duplicates section.
-  ///
-  /// In en, this message translates to:
   /// **'No duplicates detected'**
   String get healthDuplicatesEmptyTitle;
 
@@ -6902,12 +6506,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not load duplicates'**
   String get healthDuplicatesError;
-
-  /// Line above the Duplicates heading, saying what a duplicate is.
-  ///
-  /// In en, this message translates to:
-  /// **'One thing under two names'**
-  String get healthDuplicatesOverline;
 
   /// Heading over the duplicate findings.
   ///
@@ -6972,7 +6570,7 @@ abstract class AppLocalizations {
   /// Under a health rule this server cannot fix: the sources that supply artwork are not all switched on. Enrichment is the admin screen where sources are switched on.
   ///
   /// In en, this message translates to:
-  /// **'Needs its artwork sources switched on in Enrichment.'**
+  /// **'Needs artwork sources in Enrichment.'**
   String get healthFixBlockedArtSource;
 
   /// Under a health rule this server cannot fix: no provider of audiobook metadata is configured.
@@ -6981,34 +6579,34 @@ abstract class AppLocalizations {
   /// **'Needs a book metadata provider.'**
   String get healthFixBlockedBookSource;
 
-  /// Under a health rule this server cannot fix: it has no enrichment contact (an email or URL the administrator sets), which is what lets it ask MusicBrainz and the other free sources.
+  /// Under a health rule this server cannot fix: it has no enrichment contact (an email or URL set in the server's configuration), which is what lets it ask MusicBrainz and the other free sources.
   ///
   /// In en, this message translates to:
-  /// **'Needs an enrichment contact, which lets this server ask the free public sources.'**
+  /// **'Needs an enrichment contact set on the server.'**
   String get healthFixBlockedContact;
 
   /// Under a health rule this server cannot fix: no source of genres is switched on. Enrichment is the admin screen where sources are switched on.
   ///
   /// In en, this message translates to:
-  /// **'Needs a genre source, MusicBrainz or ListenBrainz, switched on in Enrichment.'**
+  /// **'Needs a genre source in Enrichment.'**
   String get healthFixBlockedGenreSource;
 
   /// Under a health rule this server cannot fix: no lyrics source is switched on. Enrichment is the admin screen where sources are switched on.
   ///
   /// In en, this message translates to:
-  /// **'Needs a lyrics source switched on in Enrichment.'**
+  /// **'Needs a lyrics source in Enrichment.'**
   String get healthFixBlockedLyricsSource;
 
   /// Under the path-mismatch health rule when no library lets the server place files, so there is no layout to compare paths with.
   ///
   /// In en, this message translates to:
-  /// **'Needs a managed library: with none, there is no layout for paths to match.'**
+  /// **'Needs a managed library.'**
   String get healthFixBlockedNoManaged;
 
   /// Under a health rule this server cannot fix, for a reason this app does not know how to word.
   ///
   /// In en, this message translates to:
-  /// **'This server cannot run this fix yet.'**
+  /// **'This server cannot run it yet.'**
   String get healthFixBlockedOther;
 
   /// Why a fix that writes files cannot run: the whole server is in read-only mode.
@@ -7082,12 +6680,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Move this file where the profile puts it?'**
   String get healthIssueFixTitle;
-
-  /// Empty state of one rule's list of failing items.
-  ///
-  /// In en, this message translates to:
-  /// **'Every item the sweeper has seen passes it.'**
-  String get healthIssuesEmptyMessage;
 
   /// Empty state of one rule's list of failing items.
   ///
@@ -7296,7 +6888,7 @@ abstract class AppLocalizations {
   /// Empty state of the rule table, saying what fills it.
   ///
   /// In en, this message translates to:
-  /// **'Rules appear once the sweeper has evaluated the library.'**
+  /// **'Rules appear after a sweep.'**
   String get healthRulesEmptyMessage;
 
   /// Empty state of the rule table.
@@ -7304,12 +6896,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing to check yet'**
   String get healthRulesEmptyTitle;
-
-  /// Line above the Rules heading, saying what the rules are.
-  ///
-  /// In en, this message translates to:
-  /// **'What the sweeper checks'**
-  String get healthRulesOverline;
 
   /// Heading over the per-rule failure counts.
   ///
@@ -7320,7 +6906,7 @@ abstract class AppLocalizations {
   /// Line beside the health score, saying how much of the library it covers.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{Library health across 1 evaluated item} other{Library health across {count} evaluated items}}'**
+  /// **'{count, plural, =1{1 item evaluated} other{{count} items evaluated}}'**
   String healthScoreBlurb(int count);
 
   /// Accessible name of the health score, which is drawn as a bare number.
@@ -7386,12 +6972,6 @@ abstract class AppLocalizations {
   /// Empty state of the quality upgrades section.
   ///
   /// In en, this message translates to:
-  /// **'Every recording is held once.'**
-  String get healthUpgradesEmptyMessage;
-
-  /// Empty state of the quality upgrades section.
-  ///
-  /// In en, this message translates to:
   /// **'No duplicate qualities detected'**
   String get healthUpgradesEmptyTitle;
 
@@ -7437,10 +7017,10 @@ abstract class AppLocalizations {
   /// **'On this device'**
   String get homeDownloadedTitle;
 
-  /// Empty state of home, naming the three ways a library gets filled.
+  /// Empty state of home, naming the ways a library gets filled.
   ///
   /// In en, this message translates to:
-  /// **'Point a library at your music, follow a show, or drop files in. Everything you add turns up on these shelves.'**
+  /// **'Add music, follow a show, or drop files in.'**
   String get homeEmptyMessage;
 
   /// Empty state of home on a server whose library holds nothing.
@@ -7518,7 +7098,7 @@ abstract class AppLocalizations {
   /// Banner across home with no server to ask.
   ///
   /// In en, this message translates to:
-  /// **'Offline. The shelves come back when the server does; what this device holds still plays.'**
+  /// **'Offline. Downloaded items still play.'**
   String get homeOfflineMessage;
 
   /// Menu row on an entity screen that pins it to the home shelf. Home is the landing screen, named here the way the navigation names it.
@@ -7764,7 +7344,7 @@ abstract class AppLocalizations {
   /// Body of the dialog shown when a delete names only some tracks of a CUE rip: how many more tracks share a file with the ones picked and would go with them. Said of the extra tracks, since among several picked tracks only some may share a file; extra is never zero.
   ///
   /// In en, this message translates to:
-  /// **'{extra, plural, =1{1 more track is} other{{extra} more tracks are}} cut from the same file as {chosen, plural, =1{the track you picked} other{tracks you picked}}, and tracks cut from one file are deleted together or not at all.'**
+  /// **'{extra, plural, =1{1 more track is} other{{extra} more tracks are}} cut from the same file as {chosen, plural, =1{the track you picked} other{tracks you picked}}; they are deleted together or not at all.'**
   String libraryDeleteRipShared(int chosen, int extra);
 
   /// Title of the dialog offering to delete, with the tracks chosen, every other track their shared files hold, after a delete of only some of them was refused.
@@ -7992,13 +7572,13 @@ abstract class AppLocalizations {
   /// Message when a change to audiobook ended having converted nothing, because every item named already was one (a view drawn before another device changed it). {count} is how many items were named.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{This is already an audiobook} other{These are already audiobooks}}, so nothing changed.'**
+  /// **'{count, plural, =1{Already an audiobook} other{Already audiobooks}}'**
   String libraryKindAlreadyBook(int count);
 
   /// Message when a change to music ended having converted nothing, because every item named already was music (a view drawn before another device changed it). {count} is how many items were named.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{This is already music} other{These are already music}}, so nothing changed.'**
+  /// **'{count, plural, =1{Already music} other{Already music}}'**
   String libraryKindAlreadyMusic(int count);
 
   /// The word for an artist where it stands inside a sentence, such as the star row's accessible names. Lower case.
@@ -8034,7 +7614,7 @@ abstract class AppLocalizations {
   /// Message when a kind change is still running after the dialog stopped watching it (accounts without the Tasks screen).
   ///
   /// In en, this message translates to:
-  /// **'It carries on in the background; you will be told when it is done.'**
+  /// **'Running in the background'**
   String get libraryKindQueued;
 
   /// Message, with a Tasks action, when a kind change is still running after the dialog stopped watching it (administrators).
@@ -8046,7 +7626,7 @@ abstract class AppLocalizations {
   /// Message when a kind change folded the item playing into a book, which stopped it; the book's screen opens after it.
   ///
   /// In en, this message translates to:
-  /// **'What was playing is part of the book now; play it from here.'**
+  /// **'Now in the book; play from here'**
   String get libraryKindStoppedPlaying;
 
   /// Menu row on a music track (item menu, player More menu, metadata actions) that turns it into an audiobook.
@@ -8058,7 +7638,7 @@ abstract class AppLocalizations {
   /// Body of the dialog confirming tracks become an audiobook. {count} is how many tracks.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{This track becomes an audiobook in Books.} other{These {count} tracks become one audiobook in Books, the parts in order.}} Plays, stars and playlist entries come with it, and later scans keep the choice.'**
+  /// **'{count, plural, =1{This track becomes an audiobook in Books.} other{{count} tracks become one audiobook in Books, in order.}} Plays, stars and playlists come with it.'**
   String libraryKindToBookBody(int count);
 
   /// Title of the dialog confirming tracks become an audiobook.
@@ -8076,7 +7656,7 @@ abstract class AppLocalizations {
   /// Body of the dialog confirming a book becomes music tracks.
   ///
   /// In en, this message translates to:
-  /// **'This book\'s parts become tracks in Music. Plays and stars stay with them, and later scans keep the choice.'**
+  /// **'The parts become tracks in Music. Plays and stars stay.'**
   String get libraryKindToMusicBody;
 
   /// Title of the dialog confirming a book becomes music tracks.
@@ -8091,10 +7671,10 @@ abstract class AppLocalizations {
   /// **'Reading the files again'**
   String get libraryKindWorking;
 
-  /// Help under the write-back switch in the dialog changing what items are.
+  /// Info on the write-back switch in the dialog changing what items are.
   ///
   /// In en, this message translates to:
-  /// **'Writes the choice into the files too. Even a catalog rebuilt from scratch then reads a book as a book, and a track as music unless something else in its file says book.'**
+  /// **'Also writes the choice into the files, so a rebuilt catalog still reads a book as a book'**
   String get libraryKindWriteBackHelp;
 
   /// Overflow row pulling one track off the release a MusicBrainz id pinned it to.
@@ -8103,10 +7683,10 @@ abstract class AppLocalizations {
   /// **'Detach from release'**
   String get libraryMenuDetach;
 
-  /// Body of that confirmation: where the track lands and why its file's tags are cleared.
+  /// Body of that confirmation: where the track lands.
   ///
   /// In en, this message translates to:
-  /// **'The track leaves the release a MusicBrainz id pins it to and lands on the album its own tags imply.'**
+  /// **'The track leaves its release and joins the album its tags imply.'**
   String get libraryMenuDetachConfirmBody;
 
   /// Title of the confirmation that row asks before writing.
@@ -8115,10 +7695,10 @@ abstract class AppLocalizations {
   /// **'Detach this track?'**
   String get libraryMenuDetachConfirmTitle;
 
-  /// Line under the detach confirmation's write-tags switch. Off leaves the catalog edit alone on disk, which is what a read-only library can still take.
+  /// Info on the detach confirmation's write-tags switch. Off leaves the catalog edit alone on disk, which is what a read-only library can still take.
   ///
   /// In en, this message translates to:
-  /// **'Also clear the release tags in the track\'s file, so the next scan does not put it back'**
+  /// **'Also clears the release tags in the track\'s file, so the next scan does not put it back'**
   String get libraryMenuDetachWriteBackHelp;
 
   /// Message after a detach lands.
@@ -8211,6 +7791,12 @@ abstract class AppLocalizations {
   /// **'Add tag'**
   String get metadataAddTag;
 
+  /// Heading of the refusal an account without the administrator role gets on the artist editor: who may.
+  ///
+  /// In en, this message translates to:
+  /// **'Only administrators can edit an artist'**
+  String get metadataArtistForbiddenTitle;
+
   /// Message part after a bulk save: how many catalog rows took the edit.
   ///
   /// In en, this message translates to:
@@ -8226,7 +7812,7 @@ abstract class AppLocalizations {
   /// Caption under the bulk form stating what the endpoint always does: it locks what it writes, and it caps the batch.
   ///
   /// In en, this message translates to:
-  /// **'Saving locks every edited field on each selected track. One batch takes at most 1,000 items.'**
+  /// **'Saving locks edited fields; max 1,000 items.'**
   String get metadataBulkLockNote;
 
   /// Locked-fields choice: a locked track fails the whole batch.
@@ -8252,12 +7838,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Locked fields'**
   String get metadataBulkLockedPolicy;
-
-  /// Line under the locked-fields choice.
-  ///
-  /// In en, this message translates to:
-  /// **'What to do when a field this batch writes is already locked on a track'**
-  String get metadataBulkLockedPolicyHelp;
 
   /// Locked-fields choice: locked tracks are skipped and reported.
   ///
@@ -8319,12 +7899,6 @@ abstract class AppLocalizations {
   /// **'Credit role'**
   String get metadataCreditRole;
 
-  /// Line above the Credits heading.
-  ///
-  /// In en, this message translates to:
-  /// **'Who else is on it'**
-  String get metadataCreditsOverline;
-
   /// Heading over who else worked on the item.
   ///
   /// In en, this message translates to:
@@ -8340,7 +7914,7 @@ abstract class AppLocalizations {
   /// Body of the confirmation the workbench asks before replacing a pane that holds unsaved edits.
   ///
   /// In en, this message translates to:
-  /// **'This selection has edits its save bar has not written; switching away drops them.'**
+  /// **'Switching away drops this selection\'s unsaved edits.'**
   String get metadataDiscardBody;
 
   /// The confirming button on that dialog; Cancel keeps the pane and the typing.
@@ -8390,6 +7964,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fetch metadata'**
   String get metadataFetch;
+
+  /// Tooltip of the Fetch metadata button on the item editor: it applies what the providers agree on, once the preview it opens is approved.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies what the providers agree on, after a preview.'**
+  String get metadataFetchHelp;
 
   /// Name of the editable metadata field the server calls `album`.
   ///
@@ -8595,34 +8175,22 @@ abstract class AppLocalizations {
   /// **'Year'**
   String get metadataFieldYear;
 
-  /// Line above the Fields heading.
-  ///
-  /// In en, this message translates to:
-  /// **'What this item claims to be'**
-  String get metadataFieldsOverline;
-
   /// Heading over the item's editable metadata fields.
   ///
   /// In en, this message translates to:
   /// **'Fields'**
   String get metadataFieldsTitle;
 
-  /// Body of the refusal page shown when the signed-in account may not edit this item's metadata.
+  /// Heading of the refusal shown when the signed-in account may not edit an item's metadata, naming who may: an administrator, or for a track or a book the account whose upload brought it in. An episode comes from its feed, so only an administrator. {kind} is the item's kind.
   ///
   /// In en, this message translates to:
-  /// **'Editing a track changes it for everyone on this server, so the people who can are administrators and whoever\'s upload brought it in.'**
-  String get metadataForbiddenMessage;
+  /// **'{kind, select, audiobook{Only administrators and the uploader can edit this book} podcast{Only administrators can edit this episode} other{Only administrators and the uploader can edit this track}}'**
+  String metadataForbiddenTitle(String kind);
 
-  /// Heading of the refusal page shown when the signed-in account may not edit this item's metadata.
+  /// Info tip beside the Force switch.
   ///
   /// In en, this message translates to:
-  /// **'This one is not yours to edit'**
-  String get metadataForbiddenTitle;
-
-  /// Line under the force switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Overwrite fields that are already locked'**
+  /// **'Overwrites fields that are already locked'**
   String get metadataForceHelp;
 
   /// Switch that lets a save overwrite fields somebody locked. Its name is quoted in the refusal that suggests it, so the two must agree.
@@ -8649,11 +8217,11 @@ abstract class AppLocalizations {
   /// **'Search or type a genre'**
   String get metadataGenreSearchHint;
 
-  /// Line under the Identification heading, telling the two buttons apart.
+  /// Heading of the refusal an account without the administrator role gets on the release-group editor: who may.
   ///
   /// In en, this message translates to:
-  /// **'Rematch reopens identification and puts the result in the review queue. Fetching metadata applies what the providers already agree on, without asking.'**
-  String get metadataIdentificationBlurb;
+  /// **'Only administrators can edit a release group'**
+  String get metadataGroupForbiddenTitle;
 
   /// Heading over the two ways of asking the providers about this item again.
   ///
@@ -8664,7 +8232,7 @@ abstract class AppLocalizations {
   /// Line in the editor's header when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).
   ///
   /// In en, this message translates to:
-  /// **'Kind: {kind}, pinned'**
+  /// **'{kind}, pinned'**
   String metadataKindPinned(String kind);
 
   /// Heading of the lyrics preview when every line carries a timestamp.
@@ -8691,10 +8259,10 @@ abstract class AppLocalizations {
   /// **'Lock {field}'**
   String metadataLockField(String field);
 
-  /// Line under the lock switch.
+  /// Info tip beside the lock switch.
   ///
   /// In en, this message translates to:
-  /// **'Keep scans and enrichment from overwriting what you type'**
+  /// **'Keeps scans and enrichment from overwriting what you type'**
   String get metadataLockHelp;
 
   /// Switch that keeps later scans from overwriting what was typed.
@@ -8702,12 +8270,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Lock edited fields'**
   String get metadataLockTitle;
-
-  /// Helper line under the lyrics field now that clearing rides the unified save.
-  ///
-  /// In en, this message translates to:
-  /// **'Leave empty to remove the stored lyrics when you save.'**
-  String get metadataLyricsEmptyClears;
 
   /// Hint in the lyrics field, showing one timed line. The bracketed stamp is the format's own and must not change shape.
   ///
@@ -8720,12 +8282,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'LRC'**
   String get metadataLyricsLabel;
-
-  /// Line above the Lyrics heading. LRC is the timed-lyrics file format and stays as it is.
-  ///
-  /// In en, this message translates to:
-  /// **'Timed LRC, or plain lines'**
-  String get metadataLyricsOverline;
 
   /// The provenance line for the item's lyrics. {source} is where they came from, already worded, in the same vocabulary artwork uses.
   ///
@@ -8781,23 +8337,17 @@ abstract class AppLocalizations {
   /// **'Remove origin'**
   String get metadataOriginClear;
 
-  /// Help under the origin sheet's title. The replacement rule matters: the server writes every editable column as sent, so an empty box is a clear rather than a no-op.
+  /// Accessible name of the origin line in the item header when a curator may correct it.
   ///
   /// In en, this message translates to:
-  /// **'Every box is saved as you leave it, so clearing one clears the value. The date the item was acquired is kept as it stands.'**
-  String get metadataOriginEditHelp;
+  /// **'Correct the origin'**
+  String get metadataOriginEditAction;
 
   /// Title of the sheet that corrects an item's recorded origin.
   ///
   /// In en, this message translates to:
   /// **'Where this came from'**
   String get metadataOriginEditTitle;
-
-  /// Caption under the origin line for someone who may curate the item, replacing the read-only wording.
-  ///
-  /// In en, this message translates to:
-  /// **'Recorded evidence of how this arrived. Tap to correct it.'**
-  String get metadataOriginEditable;
 
   /// Field in the origin sheet: the origin's own id in the provider's namespace, such as a feed guid or a video id.
   ///
@@ -8834,12 +8384,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Provider'**
   String get metadataOriginProvider;
-
-  /// Caption under the origin line, saying why the origin has no form control beside it.
-  ///
-  /// In en, this message translates to:
-  /// **'Recorded evidence of how this arrived, not an editable field.'**
-  String get metadataOriginRecorded;
 
   /// Confirmation after taking an item's recorded origin off.
   ///
@@ -8883,10 +8427,10 @@ abstract class AppLocalizations {
   /// **'Address'**
   String get metadataOriginUrl;
 
-  /// Help under the origin address field. The server redacts the stored URL before sending it, so saving this box replaces the stored value with what is visible here.
+  /// Help line under the Address field of the origin sheet: the box holds a redacted address, and editing it replaces the stored one (sign-in parts included); a save that leaves the box alone keeps it.
   ///
   /// In en, this message translates to:
-  /// **'Shown without any sign-in details it carried'**
+  /// **'Shown redacted; editing it replaces the stored address.'**
   String get metadataOriginUrlHelp;
 
   /// Switch in the origin sheet: mirror the origin into the files' own tags.
@@ -8895,7 +8439,7 @@ abstract class AppLocalizations {
   /// **'Write into the files'**
   String get metadataOriginWriteBack;
 
-  /// Help under the origin write-back switch.
+  /// Info tip beside the origin write-back switch.
   ///
   /// In en, this message translates to:
   /// **'Keeps the correction through a full rescan'**
@@ -8913,17 +8457,17 @@ abstract class AppLocalizations {
   /// **'Apply these changes'**
   String get metadataPreviewApply;
 
-  /// Footnote on the enrichment preview sheet: the catalog's key-free sources fetch-and-write in one pass, so their answers only show up after an apply.
+  /// Info tip beside the enrichment preview sheet's title when the preview has rows: the catalog's key-free sources fetch-and-write in one pass, so their answers only show up after an apply.
   ///
   /// In en, this message translates to:
   /// **'The server\'s built-in sources cannot be previewed; applying may still fill remaining gaps from them.'**
-  String get metadataPreviewBuiltinsNote;
+  String get metadataPreviewBuiltinsHelp;
 
-  /// Empty state of the enrichment preview sheet, above the per-artifact reasons.
+  /// The enrichment preview sheet's line when the providers proposed nothing, above the per-artifact reasons and over its Fetch anyway button: the catalog's key-free sources cannot be previewed, so a fetch may still fill gaps.
   ///
   /// In en, this message translates to:
-  /// **'The providers have nothing new for this item.'**
-  String get metadataPreviewEmpty;
+  /// **'Nothing new; built-in sources may still fill gaps'**
+  String get metadataPreviewEmptyMessage;
 
   /// Confirms an empty enrichment preview: nothing was proposed, but the un-previewable built-in sources may still fill gaps.
   ///
@@ -8960,6 +8504,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Rematch'**
   String get metadataRematch;
+
+  /// Tooltip of the Rematch button on the item editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Reopens identification and puts the result in the review queue.'**
+  String get metadataRematchHelp;
 
   /// Accessible name of a credit chip; pressing it stages the removal of that person from the role. {name} is a person's name and is not translated.
   ///
@@ -9171,12 +8721,6 @@ abstract class AppLocalizations {
   /// **'Values, comma separated'**
   String get metadataTagValues;
 
-  /// Line above the custom tags heading.
-  ///
-  /// In en, this message translates to:
-  /// **'Anything the vocabulary has no field for'**
-  String get metadataTagsOverline;
-
   /// Heading over the free-form tags an item carries.
   ///
   /// In en, this message translates to:
@@ -9194,12 +8738,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unlock {field}'**
   String metadataUnlockField(String field);
-
-  /// Line under the unofficial switch.
-  ///
-  /// In en, this message translates to:
-  /// **'A bootleg, a promo, or another unofficial issue'**
-  String get metadataUnofficialHelp;
 
   /// Switch marking the item as something other than an official issue.
   ///
@@ -9222,7 +8760,7 @@ abstract class AppLocalizations {
   /// Body of that empty state.
   ///
   /// In en, this message translates to:
-  /// **'Check tracks in the list to edit them together.'**
+  /// **'Check tracks to edit together.'**
   String get metadataWorkbenchSelectEmptyMessage;
 
   /// Title of the pane's empty state while selecting with nothing checked.
@@ -9255,10 +8793,10 @@ abstract class AppLocalizations {
   /// **'{file}: {reason}'**
   String metadataWriteBackFailure(String file, String reason);
 
-  /// Line under the write-tags switch.
+  /// Info tip beside the write-tags switch.
   ///
   /// In en, this message translates to:
-  /// **'Also rewrite the tags embedded in the backing files; saved lyrics also write their .lrc sidecar'**
+  /// **'Also rewrites the tags embedded in the backing files; saved lyrics also write their .lrc sidecar'**
   String get metadataWriteBackHelp;
 
   /// Switch making a save rewrite the tags stored inside the audio files too.
@@ -9297,23 +8835,11 @@ abstract class AppLocalizations {
   /// **'{field} is locked'**
   String musicAlbumEditorFieldLocked(String field);
 
-  /// Why the album editor is closed to an ordinary account.
-  ///
-  /// In en, this message translates to:
-  /// **'Barcodes, labels, and catalog numbers are shared by everyone who can see this album, so the server keeps them to administrators.'**
-  String get musicAlbumEditorForbiddenMessage;
-
   /// Empty state shown where the album editor would be, to an account that may not write it.
   ///
   /// In en, this message translates to:
   /// **'Only administrators can edit a release'**
   String get musicAlbumEditorForbiddenTitle;
-
-  /// Overline over the sort name and MusicBrainz ID fields.
-  ///
-  /// In en, this message translates to:
-  /// **'How this release files and matches'**
-  String get musicAlbumEditorNamesOverline;
 
   /// Section over the sort name and MusicBrainz ID fields.
   ///
@@ -9333,12 +8859,6 @@ abstract class AppLocalizations {
   /// **'Saved'**
   String get musicAlbumEditorSaved;
 
-  /// Overline above the album editor's fields.
-  ///
-  /// In en, this message translates to:
-  /// **'What this edition is'**
-  String get musicAlbumEditorSectionOverline;
-
   /// Heading over the album editor's five fields.
   ///
   /// In en, this message translates to:
@@ -9351,23 +8871,11 @@ abstract class AppLocalizations {
   /// **'Total tracks'**
   String get musicAlbumEditorTotalTracks;
 
-  /// Helper under the album editor's read-only track count, explaining why there is no input.
-  ///
-  /// In en, this message translates to:
-  /// **'Counted from the tracks on this release. Add or remove tracks to change it; each track\'s own track total is edited on the track.'**
-  String get musicAlbumEditorTotalTracksHelp;
-
   /// Line under a truncated track list.
   ///
   /// In en, this message translates to:
   /// **'{count, plural, =1{and 1 more} other{and {count} more}}'**
   String musicAlbumEditorTracksMore(int count);
-
-  /// Overline over the track list, naming why it is shown: write-back rewrites tags in every one of them.
-  ///
-  /// In en, this message translates to:
-  /// **'What a write-back reaches'**
-  String get musicAlbumEditorTracksOverline;
 
   /// Section over the track list an album edit reaches.
   ///
@@ -9375,29 +8883,17 @@ abstract class AppLocalizations {
   /// **'On this release'**
   String get musicAlbumEditorTracksTitle;
 
-  /// Help under the write-tags switch on the album editor.
+  /// Info tip beside the release editor's write-back switch.
   ///
   /// In en, this message translates to:
-  /// **'Also rewrite the matching tags in every track on this release. Media has no tag form and stays here.'**
+  /// **'Also rewrites the matching tags in every track on this release; media stays here'**
   String get musicAlbumEditorWriteBackHelp;
-
-  /// Overline over the write-back, lock, and force switches.
-  ///
-  /// In en, this message translates to:
-  /// **'Where the values land, and what they overrule'**
-  String get musicAlbumEditorWriteOverline;
 
   /// Section over the write-back, lock, and force switches.
   ///
   /// In en, this message translates to:
   /// **'How this edit is written'**
   String get musicAlbumEditorWriteTitle;
-
-  /// Message under the empty state of an album, saying why it is empty.
-  ///
-  /// In en, this message translates to:
-  /// **'The tracks that were here have moved or been removed.'**
-  String get musicAlbumEmptyMessage;
 
   /// Empty state of an album whose tracks have all gone.
   ///
@@ -9411,12 +8907,6 @@ abstract class AppLocalizations {
   /// **'Could not load this album'**
   String get musicAlbumLoadError;
 
-  /// Overline above the release-identity block on an album screen.
-  ///
-  /// In en, this message translates to:
-  /// **'This edition'**
-  String get musicAlbumReleaseOverline;
-
   /// Heading over the block naming what edition an album is: its barcode, label, catalog number.
   ///
   /// In en, this message translates to:
@@ -9429,10 +8919,10 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Rewrite 1 track} other{Rewrite {count} tracks}}'**
   String musicAlbumRewriteApply(int count);
 
-  /// Body of that confirmation: the in-place rename, the merge on a taken name, and the lock behavior, all pinned by the server's own semantics.
+  /// Body of that confirmation: every track is rewritten, field locks are overridden, and a taken name merges the two releases for good.
   ///
   /// In en, this message translates to:
-  /// **'The edited fields are rewritten on every track of this release at once, so it keeps its entry - artwork, pins and play history with it. If the new name already belongs to another release, the two merge and this page follows. Locks on those fields are overridden, then set again by the rewrite.'**
+  /// **'Every track is rewritten and locks on these fields are overridden. If the new name belongs to another release, the two merge for good.'**
   String get musicAlbumRewriteConfirmBody;
 
   /// Title of the confirmation the rewrite asks before writing.
@@ -9441,23 +8931,17 @@ abstract class AppLocalizations {
   /// **'Rewrite this release?'**
   String get musicAlbumRewriteConfirmTitle;
 
-  /// Blurb under the rewrite heading, stating up front what the rename does: the release keeps its pid unless the new name is taken.
+  /// Line under the rewrite heading: the rename is written to every track, and a taken name merges the two releases.
   ///
   /// In en, this message translates to:
-  /// **'These live on the tracks rather than the release. Saving rewrites them on every member at once, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.'**
+  /// **'Rewritten on every track; a name another release has merges the two.'**
   String get musicAlbumRewriteHelp;
 
   /// Message after a rewrite whose new name was already another release's, shown as the workbench moves to the survivor.
   ///
   /// In en, this message translates to:
-  /// **'The release merged into the one that already had this name.'**
+  /// **'Merged into the existing release.'**
   String get musicAlbumRewriteMerged;
-
-  /// Line above that heading: these fields live on the members, not the release entity.
-  ///
-  /// In en, this message translates to:
-  /// **'On the tracks'**
-  String get musicAlbumRewriteOverline;
 
   /// Message after a rewrite that kept the release: how many member tracks took the new values.
   ///
@@ -9506,12 +8990,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Edit artist'**
   String get musicArtistEditMetadata;
-
-  /// Message under the empty state of an artist's screen, saying why it is empty.
-  ///
-  /// In en, this message translates to:
-  /// **'The items that were here have moved or been removed.'**
-  String get musicArtistEmptyMessage;
 
   /// Empty state of an artist whose items have all gone.
   ///
@@ -9591,12 +9069,6 @@ abstract class AppLocalizations {
   /// **'{dimension, select, artists{Artists} albums{Albums} releaseGroups{Release groups} genres{Genres} years{Years} other{Music}}'**
   String musicDimensionTitle(String dimension);
 
-  /// Message under the empty state of the tracks listing, saying what fills it.
-  ///
-  /// In en, this message translates to:
-  /// **'Add music to your library and it shows up here.'**
-  String get musicEmptyMessage;
-
   /// Empty state of the music library, on the hub and on the tracks listing.
   ///
   /// In en, this message translates to:
@@ -9612,13 +9084,13 @@ abstract class AppLocalizations {
   /// Blurb under the rename heading on an artist: the rename keeps the entity unless the new name is taken.
   ///
   /// In en, this message translates to:
-  /// **'The artist\'s name lives on the tracks that credit them. Type the new name in full: renaming rewrites it on every one at once, so the artist keeps this page - its picture, pins and play history with it; a name another artist already has merges the two, and this page follows.'**
+  /// **'Rewritten on every track; a name another artist has merges the two.'**
   String get musicEntityRenameArtistHelp;
 
   /// Body of that confirmation: the in-place rename, the merge on a taken name, and the lock behavior.
   ///
   /// In en, this message translates to:
-  /// **'Every member is rewritten at once, so the entry survives with everything attached to it. If the new name is already taken, the two merge and this page follows. Locks on these fields are overridden, then set again by the rename.'**
+  /// **'Every member is rewritten and locks on these fields are overridden. If the new name is taken, the two merge for good.'**
   String get musicEntityRenameConfirmBody;
 
   /// Title of the confirmation the rename asks before writing.
@@ -9636,7 +9108,7 @@ abstract class AppLocalizations {
   /// The same blurb for a release group, whose keying fields are the album title and its artist.
   ///
   /// In en, this message translates to:
-  /// **'These live on the tracks rather than the release group. Renaming rewrites them on every member at once, so the group keeps this page; a name another group already has merges the two, and this page follows.'**
+  /// **'Rewritten on every member; a name another group has merges the two.'**
   String get musicEntityRenameGroupHelp;
 
   /// Message after a rename whose new name was already another entity's, shown as the screen moves to the survivor.
@@ -9645,22 +9117,16 @@ abstract class AppLocalizations {
   /// **'Merged into the entry that already had this name.'**
   String get musicEntityRenameMerged;
 
-  /// Line above that heading: these values live on the member tracks, not the entity.
-  ///
-  /// In en, this message translates to:
-  /// **'On the members'**
-  String get musicEntityRenameOverline;
-
   /// Heading over the entity editor's rename section.
   ///
   /// In en, this message translates to:
   /// **'Name'**
   String get musicEntityRenameTitle;
 
-  /// Line under the rename section's write-tags switch.
+  /// Info tip on the rename section's write-back switch: how far it reaches, the tags in every member's file (each track of an artist, a release group or an album).
   ///
   /// In en, this message translates to:
-  /// **'Also rewrite these tags inside each member\'s file'**
+  /// **'Also rewrites these tags inside each member\'s file'**
   String get musicEntityRenameWriteBackHelp;
 
   /// The artist's identifier at MusicBrainz, on the artist editor.
@@ -9669,28 +9135,16 @@ abstract class AppLocalizations {
   /// **'MusicBrainz artist ID'**
   String get musicFieldArtistMbid;
 
-  /// Help under the MusicBrainz artist ID field.
-  ///
-  /// In en, this message translates to:
-  /// **'The identifier this artist matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.'**
-  String get musicFieldArtistMbidHelp;
-
   /// Label of the artist editor's rename input.
   ///
   /// In en, this message translates to:
   /// **'Artist name'**
   String get musicFieldArtistName;
 
-  /// Help under the sort name field on the artist editor.
+  /// Info tip on the artist editor's write-back switch: the sort tag is rewritten in every file that credits the artist.
   ///
   /// In en, this message translates to:
-  /// **'How this artist files in an A-to-Z list. Empty files them under their name.'**
-  String get musicFieldArtistSortHelp;
-
-  /// Help under the write-back switch on the artist editor: the sort name is the one artist field that fans out to files.
-  ///
-  /// In en, this message translates to:
-  /// **'Also rewrite the matching sort tag in the files crediting this artist.'**
+  /// **'Also rewrites the matching sort tag in every file crediting this artist'**
   String get musicFieldArtistWriteBackHelp;
 
   /// An album's barcode, on the release editor and on the album screen.
@@ -9699,11 +9153,11 @@ abstract class AppLocalizations {
   /// **'Barcode'**
   String get musicFieldBarcode;
 
-  /// Hint under the barcode field in the release editor.
+  /// Placeholder in the barcode field of the release editor.
   ///
   /// In en, this message translates to:
-  /// **'UPC or EAN, normalized to digits on save'**
-  String get musicFieldBarcodeHelp;
+  /// **'UPC or EAN'**
+  String get musicFieldBarcodeHint;
 
   /// The label's own number for a release, on the release editor and on the album screen.
   ///
@@ -9711,23 +9165,17 @@ abstract class AppLocalizations {
   /// **'Catalog number'**
   String get musicFieldCatalogNumber;
 
-  /// Hint under the catalog-number field in the release editor.
-  ///
-  /// In en, this message translates to:
-  /// **'The label\'s number for this release'**
-  String get musicFieldCatalogNumberHelp;
-
   /// Where a release was issued, on the release editor and on the album screen.
   ///
   /// In en, this message translates to:
   /// **'Country'**
   String get musicFieldCountry;
 
-  /// Hint under the country field in the release editor. The codes themselves are standards and stay as they are.
+  /// Placeholder in the country field of the release editor. The codes themselves are standards and stay as they are.
   ///
   /// In en, this message translates to:
-  /// **'Two-letter code (GB), an alpha-3 or UK alias, or XW/XE'**
-  String get musicFieldCountryHelp;
+  /// **'Two-letter code, e.g. GB'**
+  String get musicFieldCountryHint;
 
   /// The record label that issued an album, on the release editor and on the album screen.
   ///
@@ -9735,23 +9183,11 @@ abstract class AppLocalizations {
   /// **'Label'**
   String get musicFieldLabel;
 
-  /// Hint under the label field in the release editor.
-  ///
-  /// In en, this message translates to:
-  /// **'The issuing label'**
-  String get musicFieldLabelHelp;
-
   /// The album's identifier at MusicBrainz.
   ///
   /// In en, this message translates to:
   /// **'MusicBrainz release ID'**
   String get musicFieldMbid;
-
-  /// Help under the MusicBrainz release ID field.
-  ///
-  /// In en, this message translates to:
-  /// **'The identifier this release matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.'**
-  String get musicFieldMbidHelp;
 
   /// What a release was pressed on, on the release editor and on the album screen.
   ///
@@ -9759,11 +9195,11 @@ abstract class AppLocalizations {
   /// **'Media'**
   String get musicFieldMedia;
 
-  /// Hint under the media field in the release editor. The three examples are the values MusicBrainz uses and stay as they are.
+  /// Placeholder in the media field of the release editor, naming formats as they are tagged.
   ///
   /// In en, this message translates to:
-  /// **'What it was pressed on - CD, 2xVinyl, Digital Media'**
-  String get musicFieldMediaHelp;
+  /// **'CD, 2xVinyl, Digital Media'**
+  String get musicFieldMediaHint;
 
   /// The release group's identifier at MusicBrainz, on the release-group editor.
   ///
@@ -9771,41 +9207,17 @@ abstract class AppLocalizations {
   /// **'MusicBrainz release-group ID'**
   String get musicFieldReleaseGroupMbid;
 
-  /// Help under the MusicBrainz release-group ID field.
-  ///
-  /// In en, this message translates to:
-  /// **'The group\'s identifier at MusicBrainz: the album across its editions.'**
-  String get musicFieldReleaseGroupMbidHelp;
-
-  /// Help under the sort name field on the release-group editor.
-  ///
-  /// In en, this message translates to:
-  /// **'How this group files in an A-to-Z list. Empty files it under its title.'**
-  String get musicFieldReleaseGroupSortHelp;
-
   /// What a release group is - an album, an EP, a single, a compilation, an audiobook.
   ///
   /// In en, this message translates to:
   /// **'Type'**
   String get musicFieldReleaseGroupType;
 
-  /// Help under the type choice on the release-group editor.
-  ///
-  /// In en, this message translates to:
-  /// **'What this group is. Not set hands the value back to what matching stored.'**
-  String get musicFieldReleaseGroupTypeHelp;
-
   /// The album's filing name, as against its title.
   ///
   /// In en, this message translates to:
   /// **'Sort name'**
   String get musicFieldSort;
-
-  /// Help under the sort name field.
-  ///
-  /// In en, this message translates to:
-  /// **'How this release files in an A-to-Z list. Empty files it under its title.'**
-  String get musicFieldSortHelp;
 
   /// Accessible name of the add control on the music hub, and the button on its first-run invitation. Both open the sheet that adds files.
   ///
@@ -9816,7 +9228,7 @@ abstract class AppLocalizations {
   /// First-run invitation on the music hub, drawn when every shelf has answered and none of them holds anything.
   ///
   /// In en, this message translates to:
-  /// **'Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.'**
+  /// **'Add a library, or drop files in.'**
   String get musicHubEmptyMessage;
 
   /// Caption over an index saying how much of it is loaded, when the whole dimension is loaded.
@@ -9830,12 +9242,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{dimension, select, artists{{count, plural, =1{1+ artist} other{{count}+ artists}}} albums{{count, plural, =1{1+ album} other{{count}+ albums}}} releaseGroups{{count, plural, =1{1+ release group} other{{count}+ release groups}}} genres{{count, plural, =1{1+ genre} other{{count}+ genres}}} years{{count, plural, =1{1+ year} other{{count}+ years}}} other{{count, plural, =1{1+ entry} other{{count}+ entries}}}}'**
   String musicIndexCountAtLeast(String dimension, int count);
-
-  /// Empty state of a dimension's index, saying what fills it.
-  ///
-  /// In en, this message translates to:
-  /// **'{dimension, select, artists{Add music to your library and its artists show up here.} albums{Add music to your library and its albums show up here.} releaseGroups{Add music to your library and its release groups show up here.} genres{Add music to your library and its genres show up here.} years{Add music to your library and its years show up here.} other{Add music to your library and it shows up here.}}'**
-  String musicIndexEmptyMessage(String dimension);
 
   /// Empty state of a dimension's index, on a library that holds nothing yet.
   ///
@@ -9854,12 +9260,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{dimension, select, artists{Start of artists} albums{Start of albums} releaseGroups{Start of release groups} genres{Start of genres} years{Start of years} other{Start of the list}}'**
   String musicIndexStartOf(String dimension);
-
-  /// Message under the empty state of a drilled bucket, saying why it is empty.
-  ///
-  /// In en, this message translates to:
-  /// **'The items that were here have moved or been removed.'**
-  String get musicListingBucketEmptyMessage;
 
   /// Empty state of a drilled bucket whose items have all gone.
   ///
@@ -9987,10 +9387,10 @@ abstract class AppLocalizations {
   /// **'Various artists'**
   String get musicVariousArtists;
 
-  /// What the `backup-completed` notification is about, drawn under its switch.
+  /// What the `backup-completed` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body.
   ///
   /// In en, this message translates to:
-  /// **'A backup archive finished building.'**
+  /// **'A backup archive finished building'**
   String get notifBackupCompletedHelp;
 
   /// Switch label for the `backup-completed` notification.
@@ -9999,10 +9399,10 @@ abstract class AppLocalizations {
   /// **'Backup finished'**
   String get notifBackupCompletedTitle;
 
-  /// What the `backup-failed` notification is about, drawn under its switch.
+  /// What the `backup-failed` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body.
   ///
   /// In en, this message translates to:
-  /// **'A backup attempt failed.'**
+  /// **'A backup attempt failed'**
   String get notifBackupFailedHelp;
 
   /// Switch label for the `backup-failed` notification.
@@ -10014,7 +9414,7 @@ abstract class AppLocalizations {
   /// What the `catalog-reset` notification is about, drawn under its switch.
   ///
   /// In en, this message translates to:
-  /// **'An upgrade moved the catalog\'s schema and the server built a new catalog; libraries added from the console have to be added again.'**
+  /// **'Upgrade rebuilt the catalog; re-add libraries added from the console'**
   String get notifCatalogResetHelp;
 
   /// Switch label for the `catalog-reset` notification.
@@ -10023,10 +9423,10 @@ abstract class AppLocalizations {
   /// **'Catalog recreated'**
   String get notifCatalogResetTitle;
 
-  /// What the new-episode notification is about, in a delivery target's event checklist.
+  /// What the new-episode notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body.
   ///
   /// In en, this message translates to:
-  /// **'A subscribed show published a new episode.'**
+  /// **'A subscribed show published a new episode'**
   String get notifEpisodeArrivedHelp;
 
   /// Heading of the notification that a subscribed show published new episodes, and its name in a delivery target's event checklist.
@@ -10035,10 +9435,10 @@ abstract class AppLocalizations {
   /// **'New episode'**
   String get notifEpisodeArrivedTitle;
 
-  /// What the episode-fetched notification is about, in a delivery target's event checklist.
+  /// What the episode-fetched notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body.
   ///
   /// In en, this message translates to:
-  /// **'An episode you asked for finished downloading.'**
+  /// **'An episode you asked for finished downloading'**
   String get notifEpisodeDownloadedHelp;
 
   /// Heading of the notification that an episode the reader asked to download finished downloading, and its name in a delivery target's event checklist.
@@ -10047,10 +9447,10 @@ abstract class AppLocalizations {
   /// **'Episode fetched'**
   String get notifEpisodeDownloadedTitle;
 
-  /// What the `feed-disabled` notification is about, drawn under its switch.
+  /// What the `feed-disabled` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body.
   ///
   /// In en, this message translates to:
-  /// **'A subscribed feed kept failing and was disabled.'**
+  /// **'A subscribed feed kept failing and was disabled'**
   String get notifFeedDisabledHelp;
 
   /// Switch label for the `feed-disabled` notification.
@@ -10059,10 +9459,10 @@ abstract class AppLocalizations {
   /// **'Feed switched off'**
   String get notifFeedDisabledTitle;
 
-  /// What the `gpodder-device-removed` notification is about, drawn under its switch: an account keeps fifty gpodder devices, and a new one past that removes the least recently seen.
+  /// What the `gpodder-device-removed` notification is about, drawn under its switch: a new gpodder device past the account's limit replaces the least recently seen.
   ///
   /// In en, this message translates to:
-  /// **'A new podcast app device took the place of the least recently seen one; what it kept followed stays followed.'**
+  /// **'A new device replaced the least recently seen one'**
   String get notifGpodderDeviceRemovedHelp;
 
   /// Switch label for the `gpodder-device-removed` notification, and the heading of its inbox row.
@@ -10071,10 +9471,10 @@ abstract class AppLocalizations {
   /// **'Podcast app removed'**
   String get notifGpodderDeviceRemovedTitle;
 
-  /// What the health-fix-finished notification is about, in a delivery target's event checklist.
+  /// What the `health-fix-finished` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body.
   ///
   /// In en, this message translates to:
-  /// **'A library health fix you started finished.'**
+  /// **'A library health fix you started finished'**
   String get notifHealthFixFinishedHelp;
 
   /// Heading of the notification that a library health fix the reader started finished. The line under it says what it filled.
@@ -10086,7 +9486,7 @@ abstract class AppLocalizations {
   /// What the `import-completed` notification is about, drawn under its switch.
   ///
   /// In en, this message translates to:
-  /// **'An upload or acquisition identified confidently enough to file itself, with no review.'**
+  /// **'An import was filed without review'**
   String get notifImportCompletedHelp;
 
   /// Switch label for the `import-completed` notification.
@@ -10095,10 +9495,10 @@ abstract class AppLocalizations {
   /// **'Filed without review'**
   String get notifImportCompletedTitle;
 
-  /// What the job-failed notification is about, in a delivery target's event checklist.
+  /// What the `job-failed` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body.
   ///
   /// In en, this message translates to:
-  /// **'A library job you started failed.'**
+  /// **'A library job you started failed'**
   String get notifJobFailedHelp;
 
   /// Heading of the notification that a library job the reader started failed. The line under it says which and why.
@@ -10110,7 +9510,7 @@ abstract class AppLocalizations {
   /// What the job-finished notification is about, in a delivery target's event checklist.
   ///
   /// In en, this message translates to:
-  /// **'A library job you started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash.'**
+  /// **'A library job you started finished'**
   String get notifJobFinishedHelp;
 
   /// Heading of the notification that a library job the reader started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash. The line under it says which and what it did.
@@ -10122,7 +9522,7 @@ abstract class AppLocalizations {
   /// Help under the playlist-synced row in the notification-events checklist.
   ///
   /// In en, this message translates to:
-  /// **'A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended.'**
+  /// **'A synced playlist pulled changes or was suspended'**
   String get notifPlaylistSyncedHelp;
 
   /// Title of the playlist-synced row in the notification-events checklist.
@@ -10131,10 +9531,10 @@ abstract class AppLocalizations {
   /// **'Playlist synced'**
   String get notifPlaylistSyncedTitle;
 
-  /// What the `review-ready` notification is about, drawn under its switch.
+  /// What the `review-ready` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body.
   ///
   /// In en, this message translates to:
-  /// **'An upload or acquisition finished identification and waits in the review queue.'**
+  /// **'An upload or acquisition finished identification and waits in the review queue'**
   String get notifReviewReadyHelp;
 
   /// Switch label for the `review-ready` notification.
@@ -10143,10 +9543,10 @@ abstract class AppLocalizations {
   /// **'Waiting for review'**
   String get notifReviewReadyTitle;
 
-  /// What the `signup-requested` notification is about, drawn under its switch.
+  /// What the `signup-requested` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body.
   ///
   /// In en, this message translates to:
-  /// **'A new account request is waiting for approval.'**
+  /// **'A new account request is waiting for approval'**
   String get notifSignupRequestedHelp;
 
   /// Switch label for the `signup-requested` notification.
@@ -10158,7 +9558,7 @@ abstract class AppLocalizations {
   /// What the `subscription-failed` notification is about, drawn under its switch.
   ///
   /// In en, this message translates to:
-  /// **'A podcast app syncing over gpodder asked to add a feed that could not be subscribed, or to change subscriptions this account may not change.'**
+  /// **'A podcast app\'s subscription change failed or was refused'**
   String get notifSubscriptionFailedHelp;
 
   /// Switch label for the `subscription-failed` notification, and the heading of its inbox row: a subscription change a gpodder client asked for was not made, a feed that did not subscribe or any change from an account that may not change its subscriptions.
@@ -10170,7 +9570,7 @@ abstract class AppLocalizations {
   /// What the tool-task-failed notification is about, in a delivery target's event checklist.
   ///
   /// In en, this message translates to:
-  /// **'A book merge or split, or a CUE split, you started failed, or stopped after its runs kept ending with the server.'**
+  /// **'A book merge, split or CUE split failed'**
   String get notifToolTaskFailedHelp;
 
   /// Heading of the notification that a book merge or split, or a CUE split, the reader started failed or stopped and needs attention. The line under it says which and why.
@@ -10212,8 +9612,8 @@ abstract class AppLocalizations {
   /// Body of the typed confirmation before files are moved.
   ///
   /// In en, this message translates to:
-  /// **'Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.'**
-  String get organizeConfirmMessage;
+  /// **'Files move on the server. Anything else pointing at the old paths breaks.'**
+  String get organizeConfirmBody;
 
   /// The word typed to confirm an apply that lays out each library by its own profile; typed as shown, so keep it one plain word.
   ///
@@ -10239,12 +9639,6 @@ abstract class AppLocalizations {
   /// **'Discard preview'**
   String get organizeDiscard;
 
-  /// Empty state of the organize screen.
-  ///
-  /// In en, this message translates to:
-  /// **'The server offers no profile to organize files by.'**
-  String get organizeEmptyMessage;
-
   /// Empty state where the server lists no profiles.
   ///
   /// In en, this message translates to:
@@ -10260,13 +9654,13 @@ abstract class AppLocalizations {
   /// Under the dry run: files out of place that a read-only server keeps where they are.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 file stays where it is while the server is read-only.} other{{count} files stay where they are while the server is read-only.}}'**
+  /// **'{count, plural, =1{1 file held, server read-only} other{{count} files held, server read-only}}'**
   String organizeHeld(int count);
 
   /// Under the dry run: files out of place that cannot move, for any cause other than a read-only server alone (a destination another file holds, an item with nothing to file it under, a missing file).
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 file is held back and stays where it is.} other{{count} files are held back and stay where they are.}}'**
+  /// **'{count, plural, =1{1 file held back} other{{count} files held back}}'**
   String organizeHeldBack(int count);
 
   /// How many files a finished run held back where they were, for any cause.
@@ -10278,7 +9672,7 @@ abstract class AppLocalizations {
   /// Drawn where the plan or the report goes, before either exists.
   ///
   /// In en, this message translates to:
-  /// **'Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.'**
+  /// **'Preview first. Nothing moves until you apply.'**
   String get organizeHint;
 
   /// Button under the organize history that lists the next, older page of runs. Shown while the server holds older ones.
@@ -10286,12 +9680,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show older runs'**
   String get organizeHistoryMore;
-
-  /// Overline of the list of runs: the scheduled prune drops a run's journal, and its undo, after the task retention window.
-  ///
-  /// In en, this message translates to:
-  /// **'A run can be undone while its journal lasts'**
-  String get organizeHistoryOverline;
 
   /// One organize run in the history: how many files it moved, and when it started.
   ///
@@ -10398,20 +9786,14 @@ abstract class AppLocalizations {
   /// Empty state of the organize screen when no library is managed.
   ///
   /// In en, this message translates to:
-  /// **'Organizing moves files only within managed libraries, and this server has none.'**
-  String get organizeNoManagedMessage;
+  /// **'Organizing works only in managed libraries.'**
+  String get organizeNoManagedEmptyMessage;
 
   /// Empty state of the organize screen when no library is managed.
   ///
   /// In en, this message translates to:
   /// **'No managed library'**
   String get organizeNoManagedTitle;
-
-  /// Empty state of a dry run that would move nothing.
-  ///
-  /// In en, this message translates to:
-  /// **'This profile would move nothing.'**
-  String get organizeNothingMessage;
 
   /// Empty state of a dry run that would move nothing.
   ///
@@ -10424,12 +9806,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Each library\'s own profile'**
   String get organizeOwnProfiles;
-
-  /// Help under the each-library option of the profile picker.
-  ///
-  /// In en, this message translates to:
-  /// **'Each managed library by the profile set on the Libraries screen'**
-  String get organizeOwnProfilesHelp;
 
   /// Heading over the dry run, saying how many files it would move.
   ///
@@ -10448,12 +9824,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audiobook template'**
   String get organizeProfileAudiobookLabel;
-
-  /// Help under the profile editor's compilation folder field: what an unset field and an emptied one do.
-  ///
-  /// In en, this message translates to:
-  /// **'Various Artists unless set; empty files compilations under their tagged album artist'**
-  String get organizeProfileCompilationHelp;
 
   /// Label of the profile editor field naming the folder compilations file under, which the tag write also gives them as album artist.
   ///
@@ -10539,12 +9909,6 @@ abstract class AppLocalizations {
   /// **'New profile'**
   String get organizeProfileNew;
 
-  /// Overline over the profile picker.
-  ///
-  /// In en, this message translates to:
-  /// **'The naming scheme to move into'**
-  String get organizeProfileOverline;
-
   /// Field for the path template of podcast episodes.
   ///
   /// In en, this message translates to:
@@ -10605,7 +9969,7 @@ abstract class AppLocalizations {
   /// **'Write tags while organizing'**
   String get organizeProfileTagWrite;
 
-  /// Help under the tag-write switch.
+  /// Info on the tag-write switch.
   ///
   /// In en, this message translates to:
   /// **'Rewrites unlocked tags from the catalog as files move'**
@@ -10626,7 +9990,7 @@ abstract class AppLocalizations {
   /// Under the dry run and the result: managed libraries the organizer left alone because they are read-only.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 read-only library is left as it is.} other{{count} read-only libraries are left as they are.}}'**
+  /// **'{count, plural, =1{1 read-only library left alone} other{{count} read-only libraries left alone}}'**
   String organizeReadOnlyLibraries(int count);
 
   /// Heading over what a finished run actually did.
@@ -10668,8 +10032,8 @@ abstract class AppLocalizations {
   /// Body of the typed confirmation before a run is undone.
   ///
   /// In en, this message translates to:
-  /// **'Every file it moved goes back where it was found, with its sidecars; a file moved again since stays where it is.'**
-  String get organizeUndoConfirmMessage;
+  /// **'Every moved file goes back, with sidecars; files moved again stay put.'**
+  String get organizeUndoConfirmBody;
 
   /// Title of the typed confirmation before a run is undone.
   ///
@@ -10785,10 +10149,10 @@ abstract class AppLocalizations {
   /// **'Bookmarks, {count}'**
   String playerBookmarksCount(int count);
 
-  /// Empty state of the bookmarks sheet, saying that bookmarks are not how listening position is remembered.
+  /// Empty state of the bookmarks sheet.
   ///
   /// In en, this message translates to:
-  /// **'Nothing marked yet. A bookmark keeps a place you want to come back to; your listening position is kept for you either way.'**
+  /// **'Nothing marked yet'**
   String get playerBookmarksEmpty;
 
   /// Drawn in the bookmarks sheet when the read failed for a reason the error table has no sentence for.
@@ -10808,12 +10172,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel timer'**
   String get playerCancelTimer;
-
-  /// Under the idle heading in car mode.
-  ///
-  /// In en, this message translates to:
-  /// **'Start something and it takes the whole screen.'**
-  String get playerCarIdleMessage;
 
   /// Opens the large-target playback screen made for a car.
   ///
@@ -10914,7 +10272,7 @@ abstract class AppLocalizations {
   /// Message on the shell when gapless playback is on but the server turned down rendering the queue as one stream because too many streams are being converted.
   ///
   /// In en, this message translates to:
-  /// **'The server is busy, so this queue plays one track at a time. Gapless playback returns when a stream frees up.'**
+  /// **'The server is busy, so tracks play one at a time'**
   String get playerGaplessBusy;
 
   /// Message on the shell when a gapless stream stopped mid-play because the server reached its limit of streams being converted.
@@ -10934,12 +10292,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Go to show'**
   String get playerGoToShow;
-
-  /// Under the idle heading on the full player.
-  ///
-  /// In en, this message translates to:
-  /// **'Pick something from your library and it shows up here.'**
-  String get playerIdleMessage;
 
   /// Menu item that builds a queue around what is playing.
   ///
@@ -10977,12 +10329,6 @@ abstract class AppLocalizations {
   /// **'Could not load the lyrics'**
   String get playerLyricsError;
 
-  /// Under the idle heading on the lyrics panel. It finishes the heading's sentence, which says nothing is playing.
-  ///
-  /// In en, this message translates to:
-  /// **'Words show up here once something is.'**
-  String get playerLyricsIdleMessage;
-
   /// Menu item that marks the playing episode finished.
   ///
   /// In en, this message translates to:
@@ -11019,18 +10365,6 @@ abstract class AppLocalizations {
   /// **'No lyrics for this track'**
   String get playerNoLyrics;
 
-  /// Under the no-lyrics heading, for somebody who may edit the library.
-  ///
-  /// In en, this message translates to:
-  /// **'Nothing was found in a sidecar or in the file tags. You can add them in the metadata editor.'**
-  String get playerNoLyricsAdminMessage;
-
-  /// Under the no-lyrics heading. A sidecar is a small file stored beside the audio.
-  ///
-  /// In en, this message translates to:
-  /// **'Nothing was found in a sidecar or in the file tags.'**
-  String get playerNoLyricsMessage;
-
   /// Heading when the playing file has no measured waveform.
   ///
   /// In en, this message translates to:
@@ -11040,10 +10374,10 @@ abstract class AppLocalizations {
   /// Under the no-shape heading, saying what would fill it.
   ///
   /// In en, this message translates to:
-  /// **'The visualizer draws what the analyze pass measured, and this file has not been measured. Run an analyze pass on the library and it fills in.'**
-  String get playerNoShapeMessage;
+  /// **'Run an analyze pass to fill this in'**
+  String get playerNoShapeEmptyMessage;
 
-  /// Heading of every idle playback surface: the player, car mode, the visualizer, and the lyrics panel. Each says something different underneath it.
+  /// Heading of every idle playback surface: the player, car mode, the visualizer, and the lyrics panel.
   ///
   /// In en, this message translates to:
   /// **'Nothing is playing'**
@@ -11367,12 +10701,6 @@ abstract class AppLocalizations {
   /// **'Could not load the transcript.'**
   String get playerTranscriptError;
 
-  /// Shown once, the first time silence trimming is turned on.
-  ///
-  /// In en, this message translates to:
-  /// **'Silence trimming skips the mapped quiet parts of an episode. Positions stay honest; the chip counts what it skipped.'**
-  String get playerTrimExplained;
-
   /// Control that skips the quiet parts of a spoken recording.
   ///
   /// In en, this message translates to:
@@ -11433,12 +10761,6 @@ abstract class AppLocalizations {
   /// **'This track has not been analyzed yet.'**
   String get playerVisualizerAnalysisNeeded;
 
-  /// Under the idle heading on the visualizer.
-  ///
-  /// In en, this message translates to:
-  /// **'Start a track and its shape shows up here.'**
-  String get playerVisualizerIdleMessage;
-
   /// Accessible name of the control choosing how the visualizer draws.
   ///
   /// In en, this message translates to:
@@ -11454,7 +10776,7 @@ abstract class AppLocalizations {
   /// Shown once, the first time voice boost is turned on. It warns that playback restarts, because the server is what applies the effect.
   ///
   /// In en, this message translates to:
-  /// **'Voice boost evens out a quiet or uneven recording. The server applies it, so what is playing reopens.'**
+  /// **'Playback restarts to apply voice boost'**
   String get playerVoiceBoostExplained;
 
   /// Message when a voice-boost toggle did not reach the server. The setting belongs to the show, so it is stored rather than local.
@@ -11484,7 +10806,7 @@ abstract class AppLocalizations {
   /// Said under the add field when a search answered with nothing a playlist can hold.
   ///
   /// In en, this message translates to:
-  /// **'Nothing here to add. Artists and albums are not members of a playlist; their tracks are.'**
+  /// **'Nothing to add. Only tracks join.'**
   String get playlistAddNothing;
 
   /// Title of the sheet picking which playlist an item joins.
@@ -11574,7 +10896,7 @@ abstract class AppLocalizations {
   /// Body of the delete-playlist dialog, saying what goes and what does not.
   ///
   /// In en, this message translates to:
-  /// **'It goes for everyone it is shared with. The items in it are never touched.'**
+  /// **'It goes for everyone it is shared with; its items stay.'**
   String get playlistDeleteBody;
 
   /// Title of the dialog confirming a playlist is deleted.
@@ -11594,12 +10916,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Edit rules'**
   String get playlistEditRules;
-
-  /// Message under the empty state of a manual playlist this account may edit. The quoted phrase names the sheet, so it matches that sheet's own title.
-  ///
-  /// In en, this message translates to:
-  /// **'Search above to add the first track, or use \"Add to playlist\" from anywhere something is playing.'**
-  String get playlistEditableEmptyMessage;
 
   /// Empty state of a manual playlist.
   ///
@@ -11703,12 +11019,6 @@ abstract class AppLocalizations {
   /// **'Playlist'**
   String get playlistFallbackTitle;
 
-  /// Message under the empty state of somebody else's playlist, which this account cannot fill.
-  ///
-  /// In en, this message translates to:
-  /// **'The owner has not put anything in this list yet.'**
-  String get playlistForeignEmptyMessage;
-
   /// Line in the import report when the playlist was made but the source binding was refused. {reason} is the server's own sentence.
   ///
   /// In en, this message translates to:
@@ -11718,7 +11028,7 @@ abstract class AppLocalizations {
   /// Line in the import report when the created playlist was also bound to the pasted export.
   ///
   /// In en, this message translates to:
-  /// **'Kept matched to this export. Re-match it whenever you like from the playlist\'s sync settings.'**
+  /// **'Kept matched to this export.'**
   String get playlistImportBound;
 
   /// Button in the NSP and M3U import sheets that asks the server, before anything is imported, what the pasted document would lose (NSP) or what each of its lines matches (M3U).
@@ -11775,10 +11085,10 @@ abstract class AppLocalizations {
   /// **'Keep it matched to this export'**
   String get playlistImportKeepMatched;
 
-  /// Help line under the keep-matched switch, saying what binding the export does.
+  /// Help line under the keep-matched switch: the data loss binding the export brings. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'The export is stored with the playlist and re-matched against the library on demand. Membership follows the export, so tracks added by hand are reconciled away'**
+  /// **'Tracks added by hand are removed on re-match'**
   String get playlistImportKeepMatchedHelp;
 
   /// Accessible name of the menu offering the places a playlist can be imported from.
@@ -11985,16 +11295,10 @@ abstract class AppLocalizations {
   /// **'Manual'**
   String get playlistKindManual;
 
-  /// Line under the kind chips when the manual kind is chosen.
-  ///
-  /// In en, this message translates to:
-  /// **'A manual playlist holds what you put in it, in the order you put it.'**
-  String get playlistKindManualHelp;
-
   /// Line under the kind chips when the smart kind is chosen.
   ///
   /// In en, this message translates to:
-  /// **'A smart playlist keeps itself: you write the rules next and it evaluates them every time it is opened.'**
+  /// **'You write rules next; it updates itself.'**
   String get playlistKindSmartHelp;
 
   /// Title of the error state when one playlist could not be read.
@@ -12006,7 +11310,7 @@ abstract class AppLocalizations {
   /// Shown beside a spinner while the server checks each line of a pasted M3U file, which for a long file can take tens of seconds.
   ///
   /// In en, this message translates to:
-  /// **'Checking each line of the file. A long one takes a while.'**
+  /// **'Checking file'**
   String get playlistM3uPreviewChecking;
 
   /// Line above the lines of a pasted M3U file once it is checked, before anything is imported: how many lines become playlist entries, how many name the same item as the line before them through a different path to it (another of its files, such as a book's next part or a copy, or another spelling of the same file) and so add no entry, and how many match nothing the person can see.
@@ -12018,7 +11322,7 @@ abstract class AppLocalizations {
   /// Shown beside a spinner while a checked M3U file is imported as a playlist, which for a long file can take tens of seconds.
   ///
   /// In en, this message translates to:
-  /// **'Importing the playlist. A long file takes a while.'**
+  /// **'Importing playlist'**
   String get playlistM3uPreviewImporting;
 
   /// A checked M3U line's match, by its artist and title.
@@ -12096,7 +11400,7 @@ abstract class AppLocalizations {
   /// Said in the add-to-playlist sheet when the account owns no list an item could join.
   ///
   /// In en, this message translates to:
-  /// **'No manual playlists yet. Make one below and this goes straight into it.'**
+  /// **'No manual playlists yet.'**
   String get playlistNoManualLists;
 
   /// NSP gap sentence, import: the document's limit is not an integer.
@@ -12901,7 +12205,7 @@ abstract class AppLocalizations {
   /// Said in the preview when the draft rule matches nothing.
   ///
   /// In en, this message translates to:
-  /// **'Nothing in the library answers this yet.'**
+  /// **'Nothing matches yet.'**
   String get playlistRuleNoMatches;
 
   /// Said where the playlist picker would be, when the account can see no manual list a rule could point at.
@@ -13075,8 +12379,8 @@ abstract class AppLocalizations {
   /// Why the rule editor opened read-only.
   ///
   /// In en, this message translates to:
-  /// **'It uses something this editor cannot draw yet, so it is shown rather than edited. Nothing here will change it.'**
-  String get playlistRuleReadOnlyMessage;
+  /// **'This editor cannot draw it yet.'**
+  String get playlistRuleReadOnlyEmptyMessage;
 
   /// Shown instead of the rule editor for a rule shape it cannot draw.
   ///
@@ -13101,12 +12405,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove sort'**
   String get playlistRuleRemoveSort;
-
-  /// Help under the pinned-selection switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Pins which tracks the budget picks, so the list is the same on the next rebuild'**
-  String get playlistRuleSeedHelp;
 
   /// Switch pinning which members a random or budget draw picks.
   ///
@@ -13180,12 +12478,6 @@ abstract class AppLocalizations {
   /// **'yes'**
   String get playlistRuleYes;
 
-  /// Line under a smart playlist's rule chips, saying the membership is not stored.
-  ///
-  /// In en, this message translates to:
-  /// **'Evaluated live, every time this list is opened.'**
-  String get playlistRulesLive;
-
   /// The rule chips read as one thing for a screen reader. {rules} is the chips joined by commas.
   ///
   /// In en, this message translates to:
@@ -13222,12 +12514,6 @@ abstract class AppLocalizations {
   /// **'Shared by you'**
   String get playlistSharedByYou;
 
-  /// Help under the shared switch on the create dialog.
-  ///
-  /// In en, this message translates to:
-  /// **'Anyone on this server can see and play it'**
-  String get playlistSharedHelp;
-
   /// Switch on the create dialog offering the playlist to the whole server, and the header line saying a playlist is.
   ///
   /// In en, this message translates to:
@@ -13245,12 +12531,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Smart'**
   String get playlistSmart;
-
-  /// Message under the empty state of a smart playlist.
-  ///
-  /// In en, this message translates to:
-  /// **'No item in the library answers these rules. Loosen one and the list fills itself.'**
-  String get playlistSmartEmptyMessage;
 
   /// Empty state of a smart playlist whose rules match nothing.
   ///
@@ -13372,18 +12652,6 @@ abstract class AppLocalizations {
   /// **'The last sync changed nothing.'**
   String get playlistSyncLastRunNothing;
 
-  /// Line under the mode choice on a matched binding, saying why mirror-trash is not offered.
-  ///
-  /// In en, this message translates to:
-  /// **'An export downloads nothing, so there are no files to move to the trash.'**
-  String get playlistSyncMatchedModeHelp;
-
-  /// Note in the sync sheet for a binding recorded from a streaming export rather than a live URL. {source} is the export format's label, e.g. spotify.
-  ///
-  /// In en, this message translates to:
-  /// **'A {source} export re-matches against the library on demand and downloads nothing.'**
-  String playlistSyncMatchedNote(String source);
-
   /// Sync mode that only adds new source entries and never touches manual edits.
   ///
   /// In en, this message translates to:
@@ -13393,20 +12661,8 @@ abstract class AppLocalizations {
   /// Help line under the mode choice while append is selected.
   ///
   /// In en, this message translates to:
-  /// **'New source entries join the end; your own edits are never touched.'**
-  String get playlistSyncModeHelpAppend;
-
-  /// Help line under the mode choice while mirror is selected.
-  ///
-  /// In en, this message translates to:
-  /// **'Membership and order follow the source. A removed entry leaves the list but its file stays in the library.'**
-  String get playlistSyncModeHelpMirror;
-
-  /// Help line under the mode choice while mirror-and-trash is selected.
-  ///
-  /// In en, this message translates to:
-  /// **'Membership and order follow the source, and a removed entry\'s file goes to the recoverable trash.'**
-  String get playlistSyncModeHelpMirrorTrash;
+  /// **'New entries join the end; your edits stay.'**
+  String get playlistSyncModeAppendHelp;
 
   /// Label of the choice picking how a sync reconciles the playlist.
   ///
@@ -13420,11 +12676,23 @@ abstract class AppLocalizations {
   /// **'Mirror'**
   String get playlistSyncModeMirror;
 
+  /// Help line under the mode choice while mirror is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'Follows the source; removed entries keep their files.'**
+  String get playlistSyncModeMirrorHelp;
+
   /// Sync mode where membership follows the source and a removed entry's file goes to the recoverable trash.
   ///
   /// In en, this message translates to:
   /// **'Mirror and trash'**
   String get playlistSyncModeMirrorTrash;
+
+  /// Help line under the mode choice while mirror-and-trash is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'Follows the source; removed files go to recoverable trash.'**
+  String get playlistSyncModeMirrorTrashHelp;
 
   /// Button that queues a sync run immediately.
   ///
@@ -13555,7 +12823,7 @@ abstract class AppLocalizations {
   /// Note in the sync sheet while the schedule is auto-disabled.
   ///
   /// In en, this message translates to:
-  /// **'Syncing is suspended after repeated failures. A successful sync turns it back on.'**
+  /// **'Suspended after failures; a successful sync resumes it.'**
   String get playlistSyncSuspended;
 
   /// Button removing the binding; the playlist and its members stay.
@@ -13581,12 +12849,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Source playlist URL'**
   String get playlistSyncUrlLabel;
-
-  /// Message under the empty state of the playlists screen, saying the two ways to fill it.
-  ///
-  /// In en, this message translates to:
-  /// **'Make one, or add a track to a new list from anywhere it is playing. A smart playlist writes itself from rules and keeps up as the library grows.'**
-  String get playlistsEmptyMessage;
 
   /// Empty state of the playlists screen.
   ///
@@ -13659,12 +12921,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Auto-download new episodes'**
   String get podcastAutoDownload;
-
-  /// Help under the auto-download switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Keeps arrivals on this device as the feed refreshes'**
-  String get podcastAutoDownloadHelp;
 
   /// Snackbar when the walk over a show's episodes failed before anything was written. {reason} is a whole translated sentence.
   ///
@@ -13819,7 +13075,7 @@ abstract class AppLocalizations {
   /// What the auto-download filter does, with the switch on.
   ///
   /// In en, this message translates to:
-  /// **'Matched against episode titles only, and against new arrivals only: editing this never re-evaluates the backlog or removes anything already fetched.'**
+  /// **'New arrivals only; nothing already fetched is removed'**
   String get podcastFilterActiveHelp;
 
   /// Chip showing every episode of a show.
@@ -13927,7 +13183,7 @@ abstract class AppLocalizations {
   /// What the mark-older dialog does, said before it is run.
   ///
   /// In en, this message translates to:
-  /// **'Clears the unplayed dots on a backlog. Your positions on episodes you actually started are overwritten, and nothing is deleted.'**
+  /// **'Overwrites positions on episodes you started; nothing is deleted'**
   String get podcastMarkOlderBody;
 
   /// How far back the mark-older dialog reaches: a month.
@@ -14038,12 +13294,6 @@ abstract class AppLocalizations {
   /// **'No episodes yet'**
   String get podcastNoEpisodes;
 
-  /// Message under the no-episodes state.
-  ///
-  /// In en, this message translates to:
-  /// **'This feed has published nothing this server can see.'**
-  String get podcastNoEpisodesMessage;
-
   /// Shown in the add dialog when the podcast directory answered with nothing.
   ///
   /// In en, this message translates to:
@@ -14062,23 +13312,17 @@ abstract class AppLocalizations {
   /// **'Nothing matches'**
   String get podcastNothingMatches;
 
-  /// Message under the nothing-matches state.
-  ///
-  /// In en, this message translates to:
-  /// **'Widen the filter, or clear the search, to see the rest.'**
-  String get podcastNothingMatchesMessage;
-
   /// Empty state where the filter matched nothing among the episodes loaded, and the show has more.
   ///
   /// In en, this message translates to:
   /// **'Nothing matches yet'**
   String get podcastNothingMatchesYet;
 
-  /// Why a filter can come up empty on a show with a long back catalogue. The count rises with each fetch, so a press that finds nothing is still visibly progress.
+  /// Line under the empty state where the filter matched nothing among the episodes loaded, and the show has more. The count rises with each fetch, so a press that finds nothing is still visibly progress.
   ///
   /// In en, this message translates to:
-  /// **'The filter runs over the {count} episodes loaded so far, and this show has more.'**
-  String podcastNothingMatchesYetMessage(int count);
+  /// **'Filters cover the {count} episodes loaded so far'**
+  String podcastNothingMatchesYetEmptyMessage(int count);
 
   /// Button opening the web page a feed named for one episode.
   ///
@@ -14209,7 +13453,7 @@ abstract class AppLocalizations {
   /// Banner on a show whose feed the server has stopped polling.
   ///
   /// In en, this message translates to:
-  /// **'Scheduled refresh is paused for this feed after repeated failures. Checking for new episodes turns it back on.'**
+  /// **'Refresh paused after repeated failures; checking for episodes resumes it'**
   String get podcastRefreshPaused;
 
   /// Button dropping one episode's downloaded bytes from the server.
@@ -14479,13 +13723,13 @@ abstract class AppLocalizations {
   /// Help under the trim-silence switch.
   ///
   /// In en, this message translates to:
-  /// **'Needs the episode fetched: silence is mapped from the audio this server holds'**
+  /// **'Needs the episode fetched'**
   String get podcastTrimSilenceHelp;
 
   /// Body of the unfollow dialog, saying what goes and what stays.
   ///
   /// In en, this message translates to:
-  /// **'Some episodes are downloaded on the server. Remove those files too? Removed files go to the trash, and your listening progress is kept either way. If someone else subscribes to this show, the files stay regardless.'**
+  /// **'Remove its downloaded files too? They go to the trash, unless another subscriber keeps them.'**
   String get podcastUnfollowBody;
 
   /// Title of the dialog asking what to do with the downloaded files when a show is unfollowed.
@@ -14512,12 +13756,6 @@ abstract class AppLocalizations {
   /// **'Voice boost'**
   String get podcastVoiceBoost;
 
-  /// Help under the voice-boost switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Lifts speech over a noisy room'**
-  String get podcastVoiceBoostHelp;
-
   /// URL field label while the YouTube source is selected in the add-by-URL form; the parser takes either address.
   ///
   /// In en, this message translates to:
@@ -14529,12 +13767,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add a show'**
   String get podcastsEmptyAction;
-
-  /// Message under the empty state of the podcast hub.
-  ///
-  /// In en, this message translates to:
-  /// **'Follow a show and its new episodes turn up here as the feed publishes them.'**
-  String get podcastsEmptyMessage;
 
   /// Empty state of the podcast hub.
   ///
@@ -14607,12 +13839,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'EARLIER'**
   String get queueEarlier;
-
-  /// Empty state of the queue, saying what fills it.
-  ///
-  /// In en, this message translates to:
-  /// **'Play an album, a show, or a playlist and it lands here.'**
-  String get queueEmptyMessage;
 
   /// Empty state of the queue.
   ///
@@ -14746,12 +13972,6 @@ abstract class AppLocalizations {
   /// **'Restored {name}'**
   String queueRestored(String name);
 
-  /// Under a rolling queue, saying that what is listed is part of something bigger rather than the whole of it.
-  ///
-  /// In en, this message translates to:
-  /// **'A window over a larger scope'**
-  String get queueRollingWindow;
-
   /// How many queue rows are selected, over the controls that act on them. Agrees with the word for a track in this language.
   ///
   /// In en, this message translates to:
@@ -14854,12 +14074,6 @@ abstract class AppLocalizations {
   /// **'Add a station'**
   String get radioEmptyAction;
 
-  /// Message under the empty state of the radio dial, naming the two ways in.
-  ///
-  /// In en, this message translates to:
-  /// **'Search the directory to add your first, or paste a stream URL if you already have one.'**
-  String get radioEmptyMessage;
-
   /// Empty state of the radio dial.
   ///
   /// In en, this message translates to:
@@ -14899,7 +14113,7 @@ abstract class AppLocalizations {
   /// Hint under the station-name field on the add form.
   ///
   /// In en, this message translates to:
-  /// **'Taken from the stream address when left blank'**
+  /// **'Defaults to the stream address'**
   String get radioNameHint;
 
   /// Refusal when an existing station's name is cleared, where there is no address to fall back to a name from.
@@ -14956,22 +14170,10 @@ abstract class AppLocalizations {
   /// **'Get it from a URL'**
   String get radioSavedAcquire;
 
-  /// Under the get-from-a-URL row.
-  ///
-  /// In en, this message translates to:
-  /// **'Download a copy you found; it lands in review'**
-  String get radioSavedAcquireHelp;
-
-  /// Under the row on the dial that opens the saved songs.
-  ///
-  /// In en, this message translates to:
-  /// **'Songs you caught on air and mean to hunt down'**
-  String get radioSavedDoorSubtitle;
-
   /// Message under the empty state of the saved songs, saying how one gets there.
   ///
   /// In en, this message translates to:
-  /// **'Tap the heart while a station is playing and the song it named turns up here, with a way to search for it.'**
+  /// **'Tap the heart while a station plays'**
   String get radioSavedEmptyMessage;
 
   /// Empty state of the songs caught on air.
@@ -15004,18 +14206,6 @@ abstract class AppLocalizations {
   /// **'Identify a review entry as it'**
   String get radioSavedIdentify;
 
-  /// Under the identify-a-review-entry row.
-  ///
-  /// In en, this message translates to:
-  /// **'Hand its name to a pending entry\'s search'**
-  String get radioSavedIdentifyHelp;
-
-  /// Overline above the identify sheet, saying what it lists and why only those.
-  ///
-  /// In en, this message translates to:
-  /// **'Pending single tracks in the review queue'**
-  String get radioSavedIdentifyOverline;
-
   /// Heading of the sheet picking which pending review entry a saved song names.
   ///
   /// In en, this message translates to:
@@ -15037,7 +14227,7 @@ abstract class AppLocalizations {
   /// Said in the identify sheet when the review queue holds nothing a radio song could name.
   ///
   /// In en, this message translates to:
-  /// **'No pending single tracks to name. Get the song from a URL first and it turns up here while it waits for review.'**
+  /// **'No pending single tracks to name'**
   String get radioSavedNoPending;
 
   /// Said in the identify sheet when the review queue could not be read.
@@ -15408,7 +14598,7 @@ abstract class AppLocalizations {
   /// Explanation under the duplicate warning on a review entry, shown when a file holds the same audio as an item the library has.
   ///
   /// In en, this message translates to:
-  /// **'Adding a file the library already holds keeps one item, with the file as another copy. Its details, art and who may edit it do not change.'**
+  /// **'Adding keeps one item; the file becomes a copy.'**
   String get reviewDuplicateHelp;
 
   /// Heading of the warning on a review entry whose files match something the library holds by name or by sound, which may be another recording.
@@ -15438,7 +14628,7 @@ abstract class AppLocalizations {
   /// Empty state of the review queue, saying what fills it.
   ///
   /// In en, this message translates to:
-  /// **'Uploads and rematches land here when the match needs a decision.'**
+  /// **'Uploads and rematches land here.'**
   String get reviewEmptyMessage;
 
   /// Empty state of the review queue.
@@ -15594,8 +14784,8 @@ abstract class AppLocalizations {
   /// Empty state where the sources matched nothing.
   ///
   /// In en, this message translates to:
-  /// **'Nothing in the sources matched what these files claim. Keep them as they are, or skip and try again later.'**
-  String get reviewNoCandidatesMessage;
+  /// **'Keep them as they are, or skip.'**
+  String get reviewNoCandidatesEmptyMessage;
 
   /// Empty state where the sources were searched and matched nothing.
   ///
@@ -15645,16 +14835,10 @@ abstract class AppLocalizations {
   /// **'Search again'**
   String get reviewSearchAgain;
 
-  /// Above the re-identify fields when they hold what was last searched for.
-  ///
-  /// In en, this message translates to:
-  /// **'Looked up instead of what the files claim. Nothing here is written to the files.'**
-  String get reviewSearchStored;
-
   /// Above the re-identify fields when they opened on a guess parsed from the source title.
   ///
   /// In en, this message translates to:
-  /// **'Suggested from the source title. Looked up instead of what the files claim; nothing here is written to the files.'**
+  /// **'Suggested from source title'**
   String get reviewSearchSuggested;
 
   /// Opens the fields that re-run identification against typed names instead of the files' own tags.
@@ -15684,14 +14868,14 @@ abstract class AppLocalizations {
   /// Empty state for a skipped identification that has already been decided.
   ///
   /// In en, this message translates to:
-  /// **'This submission asked to be taken as delivered, so nothing was searched.'**
-  String get reviewSkippedDecided;
+  /// **'Taken as delivered, so nothing was searched.'**
+  String get reviewSkippedDecidedEmptyMessage;
 
   /// Empty state for a skipped identification that is still pending, so it needs telling what to do.
   ///
   /// In en, this message translates to:
-  /// **'This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own: read the warning above if there is one, then add it, skip it or discard it.'**
-  String get reviewSkippedPending;
+  /// **'Not added; read any warning above, then decide.'**
+  String get reviewSkippedPendingEmptyMessage;
 
   /// Empty state where nothing was searched for because the submission asked to be taken as delivered.
   ///
@@ -15795,17 +14979,11 @@ abstract class AppLocalizations {
   /// **'Add station'**
   String get searchAddStation;
 
-  /// Banner under the stations this server already has, when the public directory could not be reached.
+  /// Banner under the stations this server already has, when the public directory could not be reached: the cause, and where the way out is (Radio's add-station dialog takes a stream URL). Its one action is Retry.
   ///
   /// In en, this message translates to:
-  /// **'Could not reach the directory, so only your own stations are listed. Adding a station by its stream URL still works.'**
+  /// **'Directory unreachable; add a station by URL in Radio'**
   String get searchDirectoryDegraded;
-
-  /// The way out offered beside the station-directory error: a stream URL needs no directory.
-  ///
-  /// In en, this message translates to:
-  /// **'Adding a station by its stream URL still works.'**
-  String get searchDirectoryErrorDetail;
 
   /// Title of the error state when the station directory would not answer and there are no local stations to fall back on.
   ///
@@ -15819,23 +14997,11 @@ abstract class AppLocalizations {
   /// **'Directory'**
   String get searchDirectoryOverline;
 
-  /// Empty state under the Radio chip, saying what typing will do.
-  ///
-  /// In en, this message translates to:
-  /// **'Type a station name to look it up in the public directory, then add it to this server.'**
-  String get searchDirectoryPromptMessage;
-
   /// Empty state under the Radio chip before enough has been typed to look anything up.
   ///
   /// In en, this message translates to:
   /// **'Search the station directory'**
   String get searchDirectoryPromptTitle;
-
-  /// Empty state of the search screen with nothing typed.
-  ///
-  /// In en, this message translates to:
-  /// **'Try searching for an artist, show, or book.'**
-  String get searchEmptyMessage;
 
   /// Empty state of the search screen with nothing typed and no recent searches.
   ///
@@ -15897,23 +15063,11 @@ abstract class AppLocalizations {
   /// **'Library'**
   String get searchLibraryOverline;
 
-  /// Empty state when the station directory matched nothing.
-  ///
-  /// In en, this message translates to:
-  /// **'The directory lists nothing under that name.'**
-  String get searchNoStationsMessage;
-
   /// Empty state when the station directory matched nothing. {query} is what was typed.
   ///
   /// In en, this message translates to:
   /// **'No stations for \"{query}\"'**
   String searchNoStationsTitle(String query);
-
-  /// Empty state when a library search matched nothing.
-  ///
-  /// In en, this message translates to:
-  /// **'Check the spelling or try fewer words.'**
-  String get searchNothingMessage;
 
   /// Empty state when a library search matched nothing at all. {query} is what was typed.
   ///
@@ -15921,10 +15075,10 @@ abstract class AppLocalizations {
   /// **'Nothing for \"{query}\"'**
   String searchNothingTitle(String query);
 
-  /// Banner beside the library's own episodes when the public podcast directory could not be reached.
+  /// Banner beside the library's own episodes when the public podcast directory could not be reached: the cause, and where the way out is (Podcasts' subscribe dialog takes a feed URL). Its one action is Retry.
   ///
   /// In en, this message translates to:
-  /// **'The podcast directory did not answer, so only your own episodes are listed. Subscribing by feed URL still works.'**
+  /// **'Podcast directory unreachable; subscribe by feed URL in Podcasts'**
   String get searchPodcastDirectoryDegraded;
 
   /// Overline above the list of queries this listener ran before.
@@ -16020,7 +15174,7 @@ abstract class AppLocalizations {
   /// Note under the results when the server capped how many it answered with.
   ///
   /// In en, this message translates to:
-  /// **'There are more matches than fit here. Refine your search to narrow them down.'**
+  /// **'More matches exist; refine your search'**
   String get searchTruncated;
 
   /// Heading over the radio stations this server already has.
@@ -16047,19 +15201,13 @@ abstract class AppLocalizations {
   /// **'Signed in'**
   String get settingsAccountSignedIn;
 
-  /// The line under the row that opens the admin console.
-  ///
-  /// In en, this message translates to:
-  /// **'Libraries, users, scans, backups, and the audit log'**
-  String get settingsAdminConsoleBlurb;
-
   /// Comma-separated search keywords for the "Admin console" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
   /// **'read-only, signup, libraries, users, backups, schedules, trash, audit, transcoding, genres'**
   String get settingsAdminConsoleKeywords;
 
-  /// Name of the row that leads out of settings into the admin console.
+  /// Name of the row that leads out of settings into the admin console, and of the same way out an administrator's settings search offers when it matches nothing.
   ///
   /// In en, this message translates to:
   /// **'Open the admin console'**
@@ -16087,7 +15235,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Copy it now; the server stores it sealed and never shows it again.'**
-  String get settingsAppPasswordCreatedMessage;
+  String get settingsAppPasswordCreatedBody;
 
   /// Title of the dialog showing a newly created app password.
   ///
@@ -16107,11 +15255,11 @@ abstract class AppLocalizations {
   /// **'Label'**
   String get settingsAppPasswordLabel;
 
-  /// The line under the app password label field.
+  /// The hint inside the app password label field.
   ///
   /// In en, this message translates to:
   /// **'Which app is this for?'**
-  String get settingsAppPasswordLabelHelp;
+  String get settingsAppPasswordLabelHint;
 
   /// Action on the app passwords heading that creates one.
   ///
@@ -16140,7 +15288,7 @@ abstract class AppLocalizations {
   /// The line under the app passwords heading, saying what they are for.
   ///
   /// In en, this message translates to:
-  /// **'For Subsonic apps and podcast sync clients. Your login password never works there.'**
+  /// **'For Subsonic and podcast sync clients'**
   String get settingsAppPasswordsBlurb;
 
   /// Shown where the app password rows would be when there are none.
@@ -16179,12 +15327,6 @@ abstract class AppLocalizations {
   /// **'Artwork cache cleared'**
   String get settingsArtworkCacheCleared;
 
-  /// The line under the artwork cache row, saying what clearing it costs.
-  ///
-  /// In en, this message translates to:
-  /// **'Covers are re-fetched as they are needed again'**
-  String get settingsArtworkCacheHelp;
-
   /// Comma-separated search keywords for the "Artwork cache" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -16196,12 +15338,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Artwork cache'**
   String get settingsArtworkCacheTitle;
-
-  /// The line under the artwork cycling switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Moves the full-screen player on to the next picture by itself, when a track or book has more than one'**
-  String get settingsArtworkCycleHelp;
 
   /// Comma-separated search keywords for the "Cycle through artwork" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16215,12 +15351,6 @@ abstract class AppLocalizations {
   /// **'Cycle through artwork'**
   String get settingsArtworkCycleTitle;
 
-  /// The line under the artwork glow switch.
-  ///
-  /// In en, this message translates to:
-  /// **'The colour a cover casts behind the player'**
-  String get settingsArtworkGlowHelp;
-
   /// Comma-separated search keywords for the "Artwork glow" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -16233,22 +15363,16 @@ abstract class AppLocalizations {
   /// **'Artwork glow'**
   String get settingsArtworkGlowTitle;
 
-  /// The line under the wait-before-removing setting.
-  ///
-  /// In en, this message translates to:
-  /// **'How long a finished episode stays before it goes'**
-  String get settingsAutoRemoveAfterHelp;
-
   /// Name of the setting for how long a finished episode is kept.
   ///
   /// In en, this message translates to:
   /// **'Wait before removing'**
   String get settingsAutoRemoveAfterTitle;
 
-  /// The line under the remove-finished-episodes switch.
+  /// The line under the remove-finished-episodes switch: which downloads it reaches.
   ///
   /// In en, this message translates to:
-  /// **'Reclaims a downloaded episode once it has been finished for a while. Books and albums are left alone'**
+  /// **'Episodes only; books and albums stay'**
   String get settingsAutoRemoveFinishedHelp;
 
   /// Comma-separated search keywords for the "Remove finished episodes" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
@@ -16263,10 +15387,10 @@ abstract class AppLocalizations {
   /// **'Remove finished episodes'**
   String get settingsAutoRemoveFinishedTitle;
 
-  /// The line under the start-without-asking switch.
+  /// The line under the start-without-asking switch: what off does to a queue another device hands over.
   ///
   /// In en, this message translates to:
-  /// **'Lets a queue another device hands over start here. Off means it arrives ready and waits to be tapped'**
+  /// **'Off: a handed-over queue waits to be tapped'**
   String get settingsAutoplayHelp;
 
   /// Comma-separated search keywords for the "Start playing without asking" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
@@ -16281,12 +15405,6 @@ abstract class AppLocalizations {
   /// **'Start playing without asking'**
   String get settingsAutoplayTitle;
 
-  /// The line under the default audiobook speed setting.
-  ///
-  /// In en, this message translates to:
-  /// **'The speed a book plays at until you set one for it'**
-  String get settingsBookSpeedHelp;
-
   /// Comma-separated search keywords for the "Audiobook speed" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -16298,12 +15416,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audiobook speed'**
   String get settingsBookSpeedTitle;
-
-  /// The line under the voice boost default.
-  ///
-  /// In en, this message translates to:
-  /// **'Shows and books with no stored choice of their own open with loudness normalization on'**
-  String get settingsBoostDefaultHelp;
 
   /// Comma-separated search keywords for the "Voice boost by default" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16323,12 +15435,6 @@ abstract class AppLocalizations {
   /// **'{dimension} order'**
   String settingsBrowseOrderChoiceLabel(String dimension);
 
-  /// The line under one library index's default order, on the row that already names the index.
-  ///
-  /// In en, this message translates to:
-  /// **'The order this index opens in'**
-  String get settingsBrowseOrderHelp;
-
   /// Comma-separated search keywords for the "Default order" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -16340,12 +15446,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Default order'**
   String get settingsBrowseOrderTitle;
-
-  /// The line under the show-unknown-groups switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Lists the group for what has no genre, no album, or no year of its own'**
-  String get settingsBrowseUnknownHelp;
 
   /// Comma-separated search keywords for the "Show unknown groups" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16371,12 +15471,6 @@ abstract class AppLocalizations {
   /// **'On hover'**
   String get settingsCaptionsOnHover;
 
-  /// The line under the car mode button switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Puts car mode on the player itself instead of inside its menu'**
-  String get settingsCarButtonHelp;
-
   /// Comma-separated search keywords for the "Car mode button" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -16389,12 +15483,6 @@ abstract class AppLocalizations {
   /// **'Car mode button'**
   String get settingsCarButtonTitle;
 
-  /// The line under the card captions setting, where the choice is offered.
-  ///
-  /// In en, this message translates to:
-  /// **'The lines under a cover in a grid'**
-  String get settingsCardCaptionsHelp;
-
   /// Comma-separated search keywords for the "Card captions" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -16404,7 +15492,7 @@ abstract class AppLocalizations {
   /// The line under the card captions setting on a device with no pointer, where the choice is refused rather than stored and ignored.
   ///
   /// In en, this message translates to:
-  /// **'Always shown: hiding them needs a pointer to bring them back'**
+  /// **'Always shown: hiding needs a pointer'**
   String get settingsCardCaptionsNoPointerHelp;
 
   /// Name of the "Card captions" setting, drawn on its own row and in settings search.
@@ -16412,12 +15500,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Card captions'**
   String get settingsCardCaptionsTitle;
-
-  /// The line under the row that opens the cast connection check.
-  ///
-  /// In en, this message translates to:
-  /// **'Whether a cast device can reach this server'**
-  String get settingsCastCheckBlurb;
 
   /// Comma-separated search keywords for the "Connection check" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16431,10 +15513,10 @@ abstract class AppLocalizations {
   /// **'Connection check'**
   String get settingsCastCheckTitle;
 
-  /// The line under the crossfade setting.
+  /// The line under the crossfade setting: where it applies.
   ///
   /// In en, this message translates to:
-  /// **'Fades one track into the next wherever the server renders the queue: a cast speaker, and gapless playback in a browser'**
+  /// **'Applies to cast speakers and browser gapless playback'**
   String get settingsCrossfadeHelp;
 
   /// Comma-separated search keywords for the "Crossfade" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
@@ -16460,12 +15542,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Compact'**
   String get settingsDensityCompact;
-
-  /// The line under the density setting, saying what it does and what it does not touch.
-  ///
-  /// In en, this message translates to:
-  /// **'How tightly rows pack; text size stays the system\'s'**
-  String get settingsDensityHelp;
 
   /// Comma-separated search keywords for the "Density" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16507,7 +15583,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'This is the device you are using now. Revoking its session signs you out.'**
-  String get settingsDeviceSignOutCurrentMessage;
+  String get settingsDeviceSignOutCurrentBody;
 
   /// Title of the dialog confirming that the device being used right now is being signed out.
   ///
@@ -16569,11 +15645,17 @@ abstract class AppLocalizations {
   /// **'Signed-in devices'**
   String get settingsDevicesTitle;
 
-  /// The line under the Discord application ID field.
+  /// Help line under the Discord application field: what an empty box means. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and the image for albums with no cover'**
+  /// **'Empty publishes as WaxDeck'**
   String get settingsDiscordApplicationHelp;
+
+  /// The hint inside the Discord application field: what goes in it.
+  ///
+  /// In en, this message translates to:
+  /// **'Application ID'**
+  String get settingsDiscordApplicationHint;
 
   /// Field for a Discord application ID of the listener's own, instead of WaxDeck's.
   ///
@@ -16581,10 +15663,10 @@ abstract class AppLocalizations {
   /// **'Publish as another application (optional)'**
   String get settingsDiscordApplicationLabel;
 
-  /// Help under the album covers switch: what it contacts and what shows otherwise.
+  /// Help under the album covers switch: the third party it contacts.
   ///
   /// In en, this message translates to:
-  /// **'This device asks the Cover Art Archive for the cover of each album it plays that has a MusicBrainz release ID. Off, or with none found, Discord shows the application\'s own image.'**
+  /// **'This device asks the Cover Art Archive for each album\'s cover'**
   String get settingsDiscordCoversHelp;
 
   /// Title of the switch that has Discord presence show album covers.
@@ -16592,12 +15674,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show album covers'**
   String get settingsDiscordCoversTitle;
-
-  /// The line under the Discord presence switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Sets your Discord status while WaxDeck plays, through the Discord app on this machine'**
-  String get settingsDiscordPresenceHelp;
 
   /// Comma-separated search keywords for the "Show what I am listening to on Discord" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16629,12 +15705,6 @@ abstract class AppLocalizations {
   /// **'Display name'**
   String get settingsDisplayNameTitle;
 
-  /// The line under the row that opens the download manager.
-  ///
-  /// In en, this message translates to:
-  /// **'What this device holds offline, and how to free it'**
-  String get settingsDownloadsManagerBlurb;
-
   /// Comma-separated search keywords for the "Manage downloads" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -16646,12 +15716,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage downloads'**
   String get settingsDownloadsManagerTitle;
-
-  /// The line under the download-on-wifi-only switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Holds transfers until this device is on wifi, rather than failing them'**
-  String get settingsDownloadsWifiHelp;
 
   /// Comma-separated search keywords for the "Download on wifi only" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16665,12 +15729,6 @@ abstract class AppLocalizations {
   /// **'Download on wifi only'**
   String get settingsDownloadsWifiTitle;
 
-  /// The line under the row that opens the playback endpoint list.
-  ///
-  /// In en, this message translates to:
-  /// **'Cast targets, renderers, and your other devices'**
-  String get settingsEndpointsBlurb;
-
   /// Comma-separated search keywords for the "Playback endpoints" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -16683,23 +15741,23 @@ abstract class AppLocalizations {
   /// **'Playback endpoints'**
   String get settingsEndpointsTitle;
 
-  /// Help line under the voice boost or silence trimming default, whose switch is hidden, when the server's streaming engine answers but does not offer that feature (voice boost, or the silence analysis trimming reads). No full stop.
+  /// Line under a Playback group heading, once per group, when the engine answers but lacks the feature of several settings, which are drawn disabled. No full stop.
+  ///
+  /// In en, this message translates to:
+  /// **'Some settings need features this server\'s engine lacks'**
+  String get settingsEngineLacksThese;
+
+  /// Help line under a Playback setting that is drawn disabled because the server's streaming engine answers but does not offer that one feature, when no other setting says the same. No full stop.
   ///
   /// In en, this message translates to:
   /// **'This server\'s streaming engine doesn\'t offer this'**
   String get settingsEngineLacksThis;
 
-  /// Help line under the gapless, voice boost and silence trimming switches while the server's streaming engine is configured but not answering. Temporary: the server retries it. No full stop.
+  /// Line under each Playback group heading whose settings wait on the streaming engine, while it is configured but not answering; the settings stay live. Temporary: the server retries it. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'The streaming engine is unreachable right now'**
+  /// **'Some settings wait on the streaming engine, which is unreachable'**
   String get settingsEngineUnreachable;
-
-  /// The line under the Appearance setting stored on the account rather than on this device: the language.
-  ///
-  /// In en, this message translates to:
-  /// **'Follows you to your other devices'**
-  String get settingsFollowsAccountHelp;
 
   /// Artwork size option.
   ///
@@ -16712,12 +15770,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Medium'**
   String get settingsGridMedium;
-
-  /// The line under the artwork size setting.
-  ///
-  /// In en, this message translates to:
-  /// **'How large covers are drawn in grids'**
-  String get settingsGridSizeHelp;
 
   /// Comma-separated search keywords for the "Artwork size" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16803,12 +15855,6 @@ abstract class AppLocalizations {
   /// **'The player'**
   String get settingsGroupPlayer;
 
-  /// Heading over the settings rows about how the app reads out.
-  ///
-  /// In en, this message translates to:
-  /// **'Screen readers'**
-  String get settingsGroupScreenReaders;
-
   /// Heading over the settings rows about coverage of the audio analysis behind similar tracks and mixes.
   ///
   /// In en, this message translates to:
@@ -16857,10 +15903,10 @@ abstract class AppLocalizations {
   /// **'Where sound comes out'**
   String get settingsGroupWhereSoundComesOut;
 
-  /// The line under the identify-uploads switch.
+  /// Help line under the identify-uploads switch: the third party it asks, and that off files uploads as they are, without review. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'Matches what you add against MusicBrainz. Off adds it with the tags it has, without review'**
+  /// **'Asks MusicBrainz; off files uploads unreviewed'**
   String get settingsIdentifyUploadsHelp;
 
   /// Comma-separated search keywords for the "Identify uploads" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
@@ -16874,12 +15920,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Identify uploads'**
   String get settingsIdentifyUploadsTitle;
-
-  /// Help line under the keep-playing setting. Says what happens and where else the same switch is.
-  ///
-  /// In en, this message translates to:
-  /// **'When a music queue runs out, keep going with tracks like the last one. The queue\'s own toggle sets the same thing.'**
-  String get settingsKeepPlayingHelp;
 
   /// Comma-separated search keywords for the "Keep playing similar music" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -16911,7 +15951,7 @@ abstract class AppLocalizations {
   /// **'API key'**
   String get settingsLastfmApiKey;
 
-  /// The line under the Last.fm API key field, saying where a key comes from.
+  /// Help line under the Last.fm API key field, saying where a key comes from.
   ///
   /// In en, this message translates to:
   /// **'Register at last.fm/api/account/create'**
@@ -16941,23 +15981,11 @@ abstract class AppLocalizations {
   /// **'Shared secret'**
   String get settingsLastfmSecret;
 
-  /// The line under the Last.fm secret field once a secret is stored.
+  /// Help line under the Last.fm secret field once a secret is stored: it is kept sealed and never shown.
   ///
   /// In en, this message translates to:
   /// **'Stored sealed; never shown again'**
   String get settingsLastfmSecretHelp;
-
-  /// The read-only access line for an account granted every library.
-  ///
-  /// In en, this message translates to:
-  /// **'You can see every library on this server'**
-  String get settingsLibraryAccessAll;
-
-  /// The access line while the account is still being read.
-  ///
-  /// In en, this message translates to:
-  /// **'Checking'**
-  String get settingsLibraryAccessChecking;
 
   /// The access line when the account read failed.
   ///
@@ -16965,16 +15993,22 @@ abstract class AppLocalizations {
   /// **'Could not read your access'**
   String get settingsLibraryAccessError;
 
+  /// The value of the "What I can see" row for an account that can see every library on the server.
+  ///
+  /// In en, this message translates to:
+  /// **'All libraries'**
+  String get settingsLibraryAccessEverything;
+
   /// Comma-separated search keywords for the "What I can see" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
   /// **'permissions, libraries, access'**
   String get settingsLibraryAccessKeywords;
 
-  /// The read-only access line for an account granted some libraries. {count} is how many.
+  /// The value of the "What I can see" row for an account granted some libraries. {count} is how many.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{You can see 1 of this server\'s libraries} other{You can see {count} of this server\'s libraries}}'**
+  /// **'{count, plural, =1{1 library} other{{count} libraries}}'**
   String settingsLibraryAccessSome(int count);
 
   /// Name of the "What I can see" setting, drawn on its own row and in settings search.
@@ -16989,10 +16023,10 @@ abstract class AppLocalizations {
   /// **'API server (optional)'**
   String get settingsListenBrainzApi;
 
-  /// The line under the ListenBrainz API server field.
+  /// Help line under the ListenBrainz API server field: what an empty box means. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'For a compatible server; empty for listenbrainz.org'**
+  /// **'Empty uses listenbrainz.org'**
   String get settingsListenBrainzApiHelp;
 
   /// Title of the dialog that connects ListenBrainz with a token.
@@ -17007,7 +16041,7 @@ abstract class AppLocalizations {
   /// **'User token'**
   String get settingsListenBrainzToken;
 
-  /// The line under the ListenBrainz token field, saying where to find it.
+  /// Help line under the ListenBrainz token field, saying where to find it.
   ///
   /// In en, this message translates to:
   /// **'From your ListenBrainz profile page'**
@@ -17019,10 +16053,10 @@ abstract class AppLocalizations {
   /// **'Match the system'**
   String get settingsMatchTheSystem;
 
-  /// Help line under the voice boost and silence trimming defaults, whose switches are hidden, on a server that runs without a streaming engine. No full stop.
+  /// Line under each Playback group heading whose settings are drawn disabled because the server runs without a streaming engine. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'Needs the streaming engine, which this server runs without'**
+  /// **'Some settings need the streaming engine, which this server lacks'**
   String get settingsNeedsEngine;
 
   /// Comma-separated search keywords for the "Notification targets" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
@@ -17061,11 +16095,17 @@ abstract class AppLocalizations {
   /// **'Targets'**
   String get settingsNotifyAppriseTargets;
 
-  /// The line under the Apprise targets field.
+  /// Help line under the Apprise targets field: what an empty box means. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'Apprise URLs; empty uses the server\'s own configuration'**
+  /// **'Empty uses the server\'s own configuration'**
   String get settingsNotifyAppriseTargetsHelp;
+
+  /// The hint inside the Apprise targets field: what goes in it.
+  ///
+  /// In en, this message translates to:
+  /// **'Apprise URLs'**
+  String get settingsNotifyAppriseTargetsHint;
 
   /// Shown where the event checklist would be when the read failed.
   ///
@@ -17079,11 +16119,11 @@ abstract class AppLocalizations {
   /// **'Deliver via'**
   String get settingsNotifyDeliverVia;
 
-  /// The line under the Discord webhook field.
+  /// The hint inside the Discord webhook field.
   ///
   /// In en, this message translates to:
   /// **'A discord.com webhook URL'**
-  String get settingsNotifyDiscordWebhookHelp;
+  String get settingsNotifyDiscordWebhookHint;
 
   /// UnifiedPush field: the endpoint the distributor registered.
   ///
@@ -17109,11 +16149,11 @@ abstract class AppLocalizations {
   /// **'{field} must be a whole number'**
   String settingsNotifyFieldWholeNumber(String field);
 
-  /// The range the Gotify priority field accepts.
+  /// The hint inside the Gotify priority field: the range it accepts.
   ///
   /// In en, this message translates to:
   /// **'0 to 10'**
-  String get settingsNotifyGotifyPriorityHelp;
+  String get settingsNotifyGotifyPriorityHint;
 
   /// Label of the webhook target's extra-headers field in the target editor.
   ///
@@ -17121,11 +16161,11 @@ abstract class AppLocalizations {
   /// **'Extra headers'**
   String get settingsNotifyHeaders;
 
-  /// Helper under the extra-headers field, saying how to write them.
+  /// The hint inside the extra-headers field, saying how to write them.
   ///
   /// In en, this message translates to:
   /// **'One per line, as Name: value. At most eight.'**
-  String get settingsNotifyHeadersHelp;
+  String get settingsNotifyHeadersHint;
 
   /// Error shown when a typed header line has no colon.
   ///
@@ -17154,7 +16194,7 @@ abstract class AppLocalizations {
   /// Helper under the pacing field.
   ///
   /// In en, this message translates to:
-  /// **'0 sends everything as it happens. Up to 3600; a delivery inside the gap waits.'**
+  /// **'0 sends everything; events inside the gap wait'**
   String get settingsNotifyMinIntervalHelp;
 
   /// Label of the switch that pauses a notification target.
@@ -17169,18 +16209,6 @@ abstract class AppLocalizations {
   /// **'Muted'**
   String get settingsNotifyMutedBadge;
 
-  /// Helper under the mute switch, saying what a pause does and does not touch.
-  ///
-  /// In en, this message translates to:
-  /// **'Delivers nothing but the test button, and keeps everything else as it is.'**
-  String get settingsNotifyMutedHelp;
-
-  /// The line under this account's notification targets, listing what can carry them.
-  ///
-  /// In en, this message translates to:
-  /// **'Where your events (new episodes, review queue) get delivered: Pushover, ntfy, Gotify, Discord, webhooks, or this device\'s push registration.'**
-  String get settingsNotifyMyBlurb;
-
   /// Heading over the events that are about this account, in the event checklist an administrator sees.
   ///
   /// In en, this message translates to:
@@ -17193,7 +16221,7 @@ abstract class AppLocalizations {
   /// **'My notifications'**
   String get settingsNotifyMyTitle;
 
-  /// The line under the ntfy server field, naming the public default.
+  /// Help line under the ntfy server field: an empty box uses the public server.
   ///
   /// In en, this message translates to:
   /// **'Empty uses ntfy.sh'**
@@ -17211,11 +16239,11 @@ abstract class AppLocalizations {
   /// **'Priority'**
   String get settingsNotifyPriority;
 
-  /// The range the Pushover priority field accepts.
+  /// The hint inside the Pushover priority field: the range it accepts.
   ///
   /// In en, this message translates to:
   /// **'-2 (quietest) to 2 (emergency)'**
-  String get settingsNotifyPushoverPriorityHelp;
+  String get settingsNotifyPushoverPriorityHint;
 
   /// Pushover field: the token of the application notifications are sent from. Also the Gotify field of the same name.
   ///
@@ -17235,10 +16263,10 @@ abstract class AppLocalizations {
   /// **'Signing secret'**
   String get settingsNotifySecret;
 
-  /// Helper under the signing-secret field.
+  /// Help line under the webhook signing-secret field: an empty box sends the posts without a signature.
   ///
   /// In en, this message translates to:
-  /// **'Signs every request, so the receiver can tell it came from here.'**
+  /// **'Empty sends posts unsigned'**
   String get settingsNotifySecretHelp;
 
   /// The button that sends a test notification to one target.
@@ -17246,12 +16274,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Send test'**
   String get settingsNotifySendTest;
-
-  /// The line under the server's notification targets.
-  ///
-  /// In en, this message translates to:
-  /// **'Operations events (account requests, backup outcomes) delivered to server-wide destinations.'**
-  String get settingsNotifyServerBlurb;
 
   /// Heading over the events that are about the server, in the event checklist an administrator sees.
   ///
@@ -17343,19 +16365,13 @@ abstract class AppLocalizations {
   /// **'No answer from the test yet; the target shows it when it lands'**
   String get settingsNotifyTestUnanswered;
 
-  /// The line under the UnifiedPush endpoint field, saying it is not usually typed by hand.
-  ///
-  /// In en, this message translates to:
-  /// **'Usually registered by the app through its distributor'**
-  String get settingsNotifyUnifiedPushHelp;
-
   /// Webhook field: where the notification is posted.
   ///
   /// In en, this message translates to:
   /// **'URL'**
   String get settingsNotifyUrl;
 
-  /// The line under the webhook URL field. The four names are the JSON keys the request carries and stay as they are; only the sentence around them is translated.
+  /// Help line under the webhook URL field: what the URL receives. The four names are the JSON keys the request carries and stay as they are; only the sentence around them is translated.
   ///
   /// In en, this message translates to:
   /// **'Receives a JSON object with event, title, body and timestamp'**
@@ -17421,12 +16437,6 @@ abstract class AppLocalizations {
   /// **'Change password'**
   String get settingsPasswordTitle;
 
-  /// The line under the default podcast speed setting.
-  ///
-  /// In en, this message translates to:
-  /// **'The speed a show plays at until you set one for it'**
-  String get settingsPodcastSpeedHelp;
-
   /// Comma-separated search keywords for the "Podcast speed" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -17438,12 +16448,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Podcast speed'**
   String get settingsPodcastSpeedTitle;
-
-  /// The line under the preload-on-wifi-only switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Gapless playback buffers the next track early; this holds that back on mobile data'**
-  String get settingsPreloadWifiHelp;
 
   /// Comma-separated search keywords for the "Prepare the next track on wifi only" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -17457,12 +16461,6 @@ abstract class AppLocalizations {
   /// **'Prepare the next track on wifi only'**
   String get settingsPreloadWifiTitle;
 
-  /// The line under the scrobble-radio switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Radio segments report as tracks where a station names them honestly'**
-  String get settingsRadioScrobblingHelp;
-
   /// Comma-separated search keywords for the "Scrobble radio" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -17475,12 +16473,6 @@ abstract class AppLocalizations {
   /// **'Scrobble radio'**
   String get settingsRadioScrobblingTitle;
 
-  /// The line under the reduce motion switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Stills transitions and the playing indicator'**
-  String get settingsReduceMotionHelp;
-
   /// Comma-separated search keywords for the "Reduce motion" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -17490,7 +16482,7 @@ abstract class AppLocalizations {
   /// The line under the reduce motion switch when the device itself already asks for less motion, so the switch looks like it is doing nothing.
   ///
   /// In en, this message translates to:
-  /// **'Already reduced: this device asks every app for less motion'**
+  /// **'Reduced by your device'**
   String get settingsReduceMotionPlatformHelp;
 
   /// Name of the "Reduce motion" setting, drawn on its own row and in settings search.
@@ -17498,12 +16490,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reduce motion'**
   String get settingsReduceMotionTitle;
-
-  /// The line under the level-the-volume switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Plays a server-rendered queue at one loudness, where the files have been analyzed'**
-  String get settingsReplayGainHelp;
 
   /// Comma-separated search keywords for the "Level the volume" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -17517,17 +16503,11 @@ abstract class AppLocalizations {
   /// **'Level the volume'**
   String get settingsReplayGainTitle;
 
-  /// The line under the screen reader row.
+  /// The scope tip on a setting stored on the account rather than on this device, such as the language.
   ///
   /// In en, this message translates to:
-  /// **'Every control is named, the queue reorders from the keyboard, and the deck bar is one landmark'**
-  String get settingsScreenReaderBlurb;
-
-  /// Name of the row describing the app's screen reader support.
-  ///
-  /// In en, this message translates to:
-  /// **'How WaxDeck reads out'**
-  String get settingsScreenReaderTitle;
+  /// **'Follows your account'**
+  String get settingsScopeAccountHelp;
 
   /// Snackbar after the Last.fm authorization page has been opened.
   ///
@@ -17625,11 +16605,11 @@ abstract class AppLocalizations {
   /// **'Search settings'**
   String get settingsSearchLabel;
 
-  /// Second line of the settings search empty state: where the settings that are not here can be found.
+  /// Line under the settings search's no-match title, for every account: a setting for one podcast show or one book is on that show or book, not here. No full stop.
   ///
   /// In en, this message translates to:
-  /// **'Server-wide settings live in the admin console, not here. A per-show or per-book setting is on that show or book.'**
-  String get settingsSearchNoMatchMessage;
+  /// **'Shows and books keep their own settings'**
+  String get settingsSearchNoMatchEmptyMessage;
 
   /// Empty state on the settings home when a search finds nothing. {query} is what the listener typed.
   ///
@@ -17637,23 +16617,11 @@ abstract class AppLocalizations {
   /// **'No setting matches \"{query}\"'**
   String settingsSearchNoMatchTitle(String query);
 
-  /// The line under Accessibility on the settings home, saying what is inside it.
-  ///
-  /// In en, this message translates to:
-  /// **'Motion, and how the app reads out'**
-  String get settingsSectionAccessibilityBlurb;
-
   /// Name of the Accessibility settings section, on the settings home and as the title of the section's own screen.
   ///
   /// In en, this message translates to:
   /// **'Accessibility'**
   String get settingsSectionAccessibilityTitle;
-
-  /// The line under Account on the settings home, saying what is inside it.
-  ///
-  /// In en, this message translates to:
-  /// **'You, your devices, and how you sign in'**
-  String get settingsSectionAccountBlurb;
 
   /// Name of the Account settings section, on the settings home and as the title of the section's own screen.
   ///
@@ -17661,23 +16629,11 @@ abstract class AppLocalizations {
   /// **'Account'**
   String get settingsSectionAccountTitle;
 
-  /// The line under Appearance on the settings home, saying what is inside it.
-  ///
-  /// In en, this message translates to:
-  /// **'Theme, density, and how large artwork is drawn'**
-  String get settingsSectionAppearanceBlurb;
-
   /// Name of the Appearance settings section, on the settings home and as the title of the section's own screen.
   ///
   /// In en, this message translates to:
   /// **'Appearance'**
   String get settingsSectionAppearanceTitle;
-
-  /// The line under Devices and casting on the settings home, saying what is inside it.
-  ///
-  /// In en, this message translates to:
-  /// **'Where else your listening can come out'**
-  String get settingsSectionDevicesBlurb;
 
   /// Name of the Devices and casting settings section, on the settings home and as the title of the section's own screen.
   ///
@@ -17685,23 +16641,11 @@ abstract class AppLocalizations {
   /// **'Devices and casting'**
   String get settingsSectionDevicesTitle;
 
-  /// The line under Downloads and storage on the settings home, saying what is inside it.
-  ///
-  /// In en, this message translates to:
-  /// **'What this device keeps offline, and how much room it takes'**
-  String get settingsSectionDownloadsBlurb;
-
   /// Name of the Downloads and storage settings section, on the settings home and as the title of the section's own screen.
   ///
   /// In en, this message translates to:
   /// **'Downloads and storage'**
   String get settingsSectionDownloadsTitle;
-
-  /// The line under Integrations on the settings home, saying what is inside it.
-  ///
-  /// In en, this message translates to:
-  /// **'Scrobbling, other apps, and notifications'**
-  String get settingsSectionIntegrationsBlurb;
 
   /// Name of the Integrations settings section, on the settings home and as the title of the section's own screen.
   ///
@@ -17709,23 +16653,11 @@ abstract class AppLocalizations {
   /// **'Integrations'**
   String get settingsSectionIntegrationsTitle;
 
-  /// The line under Library and metadata on the settings home, saying what is inside it.
-  ///
-  /// In en, this message translates to:
-  /// **'What browsing shows you, and what you can see'**
-  String get settingsSectionLibraryBlurb;
-
   /// Name of the Library and metadata settings section, on the settings home and as the title of the section's own screen.
   ///
   /// In en, this message translates to:
   /// **'Library and metadata'**
   String get settingsSectionLibraryTitle;
-
-  /// The line under Playback on the settings home, saying what is inside it.
-  ///
-  /// In en, this message translates to:
-  /// **'Speeds, skips, casting, and what plays next'**
-  String get settingsSectionPlaybackBlurb;
 
   /// Name of the Playback settings section, on the settings home and as the title of the section's own screen.
   ///
@@ -17733,23 +16665,11 @@ abstract class AppLocalizations {
   /// **'Playback'**
   String get settingsSectionPlaybackTitle;
 
-  /// The line under Server on the settings home, saying what is inside it.
-  ///
-  /// In en, this message translates to:
-  /// **'This instance, for administrators'**
-  String get settingsSectionServerBlurb;
-
   /// Name of the Server settings section, on the settings home and as the title of the section's own screen.
   ///
   /// In en, this message translates to:
   /// **'Server'**
   String get settingsSectionServerTitle;
-
-  /// Second line of the administrators-only empty state.
-  ///
-  /// In en, this message translates to:
-  /// **'This section is about the server itself.'**
-  String get settingsServerAdminOnlyMessage;
 
   /// Empty state on the Server section for an account that is not an administrator, reached by typing the location.
   ///
@@ -17768,12 +16688,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This server'**
   String get settingsServerSummaryTitle;
-
-  /// The line under the share links row.
-  ///
-  /// In en, this message translates to:
-  /// **'Public links you have handed out'**
-  String get settingsShareLinksBlurb;
 
   /// Name of the row that opens the list of public links this account has created.
   ///
@@ -17841,12 +16755,6 @@ abstract class AppLocalizations {
   /// **'No analysis worker configured'**
   String get settingsSimilarityNoWorker;
 
-  /// The line under the skip back setting.
-  ///
-  /// In en, this message translates to:
-  /// **'How far the back control jumps on a podcast or a book'**
-  String get settingsSkipBackHelp;
-
   /// Comma-separated search keywords for the "Skip back by" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -17859,12 +16767,6 @@ abstract class AppLocalizations {
   /// **'Skip back by'**
   String get settingsSkipBackTitle;
 
-  /// The line under the skip forward setting.
-  ///
-  /// In en, this message translates to:
-  /// **'How far the forward control jumps'**
-  String get settingsSkipForwardHelp;
-
   /// Comma-separated search keywords for the "Skip forward by" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -17876,12 +16778,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Skip forward by'**
   String get settingsSkipForwardTitle;
-
-  /// The line under the rewind-on-resume setting.
-  ///
-  /// In en, this message translates to:
-  /// **'Steps back a little when you come back to a show or a book after a break, so you land before the sentence you lost'**
-  String get settingsSmartRewindHelp;
 
   /// Comma-separated search keywords for the "Rewind on resume" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -17916,10 +16812,10 @@ abstract class AppLocalizations {
   /// The line under the streaming quality settings, naming the trade a cap makes so it arrives as a known one.
   ///
   /// In en, this message translates to:
-  /// **'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which can turn off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads'**
+  /// **'Auto sends originals; a cap re-encodes and can turn off gapless playback'**
   String get settingsStreamQualityHelp;
 
-  /// Streaming quality option: the 320 kbps cap. The number stays in the help line, never in this label.
+  /// Streaming quality option: the 320 kbps cap. The number stays out of this label.
   ///
   /// In en, this message translates to:
   /// **'High'**
@@ -17961,12 +16857,6 @@ abstract class AppLocalizations {
   /// **'Streaming quality on Wi-Fi'**
   String get settingsStreamQualityWifiTitle;
 
-  /// The line under the technical details switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Draws codec and format chips beside what they describe'**
-  String get settingsTechnicalDetailsHelp;
-
   /// Comma-separated search keywords for the "Show technical details" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -17984,12 +16874,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dark'**
   String get settingsThemeDark;
-
-  /// The line under the theme setting, which is per device: a phone carried outdoors and a desktop in a dark room are not one choice.
-  ///
-  /// In en, this message translates to:
-  /// **'Set on this device; your other devices keep their own'**
-  String get settingsThemeHelp;
 
   /// Comma-separated search keywords for the "Theme" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -18015,10 +16899,10 @@ abstract class AppLocalizations {
   /// **'Theme'**
   String get settingsThemeTitle;
 
-  /// The line under the timezone field, saying what the timezone decides and what leaving it empty does.
+  /// The line under the timezone field: what leaving it empty does.
   ///
   /// In en, this message translates to:
-  /// **'Calendar stats bucket days in this timezone; empty uses the server default (UTC)'**
+  /// **'Empty uses the server default (UTC)'**
   String get settingsTimezoneFieldHelp;
 
   /// Placeholder in the timezone field. An IANA identifier, which is the same in every language - translate it only to a different example.
@@ -18057,12 +16941,6 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get settingsTitle;
 
-  /// The line under the trim silence default.
-  ///
-  /// In en, this message translates to:
-  /// **'Shows and books with no stored choice of their own open with silence trimming on'**
-  String get settingsTrimDefaultHelp;
-
   /// Comma-separated search keywords for the "Trim silence by default" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
@@ -18074,12 +16952,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Trim silence by default'**
   String get settingsTrimDefaultTitle;
-
-  /// The line under the idle visualizer switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Fills the screen with the track once music has been playing untouched for a few minutes'**
-  String get settingsVisualizerIdleHelp;
 
   /// Comma-separated search keywords for the "Open the visualizer when idle" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
@@ -18096,38 +16968,26 @@ abstract class AppLocalizations {
   /// The line under the gapless switch when the browser itself cannot play a rendered queue - no media source, or no format it decodes.
   ///
   /// In en, this message translates to:
-  /// **'This browser cannot play a queue as one stream, so tracks play one at a time'**
+  /// **'This browser cannot play a queue gaplessly'**
   String get settingsWebGaplessBrowser;
 
   /// The line under the gapless switch when the server refused to render the queue because its transcode session limit is reached. Temporary, unlike the other refusals.
   ///
   /// In en, this message translates to:
-  /// **'The server is at its transcoding limit, so gapless playback is off for now'**
+  /// **'Transcoding limit reached; gapless is off for now'**
   String get settingsWebGaplessBusy;
 
   /// The line under the gapless switch when the server rendered the queue in a format this browser cannot decode.
   ///
   /// In en, this message translates to:
-  /// **'This server renders no format this browser can play, so tracks play one at a time'**
+  /// **'This server renders no format this browser plays'**
   String get settingsWebGaplessFormat;
-
-  /// The line under the gapless-playback switch, on the web.
-  ///
-  /// In en, this message translates to:
-  /// **'Plays a music queue as one stream, so tracks run into each other the way they were mastered'**
-  String get settingsWebGaplessHelp;
 
   /// Comma-separated search keywords for the "Gapless playback" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
   /// **'gapless, crossfade, seam, stream, browser'**
   String get settingsWebGaplessKeywords;
-
-  /// Help line under the browser's gapless switch, which is hidden, on a server that runs without a streaming engine. No full stop, like every setting's help.
-  ///
-  /// In en, this message translates to:
-  /// **'This server runs without a streaming engine, which is what renders a queue as one stream'**
-  String get settingsWebGaplessNoEngine;
 
   /// Name of the "Gapless playback" setting, drawn on its own row and in settings search. Web only.
   ///
@@ -18138,7 +16998,7 @@ abstract class AppLocalizations {
   /// Replaces the gapless help text when the server has answered that it renders no timelines.
   ///
   /// In en, this message translates to:
-  /// **'This server cannot render a queue as one stream, so tracks play one at a time'**
+  /// **'This server cannot render queues as one stream'**
   String get settingsWebGaplessUnavailable;
 
   /// The switch letting the shared page offer the original file, and its accessible name.
@@ -18146,12 +17006,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Allow download'**
   String get sharingAllowDownload;
-
-  /// Help under the allow-download switch.
-  ///
-  /// In en, this message translates to:
-  /// **'The page offers the original file, not just playback'**
-  String get sharingAllowDownloadHelp;
 
   /// Accessible name of the control that copies one share link.
   ///
@@ -18165,10 +17019,10 @@ abstract class AppLocalizations {
   /// **'Create link'**
   String get sharingCreate;
 
-  /// Body of the share dialog, saying what a link is and where it goes.
+  /// Body of the share dialog: who a link admits.
   ///
   /// In en, this message translates to:
-  /// **'Anyone with the link can play this. It goes on your clipboard as soon as it is made.'**
+  /// **'Anyone with the link can play this.'**
   String get sharingDialogBody;
 
   /// Title of the dialog that mints a public link. A title names the thing; the overflow rows that open it name the act.
@@ -18186,7 +17040,7 @@ abstract class AppLocalizations {
   /// Empty state of the share-links screen.
   ///
   /// In en, this message translates to:
-  /// **'Share a track, an episode, a book, or a playlist and the link turns up here, with how often it has been played and a way to switch it off.'**
+  /// **'Share an item and its link appears here.'**
   String get sharingEmptyMessage;
 
   /// Empty state of the share-links screen.
@@ -18206,12 +17060,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Expires'**
   String get sharingExpires;
-
-  /// Help under the expiry picker.
-  ///
-  /// In en, this message translates to:
-  /// **'When the link stops working'**
-  String get sharingExpiresHelp;
 
   /// In a share row's caption, for a link that still works. Lower case: the caption is a line of facts.
   ///
@@ -18290,12 +17138,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start at {time}'**
   String sharingStartAt(String time);
-
-  /// Help under the start-at-position switch.
-  ///
-  /// In en, this message translates to:
-  /// **'The link opens where you are now'**
-  String get sharingStartAtHelp;
 
   /// Accessible name of the start-at-position switch, which its own row already puts a time on.
   ///
@@ -18684,13 +17526,13 @@ abstract class AppLocalizations {
   /// Banner across the shell, for every signed-in account, while the server-wide read-only switch is on.
   ///
   /// In en, this message translates to:
-  /// **'This server is read-only right now: uploads, edits that write files and deletions are paused.'**
+  /// **'Read-only mode: uploads, edits and deletions are paused'**
   String get shellReadOnlyBanner;
 
   /// Banner across the shell while the live connection is being re-established.
   ///
   /// In en, this message translates to:
-  /// **'Reconnecting to the server. Anything already playing keeps playing.'**
+  /// **'Reconnecting'**
   String get shellReconnecting;
 
   /// Action on the update banner, offered only where the page can reload itself.
@@ -18807,23 +17649,11 @@ abstract class AppLocalizations {
   /// **'Square'**
   String get statsCardFormatSquare;
 
-  /// Under the square card, saying what it is for.
-  ///
-  /// In en, this message translates to:
-  /// **'For a post or a message'**
-  String get statsCardFormatSquareBlurb;
-
   /// The tall card shape, meant for a full-screen story post.
   ///
   /// In en, this message translates to:
   /// **'Story'**
   String get statsCardFormatStory;
-
-  /// Under the tall card, saying what it is for.
-  ///
-  /// In en, this message translates to:
-  /// **'For a full-screen story'**
-  String get statsCardFormatStoryBlurb;
 
   /// Heading on the card over its list of artists. Drawn in capitals; translate it in capitals too where the language has them.
   ///
@@ -18843,23 +17673,17 @@ abstract class AppLocalizations {
   /// **'This build cannot keep an image, so the cards are preview only.'**
   String get statsCardNoExport;
 
-  /// Overline of the share-card sheet.
-  ///
-  /// In en, this message translates to:
-  /// **'Your year, cut to shape'**
-  String get statsCardOverline;
-
   /// A card preview read as a whole: which shape it is and what it is for. One sentence per shape rather than a name and a blurb joined, because only English can lower-case the second half into the first.
   ///
   /// In en, this message translates to:
   /// **'{format, select, story{Story card, for a full-screen story} square{Square card, for a post or a message} other{Share card}}'**
   String statsCardPreviewSpoken(String format);
 
-  /// Under the card previews, saying the drawing is local.
+  /// Info tip on the share cards heading: the card is drawn on this device and nothing is uploaded; where it goes is the listener's call.
   ///
   /// In en, this message translates to:
-  /// **'Cards are drawn here and never sent anywhere: what happens next is up to you.'**
-  String get statsCardPrivacy;
+  /// **'Drawn here and never sent anywhere; sharing is your choice.'**
+  String get statsCardPrivacyHelp;
 
   /// Snackbar on a platform with nowhere at all to keep a rendered share card.
   ///
@@ -18949,7 +17773,7 @@ abstract class AppLocalizations {
   /// Empty state of the listening chart.
   ///
   /// In en, this message translates to:
-  /// **'Pick a longer range, or go and play something.'**
+  /// **'Pick a longer range.'**
   String get statsEmptyMessage;
 
   /// Empty state of the listening chart.
@@ -19029,12 +17853,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'All clients'**
   String get statsLogAllClients;
-
-  /// Empty state of the listen log.
-  ///
-  /// In en, this message translates to:
-  /// **'Every session a client finishes lands here, whichever device reported it.'**
-  String get statsLogEmptyMessage;
 
   /// Empty state of the listen log.
   ///
@@ -19173,12 +17991,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Listening stats'**
   String get statsTitle;
-
-  /// Empty state of a ranked list, naming what it lists. Whole sentences per kind rather than a noun in a frame, because the article follows the noun's gender.
-  ///
-  /// In en, this message translates to:
-  /// **'{kind, select, artists{A longer range, or an artist you have actually played.} albums{A longer range, or an album you have actually played.} genres{A longer range, or a genre you have actually played.} shows{A longer range, or a show you have actually played.} stations{A longer range, or a station you have actually tuned in.} other{A longer range, or something you have actually played.}}'**
-  String statsTopEmptyMessage(String kind);
 
   /// Empty state of a ranked list.
   ///
@@ -19333,7 +18145,7 @@ abstract class AppLocalizations {
   /// Body of the dialog an administrator confirms before clearing every account's finished tasks.
   ///
   /// In en, this message translates to:
-  /// **'Finished and failed task receipts of every account go, reports they have not read included. Running tasks stay.'**
+  /// **'Deletes finished and failed task receipts of every account, unread reports included.'**
   String get toolsClearAllBody;
 
   /// Title of the dialog an administrator confirms before clearing every account's finished tasks.
@@ -19534,28 +18346,16 @@ abstract class AppLocalizations {
   /// **'Dismiss'**
   String get toolsDismiss;
 
-  /// Empty state of the tool task list, naming what turns up in it.
-  ///
-  /// In en, this message translates to:
-  /// **'Merges, splits, downloads, and imports report their progress here while they run and land here when they finish.'**
-  String get toolsEmptyMessage;
-
   /// Empty state of the tool task list.
   ///
   /// In en, this message translates to:
   /// **'No tool tasks'**
   String get toolsEmptyTitle;
 
-  /// Line under a finished task that produced no items but stored a report.
+  /// Line under a finished task: how many items it produced.
   ///
   /// In en, this message translates to:
-  /// **'Finished · tap for the report'**
-  String get toolsFinishedTapForReport;
-
-  /// Line under a finished task that produced several items. It is never drawn for one, which has a line of its own.
-  ///
-  /// In en, this message translates to:
-  /// **'{count} items produced · tap to open'**
+  /// **'{count, plural, =1{1 item} other{{count} items}}'**
   String toolsItemsProduced(int count);
 
   /// Name of a catalog job that fingerprints files and measures their loudness.
@@ -19654,7 +18454,19 @@ abstract class AppLocalizations {
   /// **'Could not load tool tasks'**
   String get toolsLoadError;
 
-  /// Line under a finished download, whose results wait in the review queue.
+  /// Accessible name of a task row's forward glyph when a tap opens the task's stored report: what a screen reader hears the row does.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the report'**
+  String get toolsOpenReport;
+
+  /// Accessible name of a task row's forward glyph when a tap opens what the task produced: the one item, or a list of the {count} to choose from.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Open the result} other{Open the results}}'**
+  String toolsOpenResult(int count);
+
+  /// Accessible name of a finished URL download's forward glyph: a tap opens the review queue, where its results wait.
   ///
   /// In en, this message translates to:
   /// **'Open the review queue'**
@@ -19804,18 +18616,6 @@ abstract class AppLocalizations {
   /// **'unmatched {count}'**
   String toolsSummaryUnmatched(String count);
 
-  /// Line under a failed task that still stored a report worth reading.
-  ///
-  /// In en, this message translates to:
-  /// **'Tap for the report'**
-  String get toolsTapForReport;
-
-  /// Line under a finished task that produced exactly one item.
-  ///
-  /// In en, this message translates to:
-  /// **'Tap to open what it produced'**
-  String get toolsTapToOpenResult;
-
   /// Name of the task that fetches audio from a web address.
   ///
   /// In en, this message translates to:
@@ -19885,7 +18685,7 @@ abstract class AppLocalizations {
   /// After Clear finished: how many finished tasks stayed because files they left in the library could not be named or removed; each such row says why and what to fix.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 task kept: its files could not be moved; see its row} other{{count} tasks kept: their files could not be moved; see each row}}'**
+  /// **'{count, plural, =1{1 task kept: its files could not move} other{{count} tasks kept: their files could not move}}'**
   String toolsTasksKept(int count);
 
   /// Heading over the tool tasks list when the catalog's jobs are listed above it.
@@ -19903,19 +18703,19 @@ abstract class AppLocalizations {
   /// Why a waiting task waits: another catalog job holds the catalog.
   ///
   /// In en, this message translates to:
-  /// **'Another job holds the catalog; this carries on once it is free.'**
+  /// **'Another job holds the catalog.'**
   String get toolsWaitCatalogBusy;
 
   /// Why a waiting task waits: the catalog is suspended for maintenance (a backup or restore).
   ///
   /// In en, this message translates to:
-  /// **'The catalog is under maintenance; this carries on once that is done.'**
+  /// **'The catalog is under maintenance.'**
   String get toolsWaitCatalogMaintenance;
 
   /// Why a waiting task waits: the engine that cuts or joins audio is not available.
   ///
   /// In en, this message translates to:
-  /// **'The audio engine is not available; this carries on once it is back.'**
+  /// **'The audio engine is not available.'**
   String get toolsWaitEngineUnavailable;
 
   /// When a waiting task tries again, as a time of day: a countdown would be wrong as soon as the screen stood still. {time} is the local time, such as 3:04 PM.
@@ -19927,37 +18727,37 @@ abstract class AppLocalizations {
   /// Why a waiting task waits, when the cause has no sentence of its own; the server's words follow.
   ///
   /// In en, this message translates to:
-  /// **'Something passing got in the way; this tries again on its own.'**
+  /// **'Something passing got in the way.'**
   String get toolsWaitOther;
 
   /// Why a book merge or split waits: one of the book's files is missing from where the catalog has it.
   ///
   /// In en, this message translates to:
-  /// **'A file of the book is not where the catalog has it. If it does not come back, this puts back what it moved and stops.'**
+  /// **'A book file is missing; if it stays gone, this undoes its moves and stops.'**
   String get toolsWaitPartMissing;
 
   /// Why a book merge or split waits: undoing, it cannot put a file back from the trash.
   ///
   /// In en, this message translates to:
-  /// **'A file cannot go back from the trash: its place is taken or its folder refuses the server. Clear the place or fix the folder and this carries on.'**
+  /// **'A file cannot leave the trash: free its place or fix its folder.'**
   String get toolsWaitPutBackBlocked;
 
   /// Why a waiting task waits: a library it works in, or the whole server, is in read-only mode.
   ///
   /// In en, this message translates to:
-  /// **'A library this works in is read-only. Turn read-only off for it, or for the server, and this carries on.'**
+  /// **'A library it works in is read-only. Turn that off for it or the server.'**
   String get toolsWaitReadOnly;
 
   /// Why a waiting task waits: the server stopped, or the run ran out of time, part way through; the sentence names both, as the reason does.
   ///
   /// In en, this message translates to:
-  /// **'This was cut short, by the server stopping or by running out of time; it carries on where it was.'**
+  /// **'Cut short by a server stop or a time limit.'**
   String get toolsWaitStopped;
 
   /// Why a waiting task waits: a library folder refuses the server's writes.
   ///
   /// In en, this message translates to:
-  /// **'A folder this writes to refuses the server. Fix the folder\'s ownership and permissions and this carries on.'**
+  /// **'A folder it writes to refuses the server. Fix its ownership and permissions.'**
   String get toolsWaitStorageUnwritable;
 
   /// A waiting task whose next try has come: the worker takes it up within moments.
@@ -19987,7 +18787,7 @@ abstract class AppLocalizations {
   /// Snackbar after asking the server to download from a URL.
   ///
   /// In en, this message translates to:
-  /// **'Downloading. It will appear in the review queue when ready.'**
+  /// **'Downloading; appears in review when ready'**
   String get uploadsAcquireQueued;
 
   /// Action on the downloading snackbar, opening the background-task screen.
@@ -19995,12 +18795,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tasks'**
   String get uploadsAcquireTasks;
-
-  /// Overline of the add sheet, saying nothing is filed without a decision.
-  ///
-  /// In en, this message translates to:
-  /// **'Both routes land in the review queue'**
-  String get uploadsAddOverline;
 
   /// Heading of the sheet offering the ways audio gets in.
   ///
@@ -20017,7 +18811,7 @@ abstract class AppLocalizations {
   /// Body of the discard confirmation. {fileName} is the file's own name.
   ///
   /// In en, this message translates to:
-  /// **'\"{fileName}\" and its staged bytes are removed, and the space they hold against your quota is released.'**
+  /// **'\"{fileName}\" is removed and its quota space freed.'**
   String uploadsDiscardBody(String fileName);
 
   /// Confirming button of the discard dialog.
@@ -20089,7 +18883,7 @@ abstract class AppLocalizations {
   /// Note on an imported upload whose audio the library already held: the file was added to that item as a copy (or nothing was added), and the item kept its details. {what} names the item.
   ///
   /// In en, this message translates to:
-  /// **'Already in the library: {what}. Its details stay as they were.'**
+  /// **'Already in the library: {what}'**
   String uploadsDuplicateJoined(String what);
 
   /// How a duplicate matched: only the name is the same. Lower case: it sits in brackets.
@@ -20103,18 +18897,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'an item in a library you cannot open'**
   String get uploadsDuplicateUnseen;
-
-  /// Empty state of the uploads screen for an account that may upload.
-  ///
-  /// In en, this message translates to:
-  /// **'Pick files from the bar above, or drop them anywhere on this page.'**
-  String get uploadsEmptyMessage;
-
-  /// Empty state of the uploads screen for an account without the upload right.
-  ///
-  /// In en, this message translates to:
-  /// **'This account cannot upload. Ask an administrator for the permission.'**
-  String get uploadsEmptyNoPermission;
 
   /// Empty state of the uploads screen.
   ///
@@ -20194,23 +18976,11 @@ abstract class AppLocalizations {
   /// **'Add music from URL'**
   String get uploadsFromUrlMusic;
 
-  /// Second line of the add-from-URL row, naming what a source URL may point at.
-  ///
-  /// In en, this message translates to:
-  /// **'A video, a playlist, or a channel'**
-  String get uploadsFromUrlSubtitle;
-
   /// Grouping choice: every file is part of one release.
   ///
   /// In en, this message translates to:
   /// **'One album'**
   String get uploadsGroupingAlbum;
-
-  /// Help under the one-album grouping choice.
-  ///
-  /// In en, this message translates to:
-  /// **'Review all files as one release'**
-  String get uploadsGroupingAlbumHelp;
 
   /// Grouping choice: let the server decide from the tags and folders.
   ///
@@ -20236,23 +19006,11 @@ abstract class AppLocalizations {
   /// **'Separate books'**
   String get uploadsGroupingBookEach;
 
-  /// Help under the separate-books grouping choice.
-  ///
-  /// In en, this message translates to:
-  /// **'Every file is a book of its own'**
-  String get uploadsGroupingBookEachHelp;
-
   /// Grouping choice for an audiobook: every file is a part of one book.
   ///
   /// In en, this message translates to:
   /// **'{count, plural, =1{One book} other{One book in {count} parts}}'**
   String uploadsGroupingBookOne(int count);
-
-  /// Help under the one-book grouping choice.
-  ///
-  /// In en, this message translates to:
-  /// **'Parts of one book, in folder and track order'**
-  String get uploadsGroupingBookOneHelp;
 
   /// Heading over the grouping choice for a multi-file upload.
   ///
@@ -20266,22 +19024,16 @@ abstract class AppLocalizations {
   /// **'Separate tracks'**
   String get uploadsGroupingTracks;
 
-  /// Help under the separate-tracks grouping choice.
-  ///
-  /// In en, this message translates to:
-  /// **'Review every file on its own'**
-  String get uploadsGroupingTracksHelp;
-
   /// The switch that matches music against the MusicBrainz catalogue before filing it. MusicBrainz is a service name and stays.
   ///
   /// In en, this message translates to:
   /// **'Identify against MusicBrainz'**
   String get uploadsIdentifyMusic;
 
-  /// Help under the identify switch for music.
+  /// Info on the identify switch for music.
   ///
   /// In en, this message translates to:
-  /// **'Matches it, then waits for your decision. Off adds it with the tags it has'**
+  /// **'Matches it against MusicBrainz; off files it with the tags it has, unreviewed'**
   String get uploadsIdentifyMusicHelp;
 
   /// The same switch for a book, where there is no catalogue to match against, so all it decides is whether the submission waits.
@@ -20290,16 +19042,16 @@ abstract class AppLocalizations {
   /// **'Review before adding'**
   String get uploadsIdentifyOther;
 
-  /// Help under the review-before-adding switch.
+  /// Info on the review-before-adding switch.
   ///
   /// In en, this message translates to:
-  /// **'Waits for your decision. Off adds it with the tags it has'**
+  /// **'Waits for your review; off files it with the tags it has'**
   String get uploadsIdentifyOtherHelp;
 
   /// Raised after an identify-on upload finishes: what arrived is in the review queue rather than on the shelves, and this is what says so. Counts what actually uploaded, not what was picked.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{Uploaded 1 file. It\'s being identified and will appear once it clears review} other{Uploaded {count} files. They\'re being identified and will appear once they clear review}}'**
+  /// **'{count, plural, =1{Uploaded 1 file; identifying it} other{Uploaded {count} files; identifying them}}'**
   String uploadsIdentifying(int count);
 
   /// Under an upload row the server is still receiving but nothing on this device is sending: the tab closed, or the upload started elsewhere.
@@ -20314,10 +19066,10 @@ abstract class AppLocalizations {
   /// **'Library'**
   String get uploadsLibrary;
 
-  /// Help line under the library picker, saying what the choice does. It selects the library whose matching and auto-apply settings govern the import, not the folder the file lands in.
+  /// Info tip beside the upload dialog's library picker: it chooses the library whose matching and singles settings apply; where the files land is the server's choice.
   ///
   /// In en, this message translates to:
-  /// **'Which library\'s settings apply. Where the files are placed is the server\'s own choice.'**
+  /// **'Picks whose settings apply, not where files go'**
   String get uploadsLibraryHelp;
 
   /// Title of the error state on the uploads screen.
@@ -20344,6 +19096,12 @@ abstract class AppLocalizations {
   /// **'Music'**
   String get uploadsMediaMusic;
 
+  /// Line under the uploads screen's empty title for an account without the upload right: the cause and the next step.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading needs a permission; ask an administrator.'**
+  String get uploadsNoPermissionEmptyMessage;
+
   /// Opens the review queue on the entry this upload made.
   ///
   /// In en, this message translates to:
@@ -20368,35 +19126,11 @@ abstract class AppLocalizations {
   /// **'The folder could not be read'**
   String get uploadsPickFolderFailed;
 
-  /// Second line of the upload-folder row. Names what the folder pick does that the file pick does not - the hierarchy rides along as the grouping hint - because the two rows otherwise read as the same thing.
-  ///
-  /// In en, this message translates to:
-  /// **'Keeps your folder grouping, disc subfolders and all'**
-  String get uploadsPickFolderSubtitle;
-
-  /// Second line of the upload-files row in the add sheet. Contrasts with the folder row: picked files carry no folder hierarchy, so grouping falls back to tags.
-  ///
-  /// In en, this message translates to:
-  /// **'Tracks you choose by hand, grouped by their tags'**
-  String get uploadsPickSubtitle;
-
   /// Why a picked file was not uploaded: the uploader's staged sessions already fill their allowance (`quota-exceeded`). Shown as {reason} in uploadsFileFailed. 'Past uploads' is the uploads screen's list of sessions.
   ///
   /// In en, this message translates to:
   /// **'You already have as much waiting as your limit allows. Import or discard some in Past uploads, then try again.'**
   String get uploadsQuotaFull;
-
-  /// Under the staging figure, saying what the cap is a cap on.
-  ///
-  /// In en, this message translates to:
-  /// **'This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.'**
-  String get uploadsQuotaHelp;
-
-  /// Under the staging figure on a server with no cap.
-  ///
-  /// In en, this message translates to:
-  /// **'Staged files are held until they are imported or discarded.'**
-  String get uploadsQuotaHelpUncapped;
 
   /// How much of the staging cap is in use. Both are formatted sizes.
   ///
@@ -20433,12 +19167,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry upload'**
   String get uploadsRetry;
-
-  /// Second line of the row in the add sheet that opens the upload sessions list.
-  ///
-  /// In en, this message translates to:
-  /// **'Quota, what is still going up, and what to retry'**
-  String get uploadsSessionsSubtitle;
 
   /// Row in the add sheet that opens the upload sessions list. The list is not a navigation destination, so this is its lasting door.
   ///

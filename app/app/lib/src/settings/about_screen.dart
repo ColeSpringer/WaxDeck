@@ -75,7 +75,7 @@ class AboutScreen extends ConsumerWidget {
                   const WaxWordmark(),
                   const SizedBox(height: WaxSpace.s8),
                   Text(
-                    l10n.aboutTagline,
+                    l10n.authTagline,
                     style: WaxType.body.copyWith(
                       color: WaxColors.of(context).textSecondary,
                     ),
@@ -135,7 +135,6 @@ class AboutScreen extends ConsumerWidget {
                   SectionHeader(title: l10n.aboutDiagnosticsTitle),
                   WaxOptionRow(
                     title: l10n.defectsTitle,
-                    subtitle: l10n.aboutDefectsSubtitle,
                     glyph: WaxIcons.warning,
                     semanticsId: SemanticsIds.aboutDefects,
                     trailing: const WaxIcon(WaxIcons.forward, size: 16),

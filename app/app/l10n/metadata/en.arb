@@ -13,6 +13,10 @@
   "@metadataAddTag": {
     "description": "Button that stores the typed custom tag."
   },
+  "metadataArtistForbiddenTitle": "Only administrators can edit an artist",
+  "@metadataArtistForbiddenTitle": {
+    "description": "Heading of the refusal an account without the administrator role gets on the artist editor: who may."
+  },
   "metadataBulkEdited": "{count, plural, =1{Edited 1 track} other{Edited {count} tracks}}",
   "@metadataBulkEdited": {
     "description": "Message part after a bulk save: how many catalog rows took the edit.",
@@ -26,7 +30,7 @@
   "@metadataBulkLeaveAsIs": {
     "description": "The default choice for a boolean field in the bulk form: the batch does not touch it."
   },
-  "metadataBulkLockNote": "Saving locks every edited field on each selected track. One batch takes at most 1,000 items.",
+  "metadataBulkLockNote": "Saving locks edited fields; max 1,000 items.",
   "@metadataBulkLockNote": {
     "description": "Caption under the bulk form stating what the endpoint always does: it locks what it writes, and it caps the batch."
   },
@@ -45,10 +49,6 @@
   "metadataBulkLockedPolicy": "Locked fields",
   "@metadataBulkLockedPolicy": {
     "description": "Accessible name of the choice deciding what a bulk edit does when a target field is already locked on a track."
-  },
-  "metadataBulkLockedPolicyHelp": "What to do when a field this batch writes is already locked on a track",
-  "@metadataBulkLockedPolicyHelp": {
-    "description": "Line under the locked-fields choice."
   },
   "metadataBulkLockedSkip": "Skip those tracks",
   "@metadataBulkLockedSkip": {
@@ -100,10 +100,6 @@
   "@metadataCreditRole": {
     "description": "Accessible name of the menu choosing which credit is being edited."
   },
-  "metadataCreditsOverline": "Who else is on it",
-  "@metadataCreditsOverline": {
-    "description": "Line above the Credits heading."
-  },
   "metadataCreditsTitle": "Credits",
   "@metadataCreditsTitle": {
     "description": "Heading over who else worked on the item."
@@ -112,7 +108,7 @@
   "@metadataDerivedChip": {
     "description": "Chip on a read-only value the server computes rather than stores, such as an album's track count."
   },
-  "metadataDiscardBody": "This selection has edits its save bar has not written; switching away drops them.",
+  "metadataDiscardBody": "Switching away drops this selection's unsaved edits.",
   "@metadataDiscardBody": {
     "description": "Body of the confirmation the workbench asks before replacing a pane that holds unsaved edits."
   },
@@ -159,6 +155,10 @@
   "metadataFetch": "Fetch metadata",
   "@metadataFetch": {
     "description": "Button that applies what the metadata providers already agree on."
+  },
+  "metadataFetchHelp": "Applies what the providers agree on, after a preview.",
+  "@metadataFetchHelp": {
+    "description": "Tooltip of the Fetch metadata button on the item editor: it applies what the providers agree on, once the preview it opens is approved."
   },
   "metadataFieldAlbum": "Album",
   "@metadataFieldAlbum": {
@@ -296,25 +296,23 @@
   "@metadataFieldYear": {
     "description": "Name of the editable metadata field the server calls `year`."
   },
-  "metadataFieldsOverline": "What this item claims to be",
-  "@metadataFieldsOverline": {
-    "description": "Line above the Fields heading."
-  },
   "metadataFieldsTitle": "Fields",
   "@metadataFieldsTitle": {
     "description": "Heading over the item's editable metadata fields."
   },
-  "metadataForbiddenMessage": "Editing a track changes it for everyone on this server, so the people who can are administrators and whoever's upload brought it in.",
-  "@metadataForbiddenMessage": {
-    "description": "Body of the refusal page shown when the signed-in account may not edit this item's metadata."
-  },
-  "metadataForbiddenTitle": "This one is not yours to edit",
+  "metadataForbiddenTitle": "{kind, select, audiobook{Only administrators and the uploader can edit this book} podcast{Only administrators can edit this episode} other{Only administrators and the uploader can edit this track}}",
   "@metadataForbiddenTitle": {
-    "description": "Heading of the refusal page shown when the signed-in account may not edit this item's metadata."
+    "description": "Heading of the refusal shown when the signed-in account may not edit an item's metadata, naming who may: an administrator, or for a track or a book the account whose upload brought it in. An episode comes from its feed, so only an administrator. {kind} is the item's kind.",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "music"
+      }
+    }
   },
-  "metadataForceHelp": "Overwrite fields that are already locked",
+  "metadataForceHelp": "Overwrites fields that are already locked",
   "@metadataForceHelp": {
-    "description": "Line under the force switch."
+    "description": "Info tip beside the Force switch."
   },
   "metadataForceTitle": "Force",
   "@metadataForceTitle": {
@@ -338,15 +336,15 @@
   "@metadataGenreSearchHint": {
     "description": "Hint in the genre picker's entry field, which both filters the canonical list and takes a genre as typed."
   },
-  "metadataIdentificationBlurb": "Rematch reopens identification and puts the result in the review queue. Fetching metadata applies what the providers already agree on, without asking.",
-  "@metadataIdentificationBlurb": {
-    "description": "Line under the Identification heading, telling the two buttons apart."
+  "metadataGroupForbiddenTitle": "Only administrators can edit a release group",
+  "@metadataGroupForbiddenTitle": {
+    "description": "Heading of the refusal an account without the administrator role gets on the release-group editor: who may."
   },
   "metadataIdentificationTitle": "Identification",
   "@metadataIdentificationTitle": {
     "description": "Heading over the two ways of asking the providers about this item again."
   },
-  "metadataKindPinned": "Kind: {kind}, pinned",
+  "metadataKindPinned": "{kind}, pinned",
   "@metadataKindPinned": {
     "description": "Line in the editor's header when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).",
     "placeholders": {
@@ -394,17 +392,13 @@
       }
     }
   },
-  "metadataLockHelp": "Keep scans and enrichment from overwriting what you type",
+  "metadataLockHelp": "Keeps scans and enrichment from overwriting what you type",
   "@metadataLockHelp": {
-    "description": "Line under the lock switch."
+    "description": "Info tip beside the lock switch."
   },
   "metadataLockTitle": "Lock edited fields",
   "@metadataLockTitle": {
     "description": "Switch that keeps later scans from overwriting what was typed."
-  },
-  "metadataLyricsEmptyClears": "Leave empty to remove the stored lyrics when you save.",
-  "@metadataLyricsEmptyClears": {
-    "description": "Helper line under the lyrics field now that clearing rides the unified save."
   },
   "metadataLyricsHint": "[00:12.00] First line",
   "@metadataLyricsHint": {
@@ -413,10 +407,6 @@
   "metadataLyricsLabel": "LRC",
   "@metadataLyricsLabel": {
     "description": "Field for the lyrics themselves. LRC is the format's name and stays as it is."
-  },
-  "metadataLyricsOverline": "Timed LRC, or plain lines",
-  "@metadataLyricsOverline": {
-    "description": "Line above the Lyrics heading. LRC is the timed-lyrics file format and stays as it is."
   },
   "metadataLyricsSource": "Lyrics · {source}",
   "@metadataLyricsSource": {
@@ -460,17 +450,13 @@
   "@metadataOriginClear": {
     "description": "Button in the origin sheet that takes the recorded origin off entirely."
   },
-  "metadataOriginEditHelp": "Every box is saved as you leave it, so clearing one clears the value. The date the item was acquired is kept as it stands.",
-  "@metadataOriginEditHelp": {
-    "description": "Help under the origin sheet's title. The replacement rule matters: the server writes every editable column as sent, so an empty box is a clear rather than a no-op."
+  "metadataOriginEditAction": "Correct the origin",
+  "@metadataOriginEditAction": {
+    "description": "Accessible name of the origin line in the item header when a curator may correct it."
   },
   "metadataOriginEditTitle": "Where this came from",
   "@metadataOriginEditTitle": {
     "description": "Title of the sheet that corrects an item's recorded origin."
-  },
-  "metadataOriginEditable": "Recorded evidence of how this arrived. Tap to correct it.",
-  "@metadataOriginEditable": {
-    "description": "Caption under the origin line for someone who may curate the item, replacing the read-only wording."
   },
   "metadataOriginId": "Identifier",
   "@metadataOriginId": {
@@ -512,10 +498,6 @@
   "@metadataOriginProvider": {
     "description": "Field in the origin sheet: the service the item was acquired from."
   },
-  "metadataOriginRecorded": "Recorded evidence of how this arrived, not an editable field.",
-  "@metadataOriginRecorded": {
-    "description": "Caption under the origin line, saying why the origin has no form control beside it."
-  },
   "metadataOriginRemoved": "Origin removed",
   "@metadataOriginRemoved": {
     "description": "Confirmation after taking an item's recorded origin off."
@@ -544,9 +526,9 @@
   "@metadataOriginUrl": {
     "description": "Field in the origin sheet: where the item came from."
   },
-  "metadataOriginUrlHelp": "Shown without any sign-in details it carried",
+  "metadataOriginUrlHelp": "Shown redacted; editing it replaces the stored address.",
   "@metadataOriginUrlHelp": {
-    "description": "Help under the origin address field. The server redacts the stored URL before sending it, so saving this box replaces the stored value with what is visible here."
+    "description": "Help line under the Address field of the origin sheet: the box holds a redacted address, and editing it replaces the stored one (sign-in parts included); a save that leaves the box alone keeps it."
   },
   "metadataOriginWriteBack": "Write into the files",
   "@metadataOriginWriteBack": {
@@ -554,7 +536,7 @@
   },
   "metadataOriginWriteBackHelp": "Keeps the correction through a full rescan",
   "@metadataOriginWriteBackHelp": {
-    "description": "Help under the origin write-back switch."
+    "description": "Info tip beside the origin write-back switch."
   },
   "metadataPendingChip": "Unsaved",
   "@metadataPendingChip": {
@@ -564,13 +546,13 @@
   "@metadataPreviewApply": {
     "description": "Confirms the enrichment preview sheet: commits exactly the previewed values."
   },
-  "metadataPreviewBuiltinsNote": "The server's built-in sources cannot be previewed; applying may still fill remaining gaps from them.",
-  "@metadataPreviewBuiltinsNote": {
-    "description": "Footnote on the enrichment preview sheet: the catalog's key-free sources fetch-and-write in one pass, so their answers only show up after an apply."
+  "metadataPreviewBuiltinsHelp": "The server's built-in sources cannot be previewed; applying may still fill remaining gaps from them.",
+  "@metadataPreviewBuiltinsHelp": {
+    "description": "Info tip beside the enrichment preview sheet's title when the preview has rows: the catalog's key-free sources fetch-and-write in one pass, so their answers only show up after an apply."
   },
-  "metadataPreviewEmpty": "The providers have nothing new for this item.",
-  "@metadataPreviewEmpty": {
-    "description": "Empty state of the enrichment preview sheet, above the per-artifact reasons."
+  "metadataPreviewEmptyMessage": "Nothing new; built-in sources may still fill gaps",
+  "@metadataPreviewEmptyMessage": {
+    "description": "The enrichment preview sheet's line when the providers proposed nothing, above the per-artifact reasons and over its Fetch anyway button: the catalog's key-free sources cannot be previewed, so a fetch may still fill gaps."
   },
   "metadataPreviewFetchAnyway": "Fetch anyway",
   "@metadataPreviewFetchAnyway": {
@@ -600,6 +582,10 @@
   "metadataRematch": "Rematch",
   "@metadataRematch": {
     "description": "Button that reopens identification for the item."
+  },
+  "metadataRematchHelp": "Reopens identification and puts the result in the review queue.",
+  "@metadataRematchHelp": {
+    "description": "Tooltip of the Rematch button on the item editor."
   },
   "metadataRemoveCredit": "Remove {name}",
   "@metadataRemoveCredit": {
@@ -796,10 +782,6 @@
   "@metadataTagValues": {
     "description": "Field for a custom tag's values."
   },
-  "metadataTagsOverline": "Anything the vocabulary has no field for",
-  "@metadataTagsOverline": {
-    "description": "Line above the custom tags heading."
-  },
   "metadataTagsTitle": "Custom tags",
   "@metadataTagsTitle": {
     "description": "Heading over the free-form tags an item carries."
@@ -818,10 +800,6 @@
       }
     }
   },
-  "metadataUnofficialHelp": "A bootleg, a promo, or another unofficial issue",
-  "@metadataUnofficialHelp": {
-    "description": "Line under the unofficial switch."
-  },
   "metadataUnofficialTitle": "Unofficial release",
   "@metadataUnofficialTitle": {
     "description": "Switch marking the item as something other than an official issue."
@@ -834,7 +812,7 @@
   "@metadataWorkbenchEditSelection": {
     "description": "Bulk-bar button opening the bulk form for the checked tracks."
   },
-  "metadataWorkbenchSelectEmptyMessage": "Check tracks in the list to edit them together.",
+  "metadataWorkbenchSelectEmptyMessage": "Check tracks to edit together.",
   "@metadataWorkbenchSelectEmptyMessage": {
     "description": "Body of that empty state."
   },
@@ -873,9 +851,9 @@
       }
     }
   },
-  "metadataWriteBackHelp": "Also rewrite the tags embedded in the backing files; saved lyrics also write their .lrc sidecar",
+  "metadataWriteBackHelp": "Also rewrites the tags embedded in the backing files; saved lyrics also write their .lrc sidecar",
   "@metadataWriteBackHelp": {
-    "description": "Line under the write-tags switch."
+    "description": "Info tip beside the write-tags switch."
   },
   "metadataWriteBackTitle": "Write tags to files",
   "@metadataWriteBackTitle": {

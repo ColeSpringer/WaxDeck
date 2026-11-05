@@ -11,6 +11,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 // The artist and release-group editors: curation-seeded fields, sparse
 // saves through the entity endpoint, the write-back switch only where a
@@ -117,11 +118,7 @@ void main() {
     expect(find.text('tags'), findsNothing);
   });
 
-  testWidgets('a field keeps its help on screen, selectable, with a value', (
-    tester,
-  ) async {
-    // It was the box's placeholder, which goes the moment the field
-    // holds anything and can never be copied.
+  testWidgets('a field draws no help under it', (tester) async {
     final repo = _repo();
     repo.entityCurationByKey['artist/$_artist'] = const [
       EntityCuratedField(
@@ -132,13 +129,25 @@ void main() {
       ),
     ];
     await _pump(tester, repo, entity: EditableEntity.artist, pid: _artist);
-    const help =
-        'How this artist files in an A-to-Z list. Empty files them under '
-        'their name.';
 
-    expect(find.widgetWithText(WaxProse, help), findsOneWidget);
-    // And spoken with the box, as a placeholder was.
-    expect(tester.getSemantics(_field('sort')).hint, help);
+    expect(find.textContaining('A-to-Z'), findsNothing);
+    expect(find.textContaining('identifier this artist'), findsNothing);
+    // Nor does the rename section's heading carry a kicker.
+    expect(find.text('Name'), findsWidgets);
+    expect(find.text('ON THE MEMBERS'), findsNothing);
+  });
+
+  testWidgets('the rename section says how far its write-back reaches', (
+    tester,
+  ) async {
+    await _pump(tester, _repo(), entity: EditableEntity.artist, pid: _artist);
+
+    // Two switches titled alike on one screen, each with its own scope.
+    expect(find.text('Write tags to files'), findsNWidgets(2));
+    expect(
+      infoTipHolding('Also rewrites these tags inside each member\'s file'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('an artist sort can fan out to the crediting files', (
@@ -146,6 +155,15 @@ void main() {
   ) async {
     final repo = _repo();
     await _pump(tester, repo, entity: EditableEntity.artist, pid: _artist);
+
+    // The label says "files"; the tip says whose.
+    expect(
+      infoTipHolding(
+        'Also rewrites the matching sort tag in every file crediting this '
+        'artist',
+      ),
+      findsOneWidget,
+    );
 
     final writeBack = find.bySemanticsIdentifier(
       SemanticsIds.metadataWriteback,
@@ -359,5 +377,9 @@ void main() {
       findsOneWidget,
     );
     expect(find.bySemanticsIdentifier(SemanticsIds.entityEditor), findsNothing);
+    // Who may edit an artist, said as the title; not the track editor's
+    // account of who may edit a track.
+    expect(find.text('Only administrators can edit an artist'), findsOneWidget);
+    expect(find.textContaining('Editing a track'), findsNothing);
   });
 }

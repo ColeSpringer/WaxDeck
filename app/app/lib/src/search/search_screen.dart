@@ -325,7 +325,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           hasScrollBody: false,
           child: EmptyState(
             title: l10n.searchDirectoryPromptTitle,
-            message: l10n.searchDirectoryPromptMessage,
             glyph: WaxIcons.radio,
           ),
         ),
@@ -374,9 +373,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           child: AsyncFailureCard.from(
             entries,
             title: l10n.searchDirectoryErrorTitle,
-            // The way out the directory-unavailable mapping implies:
-            // adding a station by URL works with no directory at all.
-            detail: l10n.searchDirectoryErrorDetail,
+            // Retry is the card's one action, so a directory that will not
+            // answer has its sentence say where else to go.
+            message: explainStationDirectory(l10n, entries.error!),
             onRetry: () => ref.invalidate(radioDirectoryResultsProvider),
           ),
         ),
@@ -388,7 +387,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.searchNoStationsTitle(query),
-              message: l10n.searchNoStationsMessage,
               glyph: WaxIcons.radio,
             ),
           ),
@@ -481,7 +479,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           hasScrollBody: false,
           child: EmptyState(
             title: context.l10n.searchEmptyTitle,
-            message: context.l10n.searchEmptyMessage,
             glyph: WaxIcons.search,
           ),
         ),
@@ -587,7 +584,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             title: context.l10n.searchNothingTitle(
               ref.read(searchQueryProvider),
             ),
-            message: context.l10n.searchNothingMessage,
             glyph: WaxIcons.search,
           ),
         ),

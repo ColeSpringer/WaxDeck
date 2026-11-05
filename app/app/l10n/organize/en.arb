@@ -27,8 +27,8 @@
   "@organizeColumnWhy": {
     "description": "Column heading for why a move is held back."
   },
-  "organizeConfirmMessage": "Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.",
-  "@organizeConfirmMessage": {
+  "organizeConfirmBody": "Files move on the server. Anything else pointing at the old paths breaks.",
+  "@organizeConfirmBody": {
     "description": "Body of the typed confirmation before files are moved."
   },
   "organizeConfirmOwnWord": "ORGANIZE",
@@ -53,10 +53,6 @@
   "@organizeDiscard": {
     "description": "Drops the dry run on screen without moving anything."
   },
-  "organizeEmptyMessage": "The server offers no profile to organize files by.",
-  "@organizeEmptyMessage": {
-    "description": "Empty state of the organize screen."
-  },
   "organizeEmptyTitle": "No organize profiles",
   "@organizeEmptyTitle": {
     "description": "Empty state where the server lists no profiles."
@@ -65,7 +61,7 @@
   "@organizeFailed": {
     "description": "How many files a finished run could not move."
   },
-  "organizeHeld": "{count, plural, =1{1 file stays where it is while the server is read-only.} other{{count} files stay where they are while the server is read-only.}}",
+  "organizeHeld": "{count, plural, =1{1 file held, server read-only} other{{count} files held, server read-only}}",
   "@organizeHeld": {
     "description": "Under the dry run: files out of place that a read-only server keeps where they are.",
     "placeholders": {
@@ -75,7 +71,7 @@
       }
     }
   },
-  "organizeHeldBack": "{count, plural, =1{1 file is held back and stays where it is.} other{{count} files are held back and stay where they are.}}",
+  "organizeHeldBack": "{count, plural, =1{1 file held back} other{{count} files held back}}",
   "@organizeHeldBack": {
     "description": "Under the dry run: files out of place that cannot move, for any cause other than a read-only server alone (a destination another file holds, an item with nothing to file it under, a missing file).",
     "placeholders": {
@@ -89,17 +85,13 @@
   "@organizeHeldTile": {
     "description": "How many files a finished run held back where they were, for any cause."
   },
-  "organizeHint": "Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.",
+  "organizeHint": "Preview first. Nothing moves until you apply.",
   "@organizeHint": {
     "description": "Drawn where the plan or the report goes, before either exists."
   },
   "organizeHistoryMore": "Show older runs",
   "@organizeHistoryMore": {
     "description": "Button under the organize history that lists the next, older page of runs. Shown while the server holds older ones."
-  },
-  "organizeHistoryOverline": "A run can be undone while its journal lasts",
-  "@organizeHistoryOverline": {
-    "description": "Overline of the list of runs: the scheduled prune drops a run's journal, and its undo, after the task retention window."
   },
   "organizeHistoryRow": "Organize - {moved} moved - {when}",
   "@organizeHistoryRow": {
@@ -195,17 +187,13 @@
   "@organizeMoved": {
     "description": "How many files a finished run moved."
   },
-  "organizeNoManagedMessage": "Organizing moves files only within managed libraries, and this server has none.",
-  "@organizeNoManagedMessage": {
+  "organizeNoManagedEmptyMessage": "Organizing works only in managed libraries.",
+  "@organizeNoManagedEmptyMessage": {
     "description": "Empty state of the organize screen when no library is managed."
   },
   "organizeNoManagedTitle": "No managed library",
   "@organizeNoManagedTitle": {
     "description": "Empty state of the organize screen when no library is managed."
-  },
-  "organizeNothingMessage": "This profile would move nothing.",
-  "@organizeNothingMessage": {
-    "description": "Empty state of a dry run that would move nothing."
   },
   "organizeNothingTitle": "Everything is already in place",
   "@organizeNothingTitle": {
@@ -214,10 +202,6 @@
   "organizeOwnProfiles": "Each library's own profile",
   "@organizeOwnProfiles": {
     "description": "Profile picker option that lays out each managed library by the profile set for it."
-  },
-  "organizeOwnProfilesHelp": "Each managed library by the profile set on the Libraries screen",
-  "@organizeOwnProfilesHelp": {
-    "description": "Help under the each-library option of the profile picker."
   },
   "organizePlannedMoves": "{count, plural, =1{1 planned move} other{{count} planned moves}}",
   "@organizePlannedMoves": {
@@ -236,10 +220,6 @@
   "organizeProfileAudiobookLabel": "Audiobook template",
   "@organizeProfileAudiobookLabel": {
     "description": "Field for the path template of audiobooks."
-  },
-  "organizeProfileCompilationHelp": "Various Artists unless set; empty files compilations under their tagged album artist",
-  "@organizeProfileCompilationHelp": {
-    "description": "Help under the profile editor's compilation folder field: what an unset field and an emptied one do."
   },
   "organizeProfileCompilationLabel": "Compilation folder",
   "@organizeProfileCompilationLabel": {
@@ -321,10 +301,6 @@
   "@organizeProfileNew": {
     "description": "Button that opens the profile editor for a new profile."
   },
-  "organizeProfileOverline": "The naming scheme to move into",
-  "@organizeProfileOverline": {
-    "description": "Overline over the profile picker."
-  },
   "organizeProfilePodcastLabel": "Podcast template",
   "@organizeProfilePodcastLabel": {
     "description": "Field for the path template of podcast episodes."
@@ -397,7 +373,7 @@
   },
   "organizeProfileTagWriteHelp": "Rewrites unlocked tags from the catalog as files move",
   "@organizeProfileTagWriteHelp": {
-    "description": "Help under the tag-write switch."
+    "description": "Info on the tag-write switch."
   },
   "organizeProfileTemplateHint": "Empty keeps the built-in layout",
   "@organizeProfileTemplateHint": {
@@ -407,7 +383,7 @@
   "@organizeProfileTitle": {
     "description": "Heading over the profile picker."
   },
-  "organizeReadOnlyLibraries": "{count, plural, =1{1 read-only library is left as it is.} other{{count} read-only libraries are left as they are.}}",
+  "organizeReadOnlyLibraries": "{count, plural, =1{1 read-only library left alone} other{{count} read-only libraries left alone}}",
   "@organizeReadOnlyLibraries": {
     "description": "Under the dry run and the result: managed libraries the organizer left alone because they are read-only.",
     "placeholders": {
@@ -451,8 +427,8 @@
   "@organizeUndo": {
     "description": "A run's control in the history: moves the files it moved back where it found them, behind a typed confirmation."
   },
-  "organizeUndoConfirmMessage": "Every file it moved goes back where it was found, with its sidecars; a file moved again since stays where it is.",
-  "@organizeUndoConfirmMessage": {
+  "organizeUndoConfirmBody": "Every moved file goes back, with sidecars; files moved again stay put.",
+  "@organizeUndoConfirmBody": {
     "description": "Body of the typed confirmation before a run is undone."
   },
   "organizeUndoConfirmTitle": "Undo this run?",

@@ -196,15 +196,15 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
                 glyph: WaxIcons.search,
                 title: l10n.reviewSkippedTitle,
                 message: detail.status == 'pending'
-                    ? l10n.reviewSkippedPending
-                    : l10n.reviewSkippedDecided,
+                    ? l10n.reviewSkippedPendingEmptyMessage
+                    : l10n.reviewSkippedDecidedEmptyMessage,
               ),
             )
           else
             EmptyState(
               glyph: WaxIcons.search,
               title: l10n.reviewNoCandidatesTitle,
-              message: l10n.reviewNoCandidatesMessage,
+              message: l10n.reviewNoCandidatesEmptyMessage,
             )
         else
           for (final c in detail.candidates)
@@ -543,13 +543,13 @@ class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
           ),
           if (_open) ...<Widget>[
             const SizedBox(height: WaxSpace.s8),
-            Text(
-              widget.stored == null && widget.suggested != null
-                  ? l10n.reviewSearchSuggested
-                  : l10n.reviewSearchStored,
-              style: WaxType.caption.copyWith(color: colors.textTertiary),
-            ),
-            const SizedBox(height: WaxSpace.s12),
+            if (widget.stored == null && widget.suggested != null) ...<Widget>[
+              Text(
+                l10n.reviewSearchSuggested,
+                style: WaxType.caption.copyWith(color: colors.textTertiary),
+              ),
+              const SizedBox(height: WaxSpace.s12),
+            ],
             WaxTextField(
               label: l10n.reviewFieldArtist,
               controller: _artist,

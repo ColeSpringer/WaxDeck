@@ -136,6 +136,48 @@ void main() {
     );
   });
 
+  testWidgets('an empty section says so once, in its title', (tester) async {
+    await _pump(tester, _host(_container(_repo())));
+
+    expect(find.text('No duplicates detected'), findsOneWidget);
+    expect(find.text('No duplicate qualities detected'), findsOneWidget);
+    expect(
+      tester
+          .widget<EmptyState>(emptyStateTitled('No duplicates detected'))
+          .message,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<EmptyState>(
+            emptyStateTitled('No duplicate qualities detected'),
+          )
+          .message,
+      isNull,
+    );
+  });
+
+  testWidgets('a rule nothing fails says so once, in its title', (
+    tester,
+  ) async {
+    final repo = _repo()..healthIssues = const [];
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(repo),
+        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
+      ),
+    );
+
+    expect(find.text('Nothing failing this rule'), findsOneWidget);
+    expect(
+      tester
+          .widget<EmptyState>(emptyStateTitled('Nothing failing this rule'))
+          .message,
+      isNull,
+    );
+  });
+
   testWidgets('warming up replaces the score with progress', (tester) async {
     final repo = _repo();
     repo.healthSummary = const HealthSummary(
@@ -382,9 +424,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.healthFix('missing-lyrics')),
       findsNothing,
     );
-    const reason =
-        'Needs an enrichment contact, which lets this server ask the '
-        'free public sources.';
+    const reason = 'Needs an enrichment contact set on the server.';
     final blocked = find.bySemanticsIdentifier(
       SemanticsIds.healthFixBlocked('missing-lyrics'),
     );

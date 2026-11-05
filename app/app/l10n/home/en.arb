@@ -13,9 +13,9 @@
   "@homeDownloadedTitle": {
     "description": "Shelf of downloaded items, the only one home draws with no server to ask."
   },
-  "homeEmptyMessage": "Point a library at your music, follow a show, or drop files in. Everything you add turns up on these shelves.",
+  "homeEmptyMessage": "Add music, follow a show, or drop files in.",
   "@homeEmptyMessage": {
-    "description": "Empty state of home, naming the three ways a library gets filled."
+    "description": "Empty state of home, naming the ways a library gets filled."
   },
   "homeEmptyTitle": "Nothing here yet",
   "@homeEmptyTitle": {
@@ -77,7 +77,7 @@
   "@homeNeverPlayedTitle": {
     "description": "Shelf of items in the library that have never been played."
   },
-  "homeOfflineMessage": "Offline. The shelves come back when the server does; what this device holds still plays.",
+  "homeOfflineMessage": "Offline. Downloaded items still play.",
   "@homeOfflineMessage": {
     "description": "Banner across home with no server to ask."
   },

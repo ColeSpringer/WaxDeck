@@ -18,7 +18,6 @@ import 'metadata_form.dart';
 class RenameSectionCopy {
   const RenameSectionCopy({
     required this.title,
-    required this.overline,
     required this.help,
     required this.applyLabel,
     required this.confirmTitle,
@@ -28,7 +27,6 @@ class RenameSectionCopy {
   });
 
   final String title;
-  final String overline;
   final String help;
 
   /// The button, and the confirmation's own confirm button with it.
@@ -212,7 +210,7 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(title: widget.copy.title, overline: widget.copy.overline),
+        SectionHeader(title: widget.copy.title),
         WaxProse(
           widget.copy.help,
           style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
@@ -234,7 +232,8 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
             ],
             WaxSettingRow(
               title: l10n.metadataWriteBackTitle,
-              help: l10n.musicEntityRenameWriteBackHelp,
+              // The widest write on the screen: every member's file.
+              info: l10n.musicEntityRenameWriteBackHelp,
               control: WaxSwitch(
                 label: l10n.metadataWriteBackTitle,
                 value: _writeBack,

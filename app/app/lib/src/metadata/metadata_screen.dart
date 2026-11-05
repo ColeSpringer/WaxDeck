@@ -51,8 +51,9 @@ class MetadataScreen extends ConsumerWidget {
     if (editor.value case final state? when state.metadata.mayCurate == false) {
       return ForbiddenPage(
         pageTitle: context.l10n.metadataTitle,
-        heading: context.l10n.metadataForbiddenTitle,
-        message: context.l10n.metadataForbiddenMessage,
+        heading: context.l10n.metadataForbiddenTitle(
+          state.metadata.mediaType.wireName,
+        ),
         glyph: WaxIcons.edit,
         semanticsId: SemanticsIds.metadataForbidden,
       );
@@ -322,8 +323,9 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
       return Center(
         child: EmptyState(
           glyph: WaxIcons.edit,
-          title: context.l10n.metadataForbiddenTitle,
-          message: context.l10n.metadataForbiddenMessage,
+          title: context.l10n.metadataForbiddenTitle(
+            state.metadata.mediaType.wireName,
+          ),
         ),
       );
     }
@@ -470,10 +472,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(
-          title: l10n.metadataFieldsTitle,
-          overline: l10n.metadataFieldsOverline,
-        ),
+        SectionHeader(title: l10n.metadataFieldsTitle),
         for (final field in state.kindFields.fields) ...<Widget>[
           MetadataFieldRow(
             field: field,
@@ -499,7 +498,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
         if (_canWriteBack(state))
           WaxSettingRow(
             title: l10n.metadataWriteBackTitle,
-            help: l10n.metadataWriteBackHelp,
+            info: l10n.metadataWriteBackHelp,
             control: WaxSwitch(
               label: l10n.metadataWriteBackTitle,
               value: _writeBack,
@@ -509,7 +508,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
           ),
         WaxSettingRow(
           title: l10n.metadataLockTitle,
-          help: l10n.metadataLockHelp,
+          info: l10n.metadataLockHelp,
           control: WaxSwitch(
             label: l10n.metadataLockTitle,
             value: _lock,
@@ -519,7 +518,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
         ),
         WaxSettingRow(
           title: l10n.metadataForceTitle,
-          help: l10n.metadataForceHelp,
+          info: l10n.metadataForceHelp,
           control: WaxSwitch(
             label: l10n.metadataForceTitle,
             value: _force,
@@ -538,14 +537,10 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(
-          title: l10n.metadataLyricsTitle,
-          overline: l10n.metadataLyricsOverline,
-        ),
+        SectionHeader(title: l10n.metadataLyricsTitle),
         WaxTextField(
           label: l10n.metadataLyricsLabel,
           hint: l10n.metadataLyricsHint,
-          helperText: l10n.metadataLyricsEmptyClears,
           controller: _draft.lyrics,
           maxLines: 8,
           semanticsId: SemanticsIds.lyricsField,
@@ -564,7 +559,6 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
         SectionHeader(title: l10n.metadataReleaseTitle),
         WaxSettingRow(
           title: l10n.metadataUnofficialTitle,
-          help: l10n.metadataUnofficialHelp,
           control: WaxSwitch(
             label: l10n.metadataUnofficialTitle,
             value: _draft.unofficialValue(stored: state.metadata.unofficial),
@@ -580,7 +574,6 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
   }
 
   Widget _actionsSection(BuildContext context, MetadataEditorState state) {
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
     // A kind change leaves for what the item became, so it waits for
     // the draft to be saved or dropped rather than discarding it.
@@ -589,11 +582,6 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(title: l10n.metadataIdentificationTitle),
-        WaxProse(
-          l10n.metadataIdentificationBlurb,
-          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
-        ),
-        const SizedBox(height: WaxSpace.s12),
         Wrap(
           spacing: WaxSpace.s8,
           runSpacing: WaxSpace.s8,
@@ -602,6 +590,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
               label: l10n.metadataRematch,
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.search,
+              detail: l10n.metadataRematchHelp,
               semanticsId: SemanticsIds.metadataRematch,
               busy: busyBy(_Work.rematch),
               onPressed: busy ? null : _rematch,
@@ -610,6 +599,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
               label: l10n.metadataFetch,
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.downloads,
+              detail: l10n.metadataFetchHelp,
               semanticsId: SemanticsIds.metadataEnrich,
               busy: busyBy(_Work.enrich),
               onPressed: busy ? null : () => _enrich(state),
@@ -822,9 +812,6 @@ class _Header extends ConsumerWidget {
           // and there is nowhere else to say where a file came from.
           _OriginBlock(
             line: origin ?? l10n.metadataOriginLine(l10n.metadataOriginLocal),
-            caption: mayEditOrigin
-                ? l10n.metadataOriginEditable
-                : l10n.metadataOriginRecorded,
             onEdit: mayEditOrigin ? () => _editOrigin(context, ref) : null,
           ),
         ],
@@ -833,48 +820,49 @@ class _Header extends ConsumerWidget {
   }
 }
 
-/// The origin line and its caption, tappable for a curator.
+/// The origin line, tappable for a curator.
 ///
 /// A row rather than a button: the line is a fact worth reading on its
-/// own, and most people looking at it are not about to change it. The
-/// affordance is the caption and the tap target around both, which is
-/// what keeps a two-line caption from turning into a control that
-/// dominates the header.
+/// own, and most people looking at it are not about to change it.
 class _OriginBlock extends StatelessWidget {
-  const _OriginBlock({
-    required this.line,
-    required this.caption,
-    required this.onEdit,
-  });
+  const _OriginBlock({required this.line, required this.onEdit});
 
   final String line;
-  final String caption;
   final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    // Selectable either way; for a curator a plain tap still edits.
+    final l10n = context.l10n;
+    final style = WaxType.caption.copyWith(color: colors.textTertiary);
+    // Selectable either way; for a curator a plain tap still edits, and
+    // the glyph says so.
     final text = WaxProse.block(
       onTap: onEdit,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(
-            line,
-            style: WaxType.caption.copyWith(color: colors.textTertiary),
-          ),
-          Text(
-            caption,
-            style: WaxType.caption.copyWith(color: colors.textTertiary),
-          ),
+          Flexible(child: Text(line, style: style)),
+          if (onEdit != null) ...<Widget>[
+            const SizedBox(width: WaxSpace.s4),
+            WaxIcon(
+              WaxIcons.edit,
+              // The caption's own size through the scaler, so the glyph
+              // stays matched to the words under nonlinear scaling too.
+              size: MediaQuery.textScalerOf(
+                context,
+              ).scale(style.fontSize ?? 12),
+              color: colors.textTertiary,
+            ),
+          ],
         ],
       ),
     );
     if (onEdit == null) return text;
     final radius = BorderRadius.circular(WaxRadius.r6);
     return WaxInkTappable(
-      label: line,
+      label: l10n.metadataOriginEditAction,
+      value: line,
       semanticsId: SemanticsIds.originEdit,
       onPressed: onEdit,
       borderRadius: radius,

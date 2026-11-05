@@ -55,10 +55,6 @@
   "@authHaveInvite": {
     "description": "The link to the sign-up screen on a server that only takes invited accounts."
   },
-  "authInviteHelp": "With a valid invite the account works right away",
-  "@authInviteHelp": {
-    "description": "Help under the invite field."
-  },
   "authInviteToken": "Invite token (optional)",
   "@authInviteToken": {
     "description": "The field for an invite code, which skips the wait for approval."
@@ -159,7 +155,7 @@
   },
   "authTagline": "Music, podcasts, and audiobooks",
   "@authTagline": {
-    "description": "Under the wordmark on the sign-in screen, saying what this is for."
+    "description": "Under the wordmark on the sign-in screen and on the About screen, saying what this is for."
   },
   "authTimedOut": "Sign-in timed out; try again",
   "@authTimedOut": {

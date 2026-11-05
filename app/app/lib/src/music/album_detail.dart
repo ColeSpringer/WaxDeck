@@ -53,12 +53,13 @@ enum AlbumIdentityField {
     AlbumIdentityField.country => l10n.musicFieldCountry,
   };
 
-  String helpOf(AppLocalizations l10n) => switch (this) {
-    AlbumIdentityField.barcode => l10n.musicFieldBarcodeHelp,
-    AlbumIdentityField.label => l10n.musicFieldLabelHelp,
-    AlbumIdentityField.catalogNumber => l10n.musicFieldCatalogNumberHelp,
-    AlbumIdentityField.media => l10n.musicFieldMediaHelp,
-    AlbumIdentityField.country => l10n.musicFieldCountryHelp,
+  /// The format or example the empty field shows, for the fields that
+  /// have one.
+  String? hintOf(AppLocalizations l10n) => switch (this) {
+    AlbumIdentityField.barcode => l10n.musicFieldBarcodeHint,
+    AlbumIdentityField.media => l10n.musicFieldMediaHint,
+    AlbumIdentityField.country => l10n.musicFieldCountryHint,
+    AlbumIdentityField.label || AlbumIdentityField.catalogNumber => null,
   };
 }
 
@@ -82,11 +83,6 @@ enum AlbumNameField {
   String labelOf(AppLocalizations l10n) => switch (this) {
     AlbumNameField.sort => l10n.musicFieldSort,
     AlbumNameField.mbid => l10n.musicFieldMbid,
-  };
-
-  String helpOf(AppLocalizations l10n) => switch (this) {
-    AlbumNameField.sort => l10n.musicFieldSortHelp,
-    AlbumNameField.mbid => l10n.musicFieldMbidHelp,
   };
 }
 

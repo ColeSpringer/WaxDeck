@@ -492,10 +492,6 @@
   "@paletteClose": {
     "description": "Accessible name of the close button on the keyboard shortcut sheet."
   },
-  "paletteEmptyMessage": "Try fewer words, or a different one.",
-  "@paletteEmptyMessage": {
-    "description": "What the command palette suggests when a query matches nothing."
-  },
   "paletteEmptyTitle": "Nothing matches",
   "@paletteEmptyTitle": {
     "description": "Heading the command palette shows when a query matches nothing."

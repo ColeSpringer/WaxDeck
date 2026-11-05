@@ -280,13 +280,11 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
             const SizedBox(height: WaxSpace.s24),
             _FieldSection(
               title: l10n.musicAlbumEditorNamesTitle,
-              overline: l10n.musicAlbumEditorNamesOverline,
               semanticsId: SemanticsIds.albumEditorNames,
               children: <Widget>[
                 for (final field in AlbumNameField.values)
                   _FieldRow(
                     label: field.labelOf(l10n),
-                    help: field.helpOf(l10n),
                     wire: field.wire,
                     controller: _controllerFor(
                       field.wire,
@@ -301,12 +299,11 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
             const SizedBox(height: WaxSpace.s24),
             _FieldSection(
               title: l10n.musicAlbumEditorSectionTitle,
-              overline: l10n.musicAlbumEditorSectionOverline,
               children: <Widget>[
                 for (final field in AlbumIdentityField.values)
                   _FieldRow(
                     label: field.labelOf(l10n),
-                    help: field.helpOf(l10n),
+                    hint: field.hintOf(l10n),
                     wire: field.wire,
                     controller: _controllerFor(
                       field.wire,
@@ -320,16 +317,13 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
               ],
             ),
             const SizedBox(height: WaxSpace.s24),
-            SectionHeader(
-              title: l10n.musicAlbumEditorWriteTitle,
-              overline: l10n.musicAlbumEditorWriteOverline,
-            ),
+            SectionHeader(title: l10n.musicAlbumEditorWriteTitle),
             // The item editor's own switches, down to the semantics
             // identifiers, so they read its keys. Only the write-back
             // help differs.
             WaxSettingRow(
               title: l10n.metadataWriteBackTitle,
-              help: l10n.musicAlbumEditorWriteBackHelp,
+              info: l10n.musicAlbumEditorWriteBackHelp,
               control: WaxSwitch(
                 label: l10n.metadataWriteBackTitle,
                 value: _writeBack,
@@ -339,7 +333,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
             ),
             WaxSettingRow(
               title: l10n.metadataLockTitle,
-              help: l10n.metadataLockHelp,
+              info: l10n.metadataLockHelp,
               control: WaxSwitch(
                 label: l10n.metadataLockTitle,
                 value: _lock,
@@ -349,7 +343,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
             ),
             WaxSettingRow(
               title: l10n.metadataForceTitle,
-              help: l10n.metadataForceHelp,
+              info: l10n.metadataForceHelp,
               control: WaxSwitch(
                 label: l10n.metadataForceTitle,
                 value: _force,
@@ -459,7 +453,6 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
       onRetrySeed: () => ref.invalidate(_rewriteSeedProvider(widget.pid)),
       copy: RenameSectionCopy(
         title: l10n.musicAlbumRewriteTitle,
-        overline: l10n.musicAlbumRewriteOverline,
         help: l10n.musicAlbumRewriteHelp,
         applyLabel: l10n.musicAlbumRewriteApply(members),
         confirmTitle: l10n.musicAlbumRewriteConfirmTitle,
@@ -561,10 +554,7 @@ class _AlbumSummary extends ConsumerWidget {
           ],
           if (tracks.isNotEmpty) ...<Widget>[
             const SizedBox(height: WaxSpace.s16),
-            SectionHeader(
-              title: l10n.musicAlbumEditorTracksTitle,
-              overline: l10n.musicAlbumEditorTracksOverline,
-            ),
+            SectionHeader(title: l10n.musicAlbumEditorTracksTitle),
             for (final track in tracks.take(_maxTracks))
               Text(
                 track.title,
@@ -619,7 +609,6 @@ class _DerivedTotalTracks extends ConsumerWidget {
       identifier: SemanticsIds.albumEditorTotalTracks,
       child: WaxSettingRow(
         title: l10n.musicAlbumEditorTotalTracks,
-        help: l10n.musicAlbumEditorTotalTracksHelp,
         control: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
@@ -643,13 +632,11 @@ class _DerivedTotalTracks extends ConsumerWidget {
 class _FieldSection extends StatelessWidget {
   const _FieldSection({
     required this.title,
-    required this.overline,
     required this.children,
     this.semanticsId,
   });
 
   final String title;
-  final String overline;
   final List<Widget> children;
   final String? semanticsId;
 
@@ -658,7 +645,7 @@ class _FieldSection extends StatelessWidget {
     final section = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(title: title, overline: overline),
+        SectionHeader(title: title),
         for (final child in children) ...<Widget>[
           child,
           const SizedBox(height: WaxSpace.s12),
@@ -678,16 +665,18 @@ class _FieldSection extends StatelessWidget {
 class _FieldRow extends StatelessWidget {
   const _FieldRow({
     required this.label,
-    required this.help,
     required this.wire,
     required this.controller,
     required this.stored,
     required this.curated,
     required this.dirty,
+    this.hint,
   });
 
   final String label;
-  final String help;
+
+  /// A format or example the empty field shows.
+  final String? hint;
 
   /// The endpoint's own name for the field, which is also the handle
   /// its input carries and the key its curation row is filed under.
@@ -716,9 +705,7 @@ class _FieldRow extends StatelessWidget {
     );
     return WaxTextField(
       label: label,
-      // Under the box, selectable, and spoken with it: a placeholder went
-      // the moment the field held a value.
-      helperText: help,
+      hint: hint,
       controller: controller,
       semanticsId: SemanticsIds.metadataField(wire),
       beside: Row(

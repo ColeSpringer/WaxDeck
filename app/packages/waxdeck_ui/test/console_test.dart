@@ -1089,4 +1089,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(answer, isFalse);
   });
+
+  testWidgets('a confirmation without a message asks only for the word', (
+    tester,
+  ) async {
+    bool? answer;
+    await _pump(
+      tester,
+      Builder(
+        builder: (context) => WaxButton(
+          label: 'Clear',
+          onPressed: () async {
+            answer = await showTypedConfirm(
+              context,
+              title: 'Clear the slot?',
+              confirmWord: 'CLEAR',
+              confirmLabel: 'Clear slot',
+              fieldSemanticsId: 'confirm-field',
+              confirmSemanticsId: 'confirm-go',
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear the slot?'), findsOneWidget);
+    expect(find.byType(WaxProse), findsNothing);
+
+    await tester.enterText(
+      find.bySemanticsIdentifier('confirm-field'),
+      'CLEAR',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier('confirm-go'));
+    await tester.pumpAndSettle();
+    expect(answer, isTrue);
+  });
 }

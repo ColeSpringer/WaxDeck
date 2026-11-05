@@ -70,7 +70,6 @@ class ListeningSection extends ConsumerWidget {
         WaxOptionRow(
           key: const Key(SemanticsIds.openShareLinks),
           title: l10n.settingsShareLinksTitle,
-          subtitle: l10n.settingsShareLinksBlurb,
           glyph: WaxIcons.share,
           semanticsId: SemanticsIds.openShareLinks,
           trailing: const WaxIcon(WaxIcons.forward, size: 16),

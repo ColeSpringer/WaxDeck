@@ -167,9 +167,7 @@ class UploadsScreen extends ConsumerWidget {
             EmptyState(
               glyph: WaxIcons.add,
               title: l10n.uploadsEmptyTitle,
-              message: canUpload
-                  ? l10n.uploadsEmptyMessage
-                  : l10n.uploadsEmptyNoPermission,
+              message: canUpload ? null : l10n.uploadsNoPermissionEmptyMessage,
             )
           else ...<Widget>[
             for (final group in _grouped(state))
@@ -365,7 +363,7 @@ class _BatchGroup extends StatelessWidget {
 }
 
 /// What is staged now against the cap. A pending-upload limit rather
-/// than a storage cap, which is what the caption explains.
+/// than a storage cap.
 class _QuotaHeader extends StatelessWidget {
   const _QuotaHeader({required this.quota});
 
@@ -418,13 +416,6 @@ class _QuotaHeader extends StatelessWidget {
                 tone: fraction >= 1 ? colors.error : null,
               ),
             ],
-            const SizedBox(height: WaxSpace.s8),
-            Text(
-              cap == null
-                  ? l10n.uploadsQuotaHelpUncapped
-                  : l10n.uploadsQuotaHelp,
-              style: WaxType.caption.copyWith(color: colors.textTertiary),
-            ),
           ],
         ),
       ),

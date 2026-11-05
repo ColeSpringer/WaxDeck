@@ -337,6 +337,12 @@ void main() {
       // The dialog is the source's own, so the switch found above
       // belongs to this one and not to a stale one left open.
       expect(find.text('Import from ${source.labelOf(l10n)}'), findsOneWidget);
+      // A data loss the label hides: printed under it, not a tip.
+      expect(
+        find.text('Tracks added by hand are removed on re-match'),
+        findsOneWidget,
+      );
+      expect(infoTipHolding(l10n.playlistImportKeepMatchedHelp), findsNothing);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
     }
@@ -389,13 +395,7 @@ void main() {
     expect(bind.refs, isNull);
     expect(bind.url, isNull);
     expect(bind.intervalHours, isNull);
-    expect(
-      find.text(
-        'Kept matched to this export. Re-match it whenever you like from the '
-        "playlist's sync settings.",
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Kept matched to this export.'), findsOneWidget);
   });
 
   testWidgets('a portable import binds the refs it parsed, not the paste', (

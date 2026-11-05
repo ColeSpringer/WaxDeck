@@ -13,6 +13,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -162,6 +163,8 @@ void main() {
       findsNothing,
       reason: 'the check runs when asked, not with the screen',
     );
+    expect(infoTipHolding(_l10n.healthCatalogHelp), findsOneWidget);
+    expect(find.text(_l10n.healthCatalogHelp), findsNothing);
 
     await _tap(tester, SemanticsIds.catalogCheckVerify);
     expect(repo.catalogChecks, 1);
@@ -303,6 +306,8 @@ void main() {
 
     await _tap(tester, SemanticsIds.catalogCheckRepair);
     expect(find.text(_l10n.healthCatalogRepairTitle), findsOneWidget);
+    // What a deleting confirmation must say: what goes, and what does not.
+    expect(find.textContaining('your files are not touched'), findsOneWidget);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmCancel));
     await tester.pumpAndSettle();
     expect(repo.catalogRepairs, isEmpty, reason: 'cancelled, nothing runs');

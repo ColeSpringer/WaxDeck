@@ -43,7 +43,6 @@ class CarModeScreen extends ConsumerWidget {
               child: EmptyState(
                 glyph: WaxIcons.headphones,
                 title: l10n.playerNothingPlaying,
-                message: l10n.playerCarIdleMessage,
                 actionLabel: l10n.playerLeaveCarMode,
                 actionSemanticsId: SemanticsIds.carExit,
                 onAction: () => leavePlayer(context),

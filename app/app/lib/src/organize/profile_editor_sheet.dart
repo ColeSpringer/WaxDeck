@@ -295,7 +295,6 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet>
                   hint: _compilationFolder == null
                       ? l10n.organizeProfileCompilationUnset
                       : l10n.organizeProfileCompilationOwn,
-                  helperText: l10n.organizeProfileCompilationHelp,
                   controller: _compilation,
                   semanticsId: SemanticsIds.organizeProfileCompilation,
                   onChanged: (text) {
@@ -306,7 +305,7 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet>
               ),
               WaxSettingRow(
                 title: l10n.organizeProfileTagWrite,
-                help: l10n.organizeProfileTagWriteHelp,
+                info: l10n.organizeProfileTagWriteHelp,
                 control: WaxSwitch(
                   label: l10n.organizeProfileTagWrite,
                   value: _tagWrite,

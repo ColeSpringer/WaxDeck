@@ -44,8 +44,8 @@ final adminAccessProvider = Provider<AdminAccess>((ref) {
 ///
 /// What a section is called is copy and so is not a constructor argument:
 /// the enum carries the two things that are the same in every language,
-/// its location and its glyph, and [titleOf] and [blurbOf] read the rest
-/// from the table.
+/// its location and its glyph, and [titleOf] reads the rest from the
+/// table.
 enum SettingsSection {
   account('account', WaxIcons.settings),
   playback('playback', WaxIcons.play),
@@ -78,19 +78,6 @@ enum SettingsSection {
     SettingsSection.appearance => l10n.settingsSectionAppearanceTitle,
     SettingsSection.accessibility => l10n.settingsSectionAccessibilityTitle,
     SettingsSection.server => l10n.settingsSectionServerTitle,
-  };
-
-  /// The line under the section's name on the settings home.
-  String blurbOf(AppLocalizations l10n) => switch (this) {
-    SettingsSection.account => l10n.settingsSectionAccountBlurb,
-    SettingsSection.playback => l10n.settingsSectionPlaybackBlurb,
-    SettingsSection.library => l10n.settingsSectionLibraryBlurb,
-    SettingsSection.downloads => l10n.settingsSectionDownloadsBlurb,
-    SettingsSection.devices => l10n.settingsSectionDevicesBlurb,
-    SettingsSection.integrations => l10n.settingsSectionIntegrationsBlurb,
-    SettingsSection.appearance => l10n.settingsSectionAppearanceBlurb,
-    SettingsSection.accessibility => l10n.settingsSectionAccessibilityBlurb,
-    SettingsSection.server => l10n.settingsSectionServerBlurb,
   };
 
   /// Administrators only. The section is not merely empty for everyone

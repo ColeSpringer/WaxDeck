@@ -71,7 +71,6 @@ class PodcastsScreen extends ConsumerWidget {
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.podcastsEmptyTitle,
-              message: l10n.podcastsEmptyMessage,
               glyph: WaxIcons.podcasts,
               actionLabel: podcastsOn ? l10n.podcastsEmptyAction : null,
               onAction: podcastsOn

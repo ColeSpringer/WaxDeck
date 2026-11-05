@@ -192,9 +192,7 @@ void main() {
     await _pump(tester, _host(_container(_repo())));
 
     final row = find.ancestor(
-      of: find.text(
-        'Recorded evidence of how this arrived. Tap to correct it.',
-      ),
+      of: find.textContaining('Origin: '),
       matching: find.byType(WaxInkTappable),
     );
     expect(row, findsOneWidget);
@@ -445,6 +443,29 @@ void main() {
     expect(find.textContaining(RegExp(r'\d+ from ')), findsNothing);
   });
 
+  testWidgets('switches and identify buttons carry their sentences in tips', (
+    tester,
+  ) async {
+    final l10n = AppLocalizationsEn();
+    await _pump(tester, _host(_container(_repo())));
+
+    expect(infoTipHolding(l10n.metadataLockHelp), findsOneWidget);
+    expect(infoTipHolding(l10n.metadataForceHelp), findsOneWidget);
+    expect(infoTipHolding(l10n.metadataWriteBackHelp), findsOneWidget);
+    expect(infoTipHolding(l10n.artworkLockHelp), findsOneWidget);
+    for (final (id, detail) in [
+      (SemanticsIds.metadataRematch, l10n.metadataRematchHelp),
+      (SemanticsIds.metadataEnrich, l10n.metadataFetchHelp),
+    ]) {
+      expect(
+        tester.widget<WaxButton>(waxControl<WaxButton>(id)).detail,
+        detail,
+      );
+    }
+    expect(find.textContaining('Rematch reopens'), findsNothing);
+    expect(find.textContaining('Leave empty to remove'), findsNothing);
+  });
+
   testWidgets('a pinned kind is a line of its own, not an edit', (
     tester,
   ) async {
@@ -459,7 +480,7 @@ void main() {
     await _pump(tester, _host(_container(repo)));
 
     expect(find.textContaining('from you'), findsNothing);
-    expect(find.text('Kind: Music, pinned'), findsOneWidget);
+    expect(find.text('Music, pinned'), findsOneWidget);
   });
 
   testWidgets('a field chip names its producer rather than the wire word', (
@@ -504,10 +525,37 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(
-      find.text('Recorded evidence of how this arrived. Tap to correct it.'),
-      findsOneWidget,
+    expect(find.textContaining('Recorded evidence'), findsNothing);
+    // An edit glyph marks the line as correctable, with no sentence.
+    final glyph = find.descendant(
+      of: find.ancestor(
+        of: find.textContaining('Origin: '),
+        matching: find.byType(WaxInkTappable),
+      ),
+      matching: find.byWidgetPredicate(
+        (w) => w is WaxIcon && w.glyph == WaxIcons.edit,
+      ),
     );
+    expect(glyph, findsOneWidget);
+  });
+
+  testWidgets('the origin glyph grows with the text it marks', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final repo = _repo()
+      ..itemAcquisition['tr-1'] = ItemAcquisition(sourceType: 'rss');
+    await _pump(tester, _host(_container(repo)));
+
+    final glyph = find.descendant(
+      of: find.ancestor(
+        of: find.text('Origin: a podcast feed'),
+        matching: find.byType(WaxInkTappable),
+      ),
+      matching: find.byWidgetPredicate(
+        (w) => w is WaxIcon && w.glyph == WaxIcons.edit,
+      ),
+    );
+    expect(tester.getSize(glyph), Size.square(WaxType.caption.fontSize! * 2));
   });
 
   testWidgets('an unconfirmed permission draws the origin as read-only', (
@@ -522,11 +570,26 @@ void main() {
       ..itemAcquisition['tr-1'] = ItemAcquisition(sourceType: 'rss');
     await _pump(tester, _host(_container(repo)));
 
+    expect(find.text('Origin: a podcast feed'), findsOneWidget);
+    expect(find.textContaining('Recorded evidence'), findsNothing);
     expect(
-      find.text(
-        'Recorded evidence of how this arrived, not an editable field.',
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('Origin: a podcast feed'),
+          matching: find.byType(WaxProse),
+        ),
+        matching: find.byWidgetPredicate(
+          (w) => w is WaxIcon && w.glyph == WaxIcons.edit,
+        ),
       ),
-      findsOneWidget,
+      findsNothing,
+    );
+    expect(
+      find.ancestor(
+        of: find.text('Origin: a podcast feed'),
+        matching: find.byType(WaxInkTappable),
+      ),
+      findsNothing,
     );
   });
 
@@ -562,6 +625,25 @@ void main() {
     await _pump(tester, _host(_container(_repo()..mayCurateItems = null)));
 
     expect(find.textContaining('Origin: '), findsNothing);
+  });
+
+  testWidgets('the origin sheet states under the address that it is redacted', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..itemAcquisition['tr-1'] = ItemAcquisition(
+        sourceType: 'manual',
+        sourceUrl: 'https://feeds.example.test/ep-1.mp3',
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.tap(find.textContaining('Origin: '));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(AppLocalizationsEn().metadataOriginUrlHelp),
+      findsOneWidget,
+    );
   });
 
   testWidgets('correcting the origin sends every column as it stands', (
@@ -1214,7 +1296,12 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.metadataForbidden),
       findsOneWidget,
     );
-    expect(find.text('This one is not yours to edit'), findsOneWidget);
+    // A title naming who may, and nothing restating it under it.
+    expect(
+      find.text('Only administrators and the uploader can edit this track'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Editing a track'), findsNothing);
     // Its own handle, not the editor's: a refusal wearing the surface
     // it refuses is how a test passes on the wrong page.
     expect(
@@ -1227,6 +1314,40 @@ void main() {
     expect(_field('title'), findsNothing);
     expect(find.bySemanticsIdentifier(SemanticsIds.metadataSave), findsNothing);
   });
+
+  // The same editor opens for a book and an episode; an episode is what
+  // its feed says it is, so no upload made it and only an administrator
+  // may edit it.
+  for (final (kind, refusal) in const [
+    (
+      MediaType.audiobook,
+      'Only administrators and the uploader can edit '
+          'this book',
+    ),
+    (MediaType.podcast, 'Only administrators can edit this episode'),
+  ]) {
+    testWidgets('the refusal names the ${kind.wireName} it refuses', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-1', mediaType: kind)])
+        ..mayCurateItems = false;
+      final container = _container(repo);
+      await _pump(tester, _routed(container));
+      expect(find.text(refusal), findsOneWidget);
+
+      // The pane's own refusal, for a host that mounts it beside a list.
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: localizedHost(
+            const Scaffold(body: MetadataPane(pid: 'tr-1', embedded: true)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(refusal), findsOneWidget);
+    });
+  }
 
   testWidgets('a server that says nothing gets the form, not the refusal', (
     tester,
@@ -2366,6 +2487,16 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('lyrics: no provider'), findsOneWidget);
+    // The built-ins note rides the title's info slot, its own semantics
+    // node.
+    final note = infoTipHolding(
+      AppLocalizationsEn().metadataPreviewBuiltinsHelp,
+    );
+    expect(
+      find.descendant(of: find.byType(SectionHeader), matching: note),
+      findsOneWidget,
+    );
+    expect(hasOwnSemanticsNode(tester, note), isTrue);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.enrichPreviewApply),
@@ -2439,6 +2570,22 @@ void main() {
     expect(call.pid, 'tr-1');
     expect(call.fields, ['art']);
     expect(call.locked, isFalse);
+  });
+
+  testWidgets('the chapter rules ride an info tip, not a drawn line', (
+    tester,
+  ) async {
+    final l10n = AppLocalizationsEn();
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: _container(_bookRepo()),
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    expect(find.text(l10n.bookChapterEditorHelp), findsNothing);
+    expect(infoTipHolding(l10n.bookChapterEditorHelp), findsOneWidget);
   });
 
   testWidgets('a single-file book stages its chapters into the one save', (
@@ -2516,7 +2663,7 @@ void main() {
       'later',
     );
     await tester.pump();
-    expect(find.textContaining('in playing order'), findsOneWidget);
+    expect(find.textContaining('Use distinct stamps'), findsOneWidget);
 
     // Another staged part keeps the save alive; the chapters stay out.
     await tester.enterText(_field('title'), 'A Better Title');
@@ -2722,6 +2869,18 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(enrich);
     await tester.pumpAndSettle();
+    // The one line says why fetching can still help; no tip repeats it.
+    expect(
+      find.text('Nothing new; built-in sources may still fill gaps'),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.enrichPreview),
+        matching: find.byType(WaxInfoTip),
+      ),
+      findsNothing,
+    );
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.enrichPreviewApply),
     );

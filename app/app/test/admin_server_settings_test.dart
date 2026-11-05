@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/server_settings_screen.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -8,6 +9,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'wax_finders.dart';
 
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
@@ -89,9 +91,7 @@ void main() {
   testWidgets('the limits say what the engine is running right now', (
     tester,
   ) async {
-    final repo = FakeRepository()
-      ..activeTranscodeSessions = 3
-      ..activeTranscodeTimelines = 1;
+    final repo = FakeRepository()..activeTranscodeSessions = 3;
     await _pump(tester, _host(_container(repo)));
 
     expect(
@@ -99,34 +99,82 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('3 engine-backed sessions right now.'), findsOneWidget);
-    // The copy says what the number is not, because it both under- and
-    // over-counts what somebody means by "transcoding" - and says how
-    // much of it is a listener playing a queue gaplessly, which is one
-    // slot however many renderings they hold.
+    // What the number is not rides an info tip rather than a printed line.
+    expect(find.textContaining('holds one slot'), findsNothing);
+    expect(find.textContaining('gapless queue.'), findsNothing);
     expect(
-      find.textContaining('One of them is a gapless queue.'),
+      tester.widget<WaxInfoTip>(find.byType(WaxInfoTip)).message,
+      contains('holds one slot'),
+    );
+    // A tap on web reaches a tip only if no ancestor excludes or merges.
+    expect(hasOwnSemanticsNode(tester, find.byType(WaxInfoTip)), isTrue);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.transcodingActivityInfo),
       findsOneWidget,
     );
-    expect(find.textContaining('holds one slot'), findsOneWidget);
     // Read once when the screen opened. A settings form is not a
     // monitor, and nothing here polls.
     expect(repo.transcodingActivityReads, 1);
   });
 
-  // An older server does not separate the two, and the row says the
-  // less rather than a number it was never given.
-  testWidgets('a server that does not split them says only the caveat', (
+  // A gapless queue holds one slot however many renderings it keeps
+  // live, so the same count means something else when queues fill it.
+  testWidgets('the count says how many sessions are gapless queues', (
     tester,
   ) async {
     final repo = FakeRepository()
-      ..activeTranscodeSessions = 2
-      ..activeTranscodeTimelines = null;
+      ..activeTranscodeSessions = 3
+      ..activeTranscodeTimelines = 2;
     await _pump(tester, _host(_container(repo)));
 
-    expect(find.text('2 engine-backed sessions right now.'), findsOneWidget);
-    expect(find.textContaining('gapless queue'), findsNothing);
-    expect(find.textContaining('holds one slot'), findsOneWidget);
+    final line = find.text(
+      '3 engine-backed sessions right now. 2 of them are gapless queues.',
+    );
+    expect(line, findsOneWidget);
+    // The tip starts where the words end, as on every title it trails.
+    expect(
+      tester.getRect(find.byType(WaxInfoTip)).left,
+      moreOrLessEquals(tester.getRect(line).right, epsilon: 0.01),
+    );
+
+    Future<void> refresh(int timelines) async {
+      repo.activeTranscodeTimelines = timelines;
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.transcodingActivityRefresh),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await refresh(1);
+    expect(
+      find.text(
+        '3 engine-backed sessions right now. One of them is a gapless queue.',
+      ),
+      findsOneWidget,
+    );
+    // None is no clause at all, and no space left where it would be.
+    await refresh(0);
+    expect(find.text('3 engine-backed sessions right now.'), findsOneWidget);
   });
+
+  test(
+    'the count and its gapless clause are one message in each language',
+    () async {
+      final es = await AppLocalizations.delegate.load(const Locale('es'));
+      expect(
+        es.adminServerActivityCount(3, 0),
+        '3 sesiones con motor ahora mismo.',
+      );
+      expect(
+        es.adminServerActivityCount(3, 1),
+        '3 sesiones con motor ahora mismo. Una de ellas es una cola sin pausas.',
+      );
+      expect(
+        es.adminServerActivityCount(3, 2),
+        '3 sesiones con motor ahora mismo. 2 de ellas son colas sin pausas.',
+      );
+    },
+  );
 
   testWidgets('the running count refreshes when asked, and only then', (
     tester,

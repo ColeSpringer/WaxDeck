@@ -376,6 +376,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No playlists yet'), findsOneWidget);
+    expect(find.textContaining('Make one'), findsNothing);
     // The invitation carries its action: the button opens the create
     // dialog rather than pointing at the plus somewhere else.
     await tester.tap(find.text('New playlist'));
@@ -734,11 +735,11 @@ void main() {
     // Nothing while the debounce is still out: an unasked search is not
     // a search that found nothing.
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.textContaining('Nothing here to add'), findsNothing);
+    expect(find.textContaining('Nothing to add'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Nothing here to add'), findsOneWidget);
+    expect(find.textContaining('Nothing to add'), findsOneWidget);
   });
 
   testWidgets('a membership write drops the cover it just changed', (
@@ -842,9 +843,10 @@ void main() {
     expect(find.text('Added at is in the last 90 days'), findsOneWidget);
     expect(find.text('Limit 50'), findsOneWidget);
     expect(
-      find.text('Evaluated live, every time this list is opened.'),
+      find.bySemanticsIdentifier(SemanticsIds.playlistRuleSummary),
       findsOneWidget,
     );
+    expect(find.textContaining('Evaluated live'), findsNothing);
     // Membership is the rule's, so there is nothing to drag and nothing
     // to remove.
     expect(
@@ -854,6 +856,31 @@ void main() {
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playlistAddField),
       findsNothing,
+    );
+  });
+
+  testWidgets('a smart list nothing answers says so once, in its title', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    final created = await repo.createPlaylist(
+      name: 'Nothing yet',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'genre', op: 'is', value: 'Polka'),
+        ]),
+      ),
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nothing matches yet'), findsOneWidget);
+    expect(
+      tester
+          .widget<EmptyState>(emptyStateTitled('Nothing matches yet'))
+          .message,
+      isNull,
     );
   });
 

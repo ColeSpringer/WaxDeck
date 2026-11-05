@@ -211,7 +211,7 @@
       }
     }
   },
-  "reviewDuplicateHelp": "Adding a file the library already holds keeps one item, with the file as another copy. Its details, art and who may edit it do not change.",
+  "reviewDuplicateHelp": "Adding keeps one item; the file becomes a copy.",
   "@reviewDuplicateHelp": {
     "description": "Explanation under the duplicate warning on a review entry, shown when a file holds the same audio as an item the library has."
   },
@@ -252,7 +252,7 @@
   "@reviewEditMetadata": {
     "description": "Menu row opening the metadata editor on one track."
   },
-  "reviewEmptyMessage": "Uploads and rematches land here when the match needs a decision.",
+  "reviewEmptyMessage": "Uploads and rematches land here.",
   "@reviewEmptyMessage": {
     "description": "Empty state of the review queue, saying what fills it."
   },
@@ -410,8 +410,8 @@
   "@reviewMatchingSinglesHelp": {
     "description": "Second line under the singles toggle: the switch is inert under the review and off modes."
   },
-  "reviewNoCandidatesMessage": "Nothing in the sources matched what these files claim. Keep them as they are, or skip and try again later.",
-  "@reviewNoCandidatesMessage": {
+  "reviewNoCandidatesEmptyMessage": "Keep them as they are, or skip.",
+  "@reviewNoCandidatesEmptyMessage": {
     "description": "Empty state where the sources matched nothing."
   },
   "reviewNoCandidatesTitle": "No candidates found",
@@ -462,11 +462,7 @@
   "@reviewSearchAgain": {
     "description": "Re-runs identification with what is in the fields. Empty fields clear the stored override and run the plain derivation."
   },
-  "reviewSearchStored": "Looked up instead of what the files claim. Nothing here is written to the files.",
-  "@reviewSearchStored": {
-    "description": "Above the re-identify fields when they hold what was last searched for."
-  },
-  "reviewSearchSuggested": "Suggested from the source title. Looked up instead of what the files claim; nothing here is written to the files.",
+  "reviewSearchSuggested": "Suggested from source title",
   "@reviewSearchSuggested": {
     "description": "Above the re-identify fields when they opened on a guess parsed from the source title."
   },
@@ -492,12 +488,12 @@
       }
     }
   },
-  "reviewSkippedDecided": "This submission asked to be taken as delivered, so nothing was searched.",
-  "@reviewSkippedDecided": {
+  "reviewSkippedDecidedEmptyMessage": "Taken as delivered, so nothing was searched.",
+  "@reviewSkippedDecidedEmptyMessage": {
     "description": "Empty state for a skipped identification that has already been decided."
   },
-  "reviewSkippedPending": "This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own: read the warning above if there is one, then add it, skip it or discard it.",
-  "@reviewSkippedPending": {
+  "reviewSkippedPendingEmptyMessage": "Not added; read any warning above, then decide.",
+  "@reviewSkippedPendingEmptyMessage": {
     "description": "Empty state for a skipped identification that is still pending, so it needs telling what to do."
   },
   "reviewSkippedTitle": "Identification was skipped",

@@ -379,8 +379,8 @@ device did itself: a finished download is this machine's news and
 nothing the server keeps. A target is one destination: native Pushover, ntfy,
 or Gotify delivery, a Discord or generic webhook, an
 [Apprise](https://github.com/caronc/apprise) API server (one
-integration, most notification services), or the UnifiedPush endpoint
-the Android client registers so events push without any Google
+integration, most notification services), or a UnifiedPush endpoint,
+the URL a distributor hands out, so events push without any Google
 services. Each target selects its own events (a subscribed show's new
 episode, an episode you asked for downloaded, a podcast feed disabled,
 the review queue ready, an upload or acquisition filed without review,

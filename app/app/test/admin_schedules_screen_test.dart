@@ -89,8 +89,15 @@ void main() {
       ),
       findsOneWidget,
     );
-    // Enrich has two an administrator cannot guess either: the nightly
-    // cap, and that a provider's refusal stands until a forced run.
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.scheduleRow('prune')),
+        matching: find.textContaining('Permanently clears'),
+      ),
+      findsOneWidget,
+    );
+    // Enrich has a cost an administrator cannot guess either: the nightly
+    // cap, which a run started by hand is exempt from.
     expect(
       find.descendant(
         of: find.bySemanticsIdentifier(SemanticsIds.scheduleRow('enrich')),

@@ -1,9 +1,9 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
-  "bellActivityBlurb": "What happened to this account, newest first. This device's own transfers are listed only while the app is open.",
+  "bellActivityBlurb": "This device's transfers show only while the app is open.",
   "@bellActivityBlurb": {
-    "description": "Line under the activity heading on the notifications screen, saying plainly that the list is this session's."
+    "description": "Line under the activity heading on the notifications screen: this device's own transfers are listed only while the app is open."
   },
   "bellActivityTitle": "Recent activity",
   "@bellActivityTitle": {
@@ -13,7 +13,7 @@
   "@bellClear": {
     "description": "Empties the list: the last row of the open bell, and the action on the notifications screen."
   },
-  "bellClearConfirm": "Delete every notification for this account, on every device? This cannot be undone.",
+  "bellClearConfirm": "Delete all notifications on every device? This cannot be undone.",
   "@bellClearConfirm": {
     "description": "Body of the confirmation before emptying the notification inbox, which is durable and shared across the account's devices."
   },
@@ -29,8 +29,8 @@
   "@bellDownloadFinished": {
     "description": "What a bell row says when this device finished keeping something offline."
   },
-  "bellEmpty": "Nothing has happened yet.",
-  "@bellEmpty": {
+  "bellEmptyMessage": "Nothing has happened yet.",
+  "@bellEmptyMessage": {
     "description": "Drawn in the open bell and under the notifications screen's own heading when this session has seen nothing. Empty is a legitimate state, not a broken bell."
   },
   "bellEmptyTitle": "Nothing to report",

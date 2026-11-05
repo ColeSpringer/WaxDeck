@@ -133,7 +133,7 @@
       }
     }
   },
-  "libraryDeleteRipShared": "{extra, plural, =1{1 more track is} other{{extra} more tracks are}} cut from the same file as {chosen, plural, =1{the track you picked} other{tracks you picked}}, and tracks cut from one file are deleted together or not at all.",
+  "libraryDeleteRipShared": "{extra, plural, =1{1 more track is} other{{extra} more tracks are}} cut from the same file as {chosen, plural, =1{the track you picked} other{tracks you picked}}; they are deleted together or not at all.",
   "@libraryDeleteRipShared": {
     "description": "Body of the dialog shown when a delete names only some tracks of a CUE rip: how many more tracks share a file with the ones picked and would go with them. Said of the extra tracks, since among several picked tracks only some may share a file; extra is never zero.",
     "placeholders": {
@@ -354,7 +354,7 @@
       }
     }
   },
-  "libraryKindAlreadyBook": "{count, plural, =1{This is already an audiobook} other{These are already audiobooks}}, so nothing changed.",
+  "libraryKindAlreadyBook": "{count, plural, =1{Already an audiobook} other{Already audiobooks}}",
   "@libraryKindAlreadyBook": {
     "description": "Message when a change to audiobook ended having converted nothing, because every item named already was one (a view drawn before another device changed it). {count} is how many items were named.",
     "placeholders": {
@@ -363,7 +363,7 @@
       }
     }
   },
-  "libraryKindAlreadyMusic": "{count, plural, =1{This is already music} other{These are already music}}, so nothing changed.",
+  "libraryKindAlreadyMusic": "{count, plural, =1{Already music} other{Already music}}",
   "@libraryKindAlreadyMusic": {
     "description": "Message when a change to music ended having converted nothing, because every item named already was music (a view drawn before another device changed it). {count} is how many items were named.",
     "placeholders": {
@@ -398,7 +398,7 @@
   "@libraryKindJoinedUnseen": {
     "description": "Message when a kind change folded the user's item into one in a library they are not granted, so there is nothing to open."
   },
-  "libraryKindQueued": "It carries on in the background; you will be told when it is done.",
+  "libraryKindQueued": "Running in the background",
   "@libraryKindQueued": {
     "description": "Message when a kind change is still running after the dialog stopped watching it (accounts without the Tasks screen)."
   },
@@ -406,7 +406,7 @@
   "@libraryKindStillRunning": {
     "description": "Message, with a Tasks action, when a kind change is still running after the dialog stopped watching it (administrators)."
   },
-  "libraryKindStoppedPlaying": "What was playing is part of the book now; play it from here.",
+  "libraryKindStoppedPlaying": "Now in the book; play from here",
   "@libraryKindStoppedPlaying": {
     "description": "Message when a kind change folded the item playing into a book, which stopped it; the book's screen opens after it."
   },
@@ -414,7 +414,7 @@
   "@libraryKindToBook": {
     "description": "Menu row on a music track (item menu, player More menu, metadata actions) that turns it into an audiobook."
   },
-  "libraryKindToBookBody": "{count, plural, =1{This track becomes an audiobook in Books.} other{These {count} tracks become one audiobook in Books, the parts in order.}} Plays, stars and playlist entries come with it, and later scans keep the choice.",
+  "libraryKindToBookBody": "{count, plural, =1{This track becomes an audiobook in Books.} other{{count} tracks become one audiobook in Books, in order.}} Plays, stars and playlists come with it.",
   "@libraryKindToBookBody": {
     "description": "Body of the dialog confirming tracks become an audiobook. {count} is how many tracks.",
     "placeholders": {
@@ -431,7 +431,7 @@
   "@libraryKindToMusic": {
     "description": "Overflow row on a book that turns its parts back into music tracks."
   },
-  "libraryKindToMusicBody": "This book's parts become tracks in Music. Plays and stars stay with them, and later scans keep the choice.",
+  "libraryKindToMusicBody": "The parts become tracks in Music. Plays and stars stay.",
   "@libraryKindToMusicBody": {
     "description": "Body of the dialog confirming a book becomes music tracks."
   },
@@ -443,25 +443,25 @@
   "@libraryKindWorking": {
     "description": "Shown in the dialog while the server reads the items' files as their new kind."
   },
-  "libraryKindWriteBackHelp": "Writes the choice into the files too. Even a catalog rebuilt from scratch then reads a book as a book, and a track as music unless something else in its file says book.",
+  "libraryKindWriteBackHelp": "Also writes the choice into the files, so a rebuilt catalog still reads a book as a book",
   "@libraryKindWriteBackHelp": {
-    "description": "Help under the write-back switch in the dialog changing what items are."
+    "description": "Info on the write-back switch in the dialog changing what items are."
   },
   "libraryMenuDetach": "Detach from release",
   "@libraryMenuDetach": {
     "description": "Overflow row pulling one track off the release a MusicBrainz id pinned it to."
   },
-  "libraryMenuDetachConfirmBody": "The track leaves the release a MusicBrainz id pins it to and lands on the album its own tags imply.",
+  "libraryMenuDetachConfirmBody": "The track leaves its release and joins the album its tags imply.",
   "@libraryMenuDetachConfirmBody": {
-    "description": "Body of that confirmation: where the track lands and why its file's tags are cleared."
+    "description": "Body of that confirmation: where the track lands."
   },
   "libraryMenuDetachConfirmTitle": "Detach this track?",
   "@libraryMenuDetachConfirmTitle": {
     "description": "Title of the confirmation that row asks before writing."
   },
-  "libraryMenuDetachWriteBackHelp": "Also clear the release tags in the track's file, so the next scan does not put it back",
+  "libraryMenuDetachWriteBackHelp": "Also clears the release tags in the track's file, so the next scan does not put it back",
   "@libraryMenuDetachWriteBackHelp": {
-    "description": "Line under the detach confirmation's write-tags switch. Off leaves the catalog edit alone on disk, which is what a read-only library can still take."
+    "description": "Info on the detach confirmation's write-tags switch. Off leaves the catalog edit alone on disk, which is what a read-only library can still take."
   },
   "libraryMenuDetached": "Detached from the release.",
   "@libraryMenuDetached": {

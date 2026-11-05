@@ -97,9 +97,8 @@ class QueueSource {
   final String? pid;
 
   /// True when the queue is a window over a scope larger than it holds,
-  /// drawn from again as it drains. The queue surface says so, so the
-  /// window is not mistaken for the whole scope, and it goes false when
-  /// the scope runs out.
+  /// drawn from again as it drains; it goes false when the scope runs
+  /// out.
   final bool rolling;
 
   /// Where the source's own listing stands at the queue's tail, so a

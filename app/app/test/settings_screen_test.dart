@@ -19,6 +19,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'row_nodes.dart';
+import 'wax_finders.dart';
 
 const _user = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -103,6 +104,15 @@ void main() {
       await tester.pumpWidget(_host(repo, const SettingsScreen()));
       await tester.pumpAndSettle();
 
+      // A section is its title and glyph; no sentence under the name.
+      expect(
+        find.text('Theme, density, and how large artwork is drawn'),
+        findsNothing,
+      );
+      expect(
+        find.text('Speeds, skips, casting, and what plays next'),
+        findsNothing,
+      );
       for (final section in SettingsSection.values) {
         final row = find.bySemanticsIdentifier(
           SemanticsIds.settingsSection(section.segment),
@@ -192,6 +202,46 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('No setting matches'), findsOneWidget);
+      // A show's or a book's own settings are on it, which holds for
+      // every account; the server's are in the admin console, which only
+      // an administrator can open, so only an administrator is offered
+      // the way there.
+      expect(emptyStateTitled('No setting matches "zzzz"'), findsOneWidget);
+      expect(
+        tester
+            .widget<EmptyState>(emptyStateTitled('No setting matches "zzzz"'))
+            .message,
+        'Shows and books keep their own settings',
+      );
+      await tester.tap(find.text('Open the admin console'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsIdentifier(SemanticsIds.adminConsole), findsOne);
+    });
+
+    testWidgets('a member who matches nothing is not sent to the console', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(id: 'us-2', username: 'sam'),
+        ),
+      );
+      await tester.pumpWidget(_host(repo, const SettingsScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.settingsSearch),
+        'zzzz',
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Shows and books keep their own settings'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('admin console'), findsNothing);
     });
   });
 
@@ -595,15 +645,61 @@ void main() {
       expect(container.read(themeModeProvider), ThemeMode.light);
     });
 
-    testWidgets('the row says the choice stays on this device', (tester) async {
+    testWidgets('the theme sits under the This device heading', (tester) async {
       _tallWindow(tester);
       await tester.pumpWidget(
         _section(_signedInRepo(), SettingsSection.appearance),
       );
       await tester.pumpAndSettle();
+      final thisDevice = find
+          .ancestor(
+            of: find.byWidgetPredicate(
+              (w) => w is SectionHeader && w.title == 'This device',
+            ),
+            matching: find.byType(Column),
+          )
+          .first;
+      final theme = find.bySemanticsIdentifier(SemanticsIds.themeSelect);
+      expect(find.descendant(of: thisDevice, matching: theme), findsOneWidget);
+      // The heading says the scope, so the row neither prints it nor
+      // holds it in a tip.
       expect(
-        find.text('Set on this device; your other devices keep their own'),
-        findsOneWidget,
+        find.descendant(
+          of: find.ancestor(of: theme, matching: find.byType(WaxSettingRow)),
+          matching: find.byType(WaxInfoTip),
+        ),
+        findsNothing,
+      );
+      expect(find.textContaining('your other devices keep'), findsNothing);
+    });
+
+    testWidgets('the language row says the choice follows the account', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      await tester.pumpWidget(
+        _section(_signedInRepo(), SettingsSection.appearance),
+      );
+      await tester.pumpAndSettle();
+      expect(infoTipHolding('Follows your account'), findsOneWidget);
+    });
+
+    testWidgets('theme and language are rows, not groups heading one row of '
+        'the same name', (tester) async {
+      _tallWindow(tester);
+      await tester.pumpWidget(
+        _section(_signedInRepo(), SettingsSection.appearance),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Theme'), findsOneWidget);
+      expect(find.text('Language'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is SectionHeader &&
+              (w.title == 'Theme' || w.title == 'Language'),
+        ),
+        findsNothing,
       );
     });
 
@@ -802,13 +898,7 @@ void main() {
       // then ignored, which is the only honest answer on a screen with
       // no way to bring a hidden caption back.
       expect(picker().onChanged, isNull);
-      expect(
-        find.text(
-          'Always shown: hiding them needs a pointer to bring '
-          'them back',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Always shown: hiding needs a pointer'), findsOneWidget);
 
       // A mouse is what makes the choice offerable at all.
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -863,7 +953,7 @@ void main() {
       );
       // Touch mode, which is where a tap leaves a hybrid machine.
       expect(picker().onChanged, isNotNull);
-      expect(find.text('The lines under a cover in a grid'), findsOneWidget);
+      expect(find.text('The lines under a cover in a grid'), findsNothing);
       // The cards still show their names, because a finger cannot hover.
       expect(
         container.read(waxThemeSpecProvider).captions,
@@ -1056,6 +1146,138 @@ void main() {
       // The switch says "scrobble radio" and the document says "opt
       // out", so turning the switch off has to store true.
       expect(repo.prefs.radioScrobbleOptOut, isTrue);
+    });
+  });
+
+  group('the library and accessibility sections', () {
+    UserAccount account(LibraryAccess access) => UserAccount(
+      id: _user.id,
+      username: _user.username,
+      roles: const ['user'],
+      createdAt: DateTime.utc(2026, 7, 15),
+      libraryAccess: access,
+    );
+
+    testWidgets('an account that sees everything says so in a label', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo()
+        ..usersById[_user.id] = account(const LibraryAccess(mode: 'all'));
+      await tester.pumpWidget(_section(repo, SettingsSection.library));
+      await tester.pumpAndSettle();
+      expect(find.text('What I can see'), findsOneWidget);
+      expect(find.text('All libraries'), findsOneWidget);
+      expect(find.textContaining('You can see'), findsNothing);
+    });
+
+    testWidgets('the Access group holds its place while the grant loads', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final gate = Completer<void>();
+      final repo = _signedInRepo()
+        ..usersById[_user.id] = account(const LibraryAccess(mode: 'all'))
+        ..getUserGate = gate;
+      await tester.pumpWidget(_section(repo, SettingsSection.library));
+      await tester.pumpAndSettle();
+      // Loading: the row is drawn, its answer is not yet.
+      expect(find.text('What I can see'), findsOneWidget);
+      expect(find.text('All libraries'), findsNothing);
+      expect(find.text('Could not read your access'), findsNothing);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('All libraries'), findsOneWidget);
+    });
+
+    // An administrator changing this very grant re-reads the session,
+    // which re-reads the account: the last answer stands meanwhile, and
+    // stands through a re-read that fails.
+    testWidgets('the Access row keeps its answer through a re-read', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo()
+        ..usersById[_user.id] = account(const LibraryAccess(mode: 'all'));
+      await tester.pumpWidget(_section(repo, SettingsSection.library));
+      await tester.pumpAndSettle();
+      expect(find.text('All libraries'), findsOneWidget);
+
+      final gate = Completer<void>();
+      repo
+        ..getUserGate = gate
+        ..sessionState = SessionState(authenticated: true, user: _user);
+      final auth = _container(
+        tester,
+        SettingsSectionScreen,
+      ).read(authControllerProvider.notifier);
+      await auth.refreshSession();
+      await tester.pump();
+      expect(find.text('All libraries'), findsOneWidget);
+      expect(find.text('Could not read your access'), findsNothing);
+
+      // The account read now fails: not-found.
+      repo.usersById.remove(_user.id);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('All libraries'), findsOneWidget);
+      expect(find.text('Could not read your access'), findsNothing);
+    });
+
+    testWidgets('identify-uploads says who it asks under the switch', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      await tester.pumpWidget(
+        _section(_signedInRepo(), SettingsSection.library),
+      );
+      await tester.pumpAndSettle();
+      // A third party contacted is a consequence the title hides, so it
+      // is printed rather than held behind a tip.
+      const sentence = 'Asks MusicBrainz; off files uploads unreviewed';
+      expect(find.text(sentence), findsOneWidget);
+      expect(infoTipHolding(sentence), findsNothing);
+    });
+
+    testWidgets('a restricted account is told how many libraries', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo()
+        ..usersById[_user.id] = account(
+          const LibraryAccess(mode: 'some', libraryPids: ['lb-1', 'lb-2']),
+        );
+      await tester.pumpWidget(_section(repo, SettingsSection.library));
+      await tester.pumpAndSettle();
+      expect(find.text('What I can see'), findsOneWidget);
+      // The answer sits where the all-access one does: the row's value.
+      expect(find.text('2 libraries'), findsOneWidget);
+      expect(find.textContaining('You can see'), findsNothing);
+    });
+
+    testWidgets('an access read that fails says so under the row', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      // No such account in the fake: the read fails with not-found.
+      await tester.pumpWidget(
+        _section(_signedInRepo(), SettingsSection.library),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('What I can see'), findsOneWidget);
+      expect(find.text('Could not read your access'), findsOneWidget);
+      expect(find.text('All libraries'), findsNothing);
+    });
+
+    testWidgets('accessibility is the motion row alone', (tester) async {
+      _tallWindow(tester);
+      await tester.pumpWidget(
+        _section(_signedInRepo(), SettingsSection.accessibility),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Reduce motion'), findsOneWidget);
+      expect(find.text('Screen readers'), findsNothing);
     });
   });
 

@@ -21,6 +21,17 @@ String explainError(AppLocalizations l10n, Object error) {
   return l10n.errorUnexpected;
 }
 
+/// [explainError] for the station directory's own card.
+///
+/// One `directory-unavailable` answers for the podcast directory too, so
+/// the table's sentence cannot name the way out; only the station search
+/// knows it asked the station directory, which adding a station by its
+/// stream URL does without.
+String explainStationDirectory(AppLocalizations l10n, Object error) =>
+    error is WaxDeckApiException && error.code == 'directory-unavailable'
+    ? l10n.errorStationDirectoryUnavailable
+    : explainError(l10n, error);
+
 /// The sentence for a code this client knows, or null for one it does not.
 String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   // Every code the spec's `Error` currently defines. A code added there

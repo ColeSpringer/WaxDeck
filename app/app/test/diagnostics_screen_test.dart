@@ -28,6 +28,18 @@ Future<void> _pump(WidgetTester tester, Widget host) async {
 }
 
 void main() {
+  testWidgets('an empty list says so in its title alone', (tester) async {
+    await _pump(tester, _host(FakeRepository()));
+
+    expect(find.text('No diagnostics recorded'), findsOneWidget);
+    expect(
+      tester
+          .widget<EmptyState>(emptyStateTitled('No diagnostics recorded'))
+          .message,
+      isNull,
+    );
+  });
+
   testWidgets('load more points down to the rows it brings in', (tester) async {
     final repo = FakeRepository()..fileDiagnosticsNextCursor = 'more';
     repo.fileDiagnostics.add(

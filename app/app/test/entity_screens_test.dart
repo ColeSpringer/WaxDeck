@@ -27,6 +27,7 @@ import 'entity_header_bar.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
+import 'wax_finders.dart';
 
 const _adminSession = SessionState(
   authenticated: true,
@@ -333,6 +334,9 @@ void main() {
       expect(_byId(SemanticsIds.albumIdentity), findsOneWidget);
       expect(find.text('036000291452'), findsOneWidget);
       expect(find.text('2xVinyl'), findsOneWidget);
+      // The heading names the block; no kicker repeats it.
+      expect(find.text('Release'), findsOneWidget);
+      expect(find.text('THIS EDITION'), findsNothing);
       // Absent fields draw nothing rather than a blank row.
       expect(find.text('Catalog number'), findsNothing);
     });
@@ -509,6 +513,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(_byId(SemanticsIds.itemMenuDetach));
       await tester.pumpAndSettle();
+      expect(
+        infoTipContaining('next scan'),
+        findsOneWidget,
+        reason: 'the write-back switch explains itself in a tip',
+      );
+      expect(find.textContaining('next scan'), findsNothing);
       // Nothing is written until the confirmation is answered: the
       // track's file loses its release tags.
       expect(repository.detachCalls, isEmpty);
@@ -587,7 +597,7 @@ void main() {
       await tester.tap(_byId(SemanticsIds.itemMenuKindAlbum));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('These 2 tracks become one audiobook'),
+        find.textContaining('2 tracks become one audiobook'),
         findsOneWidget,
       );
       await tester.tap(_byId(SemanticsIds.kindWriteBack));
@@ -688,8 +698,8 @@ void main() {
       // is another album's.
       expect(
         find.text(
-          '1 more track is cut from the same file as tracks you picked, and '
-          'tracks cut from one file are deleted together or not at all.',
+          '1 more track is cut from the same file as tracks you picked; '
+          'they are deleted together or not at all.',
         ),
         findsOneWidget,
       );

@@ -379,9 +379,6 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
           title: dimension == null
               ? l10n.musicEmptyTitle
               : l10n.musicListingBucketEmptyTitle(dimension.name),
-          message: dimension == null
-              ? l10n.musicEmptyMessage
-              : l10n.musicListingBucketEmptyMessage,
           glyph: WaxIcons.music,
         ),
       );

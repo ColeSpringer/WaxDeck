@@ -16,6 +16,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'wax_finders.dart';
 
 /// Keeps whatever it is handed, so a test can read the card back.
 class _FakeExporter implements ShareCardExporter {
@@ -348,6 +349,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(door);
     await tester.pumpAndSettle();
+
+    // The privacy note rides an info glyph; the shapes carry no blurb.
+    expect(infoTipContaining('never sent anywhere'), findsOneWidget);
+    expect(find.textContaining('never sent anywhere'), findsNothing);
+    expect(find.text('For a full-screen story'), findsNothing);
+    expect(find.text('For a post or a message'), findsNothing);
 
     // Both shapes are offered, drawn as they will export.
     for (final format in ShareCardFormat.values) {

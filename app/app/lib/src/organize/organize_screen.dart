@@ -202,7 +202,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     final confirmed = await showTypedConfirm(
       context,
       title: l10n.organizeConfirmTitle,
-      message: l10n.organizeConfirmMessage,
+      message: l10n.organizeConfirmBody,
       confirmWord: profile.isEmpty ? l10n.organizeConfirmOwnWord : profile,
       confirmLabel: l10n.organizeApply,
       fieldSemanticsId: SemanticsIds.confirmField,
@@ -238,7 +238,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     final confirmed = await showTypedConfirm(
       context,
       title: l10n.organizeUndoConfirmTitle,
-      message: l10n.organizeUndoConfirmMessage,
+      message: l10n.organizeUndoConfirmBody,
       confirmWord: l10n.organizeUndoWord,
       confirmLabel: l10n.organizeUndo,
       fieldSemanticsId: SemanticsIds.confirmField,
@@ -312,11 +312,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     final l10n = context.l10n;
     final profiles = listing.profiles;
     if (profiles.isEmpty) {
-      return EmptyState(
-        glyph: WaxIcons.sort,
-        title: l10n.organizeEmptyTitle,
-        message: l10n.organizeEmptyMessage,
-      );
+      return EmptyState(glyph: WaxIcons.sort, title: l10n.organizeEmptyTitle);
     }
     // The catalog lays out managed roots only, so with none a preview
     // could only be refused.
@@ -324,7 +320,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
       return EmptyState(
         glyph: WaxIcons.sort,
         title: l10n.organizeNoManagedTitle,
-        message: l10n.organizeNoManagedMessage,
+        message: l10n.organizeNoManagedEmptyMessage,
       );
     }
     // A profile deleted since it was chosen falls back to each library's.
@@ -338,10 +334,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(
-          title: l10n.organizeProfileTitle,
-          overline: l10n.organizeProfileOverline,
-        ),
+        SectionHeader(title: l10n.organizeProfileTitle),
         Semantics(
           container: true,
           label: l10n.organizeProfileLabel,
@@ -358,7 +351,6 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
               WaxRadioOption(
                 value: '',
                 label: l10n.organizeOwnProfiles,
-                help: l10n.organizeOwnProfilesHelp,
                 semanticsId: SemanticsIds.organizeProfileOwn,
               ),
               for (final p in profiles)
@@ -492,7 +484,6 @@ class _PlanTable extends StatelessWidget {
             EmptyState(
               glyph: WaxIcons.success,
               title: l10n.organizeNothingTitle,
-              message: l10n.organizeNothingMessage,
             )
           else if (plan.actions.isNotEmpty)
             WaxTable<OrganizeAction>(
@@ -743,10 +734,7 @@ class _HistorySection extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            SectionHeader(
-              title: l10n.organizeHistoryTitle,
-              overline: l10n.organizeHistoryOverline,
-            ),
+            SectionHeader(title: l10n.organizeHistoryTitle),
             ...body,
           ],
         ),

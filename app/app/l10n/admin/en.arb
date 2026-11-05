@@ -19,10 +19,6 @@
       }
     }
   },
-  "adminAuditEmptyMessage": "Administrative actions are recorded here as they happen.",
-  "@adminAuditEmptyMessage": {
-    "description": "Empty state of the audit log, saying what will fill it."
-  },
   "adminAuditEmptyTitle": "Nothing logged yet",
   "@adminAuditEmptyTitle": {
     "description": "Empty state of the audit log."
@@ -231,29 +227,17 @@
   "@adminEnrichmentBuiltin": {
     "description": "Caption under a source the catalog registers itself."
   },
-  "adminEnrichmentBuiltinMusicbrainz": "Built into the catalog. Switched off, its genres are left out; the identity lookups still run.",
-  "@adminEnrichmentBuiltinMusicbrainz": {
-    "description": "Caption under the MusicBrainz genres entry, which ranks MusicBrainz's genres among the sources."
-  },
-  "adminEnrichmentBuiltinNeedsContact": "Built into the catalog. Waits on a MusicBrainz contact.",
+  "adminEnrichmentBuiltinNeedsContact": "Waits on a MusicBrainz contact",
   "@adminEnrichmentBuiltinNeedsContact": {
-    "description": "Caption under a source the catalog registers itself once a MusicBrainz contact is set, shown while none is."
+    "description": "Caption under a built-in enrichment source that is switched on but cannot run until a MusicBrainz contact is set."
   },
   "adminEnrichmentCacheAnswers": "Answers kept",
   "@adminEnrichmentCacheAnswers": {
     "description": "Tile: how many answers the cache holds."
   },
-  "adminEnrichmentCacheBlurb": "What MusicBrainz and the Cover Art Archive answered, kept so a pass does not ask twice. A pruned answer costs one request the next time it is needed.",
-  "@adminEnrichmentCacheBlurb": {
-    "description": "Line under the response cache heading."
-  },
   "adminEnrichmentCacheBytesColumn": "Size",
   "@adminEnrichmentCacheBytesColumn": {
     "description": "Column header: how much room a kind takes."
-  },
-  "adminEnrichmentCacheEmpty": "Nothing is cached yet.",
-  "@adminEnrichmentCacheEmpty": {
-    "description": "Shown in place of the cache table when it is empty."
   },
   "adminEnrichmentCacheExempt": "Kept by every prune",
   "@adminEnrichmentCacheExempt": {
@@ -297,7 +281,7 @@
   "@adminEnrichmentCachePrune": {
     "description": "Button pruning the response cache, and the confirm dialog's action."
   },
-  "adminEnrichmentCachePruneBody": "Pruned answers are asked for again, one request at a time, the next time a pass needs them. The catalog's values stay as they are.",
+  "adminEnrichmentCachePruneBody": "Pruned answers are asked for again when needed. Catalog values stay.",
   "@adminEnrichmentCachePruneBody": {
     "description": "Body of the dialog confirming a cache prune."
   },
@@ -411,6 +395,10 @@
   "@adminEnrichmentDeferred": {
     "description": "Tile: lookups a source failed, asked again next pass."
   },
+  "adminEnrichmentIdentityStillAsks": "Identification still asks MusicBrainz",
+  "@adminEnrichmentIdentityStillAsks": {
+    "description": "Closes the MusicBrainz source's caption, after the built-in mark: switching this source off leaves out only its genres, and identity lookups still ask MusicBrainz. No full stop."
+  },
   "adminEnrichmentLastRunFinished": "Finished {when}",
   "@adminEnrichmentLastRunFinished": {
     "description": "When the last pass finished. {when} is a relative time.",
@@ -437,23 +425,19 @@
   "@adminEnrichmentLookedUpColumn": {
     "description": "Column header: how many a walk asked about."
   },
-  "adminEnrichmentMusicbrainzOffHelp": "Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the sources built into the catalog closed",
+  "adminEnrichmentMusicbrainzOffHelp": "Off until WAXDECK_ENRICHMENT_CONTACT is set",
   "@adminEnrichmentMusicbrainzOffHelp": {
     "description": "Help under the MusicBrainz row when no contact is set."
-  },
-  "adminEnrichmentMusicbrainzOnHelp": "Identifies artists, albums and books, and opens the sources built into the catalog",
-  "@adminEnrichmentMusicbrainzOnHelp": {
-    "description": "Help under the MusicBrainz row when its contact is set."
   },
   "adminEnrichmentMusicbrainzTitle": "MusicBrainz",
   "@adminEnrichmentMusicbrainzTitle": {
     "description": "Row naming the MusicBrainz identity service."
   },
-  "adminEnrichmentNothingToDo": "A pass has nothing to do: no source can run. Set a MusicBrainz contact or configure a provider, then restart.",
+  "adminEnrichmentNothingToDo": "Nothing can run: set a MusicBrainz contact or provider, then restart.",
   "@adminEnrichmentNothingToDo": {
     "description": "Banner when no enrichment phase can run on this server."
   },
-  "adminEnrichmentNothingToDoSwitchedOff": "A pass has nothing to do: the sources that could run are switched off. Switch one on below, or set a MusicBrainz contact and restart.",
+  "adminEnrichmentNothingToDoSwitchedOff": "Nothing can run: switch a source on below or set a MusicBrainz contact.",
   "@adminEnrichmentNothingToDoSwitchedOff": {
     "description": "Banner when no pass can run and some sources are switched off."
   },
@@ -463,7 +447,7 @@
   },
   "adminEnrichmentPhaseAlbumArtHelp": "Front covers for albums with none",
   "@adminEnrichmentPhaseAlbumArtHelp": {
-    "description": "Help under the album-covers phase."
+    "description": "Info tip beside the album-covers phase."
   },
   "adminEnrichmentPhaseAlbumFields": "Album details",
   "@adminEnrichmentPhaseAlbumFields": {
@@ -471,7 +455,7 @@
   },
   "adminEnrichmentPhaseAlbumFieldsHelp": "Label and year for albums",
   "@adminEnrichmentPhaseAlbumFieldsHelp": {
-    "description": "Help under the album details phase."
+    "description": "Info tip beside the album details phase."
   },
   "adminEnrichmentPhaseArtistArt": "Artist pictures",
   "@adminEnrichmentPhaseArtistArt": {
@@ -479,7 +463,7 @@
   },
   "adminEnrichmentPhaseArtistArtHelp": "Pictures for artists missing one",
   "@adminEnrichmentPhaseArtistArtHelp": {
-    "description": "Help under the artist-pictures phase."
+    "description": "Info tip beside the artist-pictures phase."
   },
   "adminEnrichmentPhaseBookFields": "Book details",
   "@adminEnrichmentPhaseBookFields": {
@@ -487,7 +471,7 @@
   },
   "adminEnrichmentPhaseBookFieldsHelp": "Publisher, narrator, description and more for books",
   "@adminEnrichmentPhaseBookFieldsHelp": {
-    "description": "Help under the book details phase."
+    "description": "Info tip beside the book details phase."
   },
   "adminEnrichmentPhaseGroupArt": "Release-group artwork",
   "@adminEnrichmentPhaseGroupArt": {
@@ -495,7 +479,7 @@
   },
   "adminEnrichmentPhaseGroupArtHelp": "Covers, backs, discs, booklets and backgrounds for release groups missing them",
   "@adminEnrichmentPhaseGroupArtHelp": {
-    "description": "Help under the release-group artwork phase."
+    "description": "Info tip beside the release-group artwork phase."
   },
   "adminEnrichmentPhaseIdentity": "Identity",
   "@adminEnrichmentPhaseIdentity": {
@@ -503,7 +487,7 @@
   },
   "adminEnrichmentPhaseIdentityHelp": "Match artists, release groups and books against MusicBrainz",
   "@adminEnrichmentPhaseIdentityHelp": {
-    "description": "Help under the identity phase."
+    "description": "Info tip beside the identity phase."
   },
   "adminEnrichmentPhaseLyrics": "Lyrics",
   "@adminEnrichmentPhaseLyrics": {
@@ -511,7 +495,7 @@
   },
   "adminEnrichmentPhaseLyricsHelp": "Lyrics for tracks without them",
   "@adminEnrichmentPhaseLyricsHelp": {
-    "description": "Help under the lyrics phase."
+    "description": "Info tip beside the lyrics phase."
   },
   "adminEnrichmentPhaseReleases": "Release match",
   "@adminEnrichmentPhaseReleases": {
@@ -519,7 +503,7 @@
   },
   "adminEnrichmentPhaseReleasesHelp": "Pin albums to the pressing their barcode or catalog number names",
   "@adminEnrichmentPhaseReleasesHelp": {
-    "description": "Help under the release match phase."
+    "description": "Info tip beside the release match phase."
   },
   "adminEnrichmentPhaseTrackFields": "Track details",
   "@adminEnrichmentPhaseTrackFields": {
@@ -527,7 +511,7 @@
   },
   "adminEnrichmentPhaseTrackFieldsHelp": "Tempo, ISRC and composer where they are empty",
   "@adminEnrichmentPhaseTrackFieldsHelp": {
-    "description": "Help under the track details phase."
+    "description": "Info tip beside the track details phase."
   },
   "adminEnrichmentRetried": "Asked again",
   "@adminEnrichmentRetried": {
@@ -541,7 +525,7 @@
   "@adminEnrichmentRunAll": {
     "description": "Pass mode that re-asks every source about every entity."
   },
-  "adminEnrichmentRunAllHelp": "Every source, about every entity: slow on a large library",
+  "adminEnrichmentRunAllHelp": "Everything again; slow on a large library",
   "@adminEnrichmentRunAllHelp": {
     "description": "Help under the ask-again-about-everything mode."
   },
@@ -557,17 +541,9 @@
   "@adminEnrichmentRunNormal": {
     "description": "Pass mode that asks only about what has not been looked up."
   },
-  "adminEnrichmentRunNormalHelp": "Asks about what has not been looked up, or whose miss has expired",
-  "@adminEnrichmentRunNormalHelp": {
-    "description": "Help under the fill-what-is-missing mode."
-  },
   "adminEnrichmentRunPhases": "Ask again in chosen phases",
   "@adminEnrichmentRunPhases": {
     "description": "Pass mode that re-asks only the phases switched on below it."
-  },
-  "adminEnrichmentRunPhasesHelp": "Only the phases switched on below, asking again about everything they reach",
-  "@adminEnrichmentRunPhasesHelp": {
-    "description": "Help under the chosen-phases mode: the pass walks only those phases and re-asks every target in them."
   },
   "adminEnrichmentRunStarted": "Enrichment pass started",
   "@adminEnrichmentRunStarted": {
@@ -607,13 +583,13 @@
       }
     }
   },
-  "adminEnrichmentSourcesBlurb": "Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already settled until a run forces its phases or, for a miss, the retry window passes.",
-  "@adminEnrichmentSourcesBlurb": {
-    "description": "Line under the sources heading."
-  },
   "adminEnrichmentSourcesGroup": "Sources",
   "@adminEnrichmentSourcesGroup": {
     "description": "Heading over the table of enrichment sources."
+  },
+  "adminEnrichmentSourcesHelp": "Sources are asked in this order.",
+  "@adminEnrichmentSourcesHelp": {
+    "description": "Info tip on the enrichment Sources heading: the list is the order the sources are asked in."
   },
   "adminEnrichmentSourcesRevert": "Revert",
   "@adminEnrichmentSourcesRevert": {
@@ -639,7 +615,7 @@
   "@adminEnrichmentStale": {
     "description": "Shown over the enrichment screen when a refresh of its status failed and the last one stays on screen."
   },
-  "adminEnrichmentStalled": "Stopped early: {phases}. Every source serving them failed three times in a row and sat out the pass; the lookups they owe are asked once more on the next pass.",
+  "adminEnrichmentStalled": "Stopped early: {phases}. Their sources failed three times; asked again next pass.",
   "@adminEnrichmentStalled": {
     "description": "Under the last run, when phases ended early because every source serving them kept failing.",
     "placeholders": {
@@ -727,7 +703,7 @@
   "@adminFoldsColumnSpelling": {
     "description": "Column heading in the folded names list: the folded name as the catalog matches it."
   },
-  "adminFoldsEmptyMessage": "A merge folds the names it does away with into the entry it keeps, so files still spelled the old way file under it.",
+  "adminFoldsEmptyMessage": "Merges fold old names into the kept entry.",
   "@adminFoldsEmptyMessage": {
     "description": "Empty state of the folded names section, saying where folded names come from."
   },
@@ -845,10 +821,6 @@
       }
     }
   },
-  "adminFoldsOverline": "Old spellings that file under another name",
-  "@adminFoldsOverline": {
-    "description": "Line above the Folded names heading, saying what a folded name is."
-  },
   "adminFoldsQuoted": "\"{spelling}\"",
   "@adminFoldsQuoted": {
     "description": "A folded name quoted, as the unfold button, its dialog and its message name it.",
@@ -891,9 +863,9 @@
   "@adminFoldsUnfoldAction": {
     "description": "Confirm button of the unfold dialog."
   },
-  "adminFoldsUnfoldBody": "Files spelled {fold} that the library reads as new or changed (added, moved, replaced or retagged) are filed under their own name again. The ones \"{name}\" holds already stay with it, even through a rescan with Re-read unchanged files, until they change or move.",
+  "adminFoldsUnfoldBody": "New or changed files spelled {fold} are filed under their own name again; ones \"{name}\" holds stay until they change.",
   "@adminFoldsUnfoldBody": {
-    "description": "Body of the unfold dialog: which files an unfold moves (those the library reads as new or changed), and that the ones already filed stay, a rescan with the re-read option (adminLibraryRescanForce) included. {fold} is the name quoted (adminFoldsQuoted).",
+    "description": "Body of the unfold dialog: which files an unfold moves (those the library reads as new or changed), and that the ones already filed stay. {fold} is the name quoted (adminFoldsQuoted).",
     "placeholders": {
       "fold": {
         "type": "String",
@@ -919,9 +891,9 @@
       }
     }
   },
-  "adminForbiddenMessage": "The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.",
+  "adminForbiddenMessage": "Ask an administrator if you need something here.",
   "@adminForbiddenMessage": {
-    "description": "Body of the refusal an account without the role gets at a console location it followed a link to."
+    "description": "Line under the admin console's refusal title: the next step for an account without the administrator role."
   },
   "adminForbiddenTitle": "This area is for administrators",
   "@adminForbiddenTitle": {
@@ -941,9 +913,9 @@
       }
     }
   },
-  "adminGenreAliasesBlurb": "Case, accents, and punctuation already fold, so list only the spellings folding cannot reach: Rap for Hip Hop, R&B for Rhythm and Blues.",
+  "adminGenreAliasesBlurb": "Case, accents, punctuation already fold; list other spellings only.",
   "@adminGenreAliasesBlurb": {
-    "description": "Line under the aliases field. The two examples are genre names in English and stay as they are; swap them for spellings that make the same point in this language if better ones exist."
+    "description": "Line under the aliases field: what folds already, so only other spellings need listing."
   },
   "adminGenreAliasesHint": "Comma separated",
   "@adminGenreAliasesHint": {
@@ -1005,21 +977,17 @@
   "@adminGenreNormalize": {
     "description": "Button that folds every scanned genre in the catalog onto the vocabulary."
   },
-  "adminGenreNormalizeBlurb": "A sweeper folds newly scanned genres onto the vocabulary on its own. Normalizing is the catch-up pass, for a catalog older than the change log still holds or a tree you just edited.",
-  "@adminGenreNormalizeBlurb": {
-    "description": "Line under the normalization buttons, saying that normalizing is a catch-up rather than the usual path."
+  "adminGenreNormalizeHelp": "Folds genres onto the vocabulary; new scans already do this, so use it to catch up.",
+  "@adminGenreNormalizeHelp": {
+    "description": "Tooltip on the normalize button, saying that normalizing is a catch-up rather than the usual path."
   },
   "adminGenreNormalizing": "Normalizing the catalog",
   "@adminGenreNormalizing": {
     "description": "Message after a genre normalization pass started for real."
   },
-  "adminGenreParentHelp": "The top-level genre this one belongs to",
-  "@adminGenreParentHelp": {
-    "description": "Line under the parent row."
-  },
-  "adminGenreParentHelpHasChildren": "Genres group under this one, and the tree is two levels deep",
-  "@adminGenreParentHelpHasChildren": {
-    "description": "Line under the parent row when the genre cannot take a parent because things already group under it."
+  "adminGenreParentHasChildrenHelp": "Genres sit under it; the tree is two levels deep",
+  "@adminGenreParentHasChildrenHelp": {
+    "description": "Line under the parent row, whose picker is disabled, when other genres group under this one: the tree is only two levels deep. No full stop."
   },
   "adminGenreParentLabel": "Parent genre",
   "@adminGenreParentLabel": {
@@ -1028,10 +996,6 @@
   "adminGenreParentTitle": "Groups under",
   "@adminGenreParentTitle": {
     "description": "Row choosing which top-level genre this one belongs to."
-  },
-  "adminGenrePickMessage": "Its name, its parent, and its aliases are edited here.",
-  "@adminGenrePickMessage": {
-    "description": "Empty state of the detail pane, saying what it edits."
   },
   "adminGenrePickTitle": "Pick a genre",
   "@adminGenrePickTitle": {
@@ -1073,13 +1037,9 @@
   "@adminGenreSaved": {
     "description": "Message after the edited vocabulary was written."
   },
-  "adminGenreSourceDefault": "Running on the vocabulary WaxDeck ships. Editing it stores a tree of your own.",
+  "adminGenreSourceDefault": "Shipped vocabulary",
   "@adminGenreSourceDefault": {
     "description": "Line at the top of the genre screen while the server is on the shipped vocabulary."
-  },
-  "adminGenreSourceStored": "Running on a stored vocabulary of your own.",
-  "@adminGenreSourceStored": {
-    "description": "Line at the top of the genre screen once a vocabulary of the server's own has been stored."
   },
   "adminGenreTreeLoadError": "Could not load the genre tree",
   "@adminGenreTreeLoadError": {
@@ -1108,10 +1068,6 @@
   "adminGroupServer": "Server",
   "@adminGroupServer": {
     "description": "Console group holding the instance's own settings, records, and maintenance."
-  },
-  "adminInviteAccessAllHelp": "Off picks the libraries this invite can see",
-  "@adminInviteAccessAllHelp": {
-    "description": "Line under the all-libraries switch in the new-invite dialog."
   },
   "adminInviteAdminHelp": "Server-wide authority: settings, users, and libraries",
   "@adminInviteAdminHelp": {
@@ -1181,10 +1137,6 @@
   "@adminInviteRevoked": {
     "description": "Leads the line under a revoked invite. Lower case and agreeing with the word for an invite: it sits in a comma-separated run of facts about one."
   },
-  "adminInviteUploadHelp": "Whether this account can add files to the library",
-  "@adminInviteUploadHelp": {
-    "description": "Line under the upload switch in the new-invite dialog."
-  },
   "adminInviteUses": "uses {used}/{total}",
   "@adminInviteUses": {
     "description": "How many times an invite has been used, out of how many it allows. Sits in a comma-separated run of facts about one invite, so it is lower case.",
@@ -1243,10 +1195,6 @@
   "@adminLibrariesColumnReadOnly": {
     "description": "Column heading for whether a library refuses changes."
   },
-  "adminLibrariesEmptyMessage": "Add a root below and WaxDeck scans what is in it.",
-  "@adminLibrariesEmptyMessage": {
-    "description": "Empty state of the library list, pointing at the form below it. A root is the top directory of a library."
-  },
   "adminLibrariesEmptyTitle": "No libraries yet",
   "@adminLibrariesEmptyTitle": {
     "description": "Empty state of the library list."
@@ -1258,10 +1206,6 @@
   "adminLibrariesTitle": "Libraries",
   "@adminLibrariesTitle": {
     "description": "Title of the screen listing the roots WaxDeck scans."
-  },
-  "adminLibraryAbsentHelp": "Register the path now; it is scanned once the folder is there.",
-  "@adminLibraryAbsentHelp": {
-    "description": "Line under the add form's switch for a folder that is not there yet, such as a drive mounted later."
   },
   "adminLibraryAbsentTitle": "Folder mounted later",
   "@adminLibraryAbsentTitle": {
@@ -1323,11 +1267,11 @@
       }
     }
   },
-  "adminLibraryFolderFallbackRescan": "Applies to new files now. Re-read unchanged files in Rescan to apply it to files already scanned.",
+  "adminLibraryFolderFallbackRescan": "Applies to new files; for the rest, Rescan with Re-read unchanged files.",
   "@adminLibraryFolderFallbackRescan": {
-    "description": "Message after switching on a library's folder naming: files scanned from now on take it, and a rescan that re-reads unchanged files applies it to the rest."
+    "description": "Message after switching on a library's folder naming: new files take it now, and the files already scanned take it on a rescan with the Re-read unchanged files switch on, which the message names."
   },
-  "adminLibraryHoldsHelp": "Books makes every audio file in the folder an audiobook. Music and Mixed go by each file's tags.",
+  "adminLibraryHoldsHelp": "Books reads every audio file as an audiobook",
   "@adminLibraryHoldsHelp": {
     "description": "Help under the Holds choice when adding a library: what each content class does to the files."
   },
@@ -1335,9 +1279,9 @@
   "@adminLibraryHoldsTitle": {
     "description": "Row in the add-library form choosing what the root holds."
   },
-  "adminLibraryManagedHelp": "Let uploads and organizing place files in this root",
+  "adminLibraryManagedHelp": "Uploads and Organize write and move files here; set once",
   "@adminLibraryManagedHelp": {
-    "description": "Line under the catalog-managed switch."
+    "description": "Help line under the add-library form's Catalog-managed switch: what it lets WaxDeck do to the folder, and that it is chosen only when the library is added. No full stop."
   },
   "adminLibraryManagedTitle": "Catalog-managed",
   "@adminLibraryManagedTitle": {
@@ -1411,7 +1355,7 @@
   "@adminLibraryMediaPodcasts": {
     "description": "Says a library holds podcasts."
   },
-  "adminLibraryMediaRereadBody": "Every file in {name} is read again to see what it holds, which can take a while. In Music, a book its parts' tags do not make is read as tracks; in Mixed, a book whose parts already make one stays. Items whose kind was set by hand keep it.",
+  "adminLibraryMediaRereadBody": "Every file in {name} is read again, which can take a while. Books the tags cannot support become tracks in Music. Hand-set kinds are kept.",
   "@adminLibraryMediaRereadBody": {
     "description": "Body of the dialog confirming a library becomes Music or Mixed. {name} is the library's name.",
     "placeholders": {
@@ -1438,7 +1382,7 @@
       }
     }
   },
-  "adminLibraryMediaToBooksBody": "Every audio file in {name} becomes a book on the scan this starts: parts sharing an album and author are one book, and numbered parts with no album join the book their folder holds. Items whose kind was set by hand keep it.",
+  "adminLibraryMediaToBooksBody": "Every audio file in {name} becomes a book: parts sharing an album and author join one book. Hand-set kinds are kept.",
   "@adminLibraryMediaToBooksBody": {
     "description": "Body of the dialog confirming a library becomes a Books library. {name} is the library's name.",
     "placeholders": {
@@ -1467,7 +1411,7 @@
   "@adminLibraryPathLabel": {
     "description": "Field for a new library's directory."
   },
-  "adminLibraryPathRule": "The path must be absolute, and must not overlap an existing root, the upload inbox, or the podcast download directory.",
+  "adminLibraryPathRule": "Absolute path, not overlapping another root or upload inbox",
   "@adminLibraryPathRule": {
     "description": "Line under the create button, saying what the server will refuse."
   },
@@ -1503,7 +1447,7 @@
   "@adminLibraryRemoveAction": {
     "description": "Confirm button of the remove-library dialog."
   },
-  "adminLibraryRemoveBody": "Its files stay on disk. The catalog forgets the library; items with no other copy are archived and come back if the folder is added again. Type the library's name to confirm.",
+  "adminLibraryRemoveBody": "Files stay on disk. Items with no other copy are archived until the folder returns. Type the library's name to confirm.",
   "@adminLibraryRemoveBody": {
     "description": "Body of the remove-library dialog, which asks for the library's name typed back."
   },
@@ -1535,7 +1479,7 @@
   "@adminLibraryRescan": {
     "description": "Accessible name of the rescan button. It sits on a row but scans every root, which is what the contract offers, so the name is plural. Also titles the confirm dialog the button opens."
   },
-  "adminLibraryRescanBody": "Scans every library root, not just this one. Files that haven't changed are skipped.",
+  "adminLibraryRescanBody": "Scans every library root, not just this one.",
   "@adminLibraryRescanBody": {
     "description": "Body of the rescan confirm dialog, honest that the button on one row scans everything."
   },
@@ -1543,7 +1487,7 @@
   "@adminLibraryRescanForce": {
     "description": "Label of the force switch in the rescan confirm dialog."
   },
-  "adminLibraryRescanForceHelp": "The repair pass: every file is read again even where nothing changed, which takes much longer. Edits you made are kept.",
+  "adminLibraryRescanForceHelp": "Re-reads every file, even unchanged; much slower. Edits kept.",
   "@adminLibraryRescanForceHelp": {
     "description": "Line under the force switch. Names the cost and that curated fields survive."
   },
@@ -1566,10 +1510,6 @@
   "adminLibraryUnwritable": "Not writable by the server",
   "@adminLibraryUnwritable": {
     "description": "Caption on a managed library whose folder the server cannot write to, so uploads, organize moves and deletes into it fail."
-  },
-  "adminMigrateAccountHelp": "The stars, ratings, history, and progress land on this account.",
-  "@adminMigrateAccountHelp": {
-    "description": "Line under the account picker in the import form, saying what is written where."
   },
   "adminMigrateAccountLabel": "Import onto",
   "@adminMigrateAccountLabel": {
@@ -1605,10 +1545,6 @@
       }
     }
   },
-  "adminMigrateHistoryHelp": "What was played there, and when",
-  "@adminMigrateHistoryHelp": {
-    "description": "Line under the listen history switch in the import form."
-  },
   "adminMigrateHistoryTitle": "Listen history",
   "@adminMigrateHistoryTitle": {
     "description": "Switch including what was played in an import."
@@ -1637,17 +1573,9 @@
   "@adminMigratePasswordLabel": {
     "description": "Field for the password on the server being imported from."
   },
-  "adminMigrateProgressHelp": "How far into each episode and book the listener was",
-  "@adminMigrateProgressHelp": {
-    "description": "Line under the playback progress switch in the import form."
-  },
   "adminMigrateProgressTitle": "Playback progress",
   "@adminMigrateProgressTitle": {
     "description": "Switch including how far into each episode and book the listener had got."
-  },
-  "adminMigrateRatingsHelp": "The star ratings given there",
-  "@adminMigrateRatingsHelp": {
-    "description": "Line under the ratings switch in the import form."
   },
   "adminMigrateRatingsTitle": "Ratings",
   "@adminMigrateRatingsTitle": {
@@ -1668,10 +1596,6 @@
   "adminMigrateSpotifyExport": "Spotify data export",
   "@adminMigrateSpotifyExport": {
     "description": "One of the sources WaxDeck can import from: the zip Spotify hands somebody who asks for their data. Spotify stays as it is; the words beside it do not."
-  },
-  "adminMigrateStarsHelp": "Which tracks and albums the other server had starred",
-  "@adminMigrateStarsHelp": {
-    "description": "Line under the stars switch in the import form."
   },
   "adminMigrateStarsTitle": "Stars",
   "@adminMigrateStarsTitle": {
@@ -1777,17 +1701,13 @@
   "@adminScheduleAnalyze": {
     "description": "Name of the scheduled job that measures loudness, fingerprints, and waveforms."
   },
-  "adminScheduleAnalyzeBlurb": "Measures loudness, fingerprints, and waveforms. Decodes every audio file, so a large library takes hours. Resumable: files already analyzed are skipped.",
+  "adminScheduleAnalyzeBlurb": "Decodes every audio file: hours on a large library",
   "@adminScheduleAnalyzeBlurb": {
-    "description": "What the analyze job does, and the warning that it is the one pass that decodes audio."
+    "description": "The cost warning on the analyze job: it is the one pass that decodes audio."
   },
   "adminScheduleBackup": "Backup",
   "@adminScheduleBackup": {
     "description": "Name of the scheduled job that writes a backup archive."
-  },
-  "adminScheduleBackupBlurb": "Writes an archive of the database and its sidecars.",
-  "@adminScheduleBackupBlurb": {
-    "description": "What the scheduled backup does. Sidecars are the small files stored beside the database."
   },
   "adminScheduleCronHint": "minute hour day month weekday",
   "@adminScheduleCronHint": {
@@ -1811,9 +1731,9 @@
   "@adminScheduleEnrich": {
     "description": "Name of the scheduled job that fills missing metadata, artwork and lyrics from external providers."
   },
-  "adminScheduleEnrichBlurb": "Fills missing metadata, artwork, and lyrics from the configured providers. Capped at 2000 items a night, so a large library fills in over several nights; a run started by hand is uncapped. The server's configuration sets how long something no provider could answer waits before it is asked about again, 30 days by default.",
+  "adminScheduleEnrichBlurb": "Capped at 2000 items a night; a manual run is uncapped",
   "@adminScheduleEnrichBlurb": {
-    "description": "What the scheduled enrichment does, its nightly cap, and when something no provider could answer is asked about again."
+    "description": "The nightly cap on the scheduled enrichment."
   },
   "adminScheduleLastRun": "Last run {stamp}",
   "@adminScheduleLastRun": {
@@ -1853,9 +1773,9 @@
   "@adminSchedulePrune": {
     "description": "Name of the scheduled job that clears expired staging, spent tokens, and trashed files."
   },
-  "adminSchedulePruneBlurb": "Clears expired staging, spent tokens, and trashed files past their retention.",
+  "adminSchedulePruneBlurb": "Permanently clears expired staging, tokens and old trash",
   "@adminSchedulePruneBlurb": {
-    "description": "What the prune job does."
+    "description": "The consequence line on the prune job: what it clears for good."
   },
   "adminScheduleSaved": "{name} schedule saved",
   "@adminScheduleSaved": {
@@ -1871,9 +1791,9 @@
   "@adminScheduleScan": {
     "description": "Name of the scheduled job that looks for new and changed files."
   },
-  "adminScheduleScanBlurb": "Finds new and changed files, reads their tags, and indexes them. Cheap: it does not decode audio.",
+  "adminScheduleScanBlurb": "Cheap: does not decode audio",
   "@adminScheduleScanBlurb": {
-    "description": "What the library scan does, and that it costs little."
+    "description": "The cost note on the library scan job: it costs little."
   },
   "adminScheduleStatusFailed": "failed",
   "@adminScheduleStatusFailed": {
@@ -1882,10 +1802,6 @@
   "adminScheduleStatusOk": "ok",
   "@adminScheduleStatusOk": {
     "description": "Outcome of a scheduled run that succeeded. Lower case and inside brackets, agreeing with the word for a run."
-  },
-  "adminSchedulesEmptyMessage": "This server runs nothing on a timetable.",
-  "@adminSchedulesEmptyMessage": {
-    "description": "Empty state of the maintenance timetable, saying that the server has no scheduled work at all."
   },
   "adminSchedulesEmptyTitle": "No schedules",
   "@adminSchedulesEmptyTitle": {
@@ -1903,115 +1819,55 @@
   "@adminSectionAudit": {
     "description": "Name of the screen recording who did what on this server."
   },
-  "adminSectionAuditBlurb": "Who did what, and to what",
-  "@adminSectionAuditBlurb": {
-    "description": "Line under the audit log in the console's section list."
-  },
-  "adminSectionBackupsBlurb": "Archives, imports, and staged restores",
-  "@adminSectionBackupsBlurb": {
-    "description": "Line under Backups in the console's section list."
-  },
   "adminSectionDashboard": "Dashboard",
   "@adminSectionDashboard": {
     "description": "Name of the console's front page in the section list."
-  },
-  "adminSectionDashboardBlurb": "What needs attention, and what is running",
-  "@adminSectionDashboardBlurb": {
-    "description": "Line under the dashboard in the console's section list."
   },
   "adminSectionDiagnostics": "Diagnostics",
   "@adminSectionDiagnostics": {
     "description": "Name of the screen listing files the catalog could not read."
   },
-  "adminSectionDiagnosticsBlurb": "Files the catalog could not read",
-  "@adminSectionDiagnosticsBlurb": {
-    "description": "Line under Diagnostics in the console's section list."
-  },
-  "adminSectionEnrichmentBlurb": "Where artwork, lyrics and details come from",
-  "@adminSectionEnrichmentBlurb": {
-    "description": "Line under Enrichment in the console's section list."
-  },
-  "adminSectionGenresBlurb": "The canonical vocabulary every genre folds onto",
-  "@adminSectionGenresBlurb": {
-    "description": "Line under the genre tree in the console's section list."
-  },
   "adminSectionHealth": "Health",
   "@adminSectionHealth": {
     "description": "Name of the screen listing what is missing, mistagged, or duplicated in the library."
-  },
-  "adminSectionHealthBlurb": "What is missing, mistagged, or duplicated",
-  "@adminSectionHealthBlurb": {
-    "description": "Line under Health in the console's section list."
-  },
-  "adminSectionLibrariesBlurb": "The roots WaxDeck scans, and what each one holds",
-  "@adminSectionLibrariesBlurb": {
-    "description": "Line under Libraries in the console's section list."
-  },
-  "adminSectionMigrateBlurb": "Bring a library, its stars, and its history across",
-  "@adminSectionMigrateBlurb": {
-    "description": "Line under the import screen in the console's section list."
   },
   "adminSectionNotifications": "Notifications",
   "@adminSectionNotifications": {
     "description": "Name of the screen saying where this server reports operations events."
   },
-  "adminSectionNotificationsBlurb": "Where this server reports operations events",
-  "@adminSectionNotificationsBlurb": {
-    "description": "Line under Notifications in the console's section list."
-  },
   "adminSectionOrganize": "Organize",
   "@adminSectionOrganize": {
     "description": "Name of the screen that moves library files into a naming scheme."
-  },
-  "adminSectionOrganizeBlurb": "Move files into a naming scheme",
-  "@adminSectionOrganizeBlurb": {
-    "description": "Line under Organize in the console's section list."
   },
   "adminSectionReview": "Review queue",
   "@adminSectionReview": {
     "description": "Name of the screen holding albums waiting for an identification decision."
   },
-  "adminSectionSchedulesBlurb": "When scans, backups, and pruning run",
-  "@adminSectionSchedulesBlurb": {
-    "description": "Line under Schedules in the console's section list."
-  },
-  "adminSectionSettingsBlurb": "Signups, read-only mode, transcoding, retention",
-  "@adminSectionSettingsBlurb": {
-    "description": "Line under server settings in the console's section list."
-  },
   "adminSectionShares": "Share links",
   "@adminSectionShares": {
     "description": "Name of the screen listing every public link on this server. The listener's own links are a different screen in settings."
-  },
-  "adminSectionSharesBlurb": "Every public link on this server, and who minted it",
-  "@adminSectionSharesBlurb": {
-    "description": "Line under share links in the console's section list."
-  },
-  "adminSectionTrashBlurb": "Deleted files, until they are purged",
-  "@adminSectionTrashBlurb": {
-    "description": "Line under Trash in the console's section list."
-  },
-  "adminSectionUsersBlurb": "Accounts, invites, and what each one may do",
-  "@adminSectionUsersBlurb": {
-    "description": "Line under Users in the console's section list."
   },
   "adminServerAccessGroup": "Access",
   "@adminServerAccessGroup": {
     "description": "Heading over the settings deciding who may reach this server and what they may change."
   },
-  "adminServerActivityCaveat": "Counts what the engine is transcoding or remuxing, including a client that forced the source's own format, and a listener playing a queue gaplessly holds one slot however many renderings they have live.",
-  "@adminServerActivityCaveat": {
-    "description": "The caveat under the running-session count, saying what the number both over- and under-counts. Remuxing is repackaging audio without re-encoding it."
-  },
-  "adminServerActivityCount": "{count, plural, =1{1 engine-backed session right now.} other{{count} engine-backed sessions right now.}}",
+  "adminServerActivityCount": "{count, plural, =1{1 engine-backed session right now.} other{{count} engine-backed sessions right now.}}{timelines, plural, =0{} =1{ One of them is a gapless queue.} other{ {timelines} of them are gapless queues.}}",
   "@adminServerActivityCount": {
-    "description": "How many sessions the audio engine is serving at this moment.",
+    "description": "How many sessions the audio engine is serving at this moment, then how many of them are listeners playing a whole queue as one continuous stream. {count} is the sessions, {timelines} the gapless queues among them; with none the second sentence is left out, so its arms carry their own leading space.",
     "placeholders": {
       "count": {
         "type": "int",
         "example": "3"
+      },
+      "timelines": {
+        "type": "int",
+        "example": "1"
       }
     }
+  },
+  "adminServerActivityHelp": "Counts engine sessions, including forced source formats; a gapless queue holds one slot however many renderings are live.",
+  "@adminServerActivityHelp": {
+    "description": "Tooltip beside the running-session count: what the number includes and how a gapless queue is counted."
   },
   "adminServerActivityReading": "Reading what is running...",
   "@adminServerActivityReading": {
@@ -2021,29 +1877,6 @@
   "@adminServerActivityRefresh": {
     "description": "Accessible name of the button that re-reads the running-stream count."
   },
-  "adminServerActivitySpoken": "{headline} {caveat}",
-  "@adminServerActivitySpoken": {
-    "description": "The running-stream count and its caveat read as one for a screen reader. Both halves are already-worded sentences.",
-    "placeholders": {
-      "headline": {
-        "type": "String",
-        "example": "3 engine-backed streams right now."
-      },
-      "caveat": {
-        "type": "String",
-        "example": "Counts streams the engine is transcoding..."
-      }
-    }
-  },
-  "adminServerActivityTimelines": "{count, plural, =0{None of them is a gapless queue.} =1{One of them is a gapless queue.} other{{count} of them are gapless queues.}}",
-  "@adminServerActivityTimelines": {
-    "description": "How many of the running sessions are listeners playing a whole queue as one continuous stream.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "adminServerActivityUnknown": "The server did not say what is running.",
   "@adminServerActivityUnknown": {
     "description": "Drawn in place of the running-stream count when that read failed."
@@ -2052,9 +1885,9 @@
   "@adminServerAnalysisGroup": {
     "description": "Heading over the settings deciding what the server analyzes in the background."
   },
-  "adminServerDefaultKbpsHint": "0 means no ceiling",
-  "@adminServerDefaultKbpsHint": {
-    "description": "Hint in the default bitrate field."
+  "adminServerDefaultKbpsHelp": "0 means no ceiling",
+  "@adminServerDefaultKbpsHelp": {
+    "description": "Help line under the default bitrate field."
   },
   "adminServerDefaultKbpsLabel": "Default bitrate ceiling (kbps)",
   "@adminServerDefaultKbpsLabel": {
@@ -2064,7 +1897,7 @@
   "@adminServerLoadError": {
     "description": "Title of the error state when the server settings could not be read."
   },
-  "adminServerRadioArtHelp": "When a station announces a track this library does not hold, ask Deezer, MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. On by default; with it off the player draws the station mark.",
+  "adminServerRadioArtHelp": "Asks Deezer, MusicBrainz and the Cover Art Archive for covers of unknown tracks, sending artist and title",
   "@adminServerRadioArtHelp": {
     "description": "Line under the radio cover-art switch. Says plainly what leaves the server, because the setting is on by default. Deezer, MusicBrainz and the Cover Art Archive are service names and stay as they are."
   },
@@ -2076,7 +1909,7 @@
   "@adminServerRadioGroup": {
     "description": "Heading over the settings for internet radio stations."
   },
-  "adminServerReadOnlyHelp": "Refuse every change to library content, server-wide. Playback, stars, and progress keep working",
+  "adminServerReadOnlyHelp": "Refuses every library change; playback keeps working",
   "@adminServerReadOnlyHelp": {
     "description": "Line under the read-only switch, saying what still works while it is on."
   },
@@ -2100,7 +1933,7 @@
   "@adminServerSaveTranscoding": {
     "description": "Button that writes the three transcoding fields."
   },
-  "adminServerSignupHelp": "Anyone may request an account; requests wait for approval",
+  "adminServerSignupHelp": "Requests wait for approval",
   "@adminServerSignupHelp": {
     "description": "Line under the open-signup switch, saying that a request is not yet an account."
   },
@@ -2108,17 +1941,13 @@
   "@adminServerSignupTitle": {
     "description": "Switch letting anybody request an account on this server."
   },
-  "adminServerSonicHelp": "Analyze the library in the background for instant mixes, similar tracks, and sonic paths",
-  "@adminServerSonicHelp": {
-    "description": "Line under the sonic-analysis switch, naming the three features that need it."
-  },
   "adminServerSonicTitle": "Sonic analysis",
   "@adminServerSonicTitle": {
     "description": "Switch letting the server analyze how the library sounds, which is what instant mixes and similar tracks are built from."
   },
-  "adminServerTaskDaysHint": "0 keeps every finished task",
-  "@adminServerTaskDaysHint": {
-    "description": "Hint in the task retention field."
+  "adminServerTaskDaysHelp": "0 keeps every finished task",
+  "@adminServerTaskDaysHelp": {
+    "description": "Help line under the task retention field."
   },
   "adminServerTaskDaysInvalid": "Clear finished tasks after: enter a whole number of days (0 keeps every finished task)",
   "@adminServerTaskDaysInvalid": {
@@ -2140,10 +1969,6 @@
   "@adminServerTranscodesPerUserLabel": {
     "description": "Field for how many transcodes one account may run at the same time."
   },
-  "adminServerTranscodingBlurb": "A transcode is what happens when a client cannot play a file as stored. These bound how many run at once, so a busy evening does not become a slow one.",
-  "@adminServerTranscodingBlurb": {
-    "description": "Line under the transcoding heading, saying what a transcode is before the fields that bound it."
-  },
   "adminServerTranscodingGroup": "Transcoding",
   "@adminServerTranscodingGroup": {
     "description": "Heading over the limits on how much audio the server re-encodes at once."
@@ -2152,9 +1977,9 @@
   "@adminServerTranscodingSaved": {
     "description": "Message after the transcoding limits were written."
   },
-  "adminServerTrashDaysHint": "0 keeps them until the trash is emptied by hand",
-  "@adminServerTrashDaysHint": {
-    "description": "Hint in the trash retention field."
+  "adminServerTrashDaysHelp": "0 keeps them until the trash is emptied by hand",
+  "@adminServerTrashDaysHelp": {
+    "description": "Help line under the trash retention field."
   },
   "adminServerTrashDaysInvalid": "Purge trashed files after: enter a whole number of days (0 keeps them until you empty the trash)",
   "@adminServerTrashDaysInvalid": {
@@ -2171,10 +1996,6 @@
   "adminShareRevoked": "Link revoked",
   "@adminShareRevoked": {
     "description": "Message after a share link was switched off."
-  },
-  "adminSharesEmptyMessage": "Nobody on this server has minted a public link. When somebody does it turns up here, with who made it and a way to switch it off.",
-  "@adminSharesEmptyMessage": {
-    "description": "Empty state of the server-wide share links screen, saying what would fill it."
   },
   "adminSharesEmptyTitle": "Nothing is shared",
   "@adminSharesEmptyTitle": {
@@ -2200,15 +2021,11 @@
   "@adminStreamingUnreachable": {
     "description": "Streaming engine tile value: an engine is configured and is not answering; the server retries it and plays originals directly meanwhile."
   },
-  "adminThumbsBlurb": "Resized copies of your covers, generated on demand. Clearing them costs a moment of decoding the next time each one is drawn, never a picture.",
-  "@adminThumbsBlurb": {
-    "description": "Line under the artwork-cache heading, saying what the cache is and what clearing it costs."
-  },
   "adminThumbsClearAction": "Clear cache",
   "@adminThumbsClearAction": {
     "description": "Button on the artwork-cache card that drops every generated thumbnail."
   },
-  "adminThumbsClearBody": "Every generated copy is dropped and regenerated the next time a cover is drawn. No artwork is lost. The space is freed inside the catalog file rather than returned to the disk.",
+  "adminThumbsClearBody": "Copies regenerate on next draw. No artwork is lost.",
   "@adminThumbsClearBody": {
     "description": "Body of the clear-artwork-cache dialog."
   },
@@ -2494,10 +2311,6 @@
   "@adminTrashEmptyBody": {
     "description": "Body of the dialog confirming that every trashed file is deleted for good."
   },
-  "adminTrashEmptyStateMessage": "Deleted files wait here before they are purged.",
-  "@adminTrashEmptyStateMessage": {
-    "description": "Empty state of the trash list, saying what the screen is for."
-  },
   "adminTrashEmptyStateTitle": "The trash is empty",
   "@adminTrashEmptyStateTitle": {
     "description": "Empty state of the trash list."
@@ -2604,10 +2417,6 @@
       }
     }
   },
-  "adminTrashShowRestoredHelp": "Entries already put back, for the record",
-  "@adminTrashShowRestoredHelp": {
-    "description": "Line under the show-restored switch."
-  },
   "adminTrashShowRestoredTitle": "Show restored entries",
   "@adminTrashShowRestoredTitle": {
     "description": "Switch that keeps already-restored entries in the trash list."
@@ -2631,10 +2440,6 @@
   "adminUserActionsGroup": "Account actions",
   "@adminUserActionsGroup": {
     "description": "Heading over the buttons that act on the account being edited: set password, sign out, delete."
-  },
-  "adminUserAdminHelp": "Sees the whole library and the admin console",
-  "@adminUserAdminHelp": {
-    "description": "Line under the administrator switch in the account editor, saying what the role carries."
   },
   "adminUserAdminTitle": "Administrator",
   "@adminUserAdminTitle": {
@@ -2662,7 +2467,7 @@
   "@adminUserChildPreset": {
     "description": "Button that fills the editor below with the settings a household means by an account for a child."
   },
-  "adminUserChildPresetHelp": "Sets no explicit content, no deleting, downloading, or uploading, and a deny rule for advisory-tagged tracks. Everything below stays editable.",
+  "adminUserChildPresetHelp": "Restricts explicit content, deleting, downloads and uploads; editable below.",
   "@adminUserChildPresetHelp": {
     "description": "Line under the child-account preset button, listing what the preset changes."
   },
@@ -2688,7 +2493,7 @@
   "@adminUserDeletePlaylistsDelete": {
     "description": "Choice in the delete-account dialog: every playlist the account owns is deleted."
   },
-  "adminUserDeletePlaylistsDeleteHelp": "Shared and private alike. Anyone they shared a playlist with loses it.",
+  "adminUserDeletePlaylistsDeleteHelp": "Shared and private alike; others lose access",
   "@adminUserDeletePlaylistsDeleteHelp": {
     "description": "Line under the choice that deletes the account's playlists, saying what it costs the people the playlists were shared with."
   },
@@ -2696,7 +2501,7 @@
   "@adminUserDeletePlaylistsTransfer": {
     "description": "Choice in the delete-account dialog, and the default: the account's shared playlists become the administrator's who deletes it."
   },
-  "adminUserDeletePlaylistsTransferHelp": "They keep their entries and stay shared. A smart playlist that depends on their stars, ratings, plays or private playlists becomes a fixed list of its tracks. Their private playlists are deleted.",
+  "adminUserDeletePlaylistsTransferHelp": "Smart playlists depending on this account become fixed lists. Private ones are deleted.",
   "@adminUserDeletePlaylistsTransferHelp": {
     "description": "Line under the choice that hands the account's shared playlists to the administrator, saying what happens to the rest."
   },
@@ -2704,7 +2509,7 @@
   "@adminUserDeleteTitle": {
     "description": "Title of the dialog confirming an account deletion."
   },
-  "adminUserDisabledHelp": "A disabled account cannot sign in, and its live sessions are revoked",
+  "adminUserDisabledHelp": "Cannot sign in; sessions are revoked",
   "@adminUserDisabledHelp": {
     "description": "Line under the disabled switch in the account editor."
   },
@@ -2730,10 +2535,6 @@
   "@adminUserMaxKbpsLabel": {
     "description": "Field for the highest bitrate this account may be transcoded to. kbps is the unit."
   },
-  "adminUserMayUploadHelp": "Add files to the library, through review",
-  "@adminUserMayUploadHelp": {
-    "description": "Line under the upload switch in the account editor. Uploads wait in a review queue rather than landing directly."
-  },
   "adminUserMayUploadTitle": "May upload",
   "@adminUserMayUploadTitle": {
     "description": "Switch in the account editor letting the account upload files."
@@ -2746,41 +2547,25 @@
   "@adminUserPasswordSet": {
     "description": "Message after an administrator set another account's password."
   },
-  "adminUserPermDeleteHelp": "Move catalog files to the trash",
-  "@adminUserPermDeleteHelp": {
-    "description": "Line under the delete permission in the account editor."
-  },
   "adminUserPermDeleteTitle": "Delete library files",
   "@adminUserPermDeleteTitle": {
     "description": "Permission switch in the account editor for deleting library files."
-  },
-  "adminUserPermDownloadHelp": "Keep the stored file, not just a stream",
-  "@adminUserPermDownloadHelp": {
-    "description": "Line under the download permission in the account editor."
   },
   "adminUserPermDownloadTitle": "Download originals",
   "@adminUserPermDownloadTitle": {
     "description": "Permission switch in the account editor for downloading the stored files."
   },
-  "adminUserPermExplicitHelp": "Off hides what the deny rules match",
+  "adminUserPermExplicitHelp": "Podcasts only; music needs a content deny rule",
   "@adminUserPermExplicitHelp": {
-    "description": "Line under the explicit-content permission in the account editor."
+    "description": "Info tip on the account editor's Explicit content switch: off hides only the podcast shows and episodes their feed flags; music is hidden by a content deny rule further down the form."
   },
   "adminUserPermExplicitTitle": "Explicit content",
   "@adminUserPermExplicitTitle": {
     "description": "Permission switch in the account editor for content marked explicit."
   },
-  "adminUserPermManagePodcastsHelp": "Subscribe, unsubscribe, and change feed settings",
-  "@adminUserPermManagePodcastsHelp": {
-    "description": "Line under the manage-podcasts permission in the account editor."
-  },
   "adminUserPermManagePodcastsTitle": "Manage podcasts",
   "@adminUserPermManagePodcastsTitle": {
     "description": "Permission switch in the account editor for managing podcast subscriptions."
-  },
-  "adminUserPermSharedOutputsHelp": "May play to endpoints other people also use",
-  "@adminUserPermSharedOutputsHelp": {
-    "description": "Line under the shared-outputs permission in the account editor."
   },
   "adminUserPermSharedOutputsTitle": "Shared outputs",
   "@adminUserPermSharedOutputsTitle": {
@@ -2789,10 +2574,6 @@
   "adminUserPermissionsGroup": "Permissions",
   "@adminUserPermissionsGroup": {
     "description": "Heading over the permission switches in the account editor."
-  },
-  "adminUserQuotaHelp": "How much may sit in staging waiting for a decision. Importing an upload into the library frees the space again, so this bounds the queue rather than what the account contributes.",
-  "@adminUserQuotaHelp": {
-    "description": "Line under the pending-upload limit in the account editor, saying that the limit bounds the review queue rather than the account's total contribution."
   },
   "adminUserQuotaHint": "Empty means no limit",
   "@adminUserQuotaHint": {
@@ -2848,10 +2629,6 @@
   "@adminUserTagAllowLabel": {
     "description": "Heading over the tag rules that admit content for the account."
   },
-  "adminUserTagDenyHelp": "Matching content is hidden from this account",
-  "@adminUserTagDenyHelp": {
-    "description": "Line under the content deny rules."
-  },
   "adminUserTagDenyLabel": "Content deny rules",
   "@adminUserTagDenyLabel": {
     "description": "Heading over the tag rules that hide content from the account."
@@ -2883,10 +2660,6 @@
   "adminUsersColumnUploads": "Uploads",
   "@adminUsersColumnUploads": {
     "description": "Column heading for an account's pending-upload allowance."
-  },
-  "adminUsersEmptyMessage": "Invite somebody, or open signup in server settings.",
-  "@adminUsersEmptyMessage": {
-    "description": "Empty state of the account list, naming the two ways an account comes to exist."
   },
   "adminUsersEmptyTitle": "No accounts",
   "@adminUsersEmptyTitle": {
@@ -3010,7 +2783,7 @@
   "@adminUsersUploadsUnlimited": {
     "description": "Upload allowance of an account with no cap on what may await review. Lower case: it sits in a table cell, not at the start of a sentence."
   },
-  "adminWarmingBlurb": "Files appear as they are indexed. Artwork, matching, and the health score fill in behind that: albums the scan finds are identified on their own, and anything the matcher is unsure of arrives in the review queue.",
+  "adminWarmingBlurb": "Files appear as indexed; artwork and matching follow.",
   "@adminWarmingBlurb": {
     "description": "Body of the first-hour card. It exists to tell \"still working\" from \"apparently broken\" on a new server."
   },
@@ -3026,7 +2799,7 @@
   "@adminWizardAddLibraryAction": {
     "description": "Button on the first guided step, opening the libraries screen."
   },
-  "adminWizardAddLibraryBlurb": "A library is a folder WaxDeck reads. Add one and everything else on this page starts having something to say.",
+  "adminWizardAddLibraryBlurb": "A library is a folder WaxDeck reads. Add one.",
   "@adminWizardAddLibraryBlurb": {
     "description": "Body of the first guided step."
   },
@@ -3038,7 +2811,7 @@
   "@adminWizardInvite": {
     "description": "Button on the third guided step, opening the accounts screen."
   },
-  "adminWizardScanBlurb": "A scan indexes the files, pulls their tags, and identifies the albums it recognises. It runs in the background: you can leave this page.",
+  "adminWizardScanBlurb": "A scan indexes files and identifies albums, in the background.",
   "@adminWizardScanBlurb": {
     "description": "Body of the second guided step."
   },
@@ -3060,7 +2833,7 @@
       }
     }
   },
-  "adminWizardWarmingBlurb": "Files appear as they are indexed, and artwork, matching, and the health score fill in behind them. Two things worth doing meanwhile: invite the people who will listen, and look in on the albums the matcher was unsure of.",
+  "adminWizardWarmingBlurb": "Files appear as they are indexed. Meanwhile, invite listeners and review unsure matches.",
   "@adminWizardWarmingBlurb": {
     "description": "Body of the third guided step, naming the two things worth doing while waiting."
   },

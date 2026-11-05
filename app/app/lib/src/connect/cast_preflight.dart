@@ -73,6 +73,7 @@ class _CastPreflightSheet extends ConsumerWidget {
                 child: SectionHeader(
                   overline: l10n.devicesCastingOverline,
                   title: l10n.devicesConnectionCheck,
+                  info: l10n.devicesCastHelp,
                 ),
               ),
               Padding(
@@ -93,32 +94,13 @@ class _CastPreflightSheet extends ConsumerWidget {
                 AsyncData(:final value) when value.isEmpty => <Widget>[
                   EmptyState(
                     title: l10n.devicesNoAddresses,
-                    message: l10n.devicesNoAddressesMessage,
+                    message: l10n.devicesNoAddressesEmptyMessage,
                     glyph: WaxIcons.warning,
                   ),
                 ],
                 AsyncData(:final value) => <Widget>[
                   for (var i = 0; i < value.length; i++)
                     _Base(base: value[i], index: i),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      WaxSpace.s16,
-                      WaxSpace.s8,
-                      WaxSpace.s16,
-                      0,
-                    ),
-                    child: Text(
-                      // The endpoint's own caveat, said once here rather
-                      // than repeated per row: the server checking itself
-                      // is not the device checking, and a reader deciding
-                      // what to fix needs to know which of the two this
-                      // is.
-                      l10n.devicesCastCaveat,
-                      style: WaxType.caption.copyWith(
-                        color: WaxColors.of(context).textTertiary,
-                      ),
-                    ),
-                  ),
                 ],
                 AsyncValue(hasError: true) => <Widget>[
                   AsyncFailureCard.from(
@@ -195,20 +177,9 @@ class _DeviceTestsState extends ConsumerState<_DeviceTests> {
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.fromLTRB(WaxSpace.s16, WaxSpace.s16, 0, 0),
-          child: SectionHeader(title: l10n.devicesTestOnDevice),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            WaxSpace.s16,
-            0,
-            WaxSpace.s16,
-            WaxSpace.s8,
-          ),
-          child: Text(
-            l10n.devicesTestOnDeviceBlurb,
-            style: WaxType.caption.copyWith(
-              color: WaxColors.of(context).textSecondary,
-            ),
+          child: SectionHeader(
+            title: l10n.devicesTestOnDevice,
+            info: l10n.devicesTestOnDeviceHelp,
           ),
         ),
         // The list is fetched, and "nothing found on this network" is a
@@ -241,7 +212,7 @@ class _DeviceTestsState extends ConsumerState<_DeviceTests> {
       return <Widget>[
         EmptyState(
           title: l10n.devicesNoDevicesToTest,
-          message: l10n.devicesNoDevicesToTestMessage,
+          message: l10n.devicesNoDevicesToTestEmptyMessage,
           glyph: WaxIcons.cast,
           semanticsId: SemanticsIds.preflightDevices,
         ),

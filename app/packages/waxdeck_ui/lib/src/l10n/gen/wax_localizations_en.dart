@@ -323,9 +323,6 @@ class WaxLocalizationsEn extends WaxLocalizations {
   String get paletteClose => 'Close';
 
   @override
-  String get paletteEmptyMessage => 'Try fewer words, or a different one.';
-
-  @override
   String get paletteEmptyTitle => 'Nothing matches';
 
   @override

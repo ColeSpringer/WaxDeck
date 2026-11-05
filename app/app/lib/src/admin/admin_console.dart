@@ -91,27 +91,6 @@ enum AdminSection {
     migrate => l10n.adminMigrateTitle,
   };
 
-  /// The line under the section's name on the compact list. The sidebar
-  /// draws the title alone.
-  String blurbOf(AppLocalizations l10n) => switch (this) {
-    dashboard => l10n.adminSectionDashboardBlurb,
-    libraries => l10n.adminSectionLibrariesBlurb,
-    health => l10n.adminSectionHealthBlurb,
-    diagnostics => l10n.adminSectionDiagnosticsBlurb,
-    genres => l10n.adminSectionGenresBlurb,
-    organize => l10n.adminSectionOrganizeBlurb,
-    enrichment => l10n.adminSectionEnrichmentBlurb,
-    users => l10n.adminSectionUsersBlurb,
-    shares => l10n.adminSectionSharesBlurb,
-    settings => l10n.adminSectionSettingsBlurb,
-    notifications => l10n.adminSectionNotificationsBlurb,
-    schedules => l10n.adminSectionSchedulesBlurb,
-    backups => l10n.adminSectionBackupsBlurb,
-    trash => l10n.adminSectionTrashBlurb,
-    audit => l10n.adminSectionAuditBlurb,
-    migrate => l10n.adminSectionMigrateBlurb,
-  };
-
   String get semanticsId => SemanticsIds.adminSection(name);
 
   /// The section a console location belongs to: the longest declared

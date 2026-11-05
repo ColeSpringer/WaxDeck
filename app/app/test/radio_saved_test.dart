@@ -371,7 +371,10 @@ void main() {
     await _pump(tester, FakeRepository());
 
     expect(find.text('Nothing saved yet'), findsOneWidget);
-    expect(find.textContaining('Tap the heart'), findsOneWidget);
+    expect(
+      find.textContaining('Tap the heart while a station plays'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the row menu hands the song to Add-from-URL', (tester) async {

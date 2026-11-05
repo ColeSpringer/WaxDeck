@@ -398,7 +398,6 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
       return ForbiddenPage(
         pageTitle: l10n.musicAlbumTitle,
         heading: l10n.musicAlbumEditorForbiddenTitle,
-        message: l10n.musicAlbumEditorForbiddenMessage,
         glyph: WaxIcons.edit,
         fallback: WaxRoute.music,
       );

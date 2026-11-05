@@ -47,11 +47,11 @@
   "@bookChapterEditorAdd": {
     "description": "Button on the chapter editor appending an empty row."
   },
-  "bookChapterEditorHelp": "Chapters file in playing order wherever they are typed. A new or moved chapter runs to the next one's start; the rest keep their stored lengths.",
+  "bookChapterEditorHelp": "Chapters file in playing order. A new or moved chapter runs to the next one's start.",
   "@bookChapterEditorHelp": {
-    "description": "Line under the chapter editor saying how the rows' starts become ranges."
+    "description": "Info tip on the Chapters header: how rows file in playing order and where a new or moved chapter ends."
   },
-  "bookChapterEditorInvalid": "Chapter starts must be stamps like 1:02:03, each one distinct. Chapters stay out of the save until they are.",
+  "bookChapterEditorInvalid": "Use distinct stamps like 1:02:03; chapters stay unsaved until fixed",
   "@bookChapterEditorInvalid": {
     "description": "Caution on the chapter editor while a start does not parse or the rows are out of order."
   },
@@ -166,17 +166,13 @@
   "@bookMergeAction": {
     "description": "Confirming button of the dialog that merges a book's files into one."
   },
-  "bookMergeBody": "The parts are joined into one chaptered file beside them, in the same library; every listener's position carries over. The original files move to the trash unless you keep them.",
+  "bookMergeBody": "Parts join into one chaptered file; positions carry over. Originals go to the trash unless kept.",
   "@bookMergeBody": {
-    "description": "Body of the dialog confirming a book merge: where the result goes, that positions survive, and what happens to the parts."
+    "description": "Body of the dialog confirming a book merge: one chaptered file, positions kept, originals trashed unless kept."
   },
   "bookMergeKeep": "Keep the original files",
   "@bookMergeKeep": {
     "description": "Switch in the merge dialog that keeps the book's parts instead of moving them to the trash; the merged copy then gets its own folder beside them."
-  },
-  "bookMergeKeepHelp": "The merged copy goes into a folder of its own beside them",
-  "@bookMergeKeepHelp": {
-    "description": "Help under the merge dialog's keep switch: where the merged copy goes when the parts stay."
   },
   "bookMergeTitle": "Merge {count} files into one?",
   "@bookMergeTitle": {
@@ -199,15 +195,6 @@
   "bookPartsCount": "{count, plural, other{{count} parts}}",
   "@bookPartsCount": {
     "description": "How many files a book is, in the line under its title. Only said where there is more than one.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "bookPartsNote": "{count, plural, other{This book is {count} files, played as one timeline. Positions and chapters span all of them.}}",
-  "@bookPartsNote": {
-    "description": "Footnote on a book made of several files, so a listener who wonders why has the answer where they are looking.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -268,7 +255,7 @@
   "@bookSeriesEmpty": {
     "description": "Empty state of the series index: nothing on the shelf carries a series in its tags."
   },
-  "bookSeriesEmptyMessage": "A book joins a series when its tags name one. Set one from a book's metadata editor.",
+  "bookSeriesEmptyMessage": "A book joins a series through its tags.",
   "@bookSeriesEmptyMessage": {
     "description": "Line under that title, saying where a series comes from."
   },
@@ -297,9 +284,9 @@
   "@bookSeriesMergeEmpty": {
     "description": "Shown in the picker when the library holds no other series."
   },
-  "bookSeriesMergeHelp": "The books in this series move to the one you pick, and this spelling goes away. Nothing else about the books changes.",
+  "bookSeriesMergeHelp": "Books move to the picked series; this spelling goes away",
   "@bookSeriesMergeHelp": {
-    "description": "Line under that title: what the merge moves and what it leaves alone."
+    "description": "Line under the merge picker title: books move to the chosen series and this spelling goes away."
   },
   "bookSeriesMergeTitle": "Merge \"{series}\" into",
   "@bookSeriesMergeTitle": {
@@ -314,9 +301,9 @@
   "@bookSeriesNoBooks": {
     "description": "Empty state of a series screen: the series exists but this account can open none of its books."
   },
-  "bookSeriesNoBooksMessage": "This series holds nothing you can open. Ask an administrator if you expected to see it.",
-  "@bookSeriesNoBooksMessage": {
-    "description": "Line under that title, naming the two things that can cause it: a library grant, or a content rule."
+  "bookSeriesNoBooksEmptyMessage": "Ask an administrator if you expected more.",
+  "@bookSeriesNoBooksEmptyMessage": {
+    "description": "Line under the empty title of a series the account cannot open any book of: where to ask."
   },
   "bookSeriesSequence": "Book {number} of {series}",
   "@bookSeriesSequence": {
@@ -370,17 +357,13 @@
   "@bookSplitAction": {
     "description": "Confirming button of the dialog that splits a book at its chapters."
   },
-  "bookSplitBody": "One file per chapter is written beside the book. The original moves to the trash unless you keep it.",
+  "bookSplitBody": "One file per chapter. The original goes to the trash unless kept.",
   "@bookSplitBody": {
-    "description": "Body of the dialog confirming a book split: where the pieces go and what happens to the original file."
+    "description": "Body of the dialog confirming a book split: one file per chapter, original trashed unless kept."
   },
   "bookSplitKeep": "Keep the original file",
   "@bookSplitKeep": {
     "description": "Switch in the split dialog that keeps the book's file instead of moving it to the trash; the pieces then get their own folder beside it."
-  },
-  "bookSplitKeepHelp": "The pieces go into a folder of their own beside it",
-  "@bookSplitKeepHelp": {
-    "description": "Help under the split dialog's keep switch: where the pieces go when the original stays."
   },
   "bookSplitTitle": "Split at {count} chapters?",
   "@bookSplitTitle": {
@@ -408,10 +391,6 @@
   "@bookTrimSilence": {
     "description": "Switch shortening the gaps in a book's narration."
   },
-  "bookTrimSilenceHelp": "Shortens the pauses between sentences",
-  "@bookTrimSilenceHelp": {
-    "description": "Help under the trim-silence switch on a book."
-  },
   "bookUndo": "Undo",
   "@bookUndo": {
     "description": "Action on the position snackbars, putting back where the listener was."
@@ -419,10 +398,6 @@
   "bookVoiceBoost": "Voice boost",
   "@bookVoiceBoost": {
     "description": "Switch lifting the narrator above the rest of the audio."
-  },
-  "bookVoiceBoostHelp": "Lifts speech over a noisy room",
-  "@bookVoiceBoostHelp": {
-    "description": "Help under the voice-boost switch on a book."
   },
   "bookWithAuthors": "With {names}",
   "@bookWithAuthors": {
@@ -570,8 +545,8 @@
   "@booksNothingMatchesYet": {
     "description": "Empty state where the chips left no book standing among the ones loaded, and the library has more."
   },
-  "booksNothingMatchesYetMessage": "The filters run over the {count} books loaded so far, and your library has more.",
-  "@booksNothingMatchesYetMessage": {
+  "booksNothingMatchesYetEmptyMessage": "Filters cover the {count} books loaded so far",
+  "@booksNothingMatchesYetEmptyMessage": {
     "description": "Why a filter can come up empty on a library with more pages behind it. The count rises with each fetch, so a press that finds nothing is still visibly progress.",
     "placeholders": {
       "count": {

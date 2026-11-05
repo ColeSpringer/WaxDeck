@@ -137,9 +137,6 @@ class _Absent extends ConsumerWidget {
     return EmptyState(
       glyph: WaxIcons.lyrics,
       title: l10n.playerNoLyrics,
-      message: admin
-          ? l10n.playerNoLyricsAdminMessage
-          : l10n.playerNoLyricsMessage,
       actionLabel: admin ? l10n.playerAddLyrics : null,
       actionSemanticsId: admin ? SemanticsIds.lyricsAdd : null,
       onAction: admin ? () => _openEditor(context, pid) : null,
@@ -181,7 +178,6 @@ class LyricsPanel extends ConsumerWidget {
         idle: (context) => EmptyState(
           glyph: WaxIcons.lyrics,
           title: context.l10n.playerNothingPlaying,
-          message: context.l10n.playerLyricsIdleMessage,
           semanticsId: SemanticsIds.lyricsSurface,
         ),
         builder: (context, session, item, position) =>
@@ -269,7 +265,6 @@ class _LyricsSheet extends StatelessWidget {
               idle: (context) => EmptyState(
                 glyph: WaxIcons.lyrics,
                 title: context.l10n.playerNothingPlaying,
-                message: context.l10n.playerLyricsIdleMessage,
                 semanticsId: SemanticsIds.lyricsSurface,
               ),
               builder: (context, session, item, position) => LyricsSurface(

@@ -31,7 +31,7 @@ Future<void> _pump(WidgetTester tester, Widget host) async {
 }
 
 void main() {
-  testWidgets('an empty profile list promises no configuration', (
+  testWidgets('an empty profile list shows its title and no line', (
     tester,
   ) async {
     final repo = FakeRepository();
@@ -39,9 +39,12 @@ void main() {
     await _pump(tester, _host(repo));
 
     expect(find.text('No organize profiles'), findsOneWidget);
+    // The title says it; no line repeats it.
     expect(
-      find.text('The server offers no profile to organize files by.'),
-      findsOneWidget,
+      tester
+          .widget<EmptyState>(emptyStateTitled('No organize profiles'))
+          .message,
+      isNull,
     );
   });
 
@@ -202,13 +205,11 @@ void main() {
     );
   });
 
-  testWidgets('the hint says a preview checks every managed library', (
-    tester,
-  ) async {
+  testWidgets('the hint says nothing moves until applied', (tester) async {
     await _pump(tester, _host(FakeRepository()));
 
     expect(
-      find.textContaining('checks every managed library against this profile'),
+      find.textContaining('Nothing moves until you apply'),
       findsOneWidget,
     );
   });
@@ -221,10 +222,7 @@ void main() {
 
     expect(find.text('No managed library'), findsOneWidget);
     expect(
-      find.text(
-        'Organizing moves files only within managed libraries, and this '
-        'server has none.',
-      ),
+      find.text('Organizing works only in managed libraries.'),
       findsOneWidget,
     );
     expect(
@@ -247,10 +245,7 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('2 files stay where they are while the server is read-only.'),
-      findsOneWidget,
-    );
+    expect(find.text('2 files held, server read-only'), findsOneWidget);
     expect(find.text('Everything is already in place'), findsNothing);
   });
 
@@ -274,10 +269,7 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('2 files are held back and stay where they are.'),
-      findsOneWidget,
-    );
+    expect(find.text('2 files held back'), findsOneWidget);
     expect(find.textContaining('read-only'), findsNothing);
   });
 
@@ -302,7 +294,7 @@ void main() {
     await _pump(tester, _host(repo));
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
-    const line = '2 read-only libraries are left as they are.';
+    const line = '2 read-only libraries left alone';
     expect(find.text(line), findsOneWidget);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
@@ -384,7 +376,7 @@ void main() {
 
     expect(find.bySemanticsIdentifier(SemanticsIds.organizePlan), findsNothing);
     expect(
-      find.textContaining('checks every managed library against this profile'),
+      find.textContaining('Nothing moves until you apply'),
       findsOneWidget,
     );
     expect(
@@ -980,7 +972,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.text('2 files are held back and stay where they are.'),
+      find.text('2 files held back'),
       findsNothing,
       reason: 'the table counts them once',
     );

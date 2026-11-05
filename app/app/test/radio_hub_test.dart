@@ -1177,7 +1177,7 @@ void main() {
 
       expect(find.text('Night Jazz'), findsOneWidget);
       expect(
-        find.textContaining('only your own stations are listed'),
+        find.text('Directory unreachable; add a station by URL in Radio'),
         findsOneWidget,
       );
       // The directory's own retry policy outranks the container's, and a

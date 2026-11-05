@@ -114,7 +114,7 @@ class NotificationsScreen extends ConsumerWidget {
               EmptyState(
                 glyph: WaxIcons.bell,
                 title: l10n.bellEmptyTitle,
-                message: l10n.bellEmpty,
+                message: l10n.bellEmptyMessage,
               )
             else
               for (final row in rows)

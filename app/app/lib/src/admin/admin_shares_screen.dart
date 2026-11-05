@@ -85,7 +85,6 @@ class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen>
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.adminSharesEmptyTitle,
-              message: l10n.adminSharesEmptyMessage,
               glyph: WaxIcons.share,
               semanticsId: SemanticsIds.adminSharesEmpty,
             ),

@@ -110,9 +110,7 @@ class _Standing extends StatelessWidget {
           ),
         WaxSettingRow(
           title: l10n.adminEnrichmentMusicbrainzTitle,
-          help: mb
-              ? l10n.adminEnrichmentMusicbrainzOnHelp
-              : l10n.adminEnrichmentMusicbrainzOffHelp,
+          help: mb ? null : l10n.adminEnrichmentMusicbrainzOffHelp,
           control: Text(
             mb ? l10n.adminEnrichmentStateOn : l10n.adminEnrichmentStateOff,
             style: WaxType.label,
@@ -170,45 +168,45 @@ class _Coverage extends StatelessWidget {
 }
 
 /// A phase in the listener's words, with what it fills.
-({String title, String help}) _phase(AppLocalizations l10n, String phase) =>
+({String title, String? info}) _phase(AppLocalizations l10n, String phase) =>
     switch (phase) {
       'identity' => (
         title: l10n.adminEnrichmentPhaseIdentity,
-        help: l10n.adminEnrichmentPhaseIdentityHelp,
+        info: l10n.adminEnrichmentPhaseIdentityHelp,
       ),
       'releases' => (
         title: l10n.adminEnrichmentPhaseReleases,
-        help: l10n.adminEnrichmentPhaseReleasesHelp,
+        info: l10n.adminEnrichmentPhaseReleasesHelp,
       ),
       'group-art' => (
         title: l10n.adminEnrichmentPhaseGroupArt,
-        help: l10n.adminEnrichmentPhaseGroupArtHelp,
+        info: l10n.adminEnrichmentPhaseGroupArtHelp,
       ),
       'artist-art' => (
         title: l10n.adminEnrichmentPhaseArtistArt,
-        help: l10n.adminEnrichmentPhaseArtistArtHelp,
+        info: l10n.adminEnrichmentPhaseArtistArtHelp,
       ),
       'album-art' => (
         title: l10n.adminEnrichmentPhaseAlbumArt,
-        help: l10n.adminEnrichmentPhaseAlbumArtHelp,
+        info: l10n.adminEnrichmentPhaseAlbumArtHelp,
       ),
       'lyrics' => (
         title: l10n.adminEnrichmentPhaseLyrics,
-        help: l10n.adminEnrichmentPhaseLyricsHelp,
+        info: l10n.adminEnrichmentPhaseLyricsHelp,
       ),
       'track-fields' => (
         title: l10n.adminEnrichmentPhaseTrackFields,
-        help: l10n.adminEnrichmentPhaseTrackFieldsHelp,
+        info: l10n.adminEnrichmentPhaseTrackFieldsHelp,
       ),
       'book-fields' => (
         title: l10n.adminEnrichmentPhaseBookFields,
-        help: l10n.adminEnrichmentPhaseBookFieldsHelp,
+        info: l10n.adminEnrichmentPhaseBookFieldsHelp,
       ),
       'album-fields' => (
         title: l10n.adminEnrichmentPhaseAlbumFields,
-        help: l10n.adminEnrichmentPhaseAlbumFieldsHelp,
+        info: l10n.adminEnrichmentPhaseAlbumFieldsHelp,
       ),
-      _ => (title: phase, help: phase),
+      _ => (title: phase, info: null),
     };
 
 class _RunPass extends ConsumerStatefulWidget {
@@ -273,7 +271,6 @@ class _RunPassState extends ConsumerState<_RunPass> {
             WaxRadioOption(
               value: 'normal',
               label: l10n.adminEnrichmentRunNormal,
-              help: l10n.adminEnrichmentRunNormalHelp,
               semanticsId: SemanticsIds.enrichmentRunMode('normal'),
             ),
             WaxRadioOption(
@@ -285,7 +282,6 @@ class _RunPassState extends ConsumerState<_RunPass> {
             WaxRadioOption(
               value: 'phases',
               label: l10n.adminEnrichmentRunPhases,
-              help: l10n.adminEnrichmentRunPhasesHelp,
               semanticsId: SemanticsIds.enrichmentRunMode('phases'),
             ),
           ],
@@ -294,7 +290,7 @@ class _RunPassState extends ConsumerState<_RunPass> {
           for (final phase in status.phases)
             WaxSettingRow(
               title: _phase(l10n, phase).title,
-              help: _phase(l10n, phase).help,
+              info: _phase(l10n, phase).info,
               control: WaxSwitch(
                 label: _phase(l10n, phase).title,
                 value: _phases.contains(phase),
@@ -361,18 +357,15 @@ class _SourcesState extends ConsumerState<_Sources> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final colors = WaxColors.of(context);
     final providers = {for (final p in widget.status.providers) p.name: p};
     final order = _draft ?? _served;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(title: l10n.adminEnrichmentSourcesGroup),
-        Text(
-          l10n.adminEnrichmentSourcesBlurb,
-          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+        SectionHeader(
+          title: l10n.adminEnrichmentSourcesGroup,
+          info: l10n.adminEnrichmentSourcesHelp,
         ),
-        const SizedBox(height: WaxSpace.s12),
         for (final (i, source) in order.indexed)
           // Keyed, so a moved row keeps its element and the focus in it.
           _SourceRow(
@@ -480,22 +473,25 @@ class _SourceRow extends StatelessWidget {
     final l10n = context.l10n;
     final named = provenanceProducerName(l10n, name);
     final supplies = capabilities.map((c) => _capability(l10n, c)).join(', ');
-    // The MusicBrainz entry ranks only its genres; the identity walk stays.
-    final genresOnly = name == 'musicbrainz';
+    // The MusicBrainz entry ranks only its genres: identification asks
+    // MusicBrainz whatever its switch says, which its line has to say.
+    final identityStays = name == 'musicbrainz';
     return Semantics(
       identifier: SemanticsIds.enrichmentSource(name),
       container: true,
       explicitChildNodes: true,
       child: WaxSettingRow(
         title: named,
-        help: switch ((builtin, configured, genresOnly)) {
-          (false, _, _) => supplies,
-          (true, false, _) =>
-            '$supplies. ${l10n.adminEnrichmentBuiltinNeedsContact}',
-          (true, true, true) =>
-            '$supplies. ${l10n.adminEnrichmentBuiltinMusicbrainz}',
-          (true, true, false) => '$supplies. ${l10n.adminEnrichmentBuiltin}',
-        },
+        // Independent facts: built in is built in whatever the contact
+        // says, and only a switched-on one waits on it.
+        help: <String>[
+          supplies,
+          if (builtin) l10n.adminEnrichmentBuiltin,
+          if (builtin && !configured && source.enabled)
+            l10n.adminEnrichmentBuiltinNeedsContact,
+          if (builtin && configured && identityStays)
+            l10n.adminEnrichmentIdentityStillAsks,
+        ].join('. '),
         control: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
@@ -752,7 +748,6 @@ class _ResponseCacheState extends ConsumerState<_ResponseCache> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final colors = WaxColors.of(context);
     final cache = ref.watch(enrichmentCacheProvider);
     final asked =
         _olderThanDays.text.trim().isNotEmpty ||
@@ -761,11 +756,6 @@ class _ResponseCacheState extends ConsumerState<_ResponseCache> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(title: l10n.adminEnrichmentCacheGroup),
-        Text(
-          l10n.adminEnrichmentCacheBlurb,
-          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
-        ),
-        const SizedBox(height: WaxSpace.s12),
         switch (cache) {
           AsyncValue(hasError: true) => AsyncFailureCard.from(
             cache,
@@ -795,10 +785,9 @@ class _ResponseCacheState extends ConsumerState<_ResponseCache> {
               WaxTable<EnrichmentCacheKind>(
                 rows: value.kinds,
                 rowId: (k) => k.kind,
-                empty: Text(
-                  l10n.adminEnrichmentCacheEmpty,
-                  style: WaxType.body.copyWith(color: colors.textSecondary),
-                ),
+                // The zero counts above say it; a header with no rows
+                // would read as broken.
+                empty: const SizedBox.shrink(),
                 columns: <WaxColumn<EnrichmentCacheKind>>[
                   WaxColumn(
                     label: l10n.adminEnrichmentCacheKindColumn,

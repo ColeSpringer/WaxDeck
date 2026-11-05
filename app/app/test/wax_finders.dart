@@ -1,3 +1,4 @@
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -38,4 +39,39 @@ Future<void> expectLoadMoreHolds(WidgetTester tester, Finder button) async {
     tester.getTopLeft(find.byType(SkeletonShapes)).dy,
     greaterThanOrEqualTo(tester.getBottomLeft(button).dy),
   );
+}
+
+/// The info tip that holds [message].
+Finder infoTipHolding(String message) =>
+    _infoTip((held) => held == message, 'holding "$message"');
+
+/// The info tip whose message contains [part], for a test about one
+/// clause of it.
+Finder infoTipContaining(String part) =>
+    _infoTip((held) => held.contains(part), 'containing "$part"');
+
+Finder _infoTip(bool Function(String message) test, String description) =>
+    find.byWidgetPredicate(
+      (widget) => widget is WaxInfoTip && test(widget.message),
+      description: 'WaxInfoTip $description',
+    );
+
+/// The empty state titled [title].
+Finder emptyStateTitled(String title) => find.byWidgetPredicate(
+  (widget) => widget is EmptyState && widget.title == title,
+  description: 'EmptyState titled "$title"',
+);
+
+/// Whether [tip], a WaxInfoTip, is a node of its own in the semantics
+/// tree: the node its glyph lands in is named by the tip alone and takes
+/// the tap. Under an ancestor that merges or excludes semantics the glyph
+/// lands in that ancestor's node instead, and on web a tap goes to that
+/// node, so the tip never opens.
+bool hasOwnSemanticsNode(WidgetTester tester, Finder tip) {
+  final widget = tester.widget<WaxInfoTip>(tip);
+  final node = tester.getSemantics(
+    find.descendant(of: tip, matching: find.byType(Icon)),
+  );
+  return node.label == (widget.label ?? widget.message) &&
+      node.getSemanticsData().hasAction(SemanticsAction.tap);
 }

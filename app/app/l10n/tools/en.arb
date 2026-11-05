@@ -9,7 +9,7 @@
   "@toolsClearAllAction": {
     "description": "Confirm button of the dialog that asks before clearing every account's finished tasks."
   },
-  "toolsClearAllBody": "Finished and failed task receipts of every account go, reports they have not read included. Running tasks stay.",
+  "toolsClearAllBody": "Deletes finished and failed task receipts of every account, unread reports included.",
   "@toolsClearAllBody": {
     "description": "Body of the dialog an administrator confirms before clearing every account's finished tasks."
   },
@@ -318,21 +318,13 @@
   "@toolsDismiss": {
     "description": "Accessible name of the control that removes one finished task from the list."
   },
-  "toolsEmptyMessage": "Merges, splits, downloads, and imports report their progress here while they run and land here when they finish.",
-  "@toolsEmptyMessage": {
-    "description": "Empty state of the tool task list, naming what turns up in it."
-  },
   "toolsEmptyTitle": "No tool tasks",
   "@toolsEmptyTitle": {
     "description": "Empty state of the tool task list."
   },
-  "toolsFinishedTapForReport": "Finished · tap for the report",
-  "@toolsFinishedTapForReport": {
-    "description": "Line under a finished task that produced no items but stored a report."
-  },
-  "toolsItemsProduced": "{count} items produced · tap to open",
+  "toolsItemsProduced": "{count, plural, =1{1 item} other{{count} items}}",
   "@toolsItemsProduced": {
-    "description": "Line under a finished task that produced several items. It is never drawn for one, which has a line of its own.",
+    "description": "Line under a finished task: how many items it produced.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -420,9 +412,22 @@
   "@toolsLoadError": {
     "description": "Title of the error state when the task list could not be read."
   },
+  "toolsOpenReport": "Open the report",
+  "@toolsOpenReport": {
+    "description": "Accessible name of a task row's forward glyph when a tap opens the task's stored report: what a screen reader hears the row does."
+  },
+  "toolsOpenResult": "{count, plural, =1{Open the result} other{Open the results}}",
+  "@toolsOpenResult": {
+    "description": "Accessible name of a task row's forward glyph when a tap opens what the task produced: the one item, or a list of the {count} to choose from.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "toolsOpenReviewQueue": "Open the review queue",
   "@toolsOpenReviewQueue": {
-    "description": "Line under a finished download, whose results wait in the review queue."
+    "description": "Accessible name of a finished URL download's forward glyph: a tap opens the review queue, where its results wait."
   },
   "toolsProduced": "produced {pids}",
   "@toolsProduced": {
@@ -594,14 +599,6 @@
       }
     }
   },
-  "toolsTapForReport": "Tap for the report",
-  "@toolsTapForReport": {
-    "description": "Line under a failed task that still stored a report worth reading."
-  },
-  "toolsTapToOpenResult": "Tap to open what it produced",
-  "@toolsTapToOpenResult": {
-    "description": "Line under a finished task that produced exactly one item."
-  },
   "toolsTaskAcquire": "URL download",
   "@toolsTaskAcquire": {
     "description": "Name of the task that fetches audio from a web address."
@@ -674,7 +671,7 @@
       }
     }
   },
-  "toolsTasksKept": "{count, plural, =1{1 task kept: its files could not be moved; see its row} other{{count} tasks kept: their files could not be moved; see each row}}",
+  "toolsTasksKept": "{count, plural, =1{1 task kept: its files could not move} other{{count} tasks kept: their files could not move}}",
   "@toolsTasksKept": {
     "description": "After Clear finished: how many finished tasks stayed because files they left in the library could not be named or removed; each such row says why and what to fix.",
     "placeholders": {
@@ -692,15 +689,15 @@
   "@toolsTitle": {
     "description": "Title of the screen following long-running library work: merges, splits, downloads, imports."
   },
-  "toolsWaitCatalogBusy": "Another job holds the catalog; this carries on once it is free.",
+  "toolsWaitCatalogBusy": "Another job holds the catalog.",
   "@toolsWaitCatalogBusy": {
     "description": "Why a waiting task waits: another catalog job holds the catalog."
   },
-  "toolsWaitCatalogMaintenance": "The catalog is under maintenance; this carries on once that is done.",
+  "toolsWaitCatalogMaintenance": "The catalog is under maintenance.",
   "@toolsWaitCatalogMaintenance": {
     "description": "Why a waiting task waits: the catalog is suspended for maintenance (a backup or restore)."
   },
-  "toolsWaitEngineUnavailable": "The audio engine is not available; this carries on once it is back.",
+  "toolsWaitEngineUnavailable": "The audio engine is not available.",
   "@toolsWaitEngineUnavailable": {
     "description": "Why a waiting task waits: the engine that cuts or joins audio is not available."
   },
@@ -714,27 +711,27 @@
       }
     }
   },
-  "toolsWaitOther": "Something passing got in the way; this tries again on its own.",
+  "toolsWaitOther": "Something passing got in the way.",
   "@toolsWaitOther": {
     "description": "Why a waiting task waits, when the cause has no sentence of its own; the server's words follow."
   },
-  "toolsWaitPartMissing": "A file of the book is not where the catalog has it. If it does not come back, this puts back what it moved and stops.",
+  "toolsWaitPartMissing": "A book file is missing; if it stays gone, this undoes its moves and stops.",
   "@toolsWaitPartMissing": {
     "description": "Why a book merge or split waits: one of the book's files is missing from where the catalog has it."
   },
-  "toolsWaitPutBackBlocked": "A file cannot go back from the trash: its place is taken or its folder refuses the server. Clear the place or fix the folder and this carries on.",
+  "toolsWaitPutBackBlocked": "A file cannot leave the trash: free its place or fix its folder.",
   "@toolsWaitPutBackBlocked": {
     "description": "Why a book merge or split waits: undoing, it cannot put a file back from the trash."
   },
-  "toolsWaitReadOnly": "A library this works in is read-only. Turn read-only off for it, or for the server, and this carries on.",
+  "toolsWaitReadOnly": "A library it works in is read-only. Turn that off for it or the server.",
   "@toolsWaitReadOnly": {
     "description": "Why a waiting task waits: a library it works in, or the whole server, is in read-only mode."
   },
-  "toolsWaitStopped": "This was cut short, by the server stopping or by running out of time; it carries on where it was.",
+  "toolsWaitStopped": "Cut short by a server stop or a time limit.",
   "@toolsWaitStopped": {
     "description": "Why a waiting task waits: the server stopped, or the run ran out of time, part way through; the sentence names both, as the reason does."
   },
-  "toolsWaitStorageUnwritable": "A folder this writes to refuses the server. Fix the folder's ownership and permissions and this carries on.",
+  "toolsWaitStorageUnwritable": "A folder it writes to refuses the server. Fix its ownership and permissions.",
   "@toolsWaitStorageUnwritable": {
     "description": "Why a waiting task waits: a library folder refuses the server's writes."
   },

@@ -44,7 +44,7 @@ Future<void> confirmDetachItem(
             const SizedBox(height: WaxSpace.s12),
             WaxSettingRow(
               title: l10n.metadataWriteBackTitle,
-              help: l10n.libraryMenuDetachWriteBackHelp,
+              info: l10n.libraryMenuDetachWriteBackHelp,
               control: WaxSwitch(
                 label: l10n.metadataWriteBackTitle,
                 value: writeBack,

@@ -575,23 +575,33 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('a multi-file book says so, and a single-file one does not', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _host(
-        FakeRepository()..books[bookPid] = testBook(bookPid, partCount: 3),
-        FakeEngine(),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(_byId(SemanticsIds.bookPartsNote), findsOneWidget);
-    expect(find.textContaining('3 files'), findsOneWidget);
+  testWidgets(
+    'a multi-file book counts its parts, and a single-file one does not',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          FakeRepository()..books[bookPid] = testBook(bookPid, partCount: 3),
+          FakeEngine(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('3 parts'), findsOneWidget);
+      // Read where it is drawn: inside the header's own words, after the
+      // title, which is also where the e2e driver reads it.
+      final header = tester
+          .getSemantics(find.bySemanticsIdentifier(SemanticsIds.bookHeader))
+          .label;
+      expect(header, contains('3 parts'));
+      expect(
+        header.indexOf('3 parts'),
+        greaterThan(header.indexOf(testBook(bookPid).title)),
+      );
 
-    await tester.pumpWidget(_host(_repo(), FakeEngine()));
-    await tester.pumpAndSettle();
-    expect(_byId(SemanticsIds.bookPartsNote), findsNothing);
-  });
+      await tester.pumpWidget(_host(_repo(), FakeEngine()));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(' parts'), findsNothing);
+    },
+  );
 
   testWidgets('the edition rows are behind an expander', (tester) async {
     await tester.pumpWidget(
@@ -998,7 +1008,7 @@ void main() {
         final repo = _adminRepo(testBook(bookPid, partCount: 3));
         await tester.pumpWidget(_host(repo, FakeEngine()));
         await tester.pumpAndSettle();
-        expect(_byId(SemanticsIds.bookPartsNote), findsOneWidget);
+        expect(find.textContaining('3 parts'), findsOneWidget);
 
         await openOverflow(tester);
         await _tap(tester, SemanticsIds.bookMerge);
@@ -1021,7 +1031,7 @@ void main() {
         ).invalidate(toolTasksProvider);
         await tester.pumpAndSettle();
 
-        expect(_byId(SemanticsIds.bookPartsNote), findsNothing);
+        expect(find.textContaining(' parts'), findsNothing);
       });
     }
 
@@ -1033,7 +1043,7 @@ void main() {
       final repo = _adminRepo(testBook(bookPid, partCount: 3));
       await tester.pumpWidget(_host(repo, FakeEngine()));
       await tester.pumpAndSettle();
-      expect(_byId(SemanticsIds.bookPartsNote), findsOneWidget);
+      expect(find.textContaining('3 parts'), findsOneWidget);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMerge);
@@ -1047,7 +1057,7 @@ void main() {
       ).invalidate(toolTasksProvider);
       await tester.pumpAndSettle();
 
-      expect(_byId(SemanticsIds.bookPartsNote), findsNothing);
+      expect(find.textContaining(' parts'), findsNothing);
     });
 
     testWidgets('the task list is not kept live once the book screen is '

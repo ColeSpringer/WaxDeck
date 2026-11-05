@@ -128,10 +128,7 @@ class CatalogCheckSection extends ConsumerWidget {
             SectionHeader(
               title: l10n.healthCatalogTitle,
               overline: l10n.healthCatalogOverline,
-            ),
-            WaxProse(
-              l10n.healthCatalogBlurb,
-              style: WaxType.body.copyWith(color: colors.textSecondary),
+              info: l10n.healthCatalogHelp,
             ),
             const SizedBox(height: WaxSpace.s12),
             Wrap(

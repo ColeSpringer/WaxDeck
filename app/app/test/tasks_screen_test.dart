@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
@@ -27,6 +28,22 @@ Widget _host(FakeRepository repo) => ProviderScope(
 );
 
 Finder _row(String id) => find.bySemanticsIdentifier(SemanticsIds.taskRow(id));
+
+/// The glyph a row draws when a tap on it opens something.
+Finder _forward(Finder row) => find.descendant(
+  of: row,
+  matching: find.byWidgetPredicate(
+    (w) => w is WaxIcon && w.glyph == WaxIcons.forward,
+  ),
+);
+
+/// What a screen reader hears on the row's tappable node, which is the
+/// node the forward glyph lands in.
+String _heard(WidgetTester tester, Finder row) {
+  final node = tester.getSemantics(_forward(row));
+  expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+  return node.label;
+}
 
 /// When a waiting task in these tests tries next: ahead of the clock, so
 /// the row says when.
@@ -185,8 +202,8 @@ void main() {
     );
     expect(
       inRow(
-        "A folder this writes to refuses the server. Fix the folder's "
-        'ownership and permissions and this carries on.',
+        'A folder it writes to refuses the server. Fix its ownership and '
+        'permissions.',
       ),
       findsOneWidget,
     );
@@ -259,36 +276,23 @@ void main() {
       'know reads as passing', (tester) async {
     final repo = FakeRepository();
     const reasons = {
-      'catalog-busy':
-          'Another job holds the catalog; this carries on once it is free.',
-      'catalog-maintenance':
-          'The catalog is under maintenance; this carries on once that is '
-          'done.',
+      'catalog-busy': 'Another job holds the catalog.',
+      'catalog-maintenance': 'The catalog is under maintenance.',
       'read-only':
-          'A library this works in is read-only. Turn read-only off for it, '
-          'or for the server, and this carries on.',
+          'A library it works in is read-only. Turn that off for it or the '
+          'server.',
       'storage-unwritable':
-          "A folder this writes to refuses the server. Fix the folder's "
-          'ownership and permissions and this carries on.',
-      'engine-unavailable':
-          'The audio engine is not available; this carries on once it is '
-          'back.',
+          'A folder it writes to refuses the server. Fix its ownership and '
+          'permissions.',
+      'engine-unavailable': 'The audio engine is not available.',
       'part-missing':
-          'A file of the book is not where the catalog has it. If it does '
-          'not come back, this puts back what it moved and stops.',
+          'A book file is missing; if it stays gone, this undoes its moves '
+          'and stops.',
       'put-back-blocked':
-          'A file cannot go back from the trash: its place is taken or its '
-          'folder refuses the server. Clear the place or fix the folder and '
-          'this carries on.',
-      'stopped':
-          'This was cut short, by the server stopping or by running out of '
-          'time; it carries on where it was.',
-      'other':
-          'Something passing got in the way; this tries again on its '
-          'own.',
-      'a-reason-from-later':
-          'Something passing got in the way; this tries '
-          'again on its own.',
+          'A file cannot leave the trash: free its place or fix its folder.',
+      'stopped': 'Cut short by a server stop or a time limit.',
+      'other': 'Something passing got in the way.',
+      'a-reason-from-later': 'Something passing got in the way.',
     };
     var i = 0;
     for (final reason in reasons.keys) {
@@ -354,8 +358,8 @@ void main() {
     expect(inRow('En espera'), findsOneWidget);
     expect(
       inRow(
-        'Una biblioteca en la que trabaja es de solo lectura. Quita la solo '
-        'lectura de la biblioteca o del servidor y esto seguirá.',
+        'Una biblioteca en la que trabaja es de solo lectura. Desactiva la '
+        'solo lectura en ella o en el servidor.',
       ),
       findsOneWidget,
     );
@@ -571,12 +575,32 @@ void main() {
       find.descendant(of: row, matching: find.text('2 ready for review')),
       findsOneWidget,
     );
+    expect(_heard(tester, row), endsWith('Open the review queue'));
     // The review-entry ids are never shown as produced library items.
     expect(find.textContaining('rv-1'), findsNothing);
 
     await tester.tap(row);
     await tester.pumpAndSettle();
     expect(find.text('Review queue'), findsOneWidget);
+  });
+
+  testWidgets('a finished download with nothing to count draws no "open" '
+      'line, and its glyph names the way', (tester) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-dl'] = ToolTask(
+      id: 'tt-dl',
+      type: 'acquire',
+      state: 'done',
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: DateTime.utc(2026, 7, 1, 1),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    final row = _row('tt-dl');
+    expect(find.text('Open the review queue'), findsNothing);
+    expect(_forward(row), findsOneWidget);
+    expect(_heard(tester, row), endsWith('Open the review queue'));
   });
 
   testWidgets('a single produced item opens per medium', (tester) async {
@@ -600,6 +624,11 @@ void main() {
     );
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: _row('tt-m'), matching: find.text('1 item')),
+      findsOneWidget,
+    );
+    expect(_heard(tester, _row('tt-m')), endsWith('Open the result'));
 
     await tester.tap(_row('tt-m'));
     await tester.pumpAndSettle();
@@ -629,12 +658,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.descendant(
-        of: _row('tt-s'),
-        matching: find.text('2 items produced · tap to open'),
-      ),
+      find.descendant(of: _row('tt-s'), matching: find.text('2 items')),
       findsOneWidget,
     );
+    expect(_forward(_row('tt-s')), findsOneWidget);
+    expect(_heard(tester, _row('tt-s')), endsWith('Open the results'));
     await tester.tap(_row('tt-s'));
     await tester.pumpAndSettle();
 
@@ -664,6 +692,7 @@ void main() {
     );
     expect(find.byKey(const Key('task-summary-tt-imp')), findsOneWidget);
     expect(find.text('matched 120, unmatched 3, listens 987'), findsOneWidget);
+    expect(_heard(tester, row), endsWith('Open the report'));
 
     await tester.tap(row);
     await tester.pumpAndSettle();
@@ -689,10 +718,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final row = _row('tt-f');
-    expect(
-      find.descendant(of: row, matching: find.text('Tap for the report')),
-      findsOneWidget,
-    );
+    expect(_forward(row), findsOneWidget);
+    // A screen reader is told the row opens the report, as the glyph
+    // tells a sighted reader.
+    expect(_heard(tester, row), endsWith('Open the report'));
     await tester.tap(row);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('task-summary-dialog')), findsOneWidget);
@@ -704,6 +733,7 @@ void main() {
   ) async {
     // Another device swept the row first: the 404 the delete answers is
     // the outcome this tap wanted, so the row goes and nothing toasts.
+    // Nothing to open here, so no forward glyph beside the dismiss.
     final repo = FakeRepository();
     repo.toolTasksById['tt-a'] = ToolTask(
       id: 'tt-a',
@@ -715,6 +745,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
     expect(_row('tt-a'), findsOneWidget);
+    expect(_forward(_row('tt-a')), findsNothing);
 
     repo.toolTasksById.remove('tt-a');
     await tester.tap(
@@ -787,6 +818,7 @@ void main() {
     ], reason: 'a member has one sweep, and it is their own');
     expect(shellMessageText(raisedMessage(tester)), 'Cleared 2 tasks');
     expect(find.text('No tool tasks'), findsOneWidget);
+    expect(find.textContaining('report their progress'), findsNothing);
   });
 
   group('an administrator clearing finished tasks', () {
@@ -850,7 +882,7 @@ void main() {
         find.text('Clear every member\'s finished tasks?'),
         findsOneWidget,
       );
-      expect(find.textContaining('reports they have not read'), findsOneWidget);
+      expect(find.textContaining('unread reports included'), findsOneWidget);
 
       // Declining leaves every row where it was.
       await tester.tap(find.text('Cancel'));
@@ -888,8 +920,7 @@ void main() {
 
     expect(
       shellMessageText(raisedMessage(tester)),
-      'Cleared 1 task\n2 tasks kept: their files could not be moved; see '
-      'each row',
+      'Cleared 1 task\n2 tasks kept: their files could not move',
     );
   });
 
@@ -1147,7 +1178,7 @@ void main() {
       expect(
         shellMessageText(raisedMessage(tester)),
         'Cleared 1 task\nCleared 1 library job\n'
-        '2 tasks kept: their files could not be moved; see each row',
+        '2 tasks kept: their files could not move',
       );
     });
   });
@@ -1638,7 +1669,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Tap for the report'), findsNothing);
+    expect(_forward(_row('tt-fix')), findsNothing);
   });
 
   testWidgets('a health fix and a genre clean-up say what they are', (

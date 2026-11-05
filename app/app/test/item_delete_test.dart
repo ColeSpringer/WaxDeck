@@ -521,8 +521,8 @@ void main() {
     expect(find.text('Delete the other tracks too?'), findsOneWidget);
     expect(
       find.text(
-        '2 more tracks are cut from the same file as the track you picked, '
-        'and tracks cut from one file are deleted together or not at all.',
+        '2 more tracks are cut from the same file as the track you picked; '
+        'they are deleted together or not at all.',
       ),
       findsOneWidget,
     );
@@ -580,8 +580,7 @@ void main() {
       'goes, in English and Spanish', () {
     final en = AppLocalizationsEn();
     final es = AppLocalizationsEs();
-    const rest =
-        ', and tracks cut from one file are deleted together or not at all.';
+    const rest = '; they are deleted together or not at all.';
     expect(
       en.libraryDeleteRipShared(1, 1),
       '1 more track is cut from the same file as the track you picked$rest',
@@ -599,9 +598,7 @@ void main() {
       en.libraryDeleteRipShared(12, 5),
       '5 more tracks are cut from the same file as tracks you picked$rest',
     );
-    const resto =
-        ', y las pistas que salen de un mismo archivo se eliminan juntas o '
-        'ninguna.';
+    const resto = '; se eliminan juntas o ninguna.';
     expect(
       es.libraryDeleteRipShared(1, 1),
       '1 pista más sale del mismo archivo que la pista que elegiste$resto',

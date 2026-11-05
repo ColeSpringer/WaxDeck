@@ -83,7 +83,6 @@ class SettingsSectionScreen extends ConsumerWidget {
                     ),
                     AdminAccess.refused => EmptyState(
                       title: l10n.settingsServerAdminOnlyTitle,
-                      message: l10n.settingsServerAdminOnlyMessage,
                       glyph: WaxIcons.admin,
                     ),
                   },
@@ -97,55 +96,71 @@ class SettingsSectionScreen extends ConsumerWidget {
   }
 }
 
+/// Why engine settings are disabled or waiting, when several rows would
+/// say the same thing: each group holding one of them says it once, under
+/// its heading, and the rows stay quiet.
+enum EngineReason { none, away, lacking }
+
+/// The reason two or more of the rows ([offers], one per row) would share
+/// on this server, or null when no reason touches more than one row. A
+/// row alone in its reason keeps its own line.
+EngineReason? sharedEngineReason(
+  ServerStreaming? streaming,
+  List<bool Function(ServerStreaming)> offers,
+) {
+  if (offers.length < 2) return null;
+  return switch (streaming) {
+    ServerStreaming(configured: false) => EngineReason.none,
+    ServerStreaming(connected: false) => EngineReason.away,
+    final engine? when offers.where((o) => !o(engine)).length >= 2 =>
+      EngineReason.lacking,
+    _ => null,
+  };
+}
+
 /// A setting the streaming engine serves, shaped by what the server says
-/// of it: on a server without one its control goes and [withoutEngine]
-/// says why; while one is away the control stays, since the choice
-/// applies once it answers, and [away] says so; an engine that answers
-/// without the feature ([offers] false) takes the control too, with
-/// [lacking]. With nothing said yet, or by a server too old to say, the
-/// row is as it always was.
-({String help, bool offered}) engineRow(
+/// of it: on a server without one its control is drawn disabled; while one
+/// is away the control stays live, since the choice applies once it
+/// answers; an engine that answers without the feature ([offers] false)
+/// disables it too, with [lacking] unless [shared] says it for every row
+/// at once. No engine and an engine away are never the row's to say: the
+/// caller draws that once under the group heading. With nothing said yet,
+/// or by a server too old to say, the row is as it always was.
+({String? help, bool offered}) engineRow(
   ServerStreaming? streaming, {
   required bool Function(ServerStreaming) offers,
-  required String help,
-  required String withoutEngine,
-  required String away,
+  String? help,
   required String lacking,
+  EngineReason? shared,
 }) => switch (streaming) {
-  ServerStreaming(configured: false) => (help: withoutEngine, offered: false),
-  ServerStreaming(connected: false) => (help: away, offered: true),
-  final engine? when !offers(engine) => (help: lacking, offered: false),
+  ServerStreaming(configured: false) => (help: null, offered: false),
+  ServerStreaming(connected: false) => (help: help, offered: true),
+  final engine? when !offers(engine) => (
+    help: shared == EngineReason.lacking ? null : lacking,
+    offered: false,
+  ),
   _ => (help: help, offered: true),
 };
 
-/// Whether the gapless switch is offered: not on a server that renders
-/// nothing, which runs no engine or one that renders no queues. While a
-/// configured engine is away it stays, since the choice applies once the
-/// engine answers.
-bool webGaplessOffered(ServerStreaming? streaming) => switch (streaming) {
-  ServerStreaming(configured: false) => false,
-  ServerStreaming(connected: true, timelines: false) => false,
-  _ => true,
-};
-
 /// The gapless switch's help. A switch that is on and doing nothing has
-/// to say why, and which why: the server runs no engine, its engine is
-/// away, the engine renders no queues, the server is momentarily too busy
-/// to, this browser cannot play one, or nothing rendered is anything this
-/// browser decodes. Only some of those go away on their own, so one
-/// sentence for all of them would send somebody to change a setting that
-/// is not the problem. [status] is what the last mint or load said, and
-/// keeps only the answers health cannot give.
-String webGaplessHelp(
+/// to say why, and which why. The engine's whys (none, away, no rendered
+/// queues) are its group's line, as for crossfade and levelling beside
+/// it; what is left is [status], what the last mint or load said, which
+/// health cannot give: the server momentarily too busy, this browser
+/// unable to play one, or nothing rendered being anything this browser
+/// decodes. Only some of those go away on their own, so one sentence for
+/// all of them would send somebody to change a setting that is not the
+/// problem.
+String? webGaplessHelp(
   AppLocalizations l10n,
   ServerStreaming? streaming,
   String? status,
 ) => switch (streaming) {
-  ServerStreaming(configured: false) => l10n.settingsWebGaplessNoEngine,
-  ServerStreaming(connected: false) => l10n.settingsEngineUnreachable,
-  ServerStreaming(timelines: false) => l10n.settingsWebGaplessUnavailable,
+  ServerStreaming(configured: false) ||
+  ServerStreaming(connected: false) ||
+  ServerStreaming(timelines: false) => null,
   _ => switch (status) {
-    null => l10n.settingsWebGaplessHelp,
+    null => null,
     'transcode-limited' => l10n.settingsWebGaplessBusy,
     'gapless-unsupported' => l10n.settingsWebGaplessBrowser,
     'gapless-format' => l10n.settingsWebGaplessFormat,
@@ -153,11 +168,14 @@ String webGaplessHelp(
   },
 };
 
-/// A heading over a run of related rows.
+/// A heading over a run of related rows, and the one line under it when
+/// a [note] says why several of them are disabled or waiting. With no
+/// [title] the rows keep the group's spacing and go unheaded.
 class _Group extends StatelessWidget {
-  const _Group({required this.title, required this.children});
+  const _Group({required this.children, this.title, this.note});
 
-  final String title;
+  final String? title;
+  final String? note;
   final List<Widget> children;
 
   @override
@@ -169,12 +187,31 @@ class _Group extends StatelessWidget {
       // differently from the next.
       Padding(
         padding: EdgeInsets.only(top: WaxLayout.of(context).sectionGap),
-        child: SectionHeader(title: title),
+        child: switch (title) {
+          final title? => SectionHeader(title: title),
+          null => null,
+        },
       ),
+      if (note case final note?)
+        Padding(
+          padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+          child: WaxProse(
+            note,
+            style: WaxType.bodySmall.copyWith(
+              color: WaxColors.of(context).textTertiary,
+            ),
+          ),
+        ),
       ...children,
     ],
   );
 }
+
+/// Whether every id in [ids] anchors a row one of [groups] draws.
+bool _drawsEvery(List<Widget> groups, Iterable<String> ids) => {
+  for (final group in groups.whereType<_Group>())
+    for (final row in group.children.whereType<SettingAnchor>()) row.id,
+}.containsAll(ids);
 
 // --- Playback ----------------------------------------------------------------
 
@@ -190,46 +227,93 @@ class _PlaybackBody extends ConsumerWidget {
     final prefs = ref.watch(prefsControllerProvider).value;
     final prefsController = ref.read(prefsControllerProvider.notifier);
     final streaming = ref.watch(serverStreamingProvider);
-    // Trimming reads the silence the engine's analysis finds.
-    final trim = engineRow(
-      streaming,
-      offers: (engine) => engine.fileTools,
-      help: l10n.settingsTrimDefaultHelp,
-      withoutEngine: l10n.settingsNeedsEngine,
-      away: l10n.settingsEngineUnreachable,
-      lacking: l10n.settingsEngineLacksThis,
-    );
-    final boost = engineRow(
-      streaming,
-      offers: (engine) => engine.voiceBoost,
-      help: l10n.settingsBoostDefaultHelp,
-      withoutEngine: l10n.settingsNeedsEngine,
-      away: l10n.settingsEngineUnreachable,
-      lacking: l10n.settingsEngineLacksThis,
-    );
+    final mobile = ref.watch(mobileProvider);
+    // The rows a feature of the engine serves, by setting id, with what
+    // each needs of it, group by group: `shared`, each group's line and
+    // each row read them here, and an id no row draws fails the assert
+    // under the column.
+    final spoken = <String, bool Function(ServerStreaming)>{
+      // Trimming reads the silence the engine's analysis finds.
+      'trim-default': (engine) => engine.fileTools,
+      'boost-default': (engine) => engine.voiceBoost,
+    };
     // Crossfade and levelling shape the queue the engine renders as one
-    // stream; nothing plays them otherwise.
-    ({String help, bool offered}) rendered(String help) => engineRow(
-      streaming,
-      offers: (engine) => engine.timelines,
-      help: help,
-      withoutEngine: l10n.settingsNeedsEngine,
-      away: l10n.settingsEngineUnreachable,
-      lacking: l10n.settingsEngineLacksThis,
-    );
-    final crossfade = rendered(l10n.settingsCrossfadeHelp);
-    final replayGain = rendered(l10n.settingsReplayGainHelp);
-    return Column(
+    // stream, which is also what the browser's gapless switch plays.
+    final casting = <String, bool Function(ServerStreaming)>{
+      'crossfade': (engine) => engine.timelines,
+      'replay-gain': (engine) => engine.timelines,
+      if (kIsWeb) 'web-gapless': (engine) => engine.timelines,
+    };
+    final needs = {...spoken, ...casting};
+    final shared = sharedEngineReason(streaming, needs.values.toList());
+    // A reason the rows share is said once in each group holding one of
+    // them, under its heading, where a search landing on a row can read
+    // it; a group whose rows the engine serves in full says nothing.
+    String? noteFor(Iterable<bool Function(ServerStreaming)> rows) =>
+        switch ((shared, streaming)) {
+          (EngineReason.none, _) => l10n.settingsNeedsEngine,
+          (EngineReason.away, _) => l10n.settingsEngineUnreachable,
+          (EngineReason.lacking, final engine?)
+              when rows.any((offers) => !offers(engine)) =>
+            l10n.settingsEngineLacksThese,
+          _ => null,
+        };
+    ({String? help, bool offered}) rowFor(String id, [String? help]) =>
+        engineRow(
+          streaming,
+          offers: needs[id]!,
+          help: help,
+          lacking: l10n.settingsEngineLacksThis,
+          shared: shared,
+        );
+    final trim = rowFor('trim-default');
+    final boost = rowFor('boost-default');
+    final crossfade = rowFor('crossfade', l10n.settingsCrossfadeHelp);
+    final replayGain = rowFor('replay-gain');
+    final webGapless = kIsWeb ? rowFor('web-gapless') : null;
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _Group(
           title: l10n.settingsGroupSpokenWord,
+          note: noteFor(spoken.values),
           children: <Widget>[
+            // The engine's rows first, right under the line that says why
+            // they are disabled, so a search landing on one shows it.
+            SettingAnchor(
+              id: 'trim-default',
+              child: WaxSettingRow(
+                title: l10n.settingsTrimDefaultTitle,
+                help: trim.help,
+                control: WaxSwitch(
+                  value: ref.watch(trimSilenceDefaultProvider),
+                  label: l10n.settingsTrimDefaultTitle,
+                  semanticsId: SemanticsIds.setting('trim-default'),
+                  onChanged: trim.offered
+                      ? ref.read(trimSilenceDefaultProvider.notifier).set
+                      : null,
+                ),
+              ),
+            ),
+            SettingAnchor(
+              id: 'boost-default',
+              child: WaxSettingRow(
+                title: l10n.settingsBoostDefaultTitle,
+                help: boost.help,
+                control: WaxSwitch(
+                  value: ref.watch(voiceBoostDefaultProvider),
+                  label: l10n.settingsBoostDefaultTitle,
+                  semanticsId: SemanticsIds.setting('boost-default'),
+                  onChanged: boost.offered
+                      ? ref.read(voiceBoostDefaultProvider.notifier).set
+                      : null,
+                ),
+              ),
+            ),
             SettingAnchor(
               id: 'skip-back',
               child: WaxSettingRow(
                 title: l10n.settingsSkipBackTitle,
-                help: l10n.settingsSkipBackHelp,
                 control: WaxChoice<int>(
                   value: ref.watch(skipBackSecondsProvider),
                   options: SkipBackSeconds.options,
@@ -247,7 +331,6 @@ class _PlaybackBody extends ConsumerWidget {
               id: 'skip-forward',
               child: WaxSettingRow(
                 title: l10n.settingsSkipForwardTitle,
-                help: l10n.settingsSkipForwardHelp,
                 control: WaxChoice<int>(
                   value: ref.watch(skipForwardSecondsProvider),
                   options: SkipForwardSeconds.options,
@@ -263,7 +346,6 @@ class _PlaybackBody extends ConsumerWidget {
               id: 'podcast-speed',
               child: WaxSettingRow(
                 title: l10n.settingsPodcastSpeedTitle,
-                help: l10n.settingsPodcastSpeedHelp,
                 control: WaxChoice<double>(
                   value: ref.watch(podcastSpeedProvider),
                   options: SpeedSetting.options,
@@ -278,7 +360,6 @@ class _PlaybackBody extends ConsumerWidget {
               id: 'book-speed',
               child: WaxSettingRow(
                 title: l10n.settingsBookSpeedTitle,
-                help: l10n.settingsBookSpeedHelp,
                 control: WaxChoice<double>(
                   value: ref.watch(bookSpeedProvider),
                   options: SpeedSetting.options,
@@ -293,7 +374,6 @@ class _PlaybackBody extends ConsumerWidget {
               id: 'smart-rewind',
               child: WaxSettingRow(
                 title: l10n.settingsSmartRewindTitle,
-                help: l10n.settingsSmartRewindHelp,
                 control: WaxChoice<SmartRewind>(
                   value: ref.watch(smartRewindProvider),
                   options: SmartRewind.values,
@@ -302,40 +382,6 @@ class _PlaybackBody extends ConsumerWidget {
                   semanticsId: SemanticsIds.setting('smart-rewind'),
                   onChanged: ref.read(smartRewindProvider.notifier).set,
                 ),
-              ),
-            ),
-            SettingAnchor(
-              id: 'trim-default',
-              child: WaxSettingRow(
-                title: l10n.settingsTrimDefaultTitle,
-                help: trim.help,
-                control: trim.offered
-                    ? WaxSwitch(
-                        value: ref.watch(trimSilenceDefaultProvider),
-                        label: l10n.settingsTrimDefaultTitle,
-                        semanticsId: SemanticsIds.setting('trim-default'),
-                        onChanged: ref
-                            .read(trimSilenceDefaultProvider.notifier)
-                            .set,
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ),
-            SettingAnchor(
-              id: 'boost-default',
-              child: WaxSettingRow(
-                title: l10n.settingsBoostDefaultTitle,
-                help: boost.help,
-                control: boost.offered
-                    ? WaxSwitch(
-                        value: ref.watch(voiceBoostDefaultProvider),
-                        label: l10n.settingsBoostDefaultTitle,
-                        semanticsId: SemanticsIds.setting('boost-default'),
-                        onChanged: ref
-                            .read(voiceBoostDefaultProvider.notifier)
-                            .set,
-                      )
-                    : const SizedBox.shrink(),
               ),
             ),
           ],
@@ -352,7 +398,6 @@ class _PlaybackBody extends ConsumerWidget {
               id: 'keep-playing-similar',
               child: WaxSettingRow(
                 title: l10n.settingsKeepPlayingTitle,
-                help: l10n.settingsKeepPlayingHelp,
                 control: WaxSwitch(
                   value: ref.watch(keepPlayingSimilarProvider),
                   label: l10n.settingsKeepPlayingTitle,
@@ -365,7 +410,6 @@ class _PlaybackBody extends ConsumerWidget {
               id: 'car-button',
               child: WaxSettingRow(
                 title: l10n.settingsCarButtonTitle,
-                help: l10n.settingsCarButtonHelp,
                 control: WaxSwitch(
                   value: ref.watch(carModeButtonProvider),
                   label: l10n.settingsCarButtonTitle,
@@ -382,7 +426,6 @@ class _PlaybackBody extends ConsumerWidget {
                 id: 'visualizer-idle',
                 child: WaxSettingRow(
                   title: l10n.settingsVisualizerIdleTitle,
-                  help: l10n.settingsVisualizerIdleHelp,
                   control: WaxSwitch(
                     value: ref.watch(visualizerWhenIdleProvider),
                     label: l10n.settingsVisualizerIdleTitle,
@@ -399,7 +442,6 @@ class _PlaybackBody extends ConsumerWidget {
                 id: 'artwork-cycle',
                 child: WaxSettingRow(
                   title: l10n.settingsArtworkCycleTitle,
-                  help: l10n.settingsArtworkCycleHelp,
                   control: WaxSwitch(
                     value: ref.watch(playerArtworkCycleProvider),
                     label: l10n.settingsArtworkCycleTitle,
@@ -422,38 +464,31 @@ class _PlaybackBody extends ConsumerWidget {
           // both values apply here too - which is why the help lines
           // say what they apply to rather than where.
           title: l10n.settingsGroupCasting,
+          note: noteFor(casting.values),
           children: <Widget>[
             SettingAnchor(
               id: 'crossfade',
               child: WaxSettingRow(
                 title: l10n.settingsCrossfadeTitle,
                 help: crossfade.help,
-                control: crossfade.offered
-                    ? WaxChoice<double>(
-                        value: prefs?.crossfadeSeconds ?? 0,
-                        options: const <double>[0, 2, 4, 6, 8, 12],
-                        labelFor: (seconds) => seconds == 0
-                            ? l10n.settingsOptionOff
-                            : wax.spellDuration(
-                                Duration(seconds: seconds.round()),
-                              ),
-                        label: l10n.settingsCrossfadeTitle,
-                        semanticsId: SemanticsIds.setting('crossfade'),
-                        // Rounded: the options are doubles, and a spec
-                        // names 6.
-                        optionSemanticsIdFor: (seconds) =>
-                            SemanticsIds.settingOption(
-                              'crossfade',
-                              seconds.round(),
-                            ),
-                        onChanged: prefs == null
-                            ? null
-                            : (seconds) => saveSetting(
-                                context,
-                                prefsController.setCrossfadeSeconds(seconds),
-                              ),
-                      )
-                    : const SizedBox.shrink(),
+                control: WaxChoice<double>(
+                  value: prefs?.crossfadeSeconds ?? 0,
+                  options: const <double>[0, 2, 4, 6, 8, 12],
+                  labelFor: (seconds) => seconds == 0
+                      ? l10n.settingsOptionOff
+                      : wax.spellDuration(Duration(seconds: seconds.round())),
+                  label: l10n.settingsCrossfadeTitle,
+                  semanticsId: SemanticsIds.setting('crossfade'),
+                  // Rounded: the options are doubles, and a spec names 6.
+                  optionSemanticsIdFor: (seconds) =>
+                      SemanticsIds.settingOption('crossfade', seconds.round()),
+                  onChanged: prefs == null || !crossfade.offered
+                      ? null
+                      : (seconds) => saveSetting(
+                          context,
+                          prefsController.setCrossfadeSeconds(seconds),
+                        ),
+                ),
               ),
             ),
             SettingAnchor(
@@ -461,19 +496,17 @@ class _PlaybackBody extends ConsumerWidget {
               child: WaxSettingRow(
                 title: l10n.settingsReplayGainTitle,
                 help: replayGain.help,
-                control: replayGain.offered
-                    ? WaxSwitch(
-                        value: prefs?.replayGain ?? false,
-                        label: l10n.settingsReplayGainTitle,
-                        semanticsId: SemanticsIds.setting('replay-gain'),
-                        onChanged: prefs == null
-                            ? null
-                            : (on) => saveSetting(
-                                context,
-                                prefsController.setReplayGain(on),
-                              ),
-                      )
-                    : const SizedBox.shrink(),
+                control: WaxSwitch(
+                  value: prefs?.replayGain ?? false,
+                  label: l10n.settingsReplayGainTitle,
+                  semanticsId: SemanticsIds.setting('replay-gain'),
+                  onChanged: prefs == null || !replayGain.offered
+                      ? null
+                      : (on) => saveSetting(
+                          context,
+                          prefsController.setReplayGain(on),
+                        ),
+                ),
               ),
             ),
             // Browsers only, and here rather than under the player
@@ -482,7 +515,7 @@ class _PlaybackBody extends ConsumerWidget {
             // other platform crosses a boundary without a gap already,
             // so elsewhere this would be a switch between two identical
             // outcomes.
-            if (kIsWeb)
+            if (webGapless case final gapless?)
               SettingAnchor(
                 id: 'web-gapless',
                 child: WaxSettingRow(
@@ -492,15 +525,15 @@ class _PlaybackBody extends ConsumerWidget {
                     streaming,
                     ref.watch(webGaplessStatusProvider),
                   ),
-                  // Nothing to switch on a server that renders nothing.
-                  control: webGaplessOffered(streaming)
-                      ? WaxSwitch(
-                          value: ref.watch(webGaplessProvider),
-                          label: l10n.settingsWebGaplessTitle,
-                          semanticsId: SemanticsIds.setting('web-gapless'),
-                          onChanged: ref.read(webGaplessProvider.notifier).set,
-                        )
-                      : const SizedBox.shrink(),
+                  // Disabled on a server that renders nothing.
+                  control: WaxSwitch(
+                    value: ref.watch(webGaplessProvider),
+                    label: l10n.settingsWebGaplessTitle,
+                    semanticsId: SemanticsIds.setting('web-gapless'),
+                    onChanged: gapless.offered
+                        ? ref.read(webGaplessProvider.notifier).set
+                        : null,
+                  ),
                 ),
               ),
           ],
@@ -530,11 +563,14 @@ class _PlaybackBody extends ConsumerWidget {
         ),
         _Group(
           title: l10n.settingsGroupStreaming,
+          // Its rows need an engine and never a feature of one, so only a
+          // missing or an away engine is ever its line.
+          note: noteFor(const []),
           children: <Widget>[
             // One choice where the platform cannot tell a metered
             // connection apart (desktop, web); the mobile platforms
             // split the decision by connection.
-            if (ref.watch(mobileProvider)) ...<Widget>[
+            if (mobile) ...<Widget>[
               _streamQualityRow(
                 id: 'stream-quality-wifi',
                 title: l10n.settingsStreamQualityWifiTitle,
@@ -564,7 +600,6 @@ class _PlaybackBody extends ConsumerWidget {
                 id: 'preload-wifi',
                 child: WaxSettingRow(
                   title: l10n.settingsPreloadWifiTitle,
-                  help: l10n.settingsPreloadWifiHelp,
                   control: WaxSwitch(
                     value: ref.watch(preloadOnWifiOnlyProvider),
                     label: l10n.settingsPreloadWifiTitle,
@@ -577,6 +612,11 @@ class _PlaybackBody extends ConsumerWidget {
           ),
       ],
     );
+    assert(
+      _drawsEvery(body.children, needs.keys),
+      'an engine row is declared above and drawn in no group',
+    );
+    return body;
   }
 
   /// A stream quality is a bitrate the engine's transcode keeps to: a
@@ -594,8 +634,6 @@ class _PlaybackBody extends ConsumerWidget {
         ref.watch(serverStreamingProvider),
         offers: (_) => true,
         help: help,
-        withoutEngine: l10n.settingsNeedsEngine,
-        away: l10n.settingsEngineUnreachable,
         lacking: help,
       );
       return SettingAnchor(
@@ -603,23 +641,21 @@ class _PlaybackBody extends ConsumerWidget {
         child: WaxSettingRow(
           title: title,
           help: row.help,
-          control: row.offered
-              ? WaxChoice<StreamQuality>(
-                  value: ref.watch(provider),
-                  options: StreamQuality.values,
-                  labelFor: (quality) => switch (quality) {
-                    StreamQuality.auto => l10n.settingsStreamQualityAuto,
-                    StreamQuality.high => l10n.settingsStreamQualityHigh,
-                    StreamQuality.normal => l10n.settingsStreamQualityNormal,
-                    StreamQuality.low => l10n.settingsStreamQualityLow,
-                  },
-                  label: title,
-                  semanticsId: SemanticsIds.setting(id),
-                  optionSemanticsIdFor: (quality) =>
-                      SemanticsIds.settingOption(id, quality.name),
-                  onChanged: ref.read(provider.notifier).set,
-                )
-              : const SizedBox.shrink(),
+          control: WaxChoice<StreamQuality>(
+            value: ref.watch(provider),
+            options: StreamQuality.values,
+            labelFor: (quality) => switch (quality) {
+              StreamQuality.auto => l10n.settingsStreamQualityAuto,
+              StreamQuality.high => l10n.settingsStreamQualityHigh,
+              StreamQuality.normal => l10n.settingsStreamQualityNormal,
+              StreamQuality.low => l10n.settingsStreamQualityLow,
+            },
+            label: title,
+            semanticsId: SemanticsIds.setting(id),
+            optionSemanticsIdFor: (quality) =>
+                SemanticsIds.settingOption(id, quality.name),
+            onChanged: row.offered ? ref.read(provider.notifier).set : null,
+          ),
         ),
       );
     },
@@ -646,7 +682,6 @@ class _LibraryBody extends ConsumerWidget {
               id: 'technical-details',
               child: WaxSettingRow(
                 title: l10n.settingsTechnicalDetailsTitle,
-                help: l10n.settingsTechnicalDetailsHelp,
                 control: WaxSwitch(
                   value: ref.watch(technicalDetailsProvider),
                   label: l10n.settingsTechnicalDetailsTitle,
@@ -659,7 +694,6 @@ class _LibraryBody extends ConsumerWidget {
               id: 'browse-unknown',
               child: WaxSettingRow(
                 title: l10n.settingsBrowseUnknownTitle,
-                help: l10n.settingsBrowseUnknownHelp,
                 control: WaxSwitch(
                   value: prefs?.browseShowUnknown ?? true,
                   label: l10n.settingsBrowseUnknownTitle,
@@ -683,16 +717,13 @@ class _LibraryBody extends ConsumerWidget {
                 id: 'browse-sort-${dimension.segment}',
                 child: WaxSettingRow(
                   title: dimension.titleOf(l10n),
-                  // The row already names the index, so the line under
-                  // it does not. The picker's accessible name still takes
-                  // it: five controls in one group need telling apart.
-                  help: l10n.settingsBrowseOrderHelp,
                   control: WaxChoice<FacetSort>(
                     value:
                         prefs?.browseSortFor(dimension.wireName) ??
                         defaultBrowseSort(dimension),
                     options: FacetSort.values,
                     labelFor: (sort) => browseSortLabel(l10n, sort),
+                    // Five controls in one group need telling apart.
                     label: l10n.settingsBrowseOrderChoiceLabel(
                       dimension.titleOf(l10n),
                     ),
@@ -720,6 +751,7 @@ class _LibraryBody extends ConsumerWidget {
               id: 'identify-uploads',
               child: WaxSettingRow(
                 title: l10n.settingsIdentifyUploadsTitle,
+                // Printed, not a tip: the title names no third party.
                 help: l10n.settingsIdentifyUploadsHelp,
                 control: WaxSwitch(
                   value: !(prefs?.identifyOptOut ?? false),
@@ -736,10 +768,7 @@ class _LibraryBody extends ConsumerWidget {
             ),
           ],
         ),
-        _Group(
-          title: l10n.settingsGroupAccess,
-          children: const <Widget>[_LibraryAccessRow()],
-        ),
+        const _LibraryAccessGroup(),
       ],
     );
   }
@@ -748,34 +777,49 @@ class _LibraryBody extends ConsumerWidget {
 /// What this account can see, read-only, so a household member can
 /// answer "why can I not find that album" without asking. The grant is
 /// the administrator's, so a control here would be a refusal waiting.
-class _LibraryAccessRow extends ConsumerWidget {
-  const _LibraryAccessRow();
+/// The answer is the row's value, all or a count; the row holds its
+/// place while the grant is first read, keeps its last answer through a
+/// re-read that is in flight or fails, and a read that fails with no
+/// answer yet says so under it.
+class _LibraryAccessGroup extends ConsumerWidget {
+  const _LibraryAccessGroup();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final account = ref.watch(myAccountProvider);
-    final help = switch (account) {
-      AsyncData(:final value) => switch (value.libraryAccess.mode) {
-        'all' => l10n.settingsLibraryAccessAll,
-        _ => l10n.settingsLibraryAccessSome(
-          value.libraryAccess.libraryPids.length,
-        ),
-      },
-      AsyncValue(hasError: true) => l10n.settingsLibraryAccessError,
-      _ => l10n.settingsLibraryAccessChecking,
+    final access = account.value?.libraryAccess;
+    final label = switch (access) {
+      null => null,
+      LibraryAccess(mode: 'all') => l10n.settingsLibraryAccessEverything,
+      _ => l10n.settingsLibraryAccessSome(access.libraryPids.length),
     };
-    return SettingAnchor(
-      id: 'library-access',
-      child: Semantics(
-        identifier: SemanticsIds.setting('library-access'),
-        child: WaxSettingRow(
-          title: l10n.settingsLibraryAccessTitle,
-          help: help,
-          glyph: WaxIcons.albums,
-          control: const SizedBox.shrink(),
+    final help = label == null && account.hasError
+        ? l10n.settingsLibraryAccessError
+        : null;
+    return _Group(
+      title: l10n.settingsGroupAccess,
+      children: <Widget>[
+        SettingAnchor(
+          id: 'library-access',
+          child: Semantics(
+            identifier: SemanticsIds.setting('library-access'),
+            child: WaxSettingRow(
+              title: l10n.settingsLibraryAccessTitle,
+              help: help,
+              glyph: WaxIcons.albums,
+              control: label == null
+                  ? const SizedBox.shrink()
+                  : Text(
+                      label,
+                      style: WaxType.body.copyWith(
+                        color: WaxColors.of(context).textSecondary,
+                      ),
+                    ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -799,7 +843,6 @@ class _DownloadsBody extends ConsumerWidget {
                 id: 'downloads-wifi',
                 child: WaxSettingRow(
                   title: l10n.settingsDownloadsWifiTitle,
-                  help: l10n.settingsDownloadsWifiHelp,
                   control: WaxSwitch(
                     value: ref.watch(downloadsOnWifiOnlyProvider),
                     label: l10n.settingsDownloadsWifiTitle,
@@ -829,7 +872,6 @@ class _DownloadsBody extends ConsumerWidget {
               if (ref.watch(autoRemoveFinishedProvider))
                 WaxSettingRow(
                   title: l10n.settingsAutoRemoveAfterTitle,
-                  help: l10n.settingsAutoRemoveAfterHelp,
                   control: WaxChoice<int>(
                     value: ref.watch(autoRemoveFinishedAfterHoursProvider),
                     options: AutoRemoveFinishedAfterHours.options,
@@ -845,7 +887,6 @@ class _DownloadsBody extends ConsumerWidget {
                 id: 'downloads-manager',
                 child: WaxOptionRow(
                   title: l10n.settingsDownloadsManagerTitle,
-                  subtitle: l10n.settingsDownloadsManagerBlurb,
                   glyph: WaxIcons.downloads,
                   semanticsId: SemanticsIds.setting('downloads-manager'),
                   trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -897,7 +938,6 @@ class _ArtworkCacheRowState extends ConsumerState<_ArtworkCacheRow> {
       id: 'artwork-cache',
       child: WaxSettingRow(
         title: l10n.settingsArtworkCacheTitle,
-        help: l10n.settingsArtworkCacheHelp,
         glyph: WaxIcons.albums,
         control: WaxButton(
           label: l10n.settingsArtworkCacheClear,
@@ -928,7 +968,6 @@ class _DevicesBody extends ConsumerWidget {
               id: 'endpoints',
               child: WaxOptionRow(
                 title: l10n.settingsEndpointsTitle,
-                subtitle: l10n.settingsEndpointsBlurb,
                 glyph: WaxIcons.cast,
                 semanticsId: SemanticsIds.setting('endpoints'),
                 trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -942,7 +981,6 @@ class _DevicesBody extends ConsumerWidget {
               id: 'cast-check',
               child: WaxOptionRow(
                 title: l10n.settingsCastCheckTitle,
-                subtitle: l10n.settingsCastCheckBlurb,
                 glyph: WaxIcons.warning,
                 semanticsId: SemanticsIds.setting('cast-check'),
                 trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -984,7 +1022,6 @@ class _IntegrationsBody extends ConsumerWidget {
               id: 'radio-scrobbling',
               child: WaxSettingRow(
                 title: l10n.settingsRadioScrobblingTitle,
-                help: l10n.settingsRadioScrobblingHelp,
                 control: WaxSwitch(
                   value: !(prefs?.radioScrobbleOptOut ?? false),
                   label: l10n.settingsRadioScrobblingTitle,
@@ -1099,37 +1136,16 @@ class _AppearanceBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        // Untitled: a heading over one row says that row's title twice.
+        // Its scope tip says the language follows the account, unlike
+        // everything under This device.
         _Group(
-          title: l10n.settingsThemeTitle,
-          children: <Widget>[
-            SettingAnchor(
-              id: 'theme',
-              child: WaxSettingRow(
-                title: l10n.settingsThemeTitle,
-                // This device's, not the account's: the screen being
-                // looked at is what a theme is about.
-                help: l10n.settingsThemeHelp,
-                control: WaxChoice<ThemePref>(
-                  value: ref.watch(themeSettingProvider),
-                  options: ThemePref.values,
-                  labelFor: (theme) => _themeLabel(l10n, theme),
-                  label: l10n.settingsThemeTitle,
-                  semanticsId: SemanticsIds.themeSelect,
-                  onChanged: (theme) =>
-                      ref.read(themeSettingProvider.notifier).set(theme),
-                ),
-              ),
-            ),
-          ],
-        ),
-        _Group(
-          title: l10n.settingsLanguageTitle,
           children: <Widget>[
             SettingAnchor(
               id: 'language',
               child: WaxSettingRow(
                 title: l10n.settingsLanguageTitle,
-                help: l10n.settingsFollowsAccountHelp,
+                info: l10n.settingsScopeAccountHelp,
                 control: WaxChoice<String>(
                   value: _languageValue(prefs?.locale),
                   options: languageTags,
@@ -1154,11 +1170,27 @@ class _AppearanceBody extends ConsumerWidget {
         _Group(
           title: l10n.settingsGroupThisDevice,
           children: <Widget>[
+            // This device's, not the account's: the screen being looked at
+            // is what a theme is about.
+            SettingAnchor(
+              id: 'theme',
+              child: WaxSettingRow(
+                title: l10n.settingsThemeTitle,
+                control: WaxChoice<ThemePref>(
+                  value: ref.watch(themeSettingProvider),
+                  options: ThemePref.values,
+                  labelFor: (theme) => _themeLabel(l10n, theme),
+                  label: l10n.settingsThemeTitle,
+                  semanticsId: SemanticsIds.themeSelect,
+                  onChanged: (theme) =>
+                      ref.read(themeSettingProvider.notifier).set(theme),
+                ),
+              ),
+            ),
             SettingAnchor(
               id: 'density',
               child: WaxSettingRow(
                 title: l10n.settingsDensityTitle,
-                help: l10n.settingsDensityHelp,
                 control: WaxChoice<WaxDensity>(
                   value: ref.watch(densityProvider),
                   options: WaxDensity.values,
@@ -1173,7 +1205,6 @@ class _AppearanceBody extends ConsumerWidget {
               id: 'grid-size',
               child: WaxSettingRow(
                 title: l10n.settingsGridSizeTitle,
-                help: l10n.settingsGridSizeHelp,
                 control: WaxChoice<WaxGridSize>(
                   value: ref.watch(gridSizeProvider),
                   options: WaxGridSize.values,
@@ -1188,7 +1219,6 @@ class _AppearanceBody extends ConsumerWidget {
               id: 'artwork-glow',
               child: WaxSettingRow(
                 title: l10n.settingsArtworkGlowTitle,
-                help: l10n.settingsArtworkGlowHelp,
                 control: WaxSwitch(
                   value: ref.watch(artworkGlowProvider),
                   label: l10n.settingsArtworkGlowTitle,
@@ -1205,7 +1235,7 @@ class _AppearanceBody extends ConsumerWidget {
                 // no pointer the choice is refused rather than taken and
                 // quietly ignored, and the help line says why.
                 help: hasPointer
-                    ? l10n.settingsCardCaptionsHelp
+                    ? null
                     : l10n.settingsCardCaptionsNoPointerHelp,
                 control: WaxChoice<WaxCaptionMode>(
                   value: ref.watch(cardCaptionsProvider),
@@ -1251,7 +1281,7 @@ class _AccessibilityBody extends ConsumerWidget {
                 // not put motion back, and the line is what explains that.
                 help: platformReduced && !ref.watch(reduceMotionProvider)
                     ? l10n.settingsReduceMotionPlatformHelp
-                    : l10n.settingsReduceMotionHelp,
+                    : null,
                 control: WaxSwitch(
                   value: ref.watch(reduceMotionProvider),
                   label: l10n.settingsReduceMotionTitle,
@@ -1259,16 +1289,6 @@ class _AccessibilityBody extends ConsumerWidget {
                   onChanged: ref.read(reduceMotionProvider.notifier).set,
                 ),
               ),
-            ),
-          ],
-        ),
-        _Group(
-          title: l10n.settingsGroupScreenReaders,
-          children: <Widget>[
-            WaxOptionRow(
-              title: l10n.settingsScreenReaderTitle,
-              subtitle: l10n.settingsScreenReaderBlurb,
-              glyph: WaxIcons.headphones,
             ),
           ],
         ),
@@ -1302,7 +1322,6 @@ class _ServerBody extends ConsumerWidget {
               id: 'admin-console',
               child: WaxOptionRow(
                 title: l10n.settingsAdminConsoleOpenTitle,
-                subtitle: l10n.settingsAdminConsoleBlurb,
                 glyph: WaxIcons.admin,
                 trailing: const WaxIcon(WaxIcons.forward, size: 16),
                 semanticsId: SemanticsIds.setting('admin-console'),

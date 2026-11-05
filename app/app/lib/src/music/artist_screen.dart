@@ -122,7 +122,6 @@ class ArtistScreen extends ConsumerWidget {
               hasScrollBody: false,
               child: EmptyState(
                 title: l10n.musicArtistEmptyTitle,
-                message: l10n.musicArtistEmptyMessage,
                 glyph: WaxIcons.artists,
               ),
             ),

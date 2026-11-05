@@ -426,7 +426,7 @@ void main() {
       );
     await _pump(tester, repository, initialQuery: 'night');
 
-    expect(find.textContaining('Refine your search'), findsOneWidget);
+    expect(find.textContaining('refine your search'), findsOneWidget);
   });
 
   testWidgets('an empty query offers what was searched before', (tester) async {
@@ -614,6 +614,39 @@ void main() {
     expect(repository.podcastDirectoryQueries, isEmpty);
   });
 
+  testWidgets('a station directory that fails with nothing local keeps the '
+      'stream-URL way out on its error card', (tester) async {
+    final repository = FakeRepository()
+      ..directoryError = WaxDeckApiException(
+        statusCode: 502,
+        code: 'directory-unavailable',
+        message: 'the station directory could not be reached',
+      );
+    await _pump(tester, repository, atOwnLocation: true, retryFailures: false);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('radio')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.searchField),
+      'nowhere',
+    );
+    await tester.pump(SearchQuery.debounce);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 1));
+
+    // Retry is the card's one action, so its sentence says where the
+    // other way out is; the technical line under it stays empty.
+    final card = tester.widget<ErrorState>(find.byType(ErrorState));
+    expect(
+      card.message,
+      'The station directory did not answer; add a station by its stream '
+      'URL in Radio.',
+    );
+    expect(card.detail, isNull);
+    expect(find.byType(WaxBanner), findsNothing);
+  });
+
   testWidgets('a silent podcast directory leaves the library half standing', (
     tester,
   ) async {
@@ -640,7 +673,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Night Shift Ep. 4'), findsOneWidget);
-    expect(find.textContaining('directory did not answer'), findsOneWidget);
+    expect(
+      find.text(
+        'Podcast directory unreachable; subscribe by feed URL in Podcasts',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a silent podcast directory\'s Retry is busy while it retries', (

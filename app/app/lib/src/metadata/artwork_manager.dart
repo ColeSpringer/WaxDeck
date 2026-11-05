@@ -245,9 +245,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
     final confirmed = await showTypedConfirm(
       context,
       title: l10n.artworkClearTitle(slot.inlineOf(l10n)),
-      message: slot == ArtSlot.front
-          ? l10n.artworkClearFrontBody
-          : l10n.artworkClearBody,
+      message: slot == ArtSlot.front ? l10n.artworkClearFrontBody : null,
       confirmWord: l10n.artworkClearWord,
       confirmLabel: l10n.artworkClearAction,
       fieldSemanticsId: SemanticsIds.confirmField,
@@ -377,7 +375,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(title: l10n.artworkTitle, overline: l10n.artworkOverline),
+        SectionHeader(title: l10n.artworkTitle),
         if (roles.hasError)
           WaxBanner(
             message: l10n.artworkSlotsUnreadable,
@@ -467,7 +465,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
               }
               return WaxSettingRow(
                 title: l10n.artworkLockTitle,
-                help: l10n.artworkLockHelp,
+                info: l10n.artworkLockHelp,
                 control: WaxSwitch(
                   label: l10n.artworkLockTitle,
                   value: value,

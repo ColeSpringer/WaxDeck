@@ -1,23 +1,23 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
-  "notifBackupCompletedHelp": "A backup archive finished building.",
+  "notifBackupCompletedHelp": "A backup archive finished building",
   "@notifBackupCompletedHelp": {
-    "description": "What the `backup-completed` notification is about, drawn under its switch."
+    "description": "What the `backup-completed` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
   "notifBackupCompletedTitle": "Backup finished",
   "@notifBackupCompletedTitle": {
     "description": "Switch label for the `backup-completed` notification."
   },
-  "notifBackupFailedHelp": "A backup attempt failed.",
+  "notifBackupFailedHelp": "A backup attempt failed",
   "@notifBackupFailedHelp": {
-    "description": "What the `backup-failed` notification is about, drawn under its switch."
+    "description": "What the `backup-failed` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
   "notifBackupFailedTitle": "Backup failed",
   "@notifBackupFailedTitle": {
     "description": "Switch label for the `backup-failed` notification."
   },
-  "notifCatalogResetHelp": "An upgrade moved the catalog's schema and the server built a new catalog; libraries added from the console have to be added again.",
+  "notifCatalogResetHelp": "Upgrade rebuilt the catalog; re-add libraries added from the console",
   "@notifCatalogResetHelp": {
     "description": "What the `catalog-reset` notification is about, drawn under its switch."
   },
@@ -25,47 +25,47 @@
   "@notifCatalogResetTitle": {
     "description": "Switch label for the `catalog-reset` notification."
   },
-  "notifEpisodeArrivedHelp": "A subscribed show published a new episode.",
+  "notifEpisodeArrivedHelp": "A subscribed show published a new episode",
   "@notifEpisodeArrivedHelp": {
-    "description": "What the new-episode notification is about, in a delivery target's event checklist."
+    "description": "What the new-episode notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
   "notifEpisodeArrivedTitle": "New episode",
   "@notifEpisodeArrivedTitle": {
     "description": "Heading of the notification that a subscribed show published new episodes, and its name in a delivery target's event checklist."
   },
-  "notifEpisodeDownloadedHelp": "An episode you asked for finished downloading.",
+  "notifEpisodeDownloadedHelp": "An episode you asked for finished downloading",
   "@notifEpisodeDownloadedHelp": {
-    "description": "What the episode-fetched notification is about, in a delivery target's event checklist."
+    "description": "What the episode-fetched notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
   "notifEpisodeDownloadedTitle": "Episode fetched",
   "@notifEpisodeDownloadedTitle": {
     "description": "Heading of the notification that an episode the reader asked to download finished downloading, and its name in a delivery target's event checklist."
   },
-  "notifFeedDisabledHelp": "A subscribed feed kept failing and was disabled.",
+  "notifFeedDisabledHelp": "A subscribed feed kept failing and was disabled",
   "@notifFeedDisabledHelp": {
-    "description": "What the `feed-disabled` notification is about, drawn under its switch."
+    "description": "What the `feed-disabled` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
   "notifFeedDisabledTitle": "Feed switched off",
   "@notifFeedDisabledTitle": {
     "description": "Switch label for the `feed-disabled` notification."
   },
-  "notifGpodderDeviceRemovedHelp": "A new podcast app device took the place of the least recently seen one; what it kept followed stays followed.",
+  "notifGpodderDeviceRemovedHelp": "A new device replaced the least recently seen one",
   "@notifGpodderDeviceRemovedHelp": {
-    "description": "What the `gpodder-device-removed` notification is about, drawn under its switch: an account keeps fifty gpodder devices, and a new one past that removes the least recently seen."
+    "description": "What the `gpodder-device-removed` notification is about, drawn under its switch: a new gpodder device past the account's limit replaces the least recently seen."
   },
   "notifGpodderDeviceRemovedTitle": "Podcast app removed",
   "@notifGpodderDeviceRemovedTitle": {
     "description": "Switch label for the `gpodder-device-removed` notification, and the heading of its inbox row."
   },
-  "notifHealthFixFinishedHelp": "A library health fix you started finished.",
+  "notifHealthFixFinishedHelp": "A library health fix you started finished",
   "@notifHealthFixFinishedHelp": {
-    "description": "What the health-fix-finished notification is about, in a delivery target's event checklist."
+    "description": "What the `health-fix-finished` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
   "notifHealthFixFinishedTitle": "Health fix finished",
   "@notifHealthFixFinishedTitle": {
     "description": "Heading of the notification that a library health fix the reader started finished. The line under it says what it filled."
   },
-  "notifImportCompletedHelp": "An upload or acquisition identified confidently enough to file itself, with no review.",
+  "notifImportCompletedHelp": "An import was filed without review",
   "@notifImportCompletedHelp": {
     "description": "What the `import-completed` notification is about, drawn under its switch."
   },
@@ -73,15 +73,15 @@
   "@notifImportCompletedTitle": {
     "description": "Switch label for the `import-completed` notification."
   },
-  "notifJobFailedHelp": "A library job you started failed.",
+  "notifJobFailedHelp": "A library job you started failed",
   "@notifJobFailedHelp": {
-    "description": "What the job-failed notification is about, in a delivery target's event checklist."
+    "description": "What the `job-failed` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
   "notifJobFailedTitle": "Library job failed",
   "@notifJobFailedTitle": {
     "description": "Heading of the notification that a library job the reader started failed. The line under it says which and why."
   },
-  "notifJobFinishedHelp": "A library job you started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash.",
+  "notifJobFinishedHelp": "A library job you started finished",
   "@notifJobFinishedHelp": {
     "description": "What the job-finished notification is about, in a delivery target's event checklist."
   },
@@ -89,7 +89,7 @@
   "@notifJobFinishedTitle": {
     "description": "Heading of the notification that a library job the reader started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash. The line under it says which and what it did."
   },
-  "notifPlaylistSyncedHelp": "A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended.",
+  "notifPlaylistSyncedHelp": "A synced playlist pulled changes or was suspended",
   "@notifPlaylistSyncedHelp": {
     "description": "Help under the playlist-synced row in the notification-events checklist."
   },
@@ -97,23 +97,23 @@
   "@notifPlaylistSyncedTitle": {
     "description": "Title of the playlist-synced row in the notification-events checklist."
   },
-  "notifReviewReadyHelp": "An upload or acquisition finished identification and waits in the review queue.",
+  "notifReviewReadyHelp": "An upload or acquisition finished identification and waits in the review queue",
   "@notifReviewReadyHelp": {
-    "description": "What the `review-ready` notification is about, drawn under its switch."
+    "description": "What the `review-ready` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
   "notifReviewReadyTitle": "Waiting for review",
   "@notifReviewReadyTitle": {
     "description": "Switch label for the `review-ready` notification."
   },
-  "notifSignupRequestedHelp": "A new account request is waiting for approval.",
+  "notifSignupRequestedHelp": "A new account request is waiting for approval",
   "@notifSignupRequestedHelp": {
-    "description": "What the `signup-requested` notification is about, drawn under its switch."
+    "description": "What the `signup-requested` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
   "notifSignupRequestedTitle": "Account request",
   "@notifSignupRequestedTitle": {
     "description": "Switch label for the `signup-requested` notification."
   },
-  "notifSubscriptionFailedHelp": "A podcast app syncing over gpodder asked to add a feed that could not be subscribed, or to change subscriptions this account may not change.",
+  "notifSubscriptionFailedHelp": "A podcast app's subscription change failed or was refused",
   "@notifSubscriptionFailedHelp": {
     "description": "What the `subscription-failed` notification is about, drawn under its switch."
   },
@@ -121,7 +121,7 @@
   "@notifSubscriptionFailedTitle": {
     "description": "Switch label for the `subscription-failed` notification, and the heading of its inbox row: a subscription change a gpodder client asked for was not made, a feed that did not subscribe or any change from an account that may not change its subscriptions."
   },
-  "notifToolTaskFailedHelp": "A book merge or split, or a CUE split, you started failed, or stopped after its runs kept ending with the server.",
+  "notifToolTaskFailedHelp": "A book merge, split or CUE split failed",
   "@notifToolTaskFailedHelp": {
     "description": "What the tool-task-failed notification is about, in a delivery target's event checklist."
   },

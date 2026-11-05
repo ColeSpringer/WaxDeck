@@ -11,18 +11,13 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get aboutDefectsSubtitle =>
-      'Errors the app caught on its own, newest first, with a way to copy them into a bug report.';
-
-  @override
   String get aboutDiagnosticsTitle => 'Diagnostics';
 
   @override
   String get aboutLicenses => 'Open-source licenses';
 
   @override
-  String get aboutLicensesSubtitle =>
-      'WaxDeck is GPL-3.0-only. This page also lists the bundled type and icon notices.';
+  String get aboutLicensesSubtitle => 'GPL-3.0-only';
 
   @override
   String get aboutLicensingTitle => 'Licensing';
@@ -44,10 +39,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutServerUnreachable => 'unreachable';
 
   @override
-  String get aboutTagline =>
-      'A player, library manager, and metadata completer for music, podcasts, and audiobooks.';
-
-  @override
   String get aboutTitle => 'About';
 
   @override
@@ -66,10 +57,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String adminAuditChange(String field, String from, String to) {
     return '$field: $from -> $to';
   }
-
-  @override
-  String get adminAuditEmptyMessage =>
-      'Administrative actions are recorded here as they happen.';
 
   @override
   String get adminAuditEmptyTitle => 'Nothing logged yet';
@@ -216,25 +203,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminEnrichmentBuiltin => 'Built into the catalog';
 
   @override
-  String get adminEnrichmentBuiltinMusicbrainz =>
-      'Built into the catalog. Switched off, its genres are left out; the identity lookups still run.';
-
-  @override
   String get adminEnrichmentBuiltinNeedsContact =>
-      'Built into the catalog. Waits on a MusicBrainz contact.';
+      'Waits on a MusicBrainz contact';
 
   @override
   String get adminEnrichmentCacheAnswers => 'Answers kept';
 
   @override
-  String get adminEnrichmentCacheBlurb =>
-      'What MusicBrainz and the Cover Art Archive answered, kept so a pass does not ask twice. A pruned answer costs one request the next time it is needed.';
-
-  @override
   String get adminEnrichmentCacheBytesColumn => 'Size';
-
-  @override
-  String get adminEnrichmentCacheEmpty => 'Nothing is cached yet.';
 
   @override
   String get adminEnrichmentCacheExempt => 'Kept by every prune';
@@ -272,7 +248,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminEnrichmentCachePruneBody =>
-      'Pruned answers are asked for again, one request at a time, the next time a pass needs them. The catalog\'s values stay as they are.';
+      'Pruned answers are asked for again when needed. Catalog values stay.';
 
   @override
   String get adminEnrichmentCachePruneTitle => 'Prune the response cache?';
@@ -350,6 +326,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminEnrichmentDeferred => 'Left owed';
 
   @override
+  String get adminEnrichmentIdentityStillAsks =>
+      'Identification still asks MusicBrainz';
+
+  @override
   String adminEnrichmentLastRunFinished(String when) {
     return 'Finished $when';
   }
@@ -369,22 +349,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminEnrichmentMusicbrainzOffHelp =>
-      'Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the sources built into the catalog closed';
-
-  @override
-  String get adminEnrichmentMusicbrainzOnHelp =>
-      'Identifies artists, albums and books, and opens the sources built into the catalog';
+      'Off until WAXDECK_ENRICHMENT_CONTACT is set';
 
   @override
   String get adminEnrichmentMusicbrainzTitle => 'MusicBrainz';
 
   @override
   String get adminEnrichmentNothingToDo =>
-      'A pass has nothing to do: no source can run. Set a MusicBrainz contact or configure a provider, then restart.';
+      'Nothing can run: set a MusicBrainz contact or provider, then restart.';
 
   @override
   String get adminEnrichmentNothingToDoSwitchedOff =>
-      'A pass has nothing to do: the sources that could run are switched off. Switch one on below, or set a MusicBrainz contact and restart.';
+      'Nothing can run: switch a source on below or set a MusicBrainz contact.';
 
   @override
   String get adminEnrichmentPhaseAlbumArt => 'Album covers';
@@ -458,7 +434,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminEnrichmentRunAllHelp =>
-      'Every source, about every entity: slow on a large library';
+      'Everything again; slow on a large library';
 
   @override
   String get adminEnrichmentRunBusy => 'A pass is already running.';
@@ -470,15 +446,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminEnrichmentRunNormal => 'Fill what is missing';
 
   @override
-  String get adminEnrichmentRunNormalHelp =>
-      'Asks about what has not been looked up, or whose miss has expired';
-
-  @override
   String get adminEnrichmentRunPhases => 'Ask again in chosen phases';
-
-  @override
-  String get adminEnrichmentRunPhasesHelp =>
-      'Only the phases switched on below, asking again about everything they reach';
 
   @override
   String get adminEnrichmentRunStarted => 'Enrichment pass started';
@@ -502,11 +470,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get adminEnrichmentSourcesBlurb =>
-      'Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already settled until a run forces its phases or, for a miss, the retry window passes.';
+  String get adminEnrichmentSourcesGroup => 'Sources';
 
   @override
-  String get adminEnrichmentSourcesGroup => 'Sources';
+  String get adminEnrichmentSourcesHelp => 'Sources are asked in this order.';
 
   @override
   String get adminEnrichmentSourcesRevert => 'Revert';
@@ -531,7 +498,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String adminEnrichmentStalled(String phases) {
-    return 'Stopped early: $phases. Every source serving them failed three times in a row and sat out the pass; the lookups they owe are asked once more on the next pass.';
+    return 'Stopped early: $phases. Their sources failed three times; asked again next pass.';
   }
 
   @override
@@ -586,7 +553,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminFoldsEmptyMessage =>
-      'A merge folds the names it does away with into the entry it keeps, so files still spelled the old way file under it.';
+      'Merges fold old names into the kept entry.';
 
   @override
   String get adminFoldsEmptyTitle => 'No folded names';
@@ -659,9 +626,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get adminFoldsOverline => 'Old spellings that file under another name';
-
-  @override
   String adminFoldsQuoted(String spelling) {
     return '\"$spelling\"';
   }
@@ -684,7 +648,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String adminFoldsUnfoldBody(String fold, String name) {
-    return 'Files spelled $fold that the library reads as new or changed (added, moved, replaced or retagged) are filed under their own name again. The ones \"$name\" holds already stay with it, even through a rescan with Re-read unchanged files, until they change or move.';
+    return 'New or changed files spelled $fold are filed under their own name again; ones \"$name\" holds stay until they change.';
   }
 
   @override
@@ -697,7 +661,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminForbiddenMessage =>
-      'The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.';
+      'Ask an administrator if you need something here.';
 
   @override
   String get adminForbiddenTitle => 'This area is for administrators';
@@ -718,7 +682,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminGenreAliasesBlurb =>
-      'Case, accents, and punctuation already fold, so list only the spellings folding cannot reach: Rap for Hip Hop, R&B for Rhythm and Blues.';
+      'Case, accents, punctuation already fold; list other spellings only.';
 
   @override
   String get adminGenreAliasesHint => 'Comma separated';
@@ -763,28 +727,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminGenreNormalize => 'Normalize catalog';
 
   @override
-  String get adminGenreNormalizeBlurb =>
-      'A sweeper folds newly scanned genres onto the vocabulary on its own. Normalizing is the catch-up pass, for a catalog older than the change log still holds or a tree you just edited.';
+  String get adminGenreNormalizeHelp =>
+      'Folds genres onto the vocabulary; new scans already do this, so use it to catch up.';
 
   @override
   String get adminGenreNormalizing => 'Normalizing the catalog';
 
   @override
-  String get adminGenreParentHelp => 'The top-level genre this one belongs to';
-
-  @override
-  String get adminGenreParentHelpHasChildren =>
-      'Genres group under this one, and the tree is two levels deep';
+  String get adminGenreParentHasChildrenHelp =>
+      'Genres sit under it; the tree is two levels deep';
 
   @override
   String get adminGenreParentLabel => 'Parent genre';
 
   @override
   String get adminGenreParentTitle => 'Groups under';
-
-  @override
-  String get adminGenrePickMessage =>
-      'Its name, its parent, and its aliases are edited here.';
 
   @override
   String get adminGenrePickTitle => 'Pick a genre';
@@ -818,12 +775,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminGenreSaved => 'Genre tree saved';
 
   @override
-  String get adminGenreSourceDefault =>
-      'Running on the vocabulary WaxDeck ships. Editing it stores a tree of your own.';
-
-  @override
-  String get adminGenreSourceStored =>
-      'Running on a stored vocabulary of your own.';
+  String get adminGenreSourceDefault => 'Shipped vocabulary';
 
   @override
   String get adminGenreTreeLoadError => 'Could not load the genre tree';
@@ -845,10 +797,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminGroupServer => 'Server';
-
-  @override
-  String get adminInviteAccessAllHelp =>
-      'Off picks the libraries this invite can see';
 
   @override
   String get adminInviteAdminHelp =>
@@ -904,10 +852,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminInviteRevoked => 'revoked';
 
   @override
-  String get adminInviteUploadHelp =>
-      'Whether this account can add files to the library';
-
-  @override
   String adminInviteUses(int used, int total) {
     return 'uses $used/$total';
   }
@@ -946,10 +890,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminLibrariesColumnReadOnly => 'Read-only';
 
   @override
-  String get adminLibrariesEmptyMessage =>
-      'Add a root below and WaxDeck scans what is in it.';
-
-  @override
   String get adminLibrariesEmptyTitle => 'No libraries yet';
 
   @override
@@ -957,10 +897,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminLibrariesTitle => 'Libraries';
-
-  @override
-  String get adminLibraryAbsentHelp =>
-      'Register the path now; it is scanned once the folder is there.';
 
   @override
   String get adminLibraryAbsentTitle => 'Folder mounted later';
@@ -999,18 +935,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminLibraryFolderFallbackRescan =>
-      'Applies to new files now. Re-read unchanged files in Rescan to apply it to files already scanned.';
+      'Applies to new files; for the rest, Rescan with Re-read unchanged files.';
 
   @override
   String get adminLibraryHoldsHelp =>
-      'Books makes every audio file in the folder an audiobook. Music and Mixed go by each file\'s tags.';
+      'Books reads every audio file as an audiobook';
 
   @override
   String get adminLibraryHoldsTitle => 'Holds';
 
   @override
   String get adminLibraryManagedHelp =>
-      'Let uploads and organizing place files in this root';
+      'Uploads and Organize write and move files here; set once';
 
   @override
   String get adminLibraryManagedTitle => 'Catalog-managed';
@@ -1062,7 +998,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String adminLibraryMediaRereadBody(String name) {
-    return 'Every file in $name is read again to see what it holds, which can take a while. In Music, a book its parts\' tags do not make is read as tracks; in Mixed, a book whose parts already make one stays. Items whose kind was set by hand keep it.';
+    return 'Every file in $name is read again, which can take a while. Books the tags cannot support become tracks in Music. Hand-set kinds are kept.';
   }
 
   @override
@@ -1077,7 +1013,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String adminLibraryMediaToBooksBody(String name) {
-    return 'Every audio file in $name becomes a book on the scan this starts: parts sharing an album and author are one book, and numbered parts with no album join the book their folder holds. Items whose kind was set by hand keep it.';
+    return 'Every audio file in $name becomes a book: parts sharing an album and author join one book. Hand-set kinds are kept.';
   }
 
   @override
@@ -1099,7 +1035,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminLibraryPathRule =>
-      'The path must be absolute, and must not overlap an existing root, the upload inbox, or the podcast download directory.';
+      'Absolute path, not overlapping another root or upload inbox';
 
   @override
   String get adminLibraryProfileInPlace => 'In place';
@@ -1122,7 +1058,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminLibraryRemoveBody =>
-      'Its files stay on disk. The catalog forgets the library; items with no other copy are archived and come back if the folder is added again. Type the library\'s name to confirm.';
+      'Files stay on disk. Items with no other copy are archived until the folder returns. Type the library\'s name to confirm.';
 
   @override
   String get adminLibraryRemoveConfigured =>
@@ -1143,14 +1079,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminLibraryRescanBody =>
-      'Scans every library root, not just this one. Files that haven\'t changed are skipped.';
+      'Scans every library root, not just this one.';
 
   @override
   String get adminLibraryRescanForce => 'Re-read unchanged files';
 
   @override
   String get adminLibraryRescanForceHelp =>
-      'The repair pass: every file is read again even where nothing changed, which takes much longer. Edits you made are kept.';
+      'Re-reads every file, even unchanged; much slower. Edits kept.';
 
   @override
   String get adminLibraryRescanStart => 'Rescan';
@@ -1166,10 +1102,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminLibraryUnwritable => 'Not writable by the server';
-
-  @override
-  String get adminMigrateAccountHelp =>
-      'The stars, ratings, history, and progress land on this account.';
 
   @override
   String get adminMigrateAccountLabel => 'Import onto';
@@ -1199,9 +1131,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get adminMigrateHistoryHelp => 'What was played there, and when';
-
-  @override
   String get adminMigrateHistoryTitle => 'Listen history';
 
   @override
@@ -1225,14 +1154,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminMigratePasswordLabel => 'Password';
 
   @override
-  String get adminMigrateProgressHelp =>
-      'How far into each episode and book the listener was';
-
-  @override
   String get adminMigrateProgressTitle => 'Playback progress';
-
-  @override
-  String get adminMigrateRatingsHelp => 'The star ratings given there';
 
   @override
   String get adminMigrateRatingsTitle => 'Ratings';
@@ -1248,10 +1170,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminMigrateSpotifyExport => 'Spotify data export';
-
-  @override
-  String get adminMigrateStarsHelp =>
-      'Which tracks and albums the other server had starred';
 
   @override
   String get adminMigrateStarsTitle => 'Stars';
@@ -1330,14 +1248,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminScheduleAnalyzeBlurb =>
-      'Measures loudness, fingerprints, and waveforms. Decodes every audio file, so a large library takes hours. Resumable: files already analyzed are skipped.';
+      'Decodes every audio file: hours on a large library';
 
   @override
   String get adminScheduleBackup => 'Backup';
-
-  @override
-  String get adminScheduleBackupBlurb =>
-      'Writes an archive of the database and its sidecars.';
 
   @override
   String get adminScheduleCronHint => 'minute hour day month weekday';
@@ -1355,7 +1269,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminScheduleEnrichBlurb =>
-      'Fills missing metadata, artwork, and lyrics from the configured providers. Capped at 2000 items a night, so a large library fills in over several nights; a run started by hand is uncapped. The server\'s configuration sets how long something no provider could answer waits before it is asked about again, 30 days by default.';
+      'Capped at 2000 items a night; a manual run is uncapped';
 
   @override
   String adminScheduleLastRun(String stamp) {
@@ -1377,7 +1291,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminSchedulePruneBlurb =>
-      'Clears expired staging, spent tokens, and trashed files past their retention.';
+      'Permanently clears expired staging, tokens and old trash';
 
   @override
   String adminScheduleSaved(String name) {
@@ -1388,18 +1302,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminScheduleScan => 'Library scan';
 
   @override
-  String get adminScheduleScanBlurb =>
-      'Finds new and changed files, reads their tags, and indexes them. Cheap: it does not decode audio.';
+  String get adminScheduleScanBlurb => 'Cheap: does not decode audio';
 
   @override
   String get adminScheduleStatusFailed => 'failed';
 
   @override
   String get adminScheduleStatusOk => 'ok';
-
-  @override
-  String get adminSchedulesEmptyMessage =>
-      'This server runs nothing on a timetable.';
 
   @override
   String get adminSchedulesEmptyTitle => 'No schedules';
@@ -1414,126 +1323,56 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminSectionAudit => 'Audit log';
 
   @override
-  String get adminSectionAuditBlurb => 'Who did what, and to what';
-
-  @override
-  String get adminSectionBackupsBlurb =>
-      'Archives, imports, and staged restores';
-
-  @override
   String get adminSectionDashboard => 'Dashboard';
-
-  @override
-  String get adminSectionDashboardBlurb =>
-      'What needs attention, and what is running';
 
   @override
   String get adminSectionDiagnostics => 'Diagnostics';
 
   @override
-  String get adminSectionDiagnosticsBlurb => 'Files the catalog could not read';
-
-  @override
-  String get adminSectionEnrichmentBlurb =>
-      'Where artwork, lyrics and details come from';
-
-  @override
-  String get adminSectionGenresBlurb =>
-      'The canonical vocabulary every genre folds onto';
-
-  @override
   String get adminSectionHealth => 'Health';
-
-  @override
-  String get adminSectionHealthBlurb =>
-      'What is missing, mistagged, or duplicated';
-
-  @override
-  String get adminSectionLibrariesBlurb =>
-      'The roots WaxDeck scans, and what each one holds';
-
-  @override
-  String get adminSectionMigrateBlurb =>
-      'Bring a library, its stars, and its history across';
 
   @override
   String get adminSectionNotifications => 'Notifications';
 
   @override
-  String get adminSectionNotificationsBlurb =>
-      'Where this server reports operations events';
-
-  @override
   String get adminSectionOrganize => 'Organize';
-
-  @override
-  String get adminSectionOrganizeBlurb => 'Move files into a naming scheme';
 
   @override
   String get adminSectionReview => 'Review queue';
 
   @override
-  String get adminSectionSchedulesBlurb =>
-      'When scans, backups, and pruning run';
-
-  @override
-  String get adminSectionSettingsBlurb =>
-      'Signups, read-only mode, transcoding, retention';
-
-  @override
   String get adminSectionShares => 'Share links';
-
-  @override
-  String get adminSectionSharesBlurb =>
-      'Every public link on this server, and who minted it';
-
-  @override
-  String get adminSectionTrashBlurb => 'Deleted files, until they are purged';
-
-  @override
-  String get adminSectionUsersBlurb =>
-      'Accounts, invites, and what each one may do';
 
   @override
   String get adminServerAccessGroup => 'Access';
 
   @override
-  String get adminServerActivityCaveat =>
-      'Counts what the engine is transcoding or remuxing, including a client that forced the source\'s own format, and a listener playing a queue gaplessly holds one slot however many renderings they have live.';
-
-  @override
-  String adminServerActivityCount(int count) {
+  String adminServerActivityCount(int count, int timelines) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count engine-backed sessions right now.',
       one: '1 engine-backed session right now.',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      timelines,
+      locale: localeName,
+      other: ' $timelines of them are gapless queues.',
+      one: ' One of them is a gapless queue.',
+      zero: '',
+    );
+    return '$_temp0$_temp1';
   }
+
+  @override
+  String get adminServerActivityHelp =>
+      'Counts engine sessions, including forced source formats; a gapless queue holds one slot however many renderings are live.';
 
   @override
   String get adminServerActivityReading => 'Reading what is running...';
 
   @override
   String get adminServerActivityRefresh => 'Refresh what is running';
-
-  @override
-  String adminServerActivitySpoken(String headline, String caveat) {
-    return '$headline $caveat';
-  }
-
-  @override
-  String adminServerActivityTimelines(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count of them are gapless queues.',
-      one: 'One of them is a gapless queue.',
-      zero: 'None of them is a gapless queue.',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get adminServerActivityUnknown =>
@@ -1543,7 +1382,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminServerAnalysisGroup => 'Analysis';
 
   @override
-  String get adminServerDefaultKbpsHint => '0 means no ceiling';
+  String get adminServerDefaultKbpsHelp => '0 means no ceiling';
 
   @override
   String get adminServerDefaultKbpsLabel => 'Default bitrate ceiling (kbps)';
@@ -1553,7 +1392,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminServerRadioArtHelp =>
-      'When a station announces a track this library does not hold, ask Deezer, MusicBrainz and the Cover Art Archive for its cover. This sends the artist and title the station announced off this server. On by default; with it off the player draws the station mark.';
+      'Asks Deezer, MusicBrainz and the Cover Art Archive for covers of unknown tracks, sending artist and title';
 
   @override
   String get adminServerRadioArtTitle => 'Look up cover art online';
@@ -1563,7 +1402,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminServerReadOnlyHelp =>
-      'Refuse every change to library content, server-wide. Playback, stars, and progress keep working';
+      'Refuses every library change; playback keeps working';
 
   @override
   String get adminServerReadOnlyTitle => 'Read-only mode';
@@ -1581,21 +1420,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminServerSaveTranscoding => 'Save transcoding limits';
 
   @override
-  String get adminServerSignupHelp =>
-      'Anyone may request an account; requests wait for approval';
+  String get adminServerSignupHelp => 'Requests wait for approval';
 
   @override
   String get adminServerSignupTitle => 'Open signup';
 
   @override
-  String get adminServerSonicHelp =>
-      'Analyze the library in the background for instant mixes, similar tracks, and sonic paths';
-
-  @override
   String get adminServerSonicTitle => 'Sonic analysis';
 
   @override
-  String get adminServerTaskDaysHint => '0 keeps every finished task';
+  String get adminServerTaskDaysHelp => '0 keeps every finished task';
 
   @override
   String get adminServerTaskDaysInvalid =>
@@ -1615,17 +1449,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Transcodes at once, per listener';
 
   @override
-  String get adminServerTranscodingBlurb =>
-      'A transcode is what happens when a client cannot play a file as stored. These bound how many run at once, so a busy evening does not become a slow one.';
-
-  @override
   String get adminServerTranscodingGroup => 'Transcoding';
 
   @override
   String get adminServerTranscodingSaved => 'Transcoding limits saved';
 
   @override
-  String get adminServerTrashDaysHint =>
+  String get adminServerTrashDaysHelp =>
       '0 keeps them until the trash is emptied by hand';
 
   @override
@@ -1640,10 +1470,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminShareRevoked => 'Link revoked';
-
-  @override
-  String get adminSharesEmptyMessage =>
-      'Nobody on this server has minted a public link. When somebody does it turns up here, with who made it and a way to switch it off.';
 
   @override
   String get adminSharesEmptyTitle => 'Nothing is shared';
@@ -1664,15 +1490,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminStreamingUnreachable => 'Unreachable';
 
   @override
-  String get adminThumbsBlurb =>
-      'Resized copies of your covers, generated on demand. Clearing them costs a moment of decoding the next time each one is drawn, never a picture.';
-
-  @override
   String get adminThumbsClearAction => 'Clear cache';
 
   @override
   String get adminThumbsClearBody =>
-      'Every generated copy is dropped and regenerated the next time a cover is drawn. No artwork is lost. The space is freed inside the catalog file rather than returned to the disk.';
+      'Copies regenerate on next draw. No artwork is lost.';
 
   @override
   String get adminThumbsClearTitle => 'Clear the artwork cache?';
@@ -1864,10 +1686,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Every trashed file outside read-only libraries is deleted for good, including the ones still restorable. This cannot be undone.';
 
   @override
-  String get adminTrashEmptyStateMessage =>
-      'Deleted files wait here before they are purged.';
-
-  @override
   String get adminTrashEmptyStateTitle => 'The trash is empty';
 
   @override
@@ -1932,10 +1750,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get adminTrashShowRestoredHelp =>
-      'Entries already put back, for the record';
-
-  @override
   String get adminTrashShowRestoredTitle => 'Show restored entries';
 
   @override
@@ -1952,10 +1766,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminUserActionsGroup => 'Account actions';
-
-  @override
-  String get adminUserAdminHelp =>
-      'Sees the whole library and the admin console';
 
   @override
   String get adminUserAdminTitle => 'Administrator';
@@ -1976,7 +1786,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminUserChildPresetHelp =>
-      'Sets no explicit content, no deleting, downloading, or uploading, and a deny rule for advisory-tagged tracks. Everything below stays editable.';
+      'Restricts explicit content, deleting, downloads and uploads; editable below.';
 
   @override
   String get adminUserDeleteAccount => 'Delete account';
@@ -1994,7 +1804,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminUserDeletePlaylistsDeleteHelp =>
-      'Shared and private alike. Anyone they shared a playlist with loses it.';
+      'Shared and private alike; others lose access';
 
   @override
   String get adminUserDeletePlaylistsTransfer =>
@@ -2002,14 +1812,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminUserDeletePlaylistsTransferHelp =>
-      'They keep their entries and stay shared. A smart playlist that depends on their stars, ratings, plays or private playlists becomes a fixed list of its tracks. Their private playlists are deleted.';
+      'Smart playlists depending on this account become fixed lists. Private ones are deleted.';
 
   @override
   String get adminUserDeleteTitle => 'Delete account?';
 
   @override
-  String get adminUserDisabledHelp =>
-      'A disabled account cannot sign in, and its live sessions are revoked';
+  String get adminUserDisabledHelp => 'Cannot sign in; sessions are revoked';
 
   @override
   String get adminUserDisabledTitle => 'Disabled';
@@ -2026,10 +1835,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminUserMaxKbpsLabel => 'Transcode ceiling (kbps)';
 
   @override
-  String get adminUserMayUploadHelp =>
-      'Add files to the library, through review';
-
-  @override
   String get adminUserMayUploadTitle => 'May upload';
 
   @override
@@ -2039,44 +1844,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminUserPasswordSet => 'Password set';
 
   @override
-  String get adminUserPermDeleteHelp => 'Move catalog files to the trash';
-
-  @override
   String get adminUserPermDeleteTitle => 'Delete library files';
-
-  @override
-  String get adminUserPermDownloadHelp =>
-      'Keep the stored file, not just a stream';
 
   @override
   String get adminUserPermDownloadTitle => 'Download originals';
 
   @override
-  String get adminUserPermExplicitHelp => 'Off hides what the deny rules match';
+  String get adminUserPermExplicitHelp =>
+      'Podcasts only; music needs a content deny rule';
 
   @override
   String get adminUserPermExplicitTitle => 'Explicit content';
 
   @override
-  String get adminUserPermManagePodcastsHelp =>
-      'Subscribe, unsubscribe, and change feed settings';
-
-  @override
   String get adminUserPermManagePodcastsTitle => 'Manage podcasts';
-
-  @override
-  String get adminUserPermSharedOutputsHelp =>
-      'May play to endpoints other people also use';
 
   @override
   String get adminUserPermSharedOutputsTitle => 'Shared outputs';
 
   @override
   String get adminUserPermissionsGroup => 'Permissions';
-
-  @override
-  String get adminUserQuotaHelp =>
-      'How much may sit in staging waiting for a decision. Importing an upload into the library frees the space again, so this bounds the queue rather than what the account contributes.';
 
   @override
   String get adminUserQuotaHint => 'Empty means no limit';
@@ -2118,10 +1905,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminUserTagAllowLabel => 'Content allow rules';
 
   @override
-  String get adminUserTagDenyHelp =>
-      'Matching content is hidden from this account';
-
-  @override
   String get adminUserTagDenyLabel => 'Content deny rules';
 
   @override
@@ -2144,10 +1927,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminUsersColumnUploads => 'Uploads';
-
-  @override
-  String get adminUsersEmptyMessage =>
-      'Invite somebody, or open signup in server settings.';
 
   @override
   String get adminUsersEmptyTitle => 'No accounts';
@@ -2230,7 +2009,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminWarmingBlurb =>
-      'Files appear as they are indexed. Artwork, matching, and the health score fill in behind that: albums the scan finds are identified on their own, and anything the matcher is unsure of arrives in the review queue.';
+      'Files appear as indexed; artwork and matching follow.';
 
   @override
   String get adminWarmingScanning => 'Scanning your library';
@@ -2243,7 +2022,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminWizardAddLibraryBlurb =>
-      'A library is a folder WaxDeck reads. Add one and everything else on this page starts having something to say.';
+      'A library is a folder WaxDeck reads. Add one.';
 
   @override
   String get adminWizardAddLibraryTitle => 'Point WaxDeck at your music';
@@ -2253,7 +2032,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminWizardScanBlurb =>
-      'A scan indexes the files, pulls their tags, and identifies the albums it recognises. It runs in the background: you can leave this page.';
+      'A scan indexes files and identifies albums, in the background.';
 
   @override
   String get adminWizardScanTitle => 'Read what is there';
@@ -2268,7 +2047,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminWizardWarmingBlurb =>
-      'Files appear as they are indexed, and artwork, matching, and the health score fill in behind them. Two things worth doing meanwhile: invite the people who will listen, and look in on the albums the matcher was unsure of.';
+      'Files appear as they are indexed. Meanwhile, invite listeners and review unsure matches.';
 
   @override
   String get adminWizardWarmingTitle => 'While it warms up';
@@ -2354,12 +2133,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get artworkClearAction => 'Clear';
 
   @override
-  String get artworkClearBody =>
-      'The slot becomes empty. Nothing falls back into it.';
-
-  @override
   String get artworkClearFrontBody =>
-      'The item falls back to its album or artist cover. The image itself is removed from the catalog.';
+      'Removes the image; the item falls back to another cover.';
 
   @override
   String artworkClearSlot(String slot) {
@@ -2404,9 +2179,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String artworkOneImageOnly(String slot, String file) {
     return '$slot takes one image; using $file';
   }
-
-  @override
-  String get artworkOverline => 'One image per slot';
 
   @override
   String get artworkPickLabel => 'Image';
@@ -2530,10 +2302,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authHaveInvite => 'Have an invite?';
-
-  @override
-  String get authInviteHelp =>
-      'With a valid invite the account works right away';
 
   @override
   String get authInviteToken => 'Invite token (optional)';
@@ -2663,7 +2431,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bellActivityBlurb =>
-      'What happened to this account, newest first. This device\'s own transfers are listed only while the app is open.';
+      'This device\'s transfers show only while the app is open.';
 
   @override
   String get bellActivityTitle => 'Recent activity';
@@ -2673,7 +2441,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bellClearConfirm =>
-      'Delete every notification for this account, on every device? This cannot be undone.';
+      'Delete all notifications on every device? This cannot be undone.';
 
   @override
   String get bellClearTitle => 'Empty notifications';
@@ -2685,7 +2453,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bellDownloadFinished => 'A download finished.';
 
   @override
-  String get bellEmpty => 'Nothing has happened yet.';
+  String get bellEmptyMessage => 'Nothing has happened yet.';
 
   @override
   String get bellEmptyTitle => 'Nothing to report';
@@ -2821,11 +2589,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookChapterEditorHelp =>
-      'Chapters file in playing order wherever they are typed. A new or moved chapter runs to the next one\'s start; the rest keep their stored lengths.';
+      'Chapters file in playing order. A new or moved chapter runs to the next one\'s start.';
 
   @override
   String get bookChapterEditorInvalid =>
-      'Chapter starts must be stamps like 1:02:03, each one distinct. Chapters stay out of the save until they are.';
+      'Use distinct stamps like 1:02:03; chapters stay unsaved until fixed';
 
   @override
   String get bookChapterEditorRemove => 'Remove this chapter';
@@ -2919,14 +2687,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookMergeBody =>
-      'The parts are joined into one chaptered file beside them, in the same library; every listener\'s position carries over. The original files move to the trash unless you keep them.';
+      'Parts join into one chaptered file; positions carry over. Originals go to the trash unless kept.';
 
   @override
   String get bookMergeKeep => 'Keep the original files';
-
-  @override
-  String get bookMergeKeepHelp =>
-      'The merged copy goes into a folder of its own beside them';
 
   @override
   String bookMergeTitle(int count) {
@@ -2945,17 +2709,6 @@ class AppLocalizationsEn extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count parts',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String bookPartsNote(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other:
-          'This book is $count files, played as one timeline. Positions and chapters span all of them.',
     );
     return '$_temp0';
   }
@@ -3000,7 +2753,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSeriesEmptyMessage =>
-      'A book joins a series when its tags name one. Set one from a book\'s metadata editor.';
+      'A book joins a series through its tags.';
 
   @override
   String get bookSeriesIndexLoadError => 'Could not load the series';
@@ -3021,7 +2774,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSeriesMergeHelp =>
-      'The books in this series move to the one you pick, and this spelling goes away. Nothing else about the books changes.';
+      'Books move to the picked series; this spelling goes away';
 
   @override
   String bookSeriesMergeTitle(String series) {
@@ -3032,8 +2785,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bookSeriesNoBooks => 'Nothing to show here';
 
   @override
-  String get bookSeriesNoBooksMessage =>
-      'This series holds nothing you can open. Ask an administrator if you expected to see it.';
+  String get bookSeriesNoBooksEmptyMessage =>
+      'Ask an administrator if you expected more.';
 
   @override
   String bookSeriesSequence(String number, String series) {
@@ -3068,14 +2821,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSplitBody =>
-      'One file per chapter is written beside the book. The original moves to the trash unless you keep it.';
+      'One file per chapter. The original goes to the trash unless kept.';
 
   @override
   String get bookSplitKeep => 'Keep the original file';
-
-  @override
-  String get bookSplitKeepHelp =>
-      'The pieces go into a folder of their own beside it';
 
   @override
   String bookSplitTitle(int count) {
@@ -3095,16 +2844,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bookTrimSilence => 'Trim silence';
 
   @override
-  String get bookTrimSilenceHelp => 'Shortens the pauses between sentences';
-
-  @override
   String get bookUndo => 'Undo';
 
   @override
   String get bookVoiceBoost => 'Voice boost';
-
-  @override
-  String get bookVoiceBoostHelp => 'Lifts speech over a noisy room';
 
   @override
   String bookWithAuthors(String names) {
@@ -3263,8 +3006,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get booksNothingMatchesYet => 'Nothing matches yet';
 
   @override
-  String booksNothingMatchesYetMessage(int count) {
-    return 'The filters run over the $count books loaded so far, and your library has more.';
+  String booksNothingMatchesYetEmptyMessage(int count) {
+    return 'Filters cover the $count books loaded so far';
   }
 
   @override
@@ -3386,10 +3129,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get defectsCopySpoken => 'Copy the defect log';
 
   @override
-  String get defectsEmptyMessage =>
-      'Errors the app catches on its own turn up here, so a bug report can carry them. An empty list is the good outcome.';
-
-  @override
   String get defectsEmptyTitle => 'Nothing has gone wrong';
 
   @override
@@ -3431,12 +3170,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get devicesBaseUnreachable => 'not reachable';
 
   @override
-  String get devicesCastBlurb =>
-      'A cast device fetches audio from this server by address. These are the addresses it will try, in order.';
+  String get devicesCastBlurb => 'Addresses a cast device will try, in order.';
 
   @override
-  String get devicesCastCaveat =>
-      'The server checked these itself. An address it cannot reach will not work from a speaker either; one it can may still fail if the speaker is on another network.';
+  String get devicesCastHelp =>
+      'The server checked these itself; a speaker on another network may still fail.';
 
   @override
   String get devicesCastingOverline => 'Casting';
@@ -3449,6 +3187,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get devicesCurrentlyElsewhere => 'Currently elsewhere';
+
+  @override
+  String devicesEndpointControl(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'inUse': 'In use',
+      'inUseVolume': 'In use, volume control',
+      'inUseSpeed': 'In use, speed control',
+      'inUseBoth': 'In use, volume and speed control',
+      'remoteVolume': 'Remote volume control',
+      'remoteSpeed': 'Remote speed control',
+      'remoteBoth': 'Remote volume and speed control',
+      'other': 'Remote control',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get devicesEndpointOffline => 'Offline';
 
   @override
   String get devicesGroupApps => 'WaxDeck apps';
@@ -3469,7 +3225,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get devicesListError => 'Could not list devices';
 
   @override
-  String get devicesListErrorMessage =>
+  String get devicesListErrorBody =>
       'The server did not answer. Playback here is unaffected.';
 
   @override
@@ -3482,26 +3238,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get devicesNoAddresses => 'No addresses to try';
 
   @override
-  String get devicesNoAddressesMessage =>
-      'This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.';
+  String get devicesNoAddressesEmptyMessage =>
+      'Set WAXDECK_ADVERTISE_BASE on the server.';
 
   @override
   String get devicesNoDevicesToTest => 'No devices to test';
 
   @override
-  String get devicesNoDevicesToTestMessage =>
-      'No Chromecast or renderer has turned up on this network. Discovery needs multicast, which does not cross Docker\'s default network.';
+  String get devicesNoDevicesToTestEmptyMessage =>
+      'Discovery needs multicast, which Docker\'s default network lacks.';
 
   @override
   String get devicesNothingElsewhere => 'Nothing playing elsewhere';
 
   @override
-  String get devicesNothingElsewhereMessage =>
-      'Pick a device from the now-playing bar to send playback somewhere else.';
+  String get devicesNothingElsewhereEmptyMessage =>
+      'Pick a device from the now-playing bar.';
 
   @override
-  String get devicesNothingToSend =>
-      'Nothing is playing here to send. Start something first.';
+  String get devicesNothingToSend => 'Nothing playing here to send.';
 
   @override
   String devicesOnEndpoint(String endpoint) {
@@ -3560,21 +3315,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get devicesTakeOverBody =>
-      'This device can take over, or leave it playing where it is.';
-
-  @override
-  String get devicesTakeOverOrLeave => 'Take over, or leave it playing';
-
-  @override
   String get devicesTestOnDevice => 'Test on a device';
 
   @override
-  String get devicesTestOnDeviceBlurb =>
-      'The check above is this server reaching itself. Pick a speaker and it will fetch a second of silence through each address and say what happened.';
+  String get devicesTestOnDeviceHelp =>
+      'Pick a speaker and it fetches a second of silence through each address.';
 
   @override
-  String get devicesTesting => 'Testing. This takes a few seconds per address.';
+  String get devicesTesting => 'Testing';
 
   @override
   String get devicesThisDevice => 'This device';
@@ -3599,8 +3347,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get discoveryEmptyMessage =>
-      'This answer came back empty. Try another track.';
+  String get discoveryEmptyMessage => 'Try another track.';
 
   @override
   String get discoveryEmptyTitle => 'Nothing found';
@@ -3660,7 +3407,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String downloadsClearBody(String size) {
-    return 'This frees $size. Nothing leaves the library: everything here plays again with the server reachable.';
+    return 'This frees $size. Nothing leaves the library.';
   }
 
   @override
@@ -3679,8 +3426,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadsDownloading => 'Downloading';
 
   @override
-  String get downloadsEmptyMessage =>
-      'Download a book, an album, or an episode and it plays here with the server unreachable. Its cover comes with it.';
+  String get downloadsEmptyMessage => 'Downloads play here without the server.';
 
   @override
   String get downloadsEmptyTitle => 'Nothing downloaded';
@@ -4051,6 +3797,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This server is not running the source that request needs.';
 
   @override
+  String get errorStationDirectoryUnavailable =>
+      'The station directory did not answer; add a station by its stream URL in Radio.';
+
+  @override
   String get errorStorageFull =>
       'The server has no room for this right now. Ask whoever runs it.';
 
@@ -4121,10 +3871,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get healthCatalogArtistTotals => 'Artist totals out of date';
 
   @override
-  String get healthCatalogBlurb =>
-      'Compares what the catalog keeps beside your files (the search index, totals, sort keys and years) with a fresh count from its own records. Rarely needed: a catalog the server built fresh reads consistent.';
-
-  @override
   String get healthCatalogBookIsbnKeys => 'Book ISBN keys out of date';
 
   @override
@@ -4139,11 +3885,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get healthCatalogClean => 'Consistent: nothing out of step.';
 
   @override
-  String get healthCatalogDrift =>
-      'Out of step. A repair recomputes what is listed below.';
+  String get healthCatalogDrift => 'Out of step';
 
   @override
   String get healthCatalogGenreTotals => 'Genre totals out of date';
+
+  @override
+  String get healthCatalogHelp =>
+      'Compares the catalog\'s derived figures with a fresh count from its own records; rarely needed.';
 
   @override
   String get healthCatalogMissingFromSearch => 'Items search cannot find';
@@ -4173,7 +3922,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get healthCatalogRepairBody =>
-      'The repair recounts what the check counts from the catalog\'s own records and deletes what nothing uses. It holds the catalog\'s write lock while it writes, so edits and scans wait for it. Your files are not touched.';
+      'Recounts what the check counts and deletes catalog rows nothing uses; your files are not touched. Edits and scans wait meanwhile.';
 
   @override
   String get healthCatalogRepairRunning =>
@@ -4197,8 +3946,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get healthCatalogSortKeys => 'Names sorting out of place';
 
   @override
-  String get healthCatalogTidy =>
-      'Consistent. A repair tidies what is listed below.';
+  String get healthCatalogTidy => 'Consistent, but untidy';
 
   @override
   String get healthCatalogTitle => 'Catalog check';
@@ -4263,10 +4011,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get healthDiagnosticsEmptyMessage =>
-      'Every file the catalog has seen decoded cleanly.';
-
-  @override
   String get healthDiagnosticsEmptyTitle => 'No diagnostics recorded';
 
   @override
@@ -4278,17 +4022,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get healthDuplicatesEmptyMessage =>
-      'Artists, albums, and shows each appear once.';
-
-  @override
   String get healthDuplicatesEmptyTitle => 'No duplicates detected';
 
   @override
   String get healthDuplicatesError => 'Could not load duplicates';
-
-  @override
-  String get healthDuplicatesOverline => 'One thing under two names';
 
   @override
   String get healthDuplicatesTitle => 'Duplicates';
@@ -4337,29 +4074,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get healthFixBlockedArtSource =>
-      'Needs its artwork sources switched on in Enrichment.';
+      'Needs artwork sources in Enrichment.';
 
   @override
   String get healthFixBlockedBookSource => 'Needs a book metadata provider.';
 
   @override
   String get healthFixBlockedContact =>
-      'Needs an enrichment contact, which lets this server ask the free public sources.';
+      'Needs an enrichment contact set on the server.';
 
   @override
   String get healthFixBlockedGenreSource =>
-      'Needs a genre source, MusicBrainz or ListenBrainz, switched on in Enrichment.';
+      'Needs a genre source in Enrichment.';
 
   @override
   String get healthFixBlockedLyricsSource =>
-      'Needs a lyrics source switched on in Enrichment.';
+      'Needs a lyrics source in Enrichment.';
 
   @override
-  String get healthFixBlockedNoManaged =>
-      'Needs a managed library: with none, there is no layout for paths to match.';
+  String get healthFixBlockedNoManaged => 'Needs a managed library.';
 
   @override
-  String get healthFixBlockedOther => 'This server cannot run this fix yet.';
+  String get healthFixBlockedOther => 'This server cannot run it yet.';
 
   @override
   String get healthFixBlockedReadOnly =>
@@ -4407,10 +4143,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get healthIssueFixTitle => 'Move this file where the profile puts it?';
-
-  @override
-  String get healthIssuesEmptyMessage =>
-      'Every item the sweeper has seen passes it.';
 
   @override
   String get healthIssuesEmptyTitle => 'Nothing failing this rule';
@@ -4531,14 +4263,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get healthResolveWord => 'resolve';
 
   @override
-  String get healthRulesEmptyMessage =>
-      'Rules appear once the sweeper has evaluated the library.';
+  String get healthRulesEmptyMessage => 'Rules appear after a sweep.';
 
   @override
   String get healthRulesEmptyTitle => 'Nothing to check yet';
-
-  @override
-  String get healthRulesOverline => 'What the sweeper checks';
 
   @override
   String get healthRulesTitle => 'Rules';
@@ -4548,8 +4276,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Library health across $count evaluated items',
-      one: 'Library health across 1 evaluated item',
+      other: '$count items evaluated',
+      one: '1 item evaluated',
     );
     return '$_temp0';
   }
@@ -4598,9 +4326,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get healthUpgradesEmptyMessage => 'Every recording is held once.';
-
-  @override
   String get healthUpgradesEmptyTitle => 'No duplicate qualities detected';
 
   @override
@@ -4625,8 +4350,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeDownloadedTitle => 'On this device';
 
   @override
-  String get homeEmptyMessage =>
-      'Point a library at your music, follow a show, or drop files in. Everything you add turns up on these shelves.';
+  String get homeEmptyMessage => 'Add music, follow a show, or drop files in.';
 
   @override
   String get homeEmptyTitle => 'Nothing here yet';
@@ -4669,8 +4393,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeNeverPlayedTitle => 'Never played';
 
   @override
-  String get homeOfflineMessage =>
-      'Offline. The shelves come back when the server does; what this device holds still plays.';
+  String get homeOfflineMessage => 'Offline. Downloaded items still play.';
 
   @override
   String get homePinAction => 'Pin to Home';
@@ -4889,7 +4612,7 @@ class AppLocalizationsEn extends AppLocalizations {
       other: 'tracks you picked',
       one: 'the track you picked',
     );
-    return '$_temp0 cut from the same file as $_temp1, and tracks cut from one file are deleted together or not at all.';
+    return '$_temp0 cut from the same file as $_temp1; they are deleted together or not at all.';
   }
 
   @override
@@ -5042,10 +4765,10 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'These are already audiobooks',
-      one: 'This is already an audiobook',
+      other: 'Already audiobooks',
+      one: 'Already an audiobook',
     );
-    return '$_temp0, so nothing changed.';
+    return '$_temp0';
   }
 
   @override
@@ -5053,10 +4776,10 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'These are already music',
-      one: 'This is already music',
+      other: 'Already music',
+      one: 'Already music',
     );
-    return '$_temp0, so nothing changed.';
+    return '$_temp0';
   }
 
   @override
@@ -5078,15 +4801,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'It became part of an item in a library you cannot open.';
 
   @override
-  String get libraryKindQueued =>
-      'It carries on in the background; you will be told when it is done.';
+  String get libraryKindQueued => 'Running in the background';
 
   @override
   String get libraryKindStillRunning => 'Still changing. Follow it in Tasks.';
 
   @override
-  String get libraryKindStoppedPlaying =>
-      'What was playing is part of the book now; play it from here.';
+  String get libraryKindStoppedPlaying => 'Now in the book; play from here';
 
   @override
   String get libraryKindToBook => 'Treat as audiobook';
@@ -5096,11 +4817,10 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          'These $count tracks become one audiobook in Books, the parts in order.',
+      other: '$count tracks become one audiobook in Books, in order.',
       one: 'This track becomes an audiobook in Books.',
     );
-    return '$_temp0 Plays, stars and playlist entries come with it, and later scans keep the choice.';
+    return '$_temp0 Plays, stars and playlists come with it.';
   }
 
   @override
@@ -5111,7 +4831,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get libraryKindToMusicBody =>
-      'This book\'s parts become tracks in Music. Plays and stars stay with them, and later scans keep the choice.';
+      'The parts become tracks in Music. Plays and stars stay.';
 
   @override
   String get libraryKindToMusicTitle => 'Make this music?';
@@ -5121,21 +4841,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get libraryKindWriteBackHelp =>
-      'Writes the choice into the files too. Even a catalog rebuilt from scratch then reads a book as a book, and a track as music unless something else in its file says book.';
+      'Also writes the choice into the files, so a rebuilt catalog still reads a book as a book';
 
   @override
   String get libraryMenuDetach => 'Detach from release';
 
   @override
   String get libraryMenuDetachConfirmBody =>
-      'The track leaves the release a MusicBrainz id pins it to and lands on the album its own tags imply.';
+      'The track leaves its release and joins the album its tags imply.';
 
   @override
   String get libraryMenuDetachConfirmTitle => 'Detach this track?';
 
   @override
   String get libraryMenuDetachWriteBackHelp =>
-      'Also clear the release tags in the track\'s file, so the next scan does not put it back';
+      'Also clears the release tags in the track\'s file, so the next scan does not put it back';
 
   @override
   String get libraryMenuDetached => 'Detached from the release.';
@@ -5185,6 +4905,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataAddTag => 'Add tag';
 
   @override
+  String get metadataArtistForbiddenTitle =>
+      'Only administrators can edit an artist';
+
+  @override
   String metadataBulkEdited(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -5200,7 +4924,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataBulkLockNote =>
-      'Saving locks every edited field on each selected track. One batch takes at most 1,000 items.';
+      'Saving locks edited fields; max 1,000 items.';
 
   @override
   String get metadataBulkLockedFail => 'Refuse the batch';
@@ -5214,10 +4938,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataBulkLockedPolicy => 'Locked fields';
-
-  @override
-  String get metadataBulkLockedPolicyHelp =>
-      'What to do when a field this batch writes is already locked on a track';
 
   @override
   String get metadataBulkLockedSkip => 'Skip those tracks';
@@ -5267,9 +4987,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataCreditRole => 'Credit role';
 
   @override
-  String get metadataCreditsOverline => 'Who else is on it';
-
-  @override
   String get metadataCreditsTitle => 'Credits';
 
   @override
@@ -5277,7 +4994,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataDiscardBody =>
-      'This selection has edits its save bar has not written; switching away drops them.';
+      'Switching away drops this selection\'s unsaved edits.';
 
   @override
   String get metadataDiscardConfirm => 'Discard';
@@ -5306,6 +5023,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataFetch => 'Fetch metadata';
+
+  @override
+  String get metadataFetchHelp =>
+      'Applies what the providers agree on, after a preview.';
 
   @override
   String get metadataFieldAlbum => 'Album';
@@ -5411,20 +5132,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataFieldYear => 'Year';
 
   @override
-  String get metadataFieldsOverline => 'What this item claims to be';
-
-  @override
   String get metadataFieldsTitle => 'Fields';
 
   @override
-  String get metadataForbiddenMessage =>
-      'Editing a track changes it for everyone on this server, so the people who can are administrators and whoever\'s upload brought it in.';
+  String metadataForbiddenTitle(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'audiobook': 'Only administrators and the uploader can edit this book',
+      'podcast': 'Only administrators can edit this episode',
+      'other': 'Only administrators and the uploader can edit this track',
+    });
+    return '$_temp0';
+  }
 
   @override
-  String get metadataForbiddenTitle => 'This one is not yours to edit';
-
-  @override
-  String get metadataForceHelp => 'Overwrite fields that are already locked';
+  String get metadataForceHelp => 'Overwrites fields that are already locked';
 
   @override
   String get metadataForceTitle => 'Force';
@@ -5441,15 +5162,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataGenreSearchHint => 'Search or type a genre';
 
   @override
-  String get metadataIdentificationBlurb =>
-      'Rematch reopens identification and puts the result in the review queue. Fetching metadata applies what the providers already agree on, without asking.';
+  String get metadataGroupForbiddenTitle =>
+      'Only administrators can edit a release group';
 
   @override
   String get metadataIdentificationTitle => 'Identification';
 
   @override
   String metadataKindPinned(String kind) {
-    return 'Kind: $kind, pinned';
+    return '$kind, pinned';
   }
 
   @override
@@ -5484,23 +5205,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataLockHelp =>
-      'Keep scans and enrichment from overwriting what you type';
+      'Keeps scans and enrichment from overwriting what you type';
 
   @override
   String get metadataLockTitle => 'Lock edited fields';
-
-  @override
-  String get metadataLyricsEmptyClears =>
-      'Leave empty to remove the stored lyrics when you save.';
 
   @override
   String get metadataLyricsHint => '[00:12.00] First line';
 
   @override
   String get metadataLyricsLabel => 'LRC';
-
-  @override
-  String get metadataLyricsOverline => 'Timed LRC, or plain lines';
 
   @override
   String metadataLyricsSource(String source) {
@@ -5532,15 +5246,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataOriginClear => 'Remove origin';
 
   @override
-  String get metadataOriginEditHelp =>
-      'Every box is saved as you leave it, so clearing one clears the value. The date the item was acquired is kept as it stands.';
+  String get metadataOriginEditAction => 'Correct the origin';
 
   @override
   String get metadataOriginEditTitle => 'Where this came from';
-
-  @override
-  String get metadataOriginEditable =>
-      'Recorded evidence of how this arrived. Tap to correct it.';
 
   @override
   String get metadataOriginId => 'Identifier';
@@ -5565,10 +5274,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataOriginProvider => 'Provider';
 
   @override
-  String get metadataOriginRecorded =>
-      'Recorded evidence of how this arrived, not an editable field.';
-
-  @override
   String get metadataOriginRemoved => 'Origin removed';
 
   @override
@@ -5591,7 +5296,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataOriginUrlHelp =>
-      'Shown without any sign-in details it carried';
+      'Shown redacted; editing it replaces the stored address.';
 
   @override
   String get metadataOriginWriteBack => 'Write into the files';
@@ -5607,12 +5312,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataPreviewApply => 'Apply these changes';
 
   @override
-  String get metadataPreviewBuiltinsNote =>
+  String get metadataPreviewBuiltinsHelp =>
       'The server\'s built-in sources cannot be previewed; applying may still fill remaining gaps from them.';
 
   @override
-  String get metadataPreviewEmpty =>
-      'The providers have nothing new for this item.';
+  String get metadataPreviewEmptyMessage =>
+      'Nothing new; built-in sources may still fill gaps';
 
   @override
   String get metadataPreviewFetchAnyway => 'Fetch anyway';
@@ -5633,6 +5338,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataRematch => 'Rematch';
+
+  @override
+  String get metadataRematchHelp =>
+      'Reopens identification and puts the result in the review queue.';
 
   @override
   String metadataRemoveCredit(String name) {
@@ -5766,9 +5475,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataTagValues => 'Values, comma separated';
 
   @override
-  String get metadataTagsOverline => 'Anything the vocabulary has no field for';
-
-  @override
   String get metadataTagsTitle => 'Custom tags';
 
   @override
@@ -5778,10 +5484,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String metadataUnlockField(String field) {
     return 'Unlock $field';
   }
-
-  @override
-  String get metadataUnofficialHelp =>
-      'A bootleg, a promo, or another unofficial issue';
 
   @override
   String get metadataUnofficialTitle => 'Unofficial release';
@@ -5794,7 +5496,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataWorkbenchSelectEmptyMessage =>
-      'Check tracks in the list to edit them together.';
+      'Check tracks to edit together.';
 
   @override
   String get metadataWorkbenchSelectEmptyTitle => 'Nothing selected';
@@ -5823,7 +5525,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metadataWriteBackHelp =>
-      'Also rewrite the tags embedded in the backing files; saved lyrics also write their .lrc sidecar';
+      'Also rewrites the tags embedded in the backing files; saved lyrics also write their .lrc sidecar';
 
   @override
   String get metadataWriteBackTitle => 'Write tags to files';
@@ -5849,16 +5551,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get musicAlbumEditorForbiddenMessage =>
-      'Barcodes, labels, and catalog numbers are shared by everyone who can see this album, so the server keeps them to administrators.';
-
-  @override
   String get musicAlbumEditorForbiddenTitle =>
       'Only administrators can edit a release';
-
-  @override
-  String get musicAlbumEditorNamesOverline =>
-      'How this release files and matches';
 
   @override
   String get musicAlbumEditorNamesTitle => 'Name and identifier';
@@ -5878,17 +5572,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicAlbumEditorSaved => 'Saved';
 
   @override
-  String get musicAlbumEditorSectionOverline => 'What this edition is';
-
-  @override
   String get musicAlbumEditorSectionTitle => 'Release identity';
 
   @override
   String get musicAlbumEditorTotalTracks => 'Total tracks';
-
-  @override
-  String get musicAlbumEditorTotalTracksHelp =>
-      'Counted from the tracks on this release. Add or remove tracks to change it; each track\'s own track total is edited on the track.';
 
   @override
   String musicAlbumEditorTracksMore(int count) {
@@ -5902,34 +5589,20 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get musicAlbumEditorTracksOverline => 'What a write-back reaches';
-
-  @override
   String get musicAlbumEditorTracksTitle => 'On this release';
 
   @override
   String get musicAlbumEditorWriteBackHelp =>
-      'Also rewrite the matching tags in every track on this release. Media has no tag form and stays here.';
-
-  @override
-  String get musicAlbumEditorWriteOverline =>
-      'Where the values land, and what they overrule';
+      'Also rewrites the matching tags in every track on this release; media stays here';
 
   @override
   String get musicAlbumEditorWriteTitle => 'How this edit is written';
-
-  @override
-  String get musicAlbumEmptyMessage =>
-      'The tracks that were here have moved or been removed.';
 
   @override
   String get musicAlbumEmptyTitle => 'Nothing in this album';
 
   @override
   String get musicAlbumLoadError => 'Could not load this album';
-
-  @override
-  String get musicAlbumReleaseOverline => 'This edition';
 
   @override
   String get musicAlbumReleaseTitle => 'Release';
@@ -5947,21 +5620,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicAlbumRewriteConfirmBody =>
-      'The edited fields are rewritten on every track of this release at once, so it keeps its entry - artwork, pins and play history with it. If the new name already belongs to another release, the two merge and this page follows. Locks on those fields are overridden, then set again by the rewrite.';
+      'Every track is rewritten and locks on these fields are overridden. If the new name belongs to another release, the two merge for good.';
 
   @override
   String get musicAlbumRewriteConfirmTitle => 'Rewrite this release?';
 
   @override
   String get musicAlbumRewriteHelp =>
-      'These live on the tracks rather than the release. Saving rewrites them on every member at once, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.';
+      'Rewritten on every track; a name another release has merges the two.';
 
   @override
-  String get musicAlbumRewriteMerged =>
-      'The release merged into the one that already had this name.';
-
-  @override
-  String get musicAlbumRewriteOverline => 'On the tracks';
+  String get musicAlbumRewriteMerged => 'Merged into the existing release.';
 
   @override
   String musicAlbumRewriteRenamed(int count) {
@@ -6002,10 +5671,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicArtistEditMetadata => 'Edit artist';
-
-  @override
-  String get musicArtistEmptyMessage =>
-      'The items that were here have moved or been removed.';
 
   @override
   String get musicArtistEmptyTitle => 'Nothing by this artist';
@@ -6097,10 +5762,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get musicEmptyMessage =>
-      'Add music to your library and it shows up here.';
-
-  @override
   String get musicEmptyTitle => 'No music yet';
 
   @override
@@ -6108,11 +5769,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicEntityRenameArtistHelp =>
-      'The artist\'s name lives on the tracks that credit them. Type the new name in full: renaming rewrites it on every one at once, so the artist keeps this page - its picture, pins and play history with it; a name another artist already has merges the two, and this page follows.';
+      'Rewritten on every track; a name another artist has merges the two.';
 
   @override
   String get musicEntityRenameConfirmBody =>
-      'Every member is rewritten at once, so the entry survives with everything attached to it. If the new name is already taken, the two merge and this page follows. Locks on these fields are overridden, then set again by the rename.';
+      'Every member is rewritten and locks on these fields are overridden. If the new name is taken, the two merge for good.';
 
   @override
   String get musicEntityRenameConfirmTitle => 'Rename this entry?';
@@ -6130,112 +5791,70 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get musicEntityRenameGroupHelp =>
-      'These live on the tracks rather than the release group. Renaming rewrites them on every member at once, so the group keeps this page; a name another group already has merges the two, and this page follows.';
+      'Rewritten on every member; a name another group has merges the two.';
 
   @override
   String get musicEntityRenameMerged =>
       'Merged into the entry that already had this name.';
 
   @override
-  String get musicEntityRenameOverline => 'On the members';
-
-  @override
   String get musicEntityRenameTitle => 'Name';
 
   @override
   String get musicEntityRenameWriteBackHelp =>
-      'Also rewrite these tags inside each member\'s file';
+      'Also rewrites these tags inside each member\'s file';
 
   @override
   String get musicFieldArtistMbid => 'MusicBrainz artist ID';
 
   @override
-  String get musicFieldArtistMbidHelp =>
-      'The identifier this artist matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.';
-
-  @override
   String get musicFieldArtistName => 'Artist name';
 
   @override
-  String get musicFieldArtistSortHelp =>
-      'How this artist files in an A-to-Z list. Empty files them under their name.';
-
-  @override
   String get musicFieldArtistWriteBackHelp =>
-      'Also rewrite the matching sort tag in the files crediting this artist.';
+      'Also rewrites the matching sort tag in every file crediting this artist';
 
   @override
   String get musicFieldBarcode => 'Barcode';
 
   @override
-  String get musicFieldBarcodeHelp =>
-      'UPC or EAN, normalized to digits on save';
+  String get musicFieldBarcodeHint => 'UPC or EAN';
 
   @override
   String get musicFieldCatalogNumber => 'Catalog number';
 
   @override
-  String get musicFieldCatalogNumberHelp =>
-      'The label\'s number for this release';
-
-  @override
   String get musicFieldCountry => 'Country';
 
   @override
-  String get musicFieldCountryHelp =>
-      'Two-letter code (GB), an alpha-3 or UK alias, or XW/XE';
+  String get musicFieldCountryHint => 'Two-letter code, e.g. GB';
 
   @override
   String get musicFieldLabel => 'Label';
 
   @override
-  String get musicFieldLabelHelp => 'The issuing label';
-
-  @override
   String get musicFieldMbid => 'MusicBrainz release ID';
-
-  @override
-  String get musicFieldMbidHelp =>
-      'The identifier this release matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.';
 
   @override
   String get musicFieldMedia => 'Media';
 
   @override
-  String get musicFieldMediaHelp =>
-      'What it was pressed on - CD, 2xVinyl, Digital Media';
+  String get musicFieldMediaHint => 'CD, 2xVinyl, Digital Media';
 
   @override
   String get musicFieldReleaseGroupMbid => 'MusicBrainz release-group ID';
 
   @override
-  String get musicFieldReleaseGroupMbidHelp =>
-      'The group\'s identifier at MusicBrainz: the album across its editions.';
-
-  @override
-  String get musicFieldReleaseGroupSortHelp =>
-      'How this group files in an A-to-Z list. Empty files it under its title.';
-
-  @override
   String get musicFieldReleaseGroupType => 'Type';
-
-  @override
-  String get musicFieldReleaseGroupTypeHelp =>
-      'What this group is. Not set hands the value back to what matching stored.';
 
   @override
   String get musicFieldSort => 'Sort name';
 
   @override
-  String get musicFieldSortHelp =>
-      'How this release files in an A-to-Z list. Empty files it under its title.';
-
-  @override
   String get musicHubAddToLibrary => 'Add to library';
 
   @override
-  String get musicHubEmptyMessage =>
-      'Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.';
+  String get musicHubEmptyMessage => 'Add a library, or drop files in.';
 
   @override
   String musicIndexCount(String dimension, int count) {
@@ -6336,20 +5955,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String musicIndexEmptyMessage(String dimension) {
-    String _temp0 = intl.Intl.selectLogic(dimension, {
-      'artists': 'Add music to your library and its artists show up here.',
-      'albums': 'Add music to your library and its albums show up here.',
-      'releaseGroups':
-          'Add music to your library and its release groups show up here.',
-      'genres': 'Add music to your library and its genres show up here.',
-      'years': 'Add music to your library and its years show up here.',
-      'other': 'Add music to your library and it shows up here.',
-    });
-    return '$_temp0';
-  }
-
-  @override
   String musicIndexEmptyTitle(String dimension) {
     String _temp0 = intl.Intl.selectLogic(dimension, {
       'artists': 'No artists yet',
@@ -6387,10 +5992,6 @@ class AppLocalizationsEn extends AppLocalizations {
     });
     return '$_temp0';
   }
-
-  @override
-  String get musicListingBucketEmptyMessage =>
-      'The items that were here have moved or been removed.';
 
   @override
   String musicListingBucketEmptyTitle(String dimension) {
@@ -6484,103 +6085,101 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicVariousArtists => 'Various artists';
 
   @override
-  String get notifBackupCompletedHelp => 'A backup archive finished building.';
+  String get notifBackupCompletedHelp => 'A backup archive finished building';
 
   @override
   String get notifBackupCompletedTitle => 'Backup finished';
 
   @override
-  String get notifBackupFailedHelp => 'A backup attempt failed.';
+  String get notifBackupFailedHelp => 'A backup attempt failed';
 
   @override
   String get notifBackupFailedTitle => 'Backup failed';
 
   @override
   String get notifCatalogResetHelp =>
-      'An upgrade moved the catalog\'s schema and the server built a new catalog; libraries added from the console have to be added again.';
+      'Upgrade rebuilt the catalog; re-add libraries added from the console';
 
   @override
   String get notifCatalogResetTitle => 'Catalog recreated';
 
   @override
   String get notifEpisodeArrivedHelp =>
-      'A subscribed show published a new episode.';
+      'A subscribed show published a new episode';
 
   @override
   String get notifEpisodeArrivedTitle => 'New episode';
 
   @override
   String get notifEpisodeDownloadedHelp =>
-      'An episode you asked for finished downloading.';
+      'An episode you asked for finished downloading';
 
   @override
   String get notifEpisodeDownloadedTitle => 'Episode fetched';
 
   @override
   String get notifFeedDisabledHelp =>
-      'A subscribed feed kept failing and was disabled.';
+      'A subscribed feed kept failing and was disabled';
 
   @override
   String get notifFeedDisabledTitle => 'Feed switched off';
 
   @override
   String get notifGpodderDeviceRemovedHelp =>
-      'A new podcast app device took the place of the least recently seen one; what it kept followed stays followed.';
+      'A new device replaced the least recently seen one';
 
   @override
   String get notifGpodderDeviceRemovedTitle => 'Podcast app removed';
 
   @override
   String get notifHealthFixFinishedHelp =>
-      'A library health fix you started finished.';
+      'A library health fix you started finished';
 
   @override
   String get notifHealthFixFinishedTitle => 'Health fix finished';
 
   @override
-  String get notifImportCompletedHelp =>
-      'An upload or acquisition identified confidently enough to file itself, with no review.';
+  String get notifImportCompletedHelp => 'An import was filed without review';
 
   @override
   String get notifImportCompletedTitle => 'Filed without review';
 
   @override
-  String get notifJobFailedHelp => 'A library job you started failed.';
+  String get notifJobFailedHelp => 'A library job you started failed';
 
   @override
   String get notifJobFailedTitle => 'Library job failed';
 
   @override
-  String get notifJobFinishedHelp =>
-      'A library job you started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash.';
+  String get notifJobFinishedHelp => 'A library job you started finished';
 
   @override
   String get notifJobFinishedTitle => 'Library job finished';
 
   @override
   String get notifPlaylistSyncedHelp =>
-      'A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended.';
+      'A synced playlist pulled changes or was suspended';
 
   @override
   String get notifPlaylistSyncedTitle => 'Playlist synced';
 
   @override
   String get notifReviewReadyHelp =>
-      'An upload or acquisition finished identification and waits in the review queue.';
+      'An upload or acquisition finished identification and waits in the review queue';
 
   @override
   String get notifReviewReadyTitle => 'Waiting for review';
 
   @override
   String get notifSignupRequestedHelp =>
-      'A new account request is waiting for approval.';
+      'A new account request is waiting for approval';
 
   @override
   String get notifSignupRequestedTitle => 'Account request';
 
   @override
   String get notifSubscriptionFailedHelp =>
-      'A podcast app syncing over gpodder asked to add a feed that could not be subscribed, or to change subscriptions this account may not change.';
+      'A podcast app\'s subscription change failed or was refused';
 
   @override
   String get notifSubscriptionFailedTitle =>
@@ -6588,7 +6187,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notifToolTaskFailedHelp =>
-      'A book merge or split, or a CUE split, you started failed, or stopped after its runs kept ending with the server.';
+      'A book merge, split or CUE split failed';
 
   @override
   String get notifToolTaskFailedTitle => 'Tool task failed';
@@ -6611,8 +6210,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeColumnWhy => 'Why';
 
   @override
-  String get organizeConfirmMessage =>
-      'Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.';
+  String get organizeConfirmBody =>
+      'Files move on the server. Anything else pointing at the old paths breaks.';
 
   @override
   String get organizeConfirmOwnWord => 'ORGANIZE';
@@ -6635,10 +6234,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeDiscard => 'Discard preview';
 
   @override
-  String get organizeEmptyMessage =>
-      'The server offers no profile to organize files by.';
-
-  @override
   String get organizeEmptyTitle => 'No organize profiles';
 
   @override
@@ -6649,8 +6244,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count files stay where they are while the server is read-only.',
-      one: '1 file stays where it is while the server is read-only.',
+      other: '$count files held, server read-only',
+      one: '1 file held, server read-only',
     );
     return '$_temp0';
   }
@@ -6660,8 +6255,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count files are held back and stay where they are.',
-      one: '1 file is held back and stays where it is.',
+      other: '$count files held back',
+      one: '1 file held back',
     );
     return '$_temp0';
   }
@@ -6670,15 +6265,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeHeldTile => 'Held back';
 
   @override
-  String get organizeHint =>
-      'Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.';
+  String get organizeHint => 'Preview first. Nothing moves until you apply.';
 
   @override
   String get organizeHistoryMore => 'Show older runs';
-
-  @override
-  String get organizeHistoryOverline =>
-      'A run can be undone while its journal lasts';
 
   @override
   String organizeHistoryRow(int moved, String when) {
@@ -6747,24 +6337,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeMoved => 'Moved';
 
   @override
-  String get organizeNoManagedMessage =>
-      'Organizing moves files only within managed libraries, and this server has none.';
+  String get organizeNoManagedEmptyMessage =>
+      'Organizing works only in managed libraries.';
 
   @override
   String get organizeNoManagedTitle => 'No managed library';
-
-  @override
-  String get organizeNothingMessage => 'This profile would move nothing.';
 
   @override
   String get organizeNothingTitle => 'Everything is already in place';
 
   @override
   String get organizeOwnProfiles => 'Each library\'s own profile';
-
-  @override
-  String get organizeOwnProfilesHelp =>
-      'Each managed library by the profile set on the Libraries screen';
 
   @override
   String organizePlannedMoves(int count) {
@@ -6782,10 +6365,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get organizeProfileAudiobookLabel => 'Audiobook template';
-
-  @override
-  String get organizeProfileCompilationHelp =>
-      'Various Artists unless set; empty files compilations under their tagged album artist';
 
   @override
   String get organizeProfileCompilationLabel => 'Compilation folder';
@@ -6837,9 +6416,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get organizeProfileNew => 'New profile';
-
-  @override
-  String get organizeProfileOverline => 'The naming scheme to move into';
 
   @override
   String get organizeProfilePodcastLabel => 'Podcast template';
@@ -6896,8 +6472,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count read-only libraries are left as they are.',
-      one: '1 read-only library is left as it is.',
+      other: '$count read-only libraries left alone',
+      one: '1 read-only library left alone',
     );
     return '$_temp0';
   }
@@ -6923,8 +6499,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeUndo => 'Undo moves';
 
   @override
-  String get organizeUndoConfirmMessage =>
-      'Every file it moved goes back where it was found, with its sidecars; a file moved again since stays where it is.';
+  String get organizeUndoConfirmBody =>
+      'Every moved file goes back, with sidecars; files moved again stay put.';
 
   @override
   String get organizeUndoConfirmTitle => 'Undo this run?';
@@ -7008,8 +6584,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get playerBookmarksEmpty =>
-      'Nothing marked yet. A bookmark keeps a place you want to come back to; your listening position is kept for you either way.';
+  String get playerBookmarksEmpty => 'Nothing marked yet';
 
   @override
   String get playerBookmarksError => 'Could not load the bookmarks.';
@@ -7020,10 +6595,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerCancelTimer => 'Cancel timer';
-
-  @override
-  String get playerCarIdleMessage =>
-      'Start something and it takes the whole screen.';
 
   @override
   String get playerCarMode => 'Car mode';
@@ -7083,7 +6654,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerGaplessBusy =>
-      'The server is busy, so this queue plays one track at a time. Gapless playback returns when a stream frees up.';
+      'The server is busy, so tracks play one at a time';
 
   @override
   String get playerGaplessPaused =>
@@ -7096,10 +6667,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerGoToShow => 'Go to show';
-
-  @override
-  String get playerIdleMessage =>
-      'Pick something from your library and it shows up here.';
 
   @override
   String get playerInstantMix => 'Instant mix';
@@ -7128,9 +6695,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerLyricsError => 'Could not load the lyrics';
 
   @override
-  String get playerLyricsIdleMessage => 'Words show up here once something is.';
-
-  @override
   String get playerMarkPlayed => 'Mark as played';
 
   @override
@@ -7151,19 +6715,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerNoLyrics => 'No lyrics for this track';
 
   @override
-  String get playerNoLyricsAdminMessage =>
-      'Nothing was found in a sidecar or in the file tags. You can add them in the metadata editor.';
-
-  @override
-  String get playerNoLyricsMessage =>
-      'Nothing was found in a sidecar or in the file tags.';
-
-  @override
   String get playerNoShape => 'No shape to draw';
 
   @override
-  String get playerNoShapeMessage =>
-      'The visualizer draws what the analyze pass measured, and this file has not been measured. Run an analyze pass on the library and it fills in.';
+  String get playerNoShapeEmptyMessage => 'Run an analyze pass to fill this in';
 
   @override
   String get playerNothingPlaying => 'Nothing is playing';
@@ -7369,10 +6924,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerTranscriptError => 'Could not load the transcript.';
 
   @override
-  String get playerTrimExplained =>
-      'Silence trimming skips the mapped quiet parts of an episode. Positions stay honest; the chip counts what it skipped.';
-
-  @override
   String get playerTrimSilence => 'Trim silence';
 
   @override
@@ -7410,10 +6961,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'This track has not been analyzed yet.';
 
   @override
-  String get playerVisualizerIdleMessage =>
-      'Start a track and its shape shows up here.';
-
-  @override
   String get playerVisualizerMode => 'Visualizer mode';
 
   @override
@@ -7421,7 +6968,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerVoiceBoostExplained =>
-      'Voice boost evens out a quiet or uneven recording. The server applies it, so what is playing reopens.';
+      'Playback restarts to apply voice boost';
 
   @override
   String get playerVoiceBoostFailed =>
@@ -7437,8 +6984,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistAddLabel => 'Add to this playlist';
 
   @override
-  String get playlistAddNothing =>
-      'Nothing here to add. Artists and albums are not members of a playlist; their tracks are.';
+  String get playlistAddNothing => 'Nothing to add. Only tracks join.';
 
   @override
   String get playlistAddToTitle => 'Add to playlist';
@@ -7492,7 +7038,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistDeleteBody =>
-      'It goes for everyone it is shared with. The items in it are never touched.';
+      'It goes for everyone it is shared with; its items stay.';
 
   @override
   String get playlistDeleteTitle => 'Delete this playlist?';
@@ -7502,10 +7048,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistEditRules => 'Edit rules';
-
-  @override
-  String get playlistEditableEmptyMessage =>
-      'Search above to add the first track, or use \"Add to playlist\" from anywhere something is playing.';
 
   @override
   String get playlistEmptyTitle => 'Nothing in here';
@@ -7588,17 +7130,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistFallbackTitle => 'Playlist';
 
   @override
-  String get playlistForeignEmptyMessage =>
-      'The owner has not put anything in this list yet.';
-
-  @override
   String playlistImportBindFailed(String reason) {
     return 'The playlist was created, but keeping it matched to the export failed: $reason';
   }
 
   @override
-  String get playlistImportBound =>
-      'Kept matched to this export. Re-match it whenever you like from the playlist\'s sync settings.';
+  String get playlistImportBound => 'Kept matched to this export.';
 
   @override
   String get playlistImportCheck => 'Check';
@@ -7631,7 +7168,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistImportKeepMatchedHelp =>
-      'The export is stored with the playlist and re-matched against the library on demand. Membership follows the export, so tracks added by hand are reconciled away';
+      'Tracks added by hand are removed on re-match';
 
   @override
   String get playlistImportMenu => 'Import playlist';
@@ -7795,19 +7332,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistKindManual => 'Manual';
 
   @override
-  String get playlistKindManualHelp =>
-      'A manual playlist holds what you put in it, in the order you put it.';
-
-  @override
   String get playlistKindSmartHelp =>
-      'A smart playlist keeps itself: you write the rules next and it evaluates them every time it is opened.';
+      'You write rules next; it updates itself.';
 
   @override
   String get playlistLoadError => 'Could not load this playlist';
 
   @override
-  String get playlistM3uPreviewChecking =>
-      'Checking each line of the file. A long one takes a while.';
+  String get playlistM3uPreviewChecking => 'Checking file';
 
   @override
   String playlistM3uPreviewCounts(int matched, int merged, int unmatched) {
@@ -7835,8 +7367,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get playlistM3uPreviewImporting =>
-      'Importing the playlist. A long file takes a while.';
+  String get playlistM3uPreviewImporting => 'Importing playlist';
 
   @override
   String playlistM3uPreviewItem(String artist, String title) {
@@ -7878,8 +7409,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistNameRequired => 'A playlist needs a name.';
 
   @override
-  String get playlistNoManualLists =>
-      'No manual playlists yet. Make one below and this goes straight into it.';
+  String get playlistNoManualLists => 'No manual playlists yet.';
 
   @override
   String get playlistNspGapBadLimit => 'The limit is not a whole number.';
@@ -8413,8 +7943,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistRuleNo => 'no';
 
   @override
-  String get playlistRuleNoMatches =>
-      'Nothing in the library answers this yet.';
+  String get playlistRuleNoMatches => 'Nothing matches yet.';
 
   @override
   String get playlistRuleNoPlaylists => 'No playlists to choose';
@@ -8503,8 +8032,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistRuleRandomOrder => 'A random limit draws its own order.';
 
   @override
-  String get playlistRuleReadOnlyMessage =>
-      'It uses something this editor cannot draw yet, so it is shown rather than edited. Nothing here will change it.';
+  String get playlistRuleReadOnlyEmptyMessage =>
+      'This editor cannot draw it yet.';
 
   @override
   String get playlistRuleReadOnlyTitle => 'This rule opens read-only';
@@ -8517,10 +8046,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistRuleRemoveSort => 'Remove sort';
-
-  @override
-  String get playlistRuleSeedHelp =>
-      'Pins which tracks the budget picks, so the list is the same on the next rebuild';
 
   @override
   String get playlistRuleSeedTitle => 'Keep the same selection each time';
@@ -8566,10 +8091,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistRuleYes => 'yes';
 
   @override
-  String get playlistRulesLive =>
-      'Evaluated live, every time this list is opened.';
-
-  @override
   String playlistRulesSpoken(String rules) {
     return 'Rules: $rules';
   }
@@ -8592,9 +8113,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistSharedByYou => 'Shared by you';
 
   @override
-  String get playlistSharedHelp => 'Anyone on this server can see and play it';
-
-  @override
   String get playlistSharedWithEveryone => 'Shared with everyone';
 
   @override
@@ -8602,10 +8120,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistSmart => 'Smart';
-
-  @override
-  String get playlistSmartEmptyMessage =>
-      'No item in the library answers these rules. Loosen one and the list fills itself.';
 
   @override
   String get playlistSmartEmptyTitle => 'Nothing matches yet';
@@ -8692,28 +8206,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistSyncLastRunNothing => 'The last sync changed nothing.';
 
   @override
-  String get playlistSyncMatchedModeHelp =>
-      'An export downloads nothing, so there are no files to move to the trash.';
-
-  @override
-  String playlistSyncMatchedNote(String source) {
-    return 'A $source export re-matches against the library on demand and downloads nothing.';
-  }
-
-  @override
   String get playlistSyncModeAppend => 'Append';
 
   @override
-  String get playlistSyncModeHelpAppend =>
-      'New source entries join the end; your own edits are never touched.';
-
-  @override
-  String get playlistSyncModeHelpMirror =>
-      'Membership and order follow the source. A removed entry leaves the list but its file stays in the library.';
-
-  @override
-  String get playlistSyncModeHelpMirrorTrash =>
-      'Membership and order follow the source, and a removed entry\'s file goes to the recoverable trash.';
+  String get playlistSyncModeAppendHelp =>
+      'New entries join the end; your edits stay.';
 
   @override
   String get playlistSyncModeLabel => 'Sync mode';
@@ -8722,7 +8219,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistSyncModeMirror => 'Mirror';
 
   @override
+  String get playlistSyncModeMirrorHelp =>
+      'Follows the source; removed entries keep their files.';
+
+  @override
   String get playlistSyncModeMirrorTrash => 'Mirror and trash';
+
+  @override
+  String get playlistSyncModeMirrorTrashHelp =>
+      'Follows the source; removed files go to recoverable trash.';
 
   @override
   String get playlistSyncNow => 'Sync now';
@@ -8854,7 +8359,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistSyncSuspended =>
-      'Syncing is suspended after repeated failures. A successful sync turns it back on.';
+      'Suspended after failures; a successful sync resumes it.';
 
   @override
   String get playlistSyncUnbind => 'Stop syncing';
@@ -8868,10 +8373,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistSyncUrlLabel => 'Source playlist URL';
-
-  @override
-  String get playlistsEmptyMessage =>
-      'Make one, or add a track to a new list from anywhere it is playing. A smart playlist writes itself from rules and keeps up as the library grows.';
 
   @override
   String get playlistsEmptyTitle => 'No playlists yet';
@@ -8908,10 +8409,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get podcastAutoDownload => 'Auto-download new episodes';
-
-  @override
-  String get podcastAutoDownloadHelp =>
-      'Keeps arrivals on this device as the feed refreshes';
 
   @override
   String podcastBacklogReadError(String reason) {
@@ -9031,7 +8528,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get podcastFilterActiveHelp =>
-      'Matched against episode titles only, and against new arrivals only: editing this never re-evaluates the backlog or removes anything already fetched.';
+      'New arrivals only; nothing already fetched is removed';
 
   @override
   String get podcastFilterAll => 'All';
@@ -9103,7 +8600,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get podcastMarkOlderBody =>
-      'Clears the unplayed dots on a backlog. Your positions on episodes you actually started are overwritten, and nothing is deleted.';
+      'Overwrites positions on episodes you started; nothing is deleted';
 
   @override
   String get podcastMarkOlderMonth => 'Older than a month';
@@ -9213,10 +8710,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastNoEpisodes => 'No episodes yet';
 
   @override
-  String get podcastNoEpisodesMessage =>
-      'This feed has published nothing this server can see.';
-
-  @override
   String get podcastNoMatches => 'No matches';
 
   @override
@@ -9226,15 +8719,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastNothingMatches => 'Nothing matches';
 
   @override
-  String get podcastNothingMatchesMessage =>
-      'Widen the filter, or clear the search, to see the rest.';
-
-  @override
   String get podcastNothingMatchesYet => 'Nothing matches yet';
 
   @override
-  String podcastNothingMatchesYetMessage(int count) {
-    return 'The filter runs over the $count episodes loaded so far, and this show has more.';
+  String podcastNothingMatchesYetEmptyMessage(int count) {
+    return 'Filters cover the $count episodes loaded so far';
   }
 
   @override
@@ -9344,7 +8833,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get podcastRefreshPaused =>
-      'Scheduled refresh is paused for this feed after repeated failures. Checking for new episodes turns it back on.';
+      'Refresh paused after repeated failures; checking for episodes resumes it';
 
   @override
   String get podcastRemoveDownload => 'Remove download';
@@ -9513,12 +9002,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastTrimSilence => 'Trim silence';
 
   @override
-  String get podcastTrimSilenceHelp =>
-      'Needs the episode fetched: silence is mapped from the audio this server holds';
+  String get podcastTrimSilenceHelp => 'Needs the episode fetched';
 
   @override
   String get podcastUnfollowBody =>
-      'Some episodes are downloaded on the server. Remove those files too? Removed files go to the trash, and your listening progress is kept either way. If someone else subscribes to this show, the files stay regardless.';
+      'Remove its downloaded files too? They go to the trash, unless another subscriber keeps them.';
 
   @override
   String get podcastUnfollowTitle => 'Unfollow';
@@ -9541,17 +9029,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastVoiceBoost => 'Voice boost';
 
   @override
-  String get podcastVoiceBoostHelp => 'Lifts speech over a noisy room';
-
-  @override
   String get podcastYoutubeUrlLabel => 'Channel or playlist URL';
 
   @override
   String get podcastsEmptyAction => 'Add a show';
-
-  @override
-  String get podcastsEmptyMessage =>
-      'Follow a show and its new episodes turn up here as the feed publishes them.';
 
   @override
   String get podcastsEmptyTitle => 'No shows yet';
@@ -9594,10 +9075,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queueEarlier => 'EARLIER';
-
-  @override
-  String get queueEmptyMessage =>
-      'Play an album, a show, or a playlist and it lands here.';
 
   @override
   String get queueEmptyTitle => 'Nothing queued';
@@ -9675,9 +9152,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get queueRollingWindow => 'A window over a larger scope';
-
-  @override
   String queueSelectedCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -9753,10 +9227,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get radioEmptyAction => 'Add a station';
 
   @override
-  String get radioEmptyMessage =>
-      'Search the directory to add your first, or paste a stream URL if you already have one.';
-
-  @override
   String get radioEmptyTitle => 'No stations yet';
 
   @override
@@ -9775,7 +9245,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get radioMoreOptions => 'Name, website, and logo';
 
   @override
-  String get radioNameHint => 'Taken from the stream address when left blank';
+  String get radioNameHint => 'Defaults to the stream address';
 
   @override
   String get radioNeedsName => 'A station needs a name.';
@@ -9807,16 +9277,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get radioSavedAcquire => 'Get it from a URL';
 
   @override
-  String get radioSavedAcquireHelp =>
-      'Download a copy you found; it lands in review';
-
-  @override
-  String get radioSavedDoorSubtitle =>
-      'Songs you caught on air and mean to hunt down';
-
-  @override
-  String get radioSavedEmptyMessage =>
-      'Tap the heart while a station is playing and the song it named turns up here, with a way to search for it.';
+  String get radioSavedEmptyMessage => 'Tap the heart while a station plays';
 
   @override
   String get radioSavedEmptyTitle => 'Nothing saved yet';
@@ -9840,14 +9301,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get radioSavedIdentify => 'Identify a review entry as it';
 
   @override
-  String get radioSavedIdentifyHelp =>
-      'Hand its name to a pending entry\'s search';
-
-  @override
-  String get radioSavedIdentifyOverline =>
-      'Pending single tracks in the review queue';
-
-  @override
   String radioSavedIdentifyTitle(String title) {
     return 'Identify as \"$title\"';
   }
@@ -9859,8 +9312,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get radioSavedLoadError => 'Could not load your saved songs';
 
   @override
-  String get radioSavedNoPending =>
-      'No pending single tracks to name. Get the song from a URL first and it turns up here while it waits for review.';
+  String get radioSavedNoPending => 'No pending single tracks to name';
 
   @override
   String get radioSavedReviewError => 'Could not load the review queue.';
@@ -10198,7 +9650,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reviewDuplicateHelp =>
-      'Adding a file the library already holds keeps one item, with the file as another copy. Its details, art and who may edit it do not change.';
+      'Adding keeps one item; the file becomes a copy.';
 
   @override
   String reviewDuplicateMaybeTitle(int count) {
@@ -10231,8 +9683,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewEditMetadata => 'Edit metadata';
 
   @override
-  String get reviewEmptyMessage =>
-      'Uploads and rematches land here when the match needs a decision.';
+  String get reviewEmptyMessage => 'Uploads and rematches land here.';
 
   @override
   String get reviewEmptyTitle => 'Nothing waiting for review';
@@ -10334,8 +9785,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Only applies while matching is automatic';
 
   @override
-  String get reviewNoCandidatesMessage =>
-      'Nothing in the sources matched what these files claim. Keep them as they are, or skip and try again later.';
+  String get reviewNoCandidatesEmptyMessage =>
+      'Keep them as they are, or skip.';
 
   @override
   String get reviewNoCandidatesTitle => 'No candidates found';
@@ -10378,12 +9829,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewSearchAgain => 'Search again';
 
   @override
-  String get reviewSearchStored =>
-      'Looked up instead of what the files claim. Nothing here is written to the files.';
-
-  @override
-  String get reviewSearchSuggested =>
-      'Suggested from the source title. Looked up instead of what the files claim; nothing here is written to the files.';
+  String get reviewSearchSuggested => 'Suggested from source title';
 
   @override
   String get reviewSearchToggle => 'Search for something else';
@@ -10406,12 +9852,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get reviewSkippedDecided =>
-      'This submission asked to be taken as delivered, so nothing was searched.';
+  String get reviewSkippedDecidedEmptyMessage =>
+      'Taken as delivered, so nothing was searched.';
 
   @override
-  String get reviewSkippedPending =>
-      'This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own: read the warning above if there is one, then add it, skip it or discard it.';
+  String get reviewSkippedPendingEmptyMessage =>
+      'Not added; read any warning above, then decide.';
 
   @override
   String get reviewSkippedTitle => 'Identification was skipped';
@@ -10470,11 +9916,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchDirectoryDegraded =>
-      'Could not reach the directory, so only your own stations are listed. Adding a station by its stream URL still works.';
-
-  @override
-  String get searchDirectoryErrorDetail =>
-      'Adding a station by its stream URL still works.';
+      'Directory unreachable; add a station by URL in Radio';
 
   @override
   String get searchDirectoryErrorTitle => 'Could not reach the directory';
@@ -10483,15 +9925,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchDirectoryOverline => 'Directory';
 
   @override
-  String get searchDirectoryPromptMessage =>
-      'Type a station name to look it up in the public directory, then add it to this server.';
-
-  @override
   String get searchDirectoryPromptTitle => 'Search the station directory';
-
-  @override
-  String get searchEmptyMessage =>
-      'Try searching for an artist, show, or book.';
 
   @override
   String get searchEmptyTitle => 'Search your library';
@@ -10526,16 +9960,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchLibraryOverline => 'Library';
 
   @override
-  String get searchNoStationsMessage =>
-      'The directory lists nothing under that name.';
-
-  @override
   String searchNoStationsTitle(String query) {
     return 'No stations for \"$query\"';
   }
-
-  @override
-  String get searchNothingMessage => 'Check the spelling or try fewer words.';
 
   @override
   String searchNothingTitle(String query) {
@@ -10544,7 +9971,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchPodcastDirectoryDegraded =>
-      'The podcast directory did not answer, so only your own episodes are listed. Subscribing by feed URL still works.';
+      'Podcast directory unreachable; subscribe by feed URL in Podcasts';
 
   @override
   String get searchRecentOverline => 'Recent';
@@ -10594,8 +10021,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchTopResult => 'Top result';
 
   @override
-  String get searchTruncated =>
-      'There are more matches than fit here. Refine your search to narrow them down.';
+  String get searchTruncated => 'More matches exist; refine your search';
 
   @override
   String get searchYourStations => 'Your stations';
@@ -10609,10 +10035,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAccountSignedIn => 'Signed in';
-
-  @override
-  String get settingsAdminConsoleBlurb =>
-      'Libraries, users, scans, backups, and the audit log';
 
   @override
   String get settingsAdminConsoleKeywords =>
@@ -10631,7 +10053,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppPasswordCreate => 'Create';
 
   @override
-  String get settingsAppPasswordCreatedMessage =>
+  String get settingsAppPasswordCreatedBody =>
       'Copy it now; the server stores it sealed and never shows it again.';
 
   @override
@@ -10644,7 +10066,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppPasswordLabel => 'Label';
 
   @override
-  String get settingsAppPasswordLabelHelp => 'Which app is this for?';
+  String get settingsAppPasswordLabelHint => 'Which app is this for?';
 
   @override
   String get settingsAppPasswordNewAction => 'New';
@@ -10662,7 +10084,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAppPasswordsBlurb =>
-      'For Subsonic apps and podcast sync clients. Your login password never works there.';
+      'For Subsonic and podcast sync clients';
 
   @override
   String get settingsAppPasswordsEmpty => 'No app passwords yet';
@@ -10684,18 +10106,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsArtworkCacheCleared => 'Artwork cache cleared';
 
   @override
-  String get settingsArtworkCacheHelp =>
-      'Covers are re-fetched as they are needed again';
-
-  @override
   String get settingsArtworkCacheKeywords => 'covers, images, clear, space';
 
   @override
   String get settingsArtworkCacheTitle => 'Artwork cache';
-
-  @override
-  String get settingsArtworkCycleHelp =>
-      'Moves the full-screen player on to the next picture by itself, when a track or book has more than one';
 
   @override
   String get settingsArtworkCycleKeywords =>
@@ -10705,10 +10119,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsArtworkCycleTitle => 'Cycle through artwork';
 
   @override
-  String get settingsArtworkGlowHelp =>
-      'The colour a cover casts behind the player';
-
-  @override
   String get settingsArtworkGlowKeywords =>
       'backdrop, colour, color, player, wash';
 
@@ -10716,15 +10126,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsArtworkGlowTitle => 'Artwork glow';
 
   @override
-  String get settingsAutoRemoveAfterHelp =>
-      'How long a finished episode stays before it goes';
-
-  @override
   String get settingsAutoRemoveAfterTitle => 'Wait before removing';
 
   @override
   String get settingsAutoRemoveFinishedHelp =>
-      'Reclaims a downloaded episode once it has been finished for a while. Books and albums are left alone';
+      'Episodes only; books and albums stay';
 
   @override
   String get settingsAutoRemoveFinishedKeywords =>
@@ -10735,7 +10141,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAutoplayHelp =>
-      'Lets a queue another device hands over start here. Off means it arrives ready and waits to be tapped';
+      'Off: a handed-over queue waits to be tapped';
 
   @override
   String get settingsAutoplayKeywords =>
@@ -10745,18 +10151,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAutoplayTitle => 'Start playing without asking';
 
   @override
-  String get settingsBookSpeedHelp =>
-      'The speed a book plays at until you set one for it';
-
-  @override
   String get settingsBookSpeedKeywords => 'rate, faster, default, narration';
 
   @override
   String get settingsBookSpeedTitle => 'Audiobook speed';
-
-  @override
-  String get settingsBoostDefaultHelp =>
-      'Shows and books with no stored choice of their own open with loudness normalization on';
 
   @override
   String get settingsBoostDefaultKeywords =>
@@ -10771,18 +10169,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsBrowseOrderHelp => 'The order this index opens in';
-
-  @override
   String get settingsBrowseOrderKeywords =>
       'sort, order, alphabetical, browse, index';
 
   @override
   String get settingsBrowseOrderTitle => 'Default order';
-
-  @override
-  String get settingsBrowseUnknownHelp =>
-      'Lists the group for what has no genre, no album, or no year of its own';
 
   @override
   String get settingsBrowseUnknownKeywords =>
@@ -10798,17 +10189,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsCaptionsOnHover => 'On hover';
 
   @override
-  String get settingsCarButtonHelp =>
-      'Puts car mode on the player itself instead of inside its menu';
-
-  @override
   String get settingsCarButtonKeywords => 'driving, large, dashboard, player';
 
   @override
   String get settingsCarButtonTitle => 'Car mode button';
-
-  @override
-  String get settingsCardCaptionsHelp => 'The lines under a cover in a grid';
 
   @override
   String get settingsCardCaptionsKeywords =>
@@ -10816,14 +10200,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsCardCaptionsNoPointerHelp =>
-      'Always shown: hiding them needs a pointer to bring them back';
+      'Always shown: hiding needs a pointer';
 
   @override
   String get settingsCardCaptionsTitle => 'Card captions';
-
-  @override
-  String get settingsCastCheckBlurb =>
-      'Whether a cast device can reach this server';
 
   @override
   String get settingsCastCheckKeywords =>
@@ -10834,7 +10214,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsCrossfadeHelp =>
-      'Fades one track into the next wherever the server renders the queue: a cast speaker, and gapless playback in a browser';
+      'Applies to cast speakers and browser gapless playback';
 
   @override
   String get settingsCrossfadeKeywords =>
@@ -10848,10 +10228,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDensityCompact => 'Compact';
-
-  @override
-  String get settingsDensityHelp =>
-      'How tightly rows pack; text size stays the system\'s';
 
   @override
   String get settingsDensityKeywords => 'compact, comfortable, spacing, rows';
@@ -10872,7 +10248,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDeviceSignOutAction => 'Sign out device';
 
   @override
-  String get settingsDeviceSignOutCurrentMessage =>
+  String get settingsDeviceSignOutCurrentBody =>
       'This is the device you are using now. Revoking its session signs you out.';
 
   @override
@@ -10914,8 +10290,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDevicesTitle => 'Signed-in devices';
 
   @override
-  String get settingsDiscordApplicationHelp =>
-      'Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and the image for albums with no cover';
+  String get settingsDiscordApplicationHelp => 'Empty publishes as WaxDeck';
+
+  @override
+  String get settingsDiscordApplicationHint => 'Application ID';
 
   @override
   String get settingsDiscordApplicationLabel =>
@@ -10923,14 +10301,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDiscordCoversHelp =>
-      'This device asks the Cover Art Archive for the cover of each album it plays that has a MusicBrainz release ID. Off, or with none found, Discord shows the application\'s own image.';
+      'This device asks the Cover Art Archive for each album\'s cover';
 
   @override
   String get settingsDiscordCoversTitle => 'Show album covers';
-
-  @override
-  String get settingsDiscordPresenceHelp =>
-      'Sets your Discord status while WaxDeck plays, through the Discord app on this machine';
 
   @override
   String get settingsDiscordPresenceKeywords =>
@@ -10950,10 +10324,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDisplayNameTitle => 'Display name';
 
   @override
-  String get settingsDownloadsManagerBlurb =>
-      'What this device holds offline, and how to free it';
-
-  @override
   String get settingsDownloadsManagerKeywords =>
       'offline, storage, space, remove';
 
@@ -10961,18 +10331,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDownloadsManagerTitle => 'Manage downloads';
 
   @override
-  String get settingsDownloadsWifiHelp =>
-      'Holds transfers until this device is on wifi, rather than failing them';
-
-  @override
   String get settingsDownloadsWifiKeywords => 'data, metered, mobile, cellular';
 
   @override
   String get settingsDownloadsWifiTitle => 'Download on wifi only';
-
-  @override
-  String get settingsEndpointsBlurb =>
-      'Cast targets, renderers, and your other devices';
 
   @override
   String get settingsEndpointsKeywords =>
@@ -10982,24 +10344,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsEndpointsTitle => 'Playback endpoints';
 
   @override
+  String get settingsEngineLacksThese =>
+      'Some settings need features this server\'s engine lacks';
+
+  @override
   String get settingsEngineLacksThis =>
       'This server\'s streaming engine doesn\'t offer this';
 
   @override
   String get settingsEngineUnreachable =>
-      'The streaming engine is unreachable right now';
-
-  @override
-  String get settingsFollowsAccountHelp => 'Follows you to your other devices';
+      'Some settings wait on the streaming engine, which is unreachable';
 
   @override
   String get settingsGridLarge => 'Large';
 
   @override
   String get settingsGridMedium => 'Medium';
-
-  @override
-  String get settingsGridSizeHelp => 'How large covers are drawn in grids';
 
   @override
   String get settingsGridSizeKeywords => 'grid, tiles, covers, large, small';
@@ -11044,9 +10404,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGroupPlayer => 'The player';
 
   @override
-  String get settingsGroupScreenReaders => 'Screen readers';
-
-  @override
   String get settingsGroupSonicSimilarity => 'Sonic similarity';
 
   @override
@@ -11072,7 +10429,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsIdentifyUploadsHelp =>
-      'Matches what you add against MusicBrainz. Off adds it with the tags it has, without review';
+      'Asks MusicBrainz; off files uploads unreviewed';
 
   @override
   String get settingsIdentifyUploadsKeywords =>
@@ -11080,10 +10437,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsIdentifyUploadsTitle => 'Identify uploads';
-
-  @override
-  String get settingsKeepPlayingHelp =>
-      'When a music queue runs out, keep going with tracks like the last one. The queue\'s own toggle sets the same thing.';
 
   @override
   String get settingsKeepPlayingKeywords =>
@@ -11123,14 +10476,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLastfmSecretHelp => 'Stored sealed; never shown again';
 
   @override
-  String get settingsLibraryAccessAll =>
-      'You can see every library on this server';
-
-  @override
-  String get settingsLibraryAccessChecking => 'Checking';
-
-  @override
   String get settingsLibraryAccessError => 'Could not read your access';
+
+  @override
+  String get settingsLibraryAccessEverything => 'All libraries';
 
   @override
   String get settingsLibraryAccessKeywords => 'permissions, libraries, access';
@@ -11147,8 +10496,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'You can see $countString of this server\'s libraries',
-      one: 'You can see 1 of this server\'s libraries',
+      other: '$countString libraries',
+      one: '1 library',
     );
     return '$_temp0';
   }
@@ -11160,8 +10509,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsListenBrainzApi => 'API server (optional)';
 
   @override
-  String get settingsListenBrainzApiHelp =>
-      'For a compatible server; empty for listenbrainz.org';
+  String get settingsListenBrainzApiHelp => 'Empty uses listenbrainz.org';
 
   @override
   String get settingsListenBrainzTitle => 'Connect ListenBrainz';
@@ -11178,7 +10526,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsNeedsEngine =>
-      'Needs the streaming engine, which this server runs without';
+      'Some settings need the streaming engine, which this server lacks';
 
   @override
   String get settingsNotificationsKeywords =>
@@ -11201,7 +10549,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsNotifyAppriseTargetsHelp =>
-      'Apprise URLs; empty uses the server\'s own configuration';
+      'Empty uses the server\'s own configuration';
+
+  @override
+  String get settingsNotifyAppriseTargetsHint => 'Apprise URLs';
 
   @override
   String get settingsNotifyCatalogError => 'Could not load the event catalog';
@@ -11210,7 +10561,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsNotifyDeliverVia => 'Deliver via';
 
   @override
-  String get settingsNotifyDiscordWebhookHelp => 'A discord.com webhook URL';
+  String get settingsNotifyDiscordWebhookHint => 'A discord.com webhook URL';
 
   @override
   String get settingsNotifyEndpointUrl => 'Endpoint URL';
@@ -11231,13 +10582,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsNotifyGotifyPriorityHelp => '0 to 10';
+  String get settingsNotifyGotifyPriorityHint => '0 to 10';
 
   @override
   String get settingsNotifyHeaders => 'Extra headers';
 
   @override
-  String get settingsNotifyHeadersHelp =>
+  String get settingsNotifyHeadersHint =>
       'One per line, as Name: value. At most eight.';
 
   @override
@@ -11259,21 +10610,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsNotifyMinIntervalHelp =>
-      '0 sends everything as it happens. Up to 3600; a delivery inside the gap waits.';
+      '0 sends everything; events inside the gap wait';
 
   @override
   String get settingsNotifyMuted => 'Muted';
 
   @override
   String get settingsNotifyMutedBadge => 'Muted';
-
-  @override
-  String get settingsNotifyMutedHelp =>
-      'Delivers nothing but the test button, and keeps everything else as it is.';
-
-  @override
-  String get settingsNotifyMyBlurb =>
-      'Where your events (new episodes, review queue) get delivered: Pushover, ntfy, Gotify, Discord, webhooks, or this device\'s push registration.';
 
   @override
   String get settingsNotifyMyEvents => 'My events';
@@ -11291,7 +10634,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsNotifyPriority => 'Priority';
 
   @override
-  String get settingsNotifyPushoverPriorityHelp =>
+  String get settingsNotifyPushoverPriorityHint =>
       '-2 (quietest) to 2 (emergency)';
 
   @override
@@ -11304,15 +10647,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsNotifySecret => 'Signing secret';
 
   @override
-  String get settingsNotifySecretHelp =>
-      'Signs every request, so the receiver can tell it came from here.';
+  String get settingsNotifySecretHelp => 'Empty sends posts unsigned';
 
   @override
   String get settingsNotifySendTest => 'Send test';
-
-  @override
-  String get settingsNotifyServerBlurb =>
-      'Operations events (account requests, backup outcomes) delivered to server-wide destinations.';
 
   @override
   String get settingsNotifyServerEvents => 'Server events';
@@ -11367,10 +10705,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'No answer from the test yet; the target shows it when it lands';
 
   @override
-  String get settingsNotifyUnifiedPushHelp =>
-      'Usually registered by the app through its distributor';
-
-  @override
   String get settingsNotifyUrl => 'URL';
 
   @override
@@ -11410,18 +10744,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPasswordTitle => 'Change password';
 
   @override
-  String get settingsPodcastSpeedHelp =>
-      'The speed a show plays at until you set one for it';
-
-  @override
   String get settingsPodcastSpeedKeywords => 'rate, faster, default';
 
   @override
   String get settingsPodcastSpeedTitle => 'Podcast speed';
-
-  @override
-  String get settingsPreloadWifiHelp =>
-      'Gapless playback buffers the next track early; this holds that back on mobile data';
 
   @override
   String get settingsPreloadWifiKeywords =>
@@ -11431,10 +10757,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPreloadWifiTitle => 'Prepare the next track on wifi only';
 
   @override
-  String get settingsRadioScrobblingHelp =>
-      'Radio segments report as tracks where a station names them honestly';
-
-  @override
   String get settingsRadioScrobblingKeywords =>
       'last.fm, listenbrainz, station, stream';
 
@@ -11442,23 +10764,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRadioScrobblingTitle => 'Scrobble radio';
 
   @override
-  String get settingsReduceMotionHelp =>
-      'Stills transitions and the playing indicator';
-
-  @override
   String get settingsReduceMotionKeywords =>
       'animation, transitions, vestibular';
 
   @override
-  String get settingsReduceMotionPlatformHelp =>
-      'Already reduced: this device asks every app for less motion';
+  String get settingsReduceMotionPlatformHelp => 'Reduced by your device';
 
   @override
   String get settingsReduceMotionTitle => 'Reduce motion';
-
-  @override
-  String get settingsReplayGainHelp =>
-      'Plays a server-rendered queue at one loudness, where the files have been analyzed';
 
   @override
   String get settingsReplayGainKeywords =>
@@ -11468,11 +10781,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsReplayGainTitle => 'Level the volume';
 
   @override
-  String get settingsScreenReaderBlurb =>
-      'Every control is named, the queue reorders from the keyboard, and the deck bar is one landmark';
-
-  @override
-  String get settingsScreenReaderTitle => 'How WaxDeck reads out';
+  String get settingsScopeAccountHelp => 'Follows your account';
 
   @override
   String get settingsScrobblerApprove =>
@@ -11531,8 +10840,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSearchLabel => 'Search settings';
 
   @override
-  String get settingsSearchNoMatchMessage =>
-      'Server-wide settings live in the admin console, not here. A per-show or per-book setting is on that show or book.';
+  String get settingsSearchNoMatchEmptyMessage =>
+      'Shows and books keep their own settings';
 
   @override
   String settingsSearchNoMatchTitle(String query) {
@@ -11540,70 +10849,31 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsSectionAccessibilityBlurb =>
-      'Motion, and how the app reads out';
-
-  @override
   String get settingsSectionAccessibilityTitle => 'Accessibility';
-
-  @override
-  String get settingsSectionAccountBlurb =>
-      'You, your devices, and how you sign in';
 
   @override
   String get settingsSectionAccountTitle => 'Account';
 
   @override
-  String get settingsSectionAppearanceBlurb =>
-      'Theme, density, and how large artwork is drawn';
-
-  @override
   String get settingsSectionAppearanceTitle => 'Appearance';
-
-  @override
-  String get settingsSectionDevicesBlurb =>
-      'Where else your listening can come out';
 
   @override
   String get settingsSectionDevicesTitle => 'Devices and casting';
 
   @override
-  String get settingsSectionDownloadsBlurb =>
-      'What this device keeps offline, and how much room it takes';
-
-  @override
   String get settingsSectionDownloadsTitle => 'Downloads and storage';
-
-  @override
-  String get settingsSectionIntegrationsBlurb =>
-      'Scrobbling, other apps, and notifications';
 
   @override
   String get settingsSectionIntegrationsTitle => 'Integrations';
 
   @override
-  String get settingsSectionLibraryBlurb =>
-      'What browsing shows you, and what you can see';
-
-  @override
   String get settingsSectionLibraryTitle => 'Library and metadata';
-
-  @override
-  String get settingsSectionPlaybackBlurb =>
-      'Speeds, skips, casting, and what plays next';
 
   @override
   String get settingsSectionPlaybackTitle => 'Playback';
 
   @override
-  String get settingsSectionServerBlurb => 'This instance, for administrators';
-
-  @override
   String get settingsSectionServerTitle => 'Server';
-
-  @override
-  String get settingsServerAdminOnlyMessage =>
-      'This section is about the server itself.';
 
   @override
   String get settingsServerAdminOnlyTitle => 'Administrators only';
@@ -11613,9 +10883,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsServerSummaryTitle => 'This server';
-
-  @override
-  String get settingsShareLinksBlurb => 'Public links you have handed out';
 
   @override
   String get settingsShareLinksTitle => 'Share links';
@@ -11691,27 +10958,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSimilarityNoWorker => 'No analysis worker configured';
 
   @override
-  String get settingsSkipBackHelp =>
-      'How far the back control jumps on a podcast or a book';
-
-  @override
   String get settingsSkipBackKeywords => 'rewind, seconds, podcast, audiobook';
 
   @override
   String get settingsSkipBackTitle => 'Skip back by';
 
   @override
-  String get settingsSkipForwardHelp => 'How far the forward control jumps';
-
-  @override
   String get settingsSkipForwardKeywords => 'seconds, podcast, audiobook, ad';
 
   @override
   String get settingsSkipForwardTitle => 'Skip forward by';
-
-  @override
-  String get settingsSmartRewindHelp =>
-      'Steps back a little when you come back to a show or a book after a break, so you land before the sentence you lost';
 
   @override
   String get settingsSmartRewindKeywords =>
@@ -11731,7 +10987,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsStreamQualityHelp =>
-      'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which can turn off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads';
+      'Auto sends originals; a cap re-encodes and can turn off gapless playback';
 
   @override
   String get settingsStreamQualityHigh => 'High';
@@ -11757,10 +11013,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsStreamQualityWifiTitle => 'Streaming quality on Wi-Fi';
 
   @override
-  String get settingsTechnicalDetailsHelp =>
-      'Draws codec and format chips beside what they describe';
-
-  @override
   String get settingsTechnicalDetailsKeywords =>
       'codec, bitrate, format, flac, provenance';
 
@@ -11769,10 +11021,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsThemeDark => 'Dark';
-
-  @override
-  String get settingsThemeHelp =>
-      'Set on this device; your other devices keep their own';
 
   @override
   String get settingsThemeKeywords => 'dark, light, oled, black';
@@ -11787,8 +11035,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsThemeTitle => 'Theme';
 
   @override
-  String get settingsTimezoneFieldHelp =>
-      'Calendar stats bucket days in this timezone; empty uses the server default (UTC)';
+  String get settingsTimezoneFieldHelp => 'Empty uses the server default (UTC)';
 
   @override
   String get settingsTimezoneFieldHint => 'Europe/Amsterdam';
@@ -11809,19 +11056,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTitle => 'Settings';
 
   @override
-  String get settingsTrimDefaultHelp =>
-      'Shows and books with no stored choice of their own open with silence trimming on';
-
-  @override
   String get settingsTrimDefaultKeywords =>
       'silence, skip, spoken word, podcast, book';
 
   @override
   String get settingsTrimDefaultTitle => 'Trim silence by default';
-
-  @override
-  String get settingsVisualizerIdleHelp =>
-      'Fills the screen with the track once music has been playing untouched for a few minutes';
 
   @override
   String get settingsVisualizerIdleKeywords =>
@@ -11832,41 +11071,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWebGaplessBrowser =>
-      'This browser cannot play a queue as one stream, so tracks play one at a time';
+      'This browser cannot play a queue gaplessly';
 
   @override
   String get settingsWebGaplessBusy =>
-      'The server is at its transcoding limit, so gapless playback is off for now';
+      'Transcoding limit reached; gapless is off for now';
 
   @override
   String get settingsWebGaplessFormat =>
-      'This server renders no format this browser can play, so tracks play one at a time';
-
-  @override
-  String get settingsWebGaplessHelp =>
-      'Plays a music queue as one stream, so tracks run into each other the way they were mastered';
+      'This server renders no format this browser plays';
 
   @override
   String get settingsWebGaplessKeywords =>
       'gapless, crossfade, seam, stream, browser';
 
   @override
-  String get settingsWebGaplessNoEngine =>
-      'This server runs without a streaming engine, which is what renders a queue as one stream';
-
-  @override
   String get settingsWebGaplessTitle => 'Gapless playback';
 
   @override
   String get settingsWebGaplessUnavailable =>
-      'This server cannot render a queue as one stream, so tracks play one at a time';
+      'This server cannot render queues as one stream';
 
   @override
   String get sharingAllowDownload => 'Allow download';
-
-  @override
-  String get sharingAllowDownloadHelp =>
-      'The page offers the original file, not just playback';
 
   @override
   String get sharingCopyLink => 'Copy link';
@@ -11875,8 +11102,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sharingCreate => 'Create link';
 
   @override
-  String get sharingDialogBody =>
-      'Anyone with the link can play this. It goes on your clipboard as soon as it is made.';
+  String get sharingDialogBody => 'Anyone with the link can play this.';
 
   @override
   String get sharingDialogTitle => 'Share link';
@@ -11885,8 +11111,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sharingDownloadAllowed => 'download allowed';
 
   @override
-  String get sharingEmptyMessage =>
-      'Share a track, an episode, a book, or a playlist and the link turns up here, with how often it has been played and a way to switch it off.';
+  String get sharingEmptyMessage => 'Share an item and its link appears here.';
 
   @override
   String get sharingEmptyTitle => 'No share links yet';
@@ -11898,9 +11123,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sharingExpires => 'Expires';
-
-  @override
-  String get sharingExpiresHelp => 'When the link stops working';
 
   @override
   String sharingExpiresOn(String date) {
@@ -11962,9 +11184,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String sharingStartAt(String time) {
     return 'Start at $time';
   }
-
-  @override
-  String get sharingStartAtHelp => 'The link opens where you are now';
 
   @override
   String get sharingStartAtLabel => 'Start at this position';
@@ -12175,11 +11394,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellReadOnlyBanner =>
-      'This server is read-only right now: uploads, edits that write files and deletions are paused.';
+      'Read-only mode: uploads, edits and deletions are paused';
 
   @override
-  String get shellReconnecting =>
-      'Reconnecting to the server. Anything already playing keeps playing.';
+  String get shellReconnecting => 'Reconnecting';
 
   @override
   String get shellReload => 'Reload';
@@ -12246,13 +11464,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statsCardFormatSquare => 'Square';
 
   @override
-  String get statsCardFormatSquareBlurb => 'For a post or a message';
-
-  @override
   String get statsCardFormatStory => 'Story';
-
-  @override
-  String get statsCardFormatStoryBlurb => 'For a full-screen story';
 
   @override
   String get statsCardMostPlayed => 'MOST PLAYED';
@@ -12265,9 +11477,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'This build cannot keep an image, so the cards are preview only.';
 
   @override
-  String get statsCardOverline => 'Your year, cut to shape';
-
-  @override
   String statsCardPreviewSpoken(String format) {
     String _temp0 = intl.Intl.selectLogic(format, {
       'story': 'Story card, for a full-screen story',
@@ -12278,8 +11487,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get statsCardPrivacy =>
-      'Cards are drawn here and never sent anywhere: what happens next is up to you.';
+  String get statsCardPrivacyHelp =>
+      'Drawn here and never sent anywhere; sharing is your choice.';
 
   @override
   String get statsCardSaveUnsupported => 'This build cannot save images';
@@ -12340,8 +11549,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statsDoorYearInReviewSubtitle => 'Your listening year, wrapped up';
 
   @override
-  String get statsEmptyMessage =>
-      'Pick a longer range, or go and play something.';
+  String get statsEmptyMessage => 'Pick a longer range.';
 
   @override
   String get statsEmptyTitle => 'Nothing played in this range';
@@ -12395,10 +11603,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statsLogAllClients => 'All clients';
-
-  @override
-  String get statsLogEmptyMessage =>
-      'Every session a client finishes lands here, whichever device reported it.';
 
   @override
   String get statsLogEmptyTitle => 'No listens recorded yet';
@@ -12498,19 +11702,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statsTitle => 'Listening stats';
 
   @override
-  String statsTopEmptyMessage(String kind) {
-    String _temp0 = intl.Intl.selectLogic(kind, {
-      'artists': 'A longer range, or an artist you have actually played.',
-      'albums': 'A longer range, or an album you have actually played.',
-      'genres': 'A longer range, or a genre you have actually played.',
-      'shows': 'A longer range, or a show you have actually played.',
-      'stations': 'A longer range, or a station you have actually tuned in.',
-      'other': 'A longer range, or something you have actually played.',
-    });
-    return '$_temp0';
-  }
-
-  @override
   String get statsTopEmptyTitle => 'Nothing here for this range';
 
   @override
@@ -12602,7 +11793,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolsClearAllBody =>
-      'Finished and failed task receipts of every account go, reports they have not read included. Running tasks stay.';
+      'Deletes finished and failed task receipts of every account, unread reports included.';
 
   @override
   String get toolsClearAllTitle => 'Clear every member\'s finished tasks?';
@@ -12760,18 +11951,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolsDismiss => 'Dismiss';
 
   @override
-  String get toolsEmptyMessage =>
-      'Merges, splits, downloads, and imports report their progress here while they run and land here when they finish.';
-
-  @override
   String get toolsEmptyTitle => 'No tool tasks';
 
   @override
-  String get toolsFinishedTapForReport => 'Finished · tap for the report';
-
-  @override
   String toolsItemsProduced(int count) {
-    return '$count items produced · tap to open';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12831,6 +12021,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolsLoadError => 'Could not load tool tasks';
+
+  @override
+  String get toolsOpenReport => 'Open the report';
+
+  @override
+  String toolsOpenResult(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Open the results',
+      one: 'Open the result',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get toolsOpenReviewQueue => 'Open the review queue';
@@ -12948,12 +12152,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get toolsTapForReport => 'Tap for the report';
-
-  @override
-  String get toolsTapToOpenResult => 'Tap to open what it produced';
-
-  @override
   String get toolsTaskAcquire => 'URL download';
 
   @override
@@ -13005,8 +12203,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count tasks kept: their files could not be moved; see each row',
-      one: '1 task kept: its files could not be moved; see its row',
+      other: '$count tasks kept: their files could not move',
+      one: '1 task kept: its files could not move',
     );
     return '$_temp0';
   }
@@ -13018,16 +12216,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolsTitle => 'Tool tasks';
 
   @override
-  String get toolsWaitCatalogBusy =>
-      'Another job holds the catalog; this carries on once it is free.';
+  String get toolsWaitCatalogBusy => 'Another job holds the catalog.';
 
   @override
-  String get toolsWaitCatalogMaintenance =>
-      'The catalog is under maintenance; this carries on once that is done.';
+  String get toolsWaitCatalogMaintenance => 'The catalog is under maintenance.';
 
   @override
-  String get toolsWaitEngineUnavailable =>
-      'The audio engine is not available; this carries on once it is back.';
+  String get toolsWaitEngineUnavailable => 'The audio engine is not available.';
 
   @override
   String toolsWaitNextTry(String time) {
@@ -13035,28 +12230,26 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get toolsWaitOther =>
-      'Something passing got in the way; this tries again on its own.';
+  String get toolsWaitOther => 'Something passing got in the way.';
 
   @override
   String get toolsWaitPartMissing =>
-      'A file of the book is not where the catalog has it. If it does not come back, this puts back what it moved and stops.';
+      'A book file is missing; if it stays gone, this undoes its moves and stops.';
 
   @override
   String get toolsWaitPutBackBlocked =>
-      'A file cannot go back from the trash: its place is taken or its folder refuses the server. Clear the place or fix the folder and this carries on.';
+      'A file cannot leave the trash: free its place or fix its folder.';
 
   @override
   String get toolsWaitReadOnly =>
-      'A library this works in is read-only. Turn read-only off for it, or for the server, and this carries on.';
+      'A library it works in is read-only. Turn that off for it or the server.';
 
   @override
-  String get toolsWaitStopped =>
-      'This was cut short, by the server stopping or by running out of time; it carries on where it was.';
+  String get toolsWaitStopped => 'Cut short by a server stop or a time limit.';
 
   @override
   String get toolsWaitStorageUnwritable =>
-      'A folder this writes to refuses the server. Fix the folder\'s ownership and permissions and this carries on.';
+      'A folder it writes to refuses the server. Fix its ownership and permissions.';
 
   @override
   String get toolsWaitTryingNow => 'Trying again now';
@@ -13078,13 +12271,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsAcquireQueued =>
-      'Downloading. It will appear in the review queue when ready.';
+      'Downloading; appears in review when ready';
 
   @override
   String get uploadsAcquireTasks => 'Tasks';
-
-  @override
-  String get uploadsAddOverline => 'Both routes land in the review queue';
 
   @override
   String get uploadsAddTitle => 'Add to the library';
@@ -13102,7 +12292,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String uploadsDiscardBody(String fileName) {
-    return '\"$fileName\" and its staged bytes are removed, and the space they hold against your quota is released.';
+    return '\"$fileName\" is removed and its quota space freed.';
   }
 
   @override
@@ -13144,7 +12334,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String uploadsDuplicateJoined(String what) {
-    return 'Already in the library: $what. Its details stay as they were.';
+    return 'Already in the library: $what';
   }
 
   @override
@@ -13152,14 +12342,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsDuplicateUnseen => 'an item in a library you cannot open';
-
-  @override
-  String get uploadsEmptyMessage =>
-      'Pick files from the bar above, or drop them anywhere on this page.';
-
-  @override
-  String get uploadsEmptyNoPermission =>
-      'This account cannot upload. Ask an administrator for the permission.';
 
   @override
   String get uploadsEmptyTitle => 'No uploads yet';
@@ -13205,13 +12387,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadsFromUrlMusic => 'Add music from URL';
 
   @override
-  String get uploadsFromUrlSubtitle => 'A video, a playlist, or a channel';
-
-  @override
   String get uploadsGroupingAlbum => 'One album';
-
-  @override
-  String get uploadsGroupingAlbumHelp => 'Review all files as one release';
 
   @override
   String get uploadsGroupingAuto => 'Auto-detect';
@@ -13227,9 +12403,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadsGroupingBookEach => 'Separate books';
 
   @override
-  String get uploadsGroupingBookEachHelp => 'Every file is a book of its own';
-
-  @override
   String uploadsGroupingBookOne(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13241,41 +12414,32 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get uploadsGroupingBookOneHelp =>
-      'Parts of one book, in folder and track order';
-
-  @override
   String get uploadsGroupingTitle => 'How should these files be grouped?';
 
   @override
   String get uploadsGroupingTracks => 'Separate tracks';
 
   @override
-  String get uploadsGroupingTracksHelp => 'Review every file on its own';
-
-  @override
   String get uploadsIdentifyMusic => 'Identify against MusicBrainz';
 
   @override
   String get uploadsIdentifyMusicHelp =>
-      'Matches it, then waits for your decision. Off adds it with the tags it has';
+      'Matches it against MusicBrainz; off files it with the tags it has, unreviewed';
 
   @override
   String get uploadsIdentifyOther => 'Review before adding';
 
   @override
   String get uploadsIdentifyOtherHelp =>
-      'Waits for your decision. Off adds it with the tags it has';
+      'Waits for your review; off files it with the tags it has';
 
   @override
   String uploadsIdentifying(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          'Uploaded $count files. They\'re being identified and will appear once they clear review',
-      one:
-          'Uploaded 1 file. It\'s being identified and will appear once it clears review',
+      other: 'Uploaded $count files; identifying them',
+      one: 'Uploaded 1 file; identifying it',
     );
     return '$_temp0';
   }
@@ -13289,7 +12453,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsLibraryHelp =>
-      'Which library\'s settings apply. Where the files are placed is the server\'s own choice.';
+      'Picks whose settings apply, not where files go';
 
   @override
   String get uploadsLoadError => 'Could not load uploads';
@@ -13304,6 +12468,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadsMediaMusic => 'Music';
 
   @override
+  String get uploadsNoPermissionEmptyMessage =>
+      'Uploading needs a permission; ask an administrator.';
+
+  @override
   String get uploadsOpenReview => 'Open review entry';
 
   @override
@@ -13316,24 +12484,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadsPickFolderFailed => 'The folder could not be read';
 
   @override
-  String get uploadsPickFolderSubtitle =>
-      'Keeps your folder grouping, disc subfolders and all';
-
-  @override
-  String get uploadsPickSubtitle =>
-      'Tracks you choose by hand, grouped by their tags';
-
-  @override
   String get uploadsQuotaFull =>
       'You already have as much waiting as your limit allows. Import or discard some in Past uploads, then try again.';
-
-  @override
-  String get uploadsQuotaHelp =>
-      'This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.';
-
-  @override
-  String get uploadsQuotaHelpUncapped =>
-      'Staged files are held until they are imported or discarded.';
 
   @override
   String uploadsQuotaOf(String used, String cap) {
@@ -13356,10 +12508,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsRetry => 'Retry upload';
-
-  @override
-  String get uploadsSessionsSubtitle =>
-      'Quota, what is still going up, and what to retry';
 
   @override
   String get uploadsSessionsTitle => 'Past uploads';

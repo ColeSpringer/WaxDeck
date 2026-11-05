@@ -314,7 +314,6 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
       onRetrySeed: () => ref.invalidate(_renameSeedProvider(seedKey)),
       copy: RenameSectionCopy(
         title: l10n.musicEntityRenameTitle,
-        overline: l10n.musicEntityRenameOverline,
         help: artist
             ? l10n.musicEntityRenameArtistHelp
             : l10n.musicEntityRenameGroupHelp,
@@ -349,19 +348,6 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     _ => field,
   };
 
-  String _helpOf(AppLocalizations l10n, String field) => switch (field) {
-    'sort' =>
-      widget.entity == EditableEntity.artist
-          ? l10n.musicFieldArtistSortHelp
-          : l10n.musicFieldReleaseGroupSortHelp,
-    'mbid' =>
-      widget.entity == EditableEntity.artist
-          ? l10n.musicFieldArtistMbidHelp
-          : l10n.musicFieldReleaseGroupMbidHelp,
-    'type' => l10n.musicFieldReleaseGroupTypeHelp,
-    _ => '',
-  };
-
   String _typeLabelOf(AppLocalizations l10n, String value) => switch (value) {
     'album' => l10n.musicReleaseGroupTypeAlbum,
     'ep' => l10n.musicReleaseGroupTypeEp,
@@ -386,8 +372,9 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     if (access == AdminAccess.refused) {
       return ForbiddenPage(
         pageTitle: l10n.metadataTitle,
-        heading: l10n.metadataForbiddenTitle,
-        message: l10n.metadataForbiddenMessage,
+        heading: widget.entity == EditableEntity.artist
+            ? l10n.metadataArtistForbiddenTitle
+            : l10n.metadataGroupForbiddenTitle,
         glyph: WaxIcons.edit,
         fallback: WaxRoute.music,
         semanticsId: SemanticsIds.metadataForbidden,
@@ -456,42 +443,26 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
             ),
             const SizedBox(height: WaxSpace.s24),
           ],
-          SectionHeader(
-            title: l10n.musicAlbumEditorNamesTitle,
-            overline: l10n.musicAlbumEditorNamesOverline,
-          ),
+          SectionHeader(title: l10n.musicAlbumEditorNamesTitle),
           for (final field in widget.entity.fields) ...<Widget>[
             if (field == 'type')
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  WaxChoice<String>(
-                    label: _labelOf(l10n, field),
-                    // Staged over seeded, never the curation map: after
-                    // a save the seed already holds what was sent, so
-                    // the picker keeps it while the refetch is in
-                    // flight instead of snapping to the stale value.
-                    value: _typeStaged ?? _typeSeeded ?? '',
-                    semanticsId: SemanticsIds.metadataField(field),
-                    options: kReleaseGroupTypes,
-                    labelFor: (value) => _typeLabelOf(l10n, value),
-                    onChanged: _busy
-                        ? null
-                        : (v) => setState(() => _typeStaged = v),
-                  ),
-                  const SizedBox(height: WaxSpace.s4),
-                  WaxProse(
-                    _helpOf(l10n, field),
-                    style: WaxType.caption.copyWith(
-                      color: WaxColors.of(context).textSecondary,
-                    ),
-                  ),
-                ],
+              WaxChoice<String>(
+                label: _labelOf(l10n, field),
+                // Staged over seeded, never the curation map: after
+                // a save the seed already holds what was sent, so
+                // the picker keeps it while the refetch is in
+                // flight instead of snapping to the stale value.
+                value: _typeStaged ?? _typeSeeded ?? '',
+                semanticsId: SemanticsIds.metadataField(field),
+                options: kReleaseGroupTypes,
+                labelFor: (value) => _typeLabelOf(l10n, value),
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() => _typeStaged = v),
               )
             else
               _EntityFieldRow(
                 label: _labelOf(l10n, field),
-                help: _helpOf(l10n, field),
                 wire: field,
                 controller: _controllerFor(field, _storedOf(curation, field)),
                 curated: curation[field],
@@ -507,7 +478,7 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
           if (artist)
             WaxSettingRow(
               title: l10n.metadataWriteBackTitle,
-              help: l10n.musicFieldArtistWriteBackHelp,
+              info: l10n.musicFieldArtistWriteBackHelp,
               control: WaxSwitch(
                 label: l10n.metadataWriteBackTitle,
                 value: _writeBack,
@@ -517,7 +488,7 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
             ),
           WaxSettingRow(
             title: l10n.metadataLockTitle,
-            help: l10n.metadataLockHelp,
+            info: l10n.metadataLockHelp,
             control: WaxSwitch(
               label: l10n.metadataLockTitle,
               value: _lock,
@@ -527,7 +498,7 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
           ),
           WaxSettingRow(
             title: l10n.metadataForceTitle,
-            help: l10n.metadataForceHelp,
+            info: l10n.metadataForceHelp,
             control: WaxSwitch(
               label: l10n.metadataForceTitle,
               value: _force,
@@ -558,7 +529,6 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
 class _EntityFieldRow extends StatelessWidget {
   const _EntityFieldRow({
     required this.label,
-    required this.help,
     required this.wire,
     required this.controller,
     required this.curated,
@@ -566,7 +536,6 @@ class _EntityFieldRow extends StatelessWidget {
   });
 
   final String label;
-  final String help;
   final String wire;
   final TextEditingController controller;
 
@@ -587,9 +556,6 @@ class _EntityFieldRow extends StatelessWidget {
         : fieldSourceName(l10n, source: row.source, hasValue: true);
     return WaxTextField(
       label: label,
-      // Under the box, selectable, and spoken with it: a placeholder went
-      // the moment the field held a value.
-      helperText: help.isEmpty ? null : help,
       controller: controller,
       semanticsId: SemanticsIds.metadataField(wire),
       beside: Row(

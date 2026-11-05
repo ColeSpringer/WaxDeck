@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'wax_finders.dart';
 
 Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
   tester.view.physicalSize = const Size(1200, 1600);
@@ -65,12 +66,11 @@ void main() {
     await _pump(tester, repo);
     await _newProfile(tester, 'flat');
     expect(
-      find.text(
-        'Various Artists unless set; empty files compilations under '
-        'their tagged album artist',
-      ),
-      findsOneWidget,
+      find.textContaining('Various Artists unless set'),
+      findsNothing,
+      reason: 'the hint inside the field says it',
     );
+    expect(infoTipContaining('Rewrites unlocked'), findsOneWidget);
     expect(_folderField(tester).decoration?.hintText, 'Various Artists');
 
     await _save(tester);

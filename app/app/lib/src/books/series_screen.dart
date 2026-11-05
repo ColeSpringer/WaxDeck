@@ -41,7 +41,7 @@ class BookSeriesScreen extends ConsumerWidget {
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.bookSeriesNoBooks,
-              message: l10n.bookSeriesNoBooksMessage,
+              message: l10n.bookSeriesNoBooksEmptyMessage,
               glyph: WaxIcons.audiobooks,
             ),
           ),

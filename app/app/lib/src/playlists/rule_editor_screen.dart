@@ -380,7 +380,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.playlistRuleReadOnlyTitle,
-              message: l10n.playlistRuleReadOnlyMessage,
+              message: l10n.playlistRuleReadOnlyEmptyMessage,
               glyph: WaxIcons.info,
             ),
           )
@@ -973,7 +973,6 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             WaxSettingRow(
               key: const Key(SemanticsIds.ruleLimitSeed),
               title: l10n.playlistRuleSeedTitle,
-              help: l10n.playlistRuleSeedHelp,
               control: WaxSwitch(
                 value: _limitSeed != 0,
                 label: l10n.playlistRuleSeedTitle,

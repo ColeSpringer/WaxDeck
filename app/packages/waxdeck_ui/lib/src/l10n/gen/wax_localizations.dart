@@ -579,12 +579,6 @@ abstract class WaxLocalizations {
   /// **'Close'**
   String get paletteClose;
 
-  /// What the command palette suggests when a query matches nothing.
-  ///
-  /// In en, this message translates to:
-  /// **'Try fewer words, or a different one.'**
-  String get paletteEmptyMessage;
-
   /// Heading the command palette shows when a query matches nothing.
   ///
   /// In en, this message translates to:

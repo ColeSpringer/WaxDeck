@@ -143,7 +143,6 @@ class TrashScreen extends ConsumerWidget {
           children: <Widget>[
             WaxSettingRow(
               title: l10n.adminTrashShowRestoredTitle,
-              help: l10n.adminTrashShowRestoredHelp,
               control: WaxSwitch(
                 label: l10n.adminTrashShowRestoredTitle,
                 value: includeRestored,
@@ -163,7 +162,6 @@ class TrashScreen extends ConsumerWidget {
                 empty: EmptyState(
                   glyph: WaxIcons.delete,
                   title: l10n.adminTrashEmptyStateTitle,
-                  message: l10n.adminTrashEmptyStateMessage,
                 ),
                 columns: <WaxColumn<TrashEntry>>[
                   WaxColumn<TrashEntry>(
@@ -301,7 +299,6 @@ class _ArtworkCacheCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final cache = ref.watch(thumbnailCacheProvider);
     return Semantics(
@@ -311,11 +308,6 @@ class _ArtworkCacheCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           SectionHeader(title: l10n.adminThumbsTitle),
-          Text(
-            l10n.adminThumbsBlurb,
-            style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
-          ),
-          const SizedBox(height: WaxSpace.s16),
           switch (cache) {
             AsyncData(:final value) => _CacheFigures(report: value),
             AsyncValue(hasError: true) => AsyncFailureCard.from(

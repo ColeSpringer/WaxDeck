@@ -1,4 +1,3 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -8,13 +7,15 @@ import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
 
 /// The settings the streaming engine serves read what the server says of
-/// it: gone with a reason on a server without one, kept with the outage
-/// said while it is away.
+/// it: drawn disabled with the reason on a server without one, kept live
+/// with the outage said while it is away. A reason several rows share is
+/// one line under each group heading that holds one of them.
 void main() {
   final en = AppLocalizationsEn();
   const none = ServerStreaming(configured: false, connected: false);
@@ -26,43 +27,52 @@ void main() {
     voiceBoost: true,
     fileTools: true,
   );
+  // The three reasons a group line can give.
+  final reasons = [
+    en.settingsNeedsEngine,
+    en.settingsEngineUnreachable,
+    en.settingsEngineLacksThese,
+  ];
 
   group('the gapless row', () {
-    test('says the server has no engine', () {
-      expect(webGaplessHelp(en, none, null), en.settingsWebGaplessNoEngine);
+    test('leaves no engine to its group line', () {
+      expect(webGaplessHelp(en, none, null), isNull);
       // Whatever a mint said before: the server's word wins.
-      expect(
-        webGaplessHelp(en, none, 'feature-unavailable'),
-        en.settingsWebGaplessNoEngine,
-      );
+      expect(webGaplessHelp(en, none, 'feature-unavailable'), isNull);
     });
 
-    test('says the engine is unreachable', () {
-      expect(webGaplessHelp(en, away, null), en.settingsEngineUnreachable);
-      expect(
-        webGaplessHelp(en, away, 'transcode-limited'),
-        en.settingsEngineUnreachable,
-      );
+    test('leaves the unreachable engine to its group line', () {
+      expect(webGaplessHelp(en, away, null), isNull);
+      expect(webGaplessHelp(en, away, 'transcode-limited'), isNull);
     });
 
-    test('says an engine that renders no queues renders none', () {
+    test('leaves an engine that renders no queues to its group line', () {
       const plain = ServerStreaming(configured: true, connected: true);
-      expect(webGaplessHelp(en, plain, null), en.settingsWebGaplessUnavailable);
+      expect(webGaplessHelp(en, plain, null), isNull);
+      expect(webGaplessHelp(en, plain, 'transcode-limited'), isNull);
     });
 
     test('offers its switch unless nothing could be rendered', () {
+      // What the row reads: its rendered-queue need, through the engine
+      // row every engine setting takes.
+      bool offered(ServerStreaming? s) => engineRow(
+        s,
+        offers: (engine) => engine.timelines,
+        lacking: en.settingsEngineLacksThis,
+      ).offered;
       const plain = ServerStreaming(configured: true, connected: true);
-      expect(webGaplessOffered(none), isFalse);
-      expect(webGaplessOffered(plain), isFalse);
+      expect(offered(none), isFalse);
+      expect(offered(plain), isFalse);
       // Away, the choice applies once the engine answers again.
-      expect(webGaplessOffered(away), isTrue);
-      expect(webGaplessOffered(up), isTrue);
+      expect(offered(away), isTrue);
+      expect(offered(up), isTrue);
       // A server too old to say keeps the switch.
-      expect(webGaplessOffered(null), isTrue);
+      expect(offered(null), isTrue);
     });
 
-    test('keeps the passing answers the server cannot give', () {
-      expect(webGaplessHelp(en, up, null), en.settingsWebGaplessHelp);
+    test('says nothing while it works, and keeps the refusals only the '
+        'browser hears', () {
+      expect(webGaplessHelp(en, up, null), isNull);
       expect(
         webGaplessHelp(en, up, 'transcode-limited'),
         en.settingsWebGaplessBusy,
@@ -83,8 +93,13 @@ void main() {
     });
   });
 
-  Future<void> pumpPlayback(WidgetTester tester, ServerStreaming? s) async {
-    tester.view.physicalSize = const Size(1000, 2400);
+  Future<void> pumpPlayback(
+    WidgetTester tester,
+    ServerStreaming? s, {
+    Size size = const Size(1000, 2400),
+    String? setting,
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repo = FakeRepository(
@@ -100,7 +115,10 @@ void main() {
           credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
         ],
         child: routedHost(
-          const SettingsSectionScreen(section: SettingsSection.playback),
+          SettingsSectionScreen(
+            section: SettingsSection.playback,
+            setting: setting,
+          ),
         ),
       ),
     );
@@ -110,26 +128,145 @@ void main() {
   Finder control(String id) =>
       find.bySemanticsIdentifier(SemanticsIds.setting(id));
 
-  testWidgets('trimming and voice boost go, with the reason, without an '
-      'engine', (tester) async {
+  /// Whether the row's control is drawn but refuses a change, the way the
+  /// card captions refuse one with no pointer.
+  void expectDisabled(WidgetTester tester, String id) {
+    expect(control(id), findsOneWidget, reason: id);
+    final owner = tester.widget(
+      find
+          .ancestor(
+            of: control(id),
+            matching: find.byWidgetPredicate(
+              (w) => w is WaxSwitch || w is WaxChoice<Object?>,
+            ),
+          )
+          .first,
+    );
+    final onChanged = switch (owner) {
+      WaxSwitch(:final onChanged) => onChanged,
+      WaxChoice<Object?>(:final onChanged) => onChanged,
+      _ => fail('$id is neither a switch nor a choice'),
+    };
+    expect(onChanged, isNull, reason: id);
+  }
+
+  /// The group a heading heads: the column its header opens.
+  Finder groupOf(String heading) => find
+      .ancestor(
+        of: find.byWidgetPredicate(
+          (w) => w is SectionHeader && w.title == heading,
+        ),
+        matching: find.byType(Column),
+      )
+      .first;
+
+  /// [note] drawn once in [heading]'s group, between the heading and
+  /// every one of [rows].
+  void expectGroupNote(
+    WidgetTester tester,
+    String heading,
+    String note,
+    List<String> rows,
+  ) {
+    final line = find.descendant(
+      of: groupOf(heading),
+      matching: find.text(note),
+    );
+    expect(line, findsOneWidget, reason: heading);
+    final header = find.byWidgetPredicate(
+      (w) => w is SectionHeader && w.title == heading,
+    );
+    final at = tester.getRect(line);
+    expect(
+      at.top,
+      greaterThanOrEqualTo(tester.getRect(header).bottom),
+      reason: 'under the $heading heading',
+    );
+    for (final id in rows) {
+      expect(
+        at.bottom,
+        lessThanOrEqualTo(tester.getRect(control(id)).top),
+        reason: 'above $id',
+      );
+    }
+  }
+
+  /// No reason line anywhere in [heading]'s group.
+  void expectNoGroupNote(String heading) {
+    for (final reason in reasons) {
+      expect(
+        find.descendant(of: groupOf(heading), matching: find.text(reason)),
+        findsNothing,
+        reason: '$heading: $reason',
+      );
+    }
+  }
+
+  // The rows each engine group holds. The test platform is a phone,
+  // which splits the stream quality by connection.
+  const spoken = ['trim-default', 'boost-default'];
+  const casting = ['crossfade', 'replay-gain'];
+  const streamed = ['stream-quality-wifi', 'stream-quality-metered'];
+
+  testWidgets('without an engine every engine row is disabled, and each of '
+      'their groups says why once', (tester) async {
     await pumpPlayback(tester, none);
-    expect(control('trim-default'), findsNothing);
-    expect(control('boost-default'), findsNothing);
-    expect(find.text(en.settingsNeedsEngine), findsWidgets);
+    for (final id in [...spoken, ...casting, ...streamed]) {
+      expectDisabled(tester, id);
+    }
+    expectGroupNote(
+      tester,
+      en.settingsGroupSpokenWord,
+      en.settingsNeedsEngine,
+      spoken,
+    );
+    expectGroupNote(
+      tester,
+      en.settingsGroupCasting,
+      en.settingsNeedsEngine,
+      casting,
+    );
+    expectGroupNote(
+      tester,
+      en.settingsGroupStreaming,
+      en.settingsNeedsEngine,
+      streamed,
+    );
+    expect(find.text(en.settingsNeedsEngine), findsNWidgets(3));
+    // A group with no engine row says nothing of it.
+    expectNoGroupNote(en.settingsGroupPlayer);
   });
 
-  testWidgets('trimming and voice boost stay, saying the engine is away', (
-    tester,
-  ) async {
+  testWidgets('an engine away keeps every row live, and each of their '
+      'groups says it is away', (tester) async {
     await pumpPlayback(tester, away);
-    expect(control('trim-default'), findsOneWidget);
-    expect(control('boost-default'), findsOneWidget);
-    expect(find.text(en.settingsEngineUnreachable), findsWidgets);
+    for (final id in [...spoken, ...casting, ...streamed]) {
+      expect(control(id), findsOneWidget, reason: id);
+    }
+    expectGroupNote(
+      tester,
+      en.settingsGroupSpokenWord,
+      en.settingsEngineUnreachable,
+      spoken,
+    );
+    expectGroupNote(
+      tester,
+      en.settingsGroupCasting,
+      en.settingsEngineUnreachable,
+      casting,
+    );
+    expectGroupNote(
+      tester,
+      en.settingsGroupStreaming,
+      en.settingsEngineUnreachable,
+      streamed,
+    );
     expect(find.text(en.settingsNeedsEngine), findsNothing);
   });
 
-  testWidgets('voice boost goes, saying why, from an engine that applies '
-      'none', (tester) async {
+  testWidgets('voice boost alone is disabled, saying why on its own row', (
+    tester,
+  ) async {
     await pumpPlayback(
       tester,
       const ServerStreaming(
@@ -139,13 +276,15 @@ void main() {
         fileTools: true,
       ),
     );
-    expect(control('boost-default'), findsNothing);
+    expectDisabled(tester, 'boost-default');
     expect(control('trim-default'), findsOneWidget);
     expect(find.text(en.settingsEngineLacksThis), findsOneWidget);
+    expectNoGroupNote(en.settingsGroupSpokenWord);
   });
 
-  testWidgets('trimming goes, saying why, from an engine that runs no '
-      'analysis', (tester) async {
+  testWidgets('trimming alone is disabled, saying why on its own row', (
+    tester,
+  ) async {
     await pumpPlayback(
       tester,
       const ServerStreaming(
@@ -155,49 +294,14 @@ void main() {
         voiceBoost: true,
       ),
     );
-    expect(control('trim-default'), findsNothing);
+    expectDisabled(tester, 'trim-default');
     expect(control('boost-default'), findsOneWidget);
     expect(find.text(en.settingsEngineLacksThis), findsOneWidget);
+    expectNoGroupNote(en.settingsGroupSpokenWord);
   });
 
-  // What only a rendered queue or a transcode carries: crossfade and
-  // levelling shape the queue the engine renders as one stream, and a
-  // stream quality is a bitrate only the engine's transcode keeps to.
-  // The test platform is a phone, which splits the quality by connection.
-  const rendered = [
-    'crossfade',
-    'replay-gain',
-    'stream-quality-wifi',
-    'stream-quality-metered',
-  ];
-
-  testWidgets('crossfade, levelling and stream quality go, with the reason, '
-      'without an engine', (tester) async {
-    await pumpPlayback(tester, none);
-    for (final id in rendered) {
-      expect(control(id), findsNothing, reason: id);
-    }
-    // Trimming and voice boost say it too.
-    expect(
-      find.text(en.settingsNeedsEngine),
-      findsNWidgets(2 + rendered.length),
-    );
-  });
-
-  testWidgets('crossfade, levelling and stream quality stay, saying the '
-      'engine is away', (tester) async {
-    await pumpPlayback(tester, away);
-    for (final id in rendered) {
-      expect(control(id), findsOneWidget, reason: id);
-    }
-    expect(
-      find.text(en.settingsEngineUnreachable),
-      findsNWidgets(2 + rendered.length),
-    );
-  });
-
-  testWidgets('crossfade and levelling go, saying why, from an engine that '
-      'renders no queues', (tester) async {
+  testWidgets('an engine that renders no queues disables crossfade and '
+      'levelling, said once under their heading', (tester) async {
     await pumpPlayback(
       tester,
       const ServerStreaming(
@@ -207,10 +311,48 @@ void main() {
         fileTools: true,
       ),
     );
-    expect(control('crossfade'), findsNothing);
-    expect(control('replay-gain'), findsNothing);
+    expectDisabled(tester, 'crossfade');
+    expectDisabled(tester, 'replay-gain');
     expect(control('stream-quality-wifi'), findsOneWidget);
-    expect(find.text(en.settingsEngineLacksThis), findsNWidgets(2));
+    expectGroupNote(
+      tester,
+      en.settingsGroupCasting,
+      en.settingsEngineLacksThese,
+      casting,
+    );
+    expect(find.text(en.settingsEngineLacksThese), findsOneWidget);
+    expect(find.text(en.settingsEngineLacksThis), findsNothing);
+    expectNoGroupNote(en.settingsGroupSpokenWord);
+    expectNoGroupNote(en.settingsGroupStreaming);
+  });
+
+  testWidgets('a reason shared across groups is said in each group it '
+      'touches, and only there', (tester) async {
+    // No analysis and no rendered queues: trimming in one group,
+    // crossfade and levelling in another; voice boost works.
+    await pumpPlayback(
+      tester,
+      const ServerStreaming(
+        configured: true,
+        connected: true,
+        voiceBoost: true,
+      ),
+    );
+    expectDisabled(tester, 'trim-default');
+    expectGroupNote(
+      tester,
+      en.settingsGroupSpokenWord,
+      en.settingsEngineLacksThese,
+      spoken,
+    );
+    expectGroupNote(
+      tester,
+      en.settingsGroupCasting,
+      en.settingsEngineLacksThese,
+      casting,
+    );
+    expectNoGroupNote(en.settingsGroupStreaming);
+    expect(find.text(en.settingsEngineLacksThis), findsNothing);
   });
 
   testWidgets('trimming and voice boost read as ever with the engine up', (
@@ -219,8 +361,50 @@ void main() {
     await pumpPlayback(tester, up);
     expect(control('trim-default'), findsOneWidget);
     expect(control('boost-default'), findsOneWidget);
-    expect(find.text(en.settingsTrimDefaultHelp), findsOneWidget);
-    expect(find.text(en.settingsBoostDefaultHelp), findsOneWidget);
-    expect(find.text(en.settingsEngineUnreachable), findsNothing);
+    // The labels carry them: no line under a switch that works.
+    for (final reason in reasons) {
+      expect(find.text(reason), findsNothing, reason: reason);
+    }
+  });
+
+  // A settings search opens the section scrolled to the row, centred;
+  // on a phone the section's top is then screens away, so the reason
+  // has to be within the row's own group to be read at all.
+  group('a search landing on a disabled row at phone width', () {
+    for (final id in [...spoken, ...casting, ...streamed]) {
+      testWidgets('on $id shows its group line', (tester) async {
+        await pumpPlayback(
+          tester,
+          none,
+          size: const Size(390, 844),
+          setting: id,
+        );
+        // The landing follows the row for as long as it is marked.
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+
+        final top = WaxScaffold.barHeight(
+          tester.element(find.byType(SettingsSectionScreen)),
+          largeTitle: false,
+        );
+        const bottom = 844.0;
+        bool inView(Rect r) => r.top >= top && r.bottom <= bottom;
+
+        final row = tester.getRect(control(id));
+        expect(inView(row), isTrue, reason: 'the landing shows $id: $row');
+        final notes = find.text(en.settingsNeedsEngine);
+        final above = [
+          for (var i = 0; i < notes.evaluate().length; i++)
+            tester.getRect(notes.at(i)),
+        ].where((r) => r.bottom <= row.top).toList();
+        expect(above, isNotEmpty, reason: 'a reason line above $id');
+        final nearest = above.reduce((a, b) => a.bottom > b.bottom ? a : b);
+        expect(
+          inView(nearest),
+          isTrue,
+          reason: 'its group line is on screen: $nearest, view from $top',
+        );
+      });
+    }
   });
 }

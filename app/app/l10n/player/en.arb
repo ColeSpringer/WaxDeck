@@ -125,9 +125,9 @@
       }
     }
   },
-  "playerBookmarksEmpty": "Nothing marked yet. A bookmark keeps a place you want to come back to; your listening position is kept for you either way.",
+  "playerBookmarksEmpty": "Nothing marked yet",
   "@playerBookmarksEmpty": {
-    "description": "Empty state of the bookmarks sheet, saying that bookmarks are not how listening position is remembered."
+    "description": "Empty state of the bookmarks sheet."
   },
   "playerBookmarksError": "Could not load the bookmarks.",
   "@playerBookmarksError": {
@@ -140,10 +140,6 @@
   "playerCancelTimer": "Cancel timer",
   "@playerCancelTimer": {
     "description": "Stops the running sleep timer."
-  },
-  "playerCarIdleMessage": "Start something and it takes the whole screen.",
-  "@playerCarIdleMessage": {
-    "description": "Under the idle heading in car mode."
   },
   "playerCarMode": "Car mode",
   "@playerCarMode": {
@@ -233,7 +229,7 @@
   "@playerForgetSong": {
     "description": "Accessible name of the control that drops a saved radio song."
   },
-  "playerGaplessBusy": "The server is busy, so this queue plays one track at a time. Gapless playback returns when a stream frees up.",
+  "playerGaplessBusy": "The server is busy, so tracks play one at a time",
   "@playerGaplessBusy": {
     "description": "Message on the shell when gapless playback is on but the server turned down rendering the queue as one stream because too many streams are being converted."
   },
@@ -254,10 +250,6 @@
   "playerGoToShow": "Go to show",
   "@playerGoToShow": {
     "description": "Menu item that opens the show the playing episode belongs to."
-  },
-  "playerIdleMessage": "Pick something from your library and it shows up here.",
-  "@playerIdleMessage": {
-    "description": "Under the idle heading on the full player."
   },
   "playerInstantMix": "Instant mix",
   "@playerInstantMix": {
@@ -289,10 +281,6 @@
   "@playerLyricsError": {
     "description": "Title of the error state when lyrics could not be read."
   },
-  "playerLyricsIdleMessage": "Words show up here once something is.",
-  "@playerLyricsIdleMessage": {
-    "description": "Under the idle heading on the lyrics panel. It finishes the heading's sentence, which says nothing is playing."
-  },
   "playerMarkPlayed": "Mark as played",
   "@playerMarkPlayed": {
     "description": "Menu item that marks the playing episode finished."
@@ -323,25 +311,17 @@
   "@playerNoLyrics": {
     "description": "Heading when the playing track carries no lyrics."
   },
-  "playerNoLyricsAdminMessage": "Nothing was found in a sidecar or in the file tags. You can add them in the metadata editor.",
-  "@playerNoLyricsAdminMessage": {
-    "description": "Under the no-lyrics heading, for somebody who may edit the library."
-  },
-  "playerNoLyricsMessage": "Nothing was found in a sidecar or in the file tags.",
-  "@playerNoLyricsMessage": {
-    "description": "Under the no-lyrics heading. A sidecar is a small file stored beside the audio."
-  },
   "playerNoShape": "No shape to draw",
   "@playerNoShape": {
     "description": "Heading when the playing file has no measured waveform."
   },
-  "playerNoShapeMessage": "The visualizer draws what the analyze pass measured, and this file has not been measured. Run an analyze pass on the library and it fills in.",
-  "@playerNoShapeMessage": {
+  "playerNoShapeEmptyMessage": "Run an analyze pass to fill this in",
+  "@playerNoShapeEmptyMessage": {
     "description": "Under the no-shape heading, saying what would fill it."
   },
   "playerNothingPlaying": "Nothing is playing",
   "@playerNothingPlaying": {
-    "description": "Heading of every idle playback surface: the player, car mode, the visualizer, and the lyrics panel. Each says something different underneath it."
+    "description": "Heading of every idle playback surface: the player, car mode, the visualizer, and the lyrics panel."
   },
   "playerOfferQueued": "{count, plural, =1{1 queued item} other{{count} queued items}}",
   "@playerOfferQueued": {
@@ -643,10 +623,6 @@
   "@playerTranscriptError": {
     "description": "Drawn in the transcript panel when the read failed for a reason the error table has no sentence for."
   },
-  "playerTrimExplained": "Silence trimming skips the mapped quiet parts of an episode. Positions stay honest; the chip counts what it skipped.",
-  "@playerTrimExplained": {
-    "description": "Shown once, the first time silence trimming is turned on."
-  },
   "playerTrimSilence": "Trim silence",
   "@playerTrimSilence": {
     "description": "Control that skips the quiet parts of a spoken recording."
@@ -705,10 +681,6 @@
   "@playerVisualizerAnalysisNeeded": {
     "description": "Why the visualizer row is disabled: nothing has measured the track's shape, so there is nothing to draw."
   },
-  "playerVisualizerIdleMessage": "Start a track and its shape shows up here.",
-  "@playerVisualizerIdleMessage": {
-    "description": "Under the idle heading on the visualizer."
-  },
   "playerVisualizerMode": "Visualizer mode",
   "@playerVisualizerMode": {
     "description": "Accessible name of the control choosing how the visualizer draws."
@@ -717,7 +689,7 @@
   "@playerVoiceBoost": {
     "description": "Control that lifts speech out of the rest of the sound."
   },
-  "playerVoiceBoostExplained": "Voice boost evens out a quiet or uneven recording. The server applies it, so what is playing reopens.",
+  "playerVoiceBoostExplained": "Playback restarts to apply voice boost",
   "@playerVoiceBoostExplained": {
     "description": "Shown once, the first time voice boost is turned on. It warns that playback restarts, because the server is what applies the effect."
   },

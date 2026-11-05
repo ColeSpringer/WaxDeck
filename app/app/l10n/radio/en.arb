@@ -81,10 +81,6 @@
   "@radioEmptyAction": {
     "description": "Button on the radio dial's empty state."
   },
-  "radioEmptyMessage": "Search the directory to add your first, or paste a stream URL if you already have one.",
-  "@radioEmptyMessage": {
-    "description": "Message under the empty state of the radio dial, naming the two ways in."
-  },
   "radioEmptyTitle": "No stations yet",
   "@radioEmptyTitle": {
     "description": "Empty state of the radio dial."
@@ -109,7 +105,7 @@
   "@radioMoreOptions": {
     "description": "Expands the optional fields of the station form, naming what is behind it."
   },
-  "radioNameHint": "Taken from the stream address when left blank",
+  "radioNameHint": "Defaults to the stream address",
   "@radioNameHint": {
     "description": "Hint under the station-name field on the add form."
   },
@@ -155,15 +151,7 @@
   "@radioSavedAcquire": {
     "description": "Row in a saved song's menu handing it to the add-from-URL flow."
   },
-  "radioSavedAcquireHelp": "Download a copy you found; it lands in review",
-  "@radioSavedAcquireHelp": {
-    "description": "Under the get-from-a-URL row."
-  },
-  "radioSavedDoorSubtitle": "Songs you caught on air and mean to hunt down",
-  "@radioSavedDoorSubtitle": {
-    "description": "Under the row on the dial that opens the saved songs."
-  },
-  "radioSavedEmptyMessage": "Tap the heart while a station is playing and the song it named turns up here, with a way to search for it.",
+  "radioSavedEmptyMessage": "Tap the heart while a station plays",
   "@radioSavedEmptyMessage": {
     "description": "Message under the empty state of the saved songs, saying how one gets there."
   },
@@ -205,14 +193,6 @@
   "@radioSavedIdentify": {
     "description": "Row in a saved song's menu handing its name to a pending review entry."
   },
-  "radioSavedIdentifyHelp": "Hand its name to a pending entry's search",
-  "@radioSavedIdentifyHelp": {
-    "description": "Under the identify-a-review-entry row."
-  },
-  "radioSavedIdentifyOverline": "Pending single tracks in the review queue",
-  "@radioSavedIdentifyOverline": {
-    "description": "Overline above the identify sheet, saying what it lists and why only those."
-  },
   "radioSavedIdentifyTitle": "Identify as \"{title}\"",
   "@radioSavedIdentifyTitle": {
     "description": "Heading of the sheet picking which pending review entry a saved song names.",
@@ -231,7 +211,7 @@
   "@radioSavedLoadError": {
     "description": "Title of the error state when the saved songs could not be read."
   },
-  "radioSavedNoPending": "No pending single tracks to name. Get the song from a URL first and it turns up here while it waits for review.",
+  "radioSavedNoPending": "No pending single tracks to name",
   "@radioSavedNoPending": {
     "description": "Said in the identify sheet when the review queue holds nothing a radio song could name."
   },

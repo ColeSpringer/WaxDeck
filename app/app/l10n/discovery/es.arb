@@ -5,7 +5,7 @@
   "discoveryAdventurous": "Atrevido",
   "discoveryAdventurousness": "Cuánto arriesgar",
   "discoveryBasisSpoken": "Respondido por el motor {engine}",
-  "discoveryEmptyMessage": "Esta respuesta ha llegado vacía. Prueba con otra pista.",
+  "discoveryEmptyMessage": "Prueba con otra pista.",
   "discoveryEmptyTitle": "No se ha encontrado nada",
   "discoveryFamiliar": "Conocido",
   "discoveryInstantMixFrom": "A partir de \"{title}\"",

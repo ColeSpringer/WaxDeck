@@ -14,7 +14,6 @@
   "authEnterUsername": "Escribe un nombre de usuario",
   "authFirstAdmin": "Crea la primera cuenta de administrador",
   "authHaveInvite": "¿Tienes una invitación?",
-  "authInviteHelp": "Con una invitación válida la cuenta funciona al momento",
   "authInviteToken": "Código de invitación (opcional)",
   "authLogIn": "Iniciar sesión",
   "authOr": "o",

@@ -120,9 +120,9 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet>
   };
 
   String _modeHelp(AppLocalizations l10n) => switch (_mode) {
-    'append' => l10n.playlistSyncModeHelpAppend,
-    'mirror-trash' => l10n.playlistSyncModeHelpMirrorTrash,
-    _ => l10n.playlistSyncModeHelpMirror,
+    'append' => l10n.playlistSyncModeAppendHelp,
+    'mirror-trash' => l10n.playlistSyncModeMirrorTrashHelp,
+    _ => l10n.playlistSyncModeMirrorHelp,
   };
 
   Future<void> _run(
@@ -366,21 +366,11 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet>
                     maxLines: 6,
                     semanticsId: SemanticsIds.playlistSyncPayload,
                   ),
-                ] else ...<Widget>[
+                ] else if (bound.refCount != null)
                   Text(
-                    l10n.playlistSyncMatchedNote(bound.source),
-                    style: WaxType.body.copyWith(color: colors.textSecondary),
+                    l10n.playlistSyncRefCount(bound.refCount!),
+                    style: WaxType.caption.copyWith(color: colors.textTertiary),
                   ),
-                  if (bound.refCount != null) ...<Widget>[
-                    const SizedBox(height: WaxSpace.s4),
-                    Text(
-                      l10n.playlistSyncRefCount(bound.refCount!),
-                      style: WaxType.caption.copyWith(
-                        color: colors.textTertiary,
-                      ),
-                    ),
-                  ],
-                ],
                 const SizedBox(height: WaxSpace.s12),
                 WaxChoice<String>(
                   value: _mode,
@@ -393,12 +383,12 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet>
                       ? null
                       : (mode) => setState(() => _mode = mode),
                 ),
-                const SizedBox(height: WaxSpace.s4),
-                Text(
-                  live ? _modeHelp(l10n) : l10n.playlistSyncMatchedModeHelp,
-                  style: WaxType.caption.copyWith(color: colors.textTertiary),
-                ),
                 if (live) ...<Widget>[
+                  const SizedBox(height: WaxSpace.s4),
+                  Text(
+                    _modeHelp(l10n),
+                    style: WaxType.caption.copyWith(color: colors.textTertiary),
+                  ),
                   const SizedBox(height: WaxSpace.s12),
                   WaxChoice<int>(
                     value: _intervalHours,

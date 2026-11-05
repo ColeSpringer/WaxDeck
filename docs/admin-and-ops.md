@@ -756,7 +756,8 @@ client that could not: every timeline of theirs unfetched for a minute.
 Resuming a paused listen takes it again on the next fragment, which can
 be refused in turn - the player says so rather than falling back, since
 the ordinary path sits under the same cap. The admin console's activity
-line says how much of its count is this.
+line counts it with the rest and says how many of its sessions are
+gapless queues, and the info tip beside it says how they are counted.
 
 The Android and desktop apps get a capped, voice-boosted or carved
 stream as one item's HLS rendering they seek anywhere in, rather than as

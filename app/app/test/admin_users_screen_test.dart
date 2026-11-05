@@ -257,6 +257,27 @@ void main() {
     );
   });
 
+  testWidgets('the explicit switch says it hides podcasts only', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository();
+    repo.usersById['us-3'] = _account('us-3', username: 'merry');
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userRow('us-3')));
+    await tester.pumpAndSettle();
+
+    // The flag is the feeds'; music carries none, so off hides no music.
+    expect(
+      infoTipHolding('Podcasts only; music needs a content deny rule'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('the requests and invites tabs wait as the list they become', (
     tester,
   ) async {

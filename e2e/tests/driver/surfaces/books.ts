@@ -35,10 +35,18 @@ export class Books extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.bookResume));
   }
 
-  /// The note a multi-file book carries where a listener is looking at
-  /// it.
-  partsNote(): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.bookPartsNote));
+  /// A book's header, whose words (title, subtitle, the facts line and
+  /// the people line) are one node, read in the order they are drawn.
+  header(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.bookHeader));
+  }
+
+  /// The header's words, which carry the facts line: a multi-file book's
+  /// part count among them. The node has links and actions inside it, so
+  /// its words may be its name rather than its text.
+  async facts(): Promise<string> {
+    const header = this.header();
+    return (await header.getAttribute('aria-label')) ?? (await header.textContent()) ?? '';
   }
 
   chapter(index: number): Locator {

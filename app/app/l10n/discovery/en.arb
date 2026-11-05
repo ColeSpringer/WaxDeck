@@ -19,7 +19,7 @@
       }
     }
   },
-  "discoveryEmptyMessage": "This answer came back empty. Try another track.",
+  "discoveryEmptyMessage": "Try another track.",
   "@discoveryEmptyMessage": {
     "description": "Empty state of a mix or similar-tracks list."
   },

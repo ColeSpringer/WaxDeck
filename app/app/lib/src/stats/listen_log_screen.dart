@@ -83,7 +83,6 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen>
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.statsLogEmptyTitle,
-              message: l10n.statsLogEmptyMessage,
               glyph: WaxIcons.recent,
             ),
           ),

@@ -55,10 +55,6 @@
   "@queueEarlier": {
     "description": "Heading over the queues from earlier listening sessions. Upper case as a typographic style; write it the way small headings are written in this language."
   },
-  "queueEmptyMessage": "Play an album, a show, or a playlist and it lands here.",
-  "@queueEmptyMessage": {
-    "description": "Empty state of the queue, saying what fills it."
-  },
   "queueEmptyTitle": "Nothing queued",
   "@queueEmptyTitle": {
     "description": "Empty state of the queue."
@@ -170,10 +166,6 @@
         "example": "Kind of Blue"
       }
     }
-  },
-  "queueRollingWindow": "A window over a larger scope",
-  "@queueRollingWindow": {
-    "description": "Under a rolling queue, saying that what is listed is part of something bigger rather than the whole of it."
   },
   "queueSelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
   "@queueSelectedCount": {

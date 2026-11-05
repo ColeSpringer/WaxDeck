@@ -10,6 +10,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/setting_anchor.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
@@ -86,5 +87,50 @@ void main() {
             'arriving with ?setting=${entry.id} lands nowhere near it',
       );
     }
+  });
+
+  testWidgets('the gapless switch leaves an engine that renders no queues '
+      'to its group line, as crossfade and levelling do', (tester) async {
+    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(
+              authenticated: true,
+              user: WaxDeckUser(
+                id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
+                username: 'listener',
+                roles: ['user'],
+              ),
+            ),
+          )
+          ..serverStreaming = const ServerStreaming(
+            configured: true,
+            connected: true,
+            voiceBoost: true,
+            fileTools: true,
+          );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        ],
+        child: routedHost(
+          const SettingsSectionScreen(section: SettingsSection.playback),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.setting('web-gapless')),
+      findsOneWidget,
+    );
+    // Three rows lack the one feature, so the group says it once.
+    expect(find.text(en.settingsEngineLacksThese), findsOneWidget);
+    expect(find.text(en.settingsWebGaplessUnavailable), findsNothing);
+    expect(find.text(en.settingsEngineLacksThis), findsNothing);
   });
 }

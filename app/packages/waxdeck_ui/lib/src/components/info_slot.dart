@@ -10,6 +10,9 @@ import 'info_tip.dart';
 /// the title's line, which grows to the tip's 44 px target: for a host
 /// with no room around its title, such as a section header. One shape
 /// with or without an info, so the title stays put as one comes or goes.
+///
+/// [title] is any widget: a line of text, or a control such as a picker
+/// whose own node merges, beside which a tip still opens.
 Widget titleWithInfo(Widget title, String? info, {String? semanticsId}) => Row(
   children: <Widget>[
     Flexible(child: title),

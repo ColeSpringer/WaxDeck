@@ -199,7 +199,6 @@ class _UsersTab extends ConsumerWidget {
               empty: EmptyState(
                 glyph: WaxIcons.artists,
                 title: l10n.adminUsersEmptyTitle,
-                message: l10n.adminUsersEmptyMessage,
               ),
               columns: <WaxColumn<UserAccount>>[
                 WaxColumn<UserAccount>(
@@ -669,7 +668,6 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
             WaxSettingRow(
               key: const Key('invite-access-all'),
               title: l10n.adminUserAccessAllTitle,
-              help: l10n.adminInviteAccessAllHelp,
               control: WaxSwitch(
                 value: _accessAll,
                 label: l10n.adminUserAccessAllTitle,
@@ -695,7 +693,6 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
             WaxSettingRow(
               key: const Key('invite-upload-enabled'),
               title: l10n.adminUserMayUploadTitle,
-              help: l10n.adminInviteUploadHelp,
               control: WaxSwitch(
                 value: _uploadEnabled,
                 label: l10n.adminUserMayUploadTitle,

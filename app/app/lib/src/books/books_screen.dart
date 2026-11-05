@@ -150,7 +150,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> with PagedScroll {
               hasScrollBody: false,
               child: EmptyState(
                 title: l10n.booksNothingMatchesYet,
-                message: l10n.booksNothingMatchesYetMessage(loaded.length),
+                message: l10n.booksNothingMatchesYetEmptyMessage(loaded.length),
                 glyph: WaxIcons.filter,
                 actionLabel: l10n.booksLoadMore,
                 actionBusy: loadingMore,

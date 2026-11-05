@@ -212,7 +212,7 @@ void main() {
 
     expect(_field('artist'), findsOne, reason: 'a guess is worth showing');
     expect(find.text('Nas'), findsOne);
-    expect(find.textContaining('Suggested from the source title'), findsOne);
+    expect(find.textContaining('Suggested from source title'), findsOne);
 
     // Accepting it as-is sends the guess, so nobody retypes what the
     // parse already read.
@@ -247,10 +247,7 @@ void main() {
     expect(find.text("How Ya Livin'"), findsOne);
     // And the copy stops calling it a suggestion once anything is
     // stored, because half of what is shown no longer is one.
-    expect(
-      find.textContaining('Suggested from the source title'),
-      findsNothing,
-    );
+    expect(find.textContaining('Suggested from source title'), findsNothing);
   });
 
   testWidgets('a multi-file unit is not offered a track title', (tester) async {

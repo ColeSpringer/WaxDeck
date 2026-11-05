@@ -28,6 +28,7 @@ export 'src/components/entity_header.dart';
 export 'src/components/fast_scroll.dart';
 export 'src/components/hairline.dart';
 export 'src/components/indicators.dart';
+export 'src/components/info_slot.dart' show titleWithInfo;
 export 'src/components/info_tip.dart';
 export 'src/components/inputs.dart';
 export 'src/components/keyed_rows.dart';

@@ -28,17 +28,9 @@
       }
     }
   },
-  "musicAlbumEditorForbiddenMessage": "Barcodes, labels, and catalog numbers are shared by everyone who can see this album, so the server keeps them to administrators.",
-  "@musicAlbumEditorForbiddenMessage": {
-    "description": "Why the album editor is closed to an ordinary account."
-  },
   "musicAlbumEditorForbiddenTitle": "Only administrators can edit a release",
   "@musicAlbumEditorForbiddenTitle": {
     "description": "Empty state shown where the album editor would be, to an account that may not write it."
-  },
-  "musicAlbumEditorNamesOverline": "How this release files and matches",
-  "@musicAlbumEditorNamesOverline": {
-    "description": "Overline over the sort name and MusicBrainz ID fields."
   },
   "musicAlbumEditorNamesTitle": "Name and identifier",
   "@musicAlbumEditorNamesTitle": {
@@ -57,10 +49,6 @@
   "@musicAlbumEditorSaved": {
     "description": "Snackbar after the album editor's write landed."
   },
-  "musicAlbumEditorSectionOverline": "What this edition is",
-  "@musicAlbumEditorSectionOverline": {
-    "description": "Overline above the album editor's fields."
-  },
   "musicAlbumEditorSectionTitle": "Release identity",
   "@musicAlbumEditorSectionTitle": {
     "description": "Heading over the album editor's five fields."
@@ -68,10 +56,6 @@
   "musicAlbumEditorTotalTracks": "Total tracks",
   "@musicAlbumEditorTotalTracks": {
     "description": "Label of the read-only track count in the album editor."
-  },
-  "musicAlbumEditorTotalTracksHelp": "Counted from the tracks on this release. Add or remove tracks to change it; each track's own track total is edited on the track.",
-  "@musicAlbumEditorTotalTracksHelp": {
-    "description": "Helper under the album editor's read-only track count, explaining why there is no input."
   },
   "musicAlbumEditorTracksMore": "{count, plural, =1{and 1 more} other{and {count} more}}",
   "@musicAlbumEditorTracksMore": {
@@ -82,29 +66,17 @@
       }
     }
   },
-  "musicAlbumEditorTracksOverline": "What a write-back reaches",
-  "@musicAlbumEditorTracksOverline": {
-    "description": "Overline over the track list, naming why it is shown: write-back rewrites tags in every one of them."
-  },
   "musicAlbumEditorTracksTitle": "On this release",
   "@musicAlbumEditorTracksTitle": {
     "description": "Section over the track list an album edit reaches."
   },
-  "musicAlbumEditorWriteBackHelp": "Also rewrite the matching tags in every track on this release. Media has no tag form and stays here.",
+  "musicAlbumEditorWriteBackHelp": "Also rewrites the matching tags in every track on this release; media stays here",
   "@musicAlbumEditorWriteBackHelp": {
-    "description": "Help under the write-tags switch on the album editor."
-  },
-  "musicAlbumEditorWriteOverline": "Where the values land, and what they overrule",
-  "@musicAlbumEditorWriteOverline": {
-    "description": "Overline over the write-back, lock, and force switches."
+    "description": "Info tip beside the release editor's write-back switch."
   },
   "musicAlbumEditorWriteTitle": "How this edit is written",
   "@musicAlbumEditorWriteTitle": {
     "description": "Section over the write-back, lock, and force switches."
-  },
-  "musicAlbumEmptyMessage": "The tracks that were here have moved or been removed.",
-  "@musicAlbumEmptyMessage": {
-    "description": "Message under the empty state of an album, saying why it is empty."
   },
   "musicAlbumEmptyTitle": "Nothing in this album",
   "@musicAlbumEmptyTitle": {
@@ -113,10 +85,6 @@
   "musicAlbumLoadError": "Could not load this album",
   "@musicAlbumLoadError": {
     "description": "Title of the error state when an album could not be read."
-  },
-  "musicAlbumReleaseOverline": "This edition",
-  "@musicAlbumReleaseOverline": {
-    "description": "Overline above the release-identity block on an album screen."
   },
   "musicAlbumReleaseTitle": "Release",
   "@musicAlbumReleaseTitle": {
@@ -131,25 +99,21 @@
       }
     }
   },
-  "musicAlbumRewriteConfirmBody": "The edited fields are rewritten on every track of this release at once, so it keeps its entry - artwork, pins and play history with it. If the new name already belongs to another release, the two merge and this page follows. Locks on those fields are overridden, then set again by the rewrite.",
+  "musicAlbumRewriteConfirmBody": "Every track is rewritten and locks on these fields are overridden. If the new name belongs to another release, the two merge for good.",
   "@musicAlbumRewriteConfirmBody": {
-    "description": "Body of that confirmation: the in-place rename, the merge on a taken name, and the lock behavior, all pinned by the server's own semantics."
+    "description": "Body of that confirmation: every track is rewritten, field locks are overridden, and a taken name merges the two releases for good."
   },
   "musicAlbumRewriteConfirmTitle": "Rewrite this release?",
   "@musicAlbumRewriteConfirmTitle": {
     "description": "Title of the confirmation the rewrite asks before writing."
   },
-  "musicAlbumRewriteHelp": "These live on the tracks rather than the release. Saving rewrites them on every member at once, which renames the release in place and keeps this page on it; a name another release already owns merges the two, and this page follows.",
+  "musicAlbumRewriteHelp": "Rewritten on every track; a name another release has merges the two.",
   "@musicAlbumRewriteHelp": {
-    "description": "Blurb under the rewrite heading, stating up front what the rename does: the release keeps its pid unless the new name is taken."
+    "description": "Line under the rewrite heading: the rename is written to every track, and a taken name merges the two releases."
   },
-  "musicAlbumRewriteMerged": "The release merged into the one that already had this name.",
+  "musicAlbumRewriteMerged": "Merged into the existing release.",
   "@musicAlbumRewriteMerged": {
     "description": "Message after a rewrite whose new name was already another release's, shown as the workbench moves to the survivor."
-  },
-  "musicAlbumRewriteOverline": "On the tracks",
-  "@musicAlbumRewriteOverline": {
-    "description": "Line above that heading: these fields live on the members, not the release entity."
   },
   "musicAlbumRewriteRenamed": "{count, plural, =1{Rewrote 1 track} other{Rewrote {count} tracks}}",
   "@musicAlbumRewriteRenamed": {
@@ -192,10 +156,6 @@
   "musicArtistEditMetadata": "Edit artist",
   "@musicArtistEditMetadata": {
     "description": "Entry in the artist screen's overflow opening the artist editor. Administrators only."
-  },
-  "musicArtistEmptyMessage": "The items that were here have moved or been removed.",
-  "@musicArtistEmptyMessage": {
-    "description": "Message under the empty state of an artist's screen, saying why it is empty."
   },
   "musicArtistEmptyTitle": "Nothing by this artist",
   "@musicArtistEmptyTitle": {
@@ -289,10 +249,6 @@
       }
     }
   },
-  "musicEmptyMessage": "Add music to your library and it shows up here.",
-  "@musicEmptyMessage": {
-    "description": "Message under the empty state of the tracks listing, saying what fills it."
-  },
   "musicEmptyTitle": "No music yet",
   "@musicEmptyTitle": {
     "description": "Empty state of the music library, on the hub and on the tracks listing."
@@ -301,11 +257,11 @@
   "@musicEntityRenameApply": {
     "description": "Button applying the staged rename to every member."
   },
-  "musicEntityRenameArtistHelp": "The artist's name lives on the tracks that credit them. Type the new name in full: renaming rewrites it on every one at once, so the artist keeps this page - its picture, pins and play history with it; a name another artist already has merges the two, and this page follows.",
+  "musicEntityRenameArtistHelp": "Rewritten on every track; a name another artist has merges the two.",
   "@musicEntityRenameArtistHelp": {
     "description": "Blurb under the rename heading on an artist: the rename keeps the entity unless the new name is taken."
   },
-  "musicEntityRenameConfirmBody": "Every member is rewritten at once, so the entry survives with everything attached to it. If the new name is already taken, the two merge and this page follows. Locks on these fields are overridden, then set again by the rename.",
+  "musicEntityRenameConfirmBody": "Every member is rewritten and locks on these fields are overridden. If the new name is taken, the two merge for good.",
   "@musicEntityRenameConfirmBody": {
     "description": "Body of that confirmation: the in-place rename, the merge on a taken name, and the lock behavior."
   },
@@ -322,7 +278,7 @@
       }
     }
   },
-  "musicEntityRenameGroupHelp": "These live on the tracks rather than the release group. Renaming rewrites them on every member at once, so the group keeps this page; a name another group already has merges the two, and this page follows.",
+  "musicEntityRenameGroupHelp": "Rewritten on every member; a name another group has merges the two.",
   "@musicEntityRenameGroupHelp": {
     "description": "The same blurb for a release group, whose keying fields are the album title and its artist."
   },
@@ -330,119 +286,79 @@
   "@musicEntityRenameMerged": {
     "description": "Message after a rename whose new name was already another entity's, shown as the screen moves to the survivor."
   },
-  "musicEntityRenameOverline": "On the members",
-  "@musicEntityRenameOverline": {
-    "description": "Line above that heading: these values live on the member tracks, not the entity."
-  },
   "musicEntityRenameTitle": "Name",
   "@musicEntityRenameTitle": {
     "description": "Heading over the entity editor's rename section."
   },
-  "musicEntityRenameWriteBackHelp": "Also rewrite these tags inside each member's file",
+  "musicEntityRenameWriteBackHelp": "Also rewrites these tags inside each member's file",
   "@musicEntityRenameWriteBackHelp": {
-    "description": "Line under the rename section's write-tags switch."
+    "description": "Info tip on the rename section's write-back switch: how far it reaches, the tags in every member's file (each track of an artist, a release group or an album)."
   },
   "musicFieldArtistMbid": "MusicBrainz artist ID",
   "@musicFieldArtistMbid": {
     "description": "The artist's identifier at MusicBrainz, on the artist editor."
   },
-  "musicFieldArtistMbidHelp": "The identifier this artist matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.",
-  "@musicFieldArtistMbidHelp": {
-    "description": "Help under the MusicBrainz artist ID field."
-  },
   "musicFieldArtistName": "Artist name",
   "@musicFieldArtistName": {
     "description": "Label of the artist editor's rename input."
   },
-  "musicFieldArtistSortHelp": "How this artist files in an A-to-Z list. Empty files them under their name.",
-  "@musicFieldArtistSortHelp": {
-    "description": "Help under the sort name field on the artist editor."
-  },
-  "musicFieldArtistWriteBackHelp": "Also rewrite the matching sort tag in the files crediting this artist.",
+  "musicFieldArtistWriteBackHelp": "Also rewrites the matching sort tag in every file crediting this artist",
   "@musicFieldArtistWriteBackHelp": {
-    "description": "Help under the write-back switch on the artist editor: the sort name is the one artist field that fans out to files."
+    "description": "Info tip on the artist editor's write-back switch: the sort tag is rewritten in every file that credits the artist."
   },
   "musicFieldBarcode": "Barcode",
   "@musicFieldBarcode": {
     "description": "An album's barcode, on the release editor and on the album screen."
   },
-  "musicFieldBarcodeHelp": "UPC or EAN, normalized to digits on save",
-  "@musicFieldBarcodeHelp": {
-    "description": "Hint under the barcode field in the release editor."
+  "musicFieldBarcodeHint": "UPC or EAN",
+  "@musicFieldBarcodeHint": {
+    "description": "Placeholder in the barcode field of the release editor."
   },
   "musicFieldCatalogNumber": "Catalog number",
   "@musicFieldCatalogNumber": {
     "description": "The label's own number for a release, on the release editor and on the album screen."
   },
-  "musicFieldCatalogNumberHelp": "The label's number for this release",
-  "@musicFieldCatalogNumberHelp": {
-    "description": "Hint under the catalog-number field in the release editor."
-  },
   "musicFieldCountry": "Country",
   "@musicFieldCountry": {
     "description": "Where a release was issued, on the release editor and on the album screen."
   },
-  "musicFieldCountryHelp": "Two-letter code (GB), an alpha-3 or UK alias, or XW/XE",
-  "@musicFieldCountryHelp": {
-    "description": "Hint under the country field in the release editor. The codes themselves are standards and stay as they are."
+  "musicFieldCountryHint": "Two-letter code, e.g. GB",
+  "@musicFieldCountryHint": {
+    "description": "Placeholder in the country field of the release editor. The codes themselves are standards and stay as they are."
   },
   "musicFieldLabel": "Label",
   "@musicFieldLabel": {
     "description": "The record label that issued an album, on the release editor and on the album screen."
   },
-  "musicFieldLabelHelp": "The issuing label",
-  "@musicFieldLabelHelp": {
-    "description": "Hint under the label field in the release editor."
-  },
   "musicFieldMbid": "MusicBrainz release ID",
   "@musicFieldMbid": {
     "description": "The album's identifier at MusicBrainz."
-  },
-  "musicFieldMbidHelp": "The identifier this release matched at MusicBrainz. Enrichment fills it in; setting it here pins a match by hand.",
-  "@musicFieldMbidHelp": {
-    "description": "Help under the MusicBrainz release ID field."
   },
   "musicFieldMedia": "Media",
   "@musicFieldMedia": {
     "description": "What a release was pressed on, on the release editor and on the album screen."
   },
-  "musicFieldMediaHelp": "What it was pressed on - CD, 2xVinyl, Digital Media",
-  "@musicFieldMediaHelp": {
-    "description": "Hint under the media field in the release editor. The three examples are the values MusicBrainz uses and stay as they are."
+  "musicFieldMediaHint": "CD, 2xVinyl, Digital Media",
+  "@musicFieldMediaHint": {
+    "description": "Placeholder in the media field of the release editor, naming formats as they are tagged."
   },
   "musicFieldReleaseGroupMbid": "MusicBrainz release-group ID",
   "@musicFieldReleaseGroupMbid": {
     "description": "The release group's identifier at MusicBrainz, on the release-group editor."
   },
-  "musicFieldReleaseGroupMbidHelp": "The group's identifier at MusicBrainz: the album across its editions.",
-  "@musicFieldReleaseGroupMbidHelp": {
-    "description": "Help under the MusicBrainz release-group ID field."
-  },
-  "musicFieldReleaseGroupSortHelp": "How this group files in an A-to-Z list. Empty files it under its title.",
-  "@musicFieldReleaseGroupSortHelp": {
-    "description": "Help under the sort name field on the release-group editor."
-  },
   "musicFieldReleaseGroupType": "Type",
   "@musicFieldReleaseGroupType": {
     "description": "What a release group is - an album, an EP, a single, a compilation, an audiobook."
-  },
-  "musicFieldReleaseGroupTypeHelp": "What this group is. Not set hands the value back to what matching stored.",
-  "@musicFieldReleaseGroupTypeHelp": {
-    "description": "Help under the type choice on the release-group editor."
   },
   "musicFieldSort": "Sort name",
   "@musicFieldSort": {
     "description": "The album's filing name, as against its title."
   },
-  "musicFieldSortHelp": "How this release files in an A-to-Z list. Empty files it under its title.",
-  "@musicFieldSortHelp": {
-    "description": "Help under the sort name field."
-  },
   "musicHubAddToLibrary": "Add to library",
   "@musicHubAddToLibrary": {
     "description": "Accessible name of the add control on the music hub, and the button on its first-run invitation. Both open the sheet that adds files."
   },
-  "musicHubEmptyMessage": "Point a library at your music or drop files in. These shelves fill themselves as the collection grows and you listen.",
+  "musicHubEmptyMessage": "Add a library, or drop files in.",
   "@musicHubEmptyMessage": {
     "description": "First-run invitation on the music hub, drawn when every shelf has answered and none of them holds anything."
   },
@@ -469,16 +385,6 @@
       },
       "count": {
         "type": "int"
-      }
-    }
-  },
-  "musicIndexEmptyMessage": "{dimension, select, artists{Add music to your library and its artists show up here.} albums{Add music to your library and its albums show up here.} releaseGroups{Add music to your library and its release groups show up here.} genres{Add music to your library and its genres show up here.} years{Add music to your library and its years show up here.} other{Add music to your library and it shows up here.}}",
-  "@musicIndexEmptyMessage": {
-    "description": "Empty state of a dimension's index, saying what fills it.",
-    "placeholders": {
-      "dimension": {
-        "type": "String",
-        "example": "artists"
       }
     }
   },
@@ -511,10 +417,6 @@
         "example": "artists"
       }
     }
-  },
-  "musicListingBucketEmptyMessage": "The items that were here have moved or been removed.",
-  "@musicListingBucketEmptyMessage": {
-    "description": "Message under the empty state of a drilled bucket, saying why it is empty."
   },
   "musicListingBucketEmptyTitle": "{dimension, select, artists{Nothing in this artist} albums{Nothing in this album} releaseGroups{Nothing in this release group} genres{Nothing in this genre} years{Nothing in this year} other{Nothing here}}",
   "@musicListingBucketEmptyTitle": {

@@ -113,11 +113,7 @@
   "@artworkClearAction": {
     "description": "Confirming button of the clear-artwork dialog. It removes stored content rather than emptying a list, which some languages word differently."
   },
-  "artworkClearBody": "The slot becomes empty. Nothing falls back into it.",
-  "@artworkClearBody": {
-    "description": "Body of the clear dialog for every slot but the front cover."
-  },
-  "artworkClearFrontBody": "The item falls back to its album or artist cover. The image itself is removed from the catalog.",
+  "artworkClearFrontBody": "Removes the image; the item falls back to another cover.",
   "@artworkClearFrontBody": {
     "description": "Body of the clear dialog for the front cover, which is the one slot that falls back to something else."
   },
@@ -171,7 +167,7 @@
   },
   "artworkLockHelp": "Holds every slot as it is, empty ones included, through scans and enrichment runs",
   "@artworkLockHelp": {
-    "description": "One-line help under the cover pin switch, no full stop. Says both facts: the pin holds every slot through scans and enrichment, and an empty pinned slot stays empty (a cleared-and-pinned cover refuses every later write)."
+    "description": "Info tip beside the cover pin switch, no full stop. Says both facts: the pin holds every slot through scans and enrichment, and an empty pinned slot stays empty."
   },
   "artworkLockPinned": "Cover pinned",
   "@artworkLockPinned": {
@@ -198,10 +194,6 @@
         "example": "cover.jpg"
       }
     }
-  },
-  "artworkOverline": "One image per slot",
-  "@artworkOverline": {
-    "description": "Line above the Artwork heading. A slot is one named place an image can go."
   },
   "artworkPickLabel": "Image",
   "@artworkPickLabel": {

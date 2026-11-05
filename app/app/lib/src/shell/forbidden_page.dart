@@ -19,8 +19,8 @@ class ForbiddenPage extends StatelessWidget {
   const ForbiddenPage({
     required this.pageTitle,
     required this.heading,
-    required this.message,
     required this.glyph,
+    this.message,
     this.fallback = WaxRoute.home,
     this.semanticsId,
     super.key,
@@ -30,9 +30,9 @@ class ForbiddenPage extends StatelessWidget {
   /// every location in it.
   final String pageTitle;
 
-  /// What the refusal says, and why.
+  /// What the refusal says, and why when the heading cannot.
   final String heading;
-  final String message;
+  final String? message;
 
   final WaxGlyph glyph;
 

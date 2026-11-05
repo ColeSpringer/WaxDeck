@@ -156,7 +156,6 @@ class TasksScreen extends ConsumerWidget {
             empty: (context, _) {
               final empty = EmptyState(
                 title: l10n.toolsEmptyTitle,
-                message: l10n.toolsEmptyMessage,
                 glyph: WaxIcons.check,
               );
               return jobs.isEmpty
@@ -328,28 +327,14 @@ class _TaskRow extends ConsumerWidget {
     return summary;
   }
 
-  /// What the finished task points at, said in words; null when there
-  /// is nowhere to go and nothing to show.
+  /// What a finished task produced, said as a fact; null when it
+  /// produced nothing to count. The forward glyph says it opens.
   String? _resultLabel(AppLocalizations l10n) {
-    if (task.state == 'failed') {
-      // A failure can still have written a report worth reading: an
-      // import that matched half the library before dying stores what
-      // landed, and the error line alone buries it.
-      return _report == null ? null : l10n.toolsTapForReport;
-    }
     if (task.state != 'done') return null;
     final results = task.resultPids;
-    if (task.type == 'acquire') {
-      return results.isEmpty
-          ? l10n.toolsOpenReviewQueue
-          : l10n.toolsReadyForReview(results.length);
-    }
-    if (results.isEmpty) {
-      return _report == null ? null : l10n.toolsFinishedTapForReport;
-    }
-    return results.length == 1
-        ? l10n.toolsTapToOpenResult
-        : l10n.toolsItemsProduced(results.length);
+    if (results.isEmpty) return null;
+    if (task.type == 'acquire') return l10n.toolsReadyForReview(results.length);
+    return l10n.toolsItemsProduced(results.length);
   }
 
   /// One line of the summary's headline counters, when present.
@@ -414,14 +399,22 @@ class _TaskRow extends ConsumerWidget {
     return parts.join(', ');
   }
 
-  /// Where a finished task's tap goes. Null when it goes nowhere: a
-  /// running task is not done being followed, and a failure with no
-  /// stored report explains itself inline.
-  VoidCallback? _openAction(BuildContext context, WidgetRef ref) {
+  /// Where a finished task's tap goes, and its name, which the forward
+  /// glyph gives a screen reader. Null when it goes nowhere: a running
+  /// task is not done being followed, and a failure with no stored report
+  /// explains itself inline.
+  ({VoidCallback go, String name})? _openAction(
+    BuildContext context,
+    WidgetRef ref,
+  ) {
+    final l10n = context.l10n;
     if (task.state == 'failed') {
       final summary = _report;
       if (summary == null) return null;
-      return () => _showSummary(context, summary);
+      return (
+        go: () => _showSummary(context, summary),
+        name: l10n.toolsOpenReport,
+      );
     }
     if (task.state != 'done') return null;
     final results = task.resultPids;
@@ -429,17 +422,25 @@ class _TaskRow extends ConsumerWidget {
     // is where they went; the same door serves when the entry pids are
     // in hand and when the server predates reporting them.
     if (task.type == 'acquire' || results.any((pid) => pid.startsWith('rv-'))) {
-      return () => context.go(WaxRoute.review);
+      return (
+        go: () => context.go(WaxRoute.review),
+        name: l10n.toolsOpenReviewQueue,
+      );
     }
     final summary = _report;
     if (results.isEmpty) {
       if (summary == null) return null;
-      return () => _showSummary(context, summary);
+      return (
+        go: () => _showSummary(context, summary),
+        name: l10n.toolsOpenReport,
+      );
     }
-    if (results.length == 1) {
-      return () => unawaited(_openResult(context, ref, results.single));
-    }
-    return () => unawaited(_pickResult(context, ref, results));
+    return (
+      go: results.length == 1
+          ? () => unawaited(_openResult(context, ref, results.single))
+          : () => unawaited(_pickResult(context, ref, results)),
+      name: l10n.toolsOpenResult(results.length),
+    );
   }
 
   /// Resolves one produced item and opens it the way a home card does:
@@ -596,7 +597,7 @@ class _TaskRow extends ConsumerWidget {
       container: true,
       explicitChildNodes: true,
       child: InkWell(
-        onTap: open,
+        onTap: open?.go,
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: WaxSpace.s16,
@@ -671,7 +672,7 @@ class _TaskRow extends ConsumerWidget {
                               ? colors.textTertiary
                               : colors.error,
                         ),
-                        onTap: open,
+                        onTap: open?.go,
                       ),
                     ],
                     if (result != null) ...<Widget>[
@@ -696,6 +697,21 @@ class _TaskRow extends ConsumerWidget {
                   ],
                 ),
               ),
+              if (open != null)
+                Padding(
+                  padding: const EdgeInsets.only(
+                    top: WaxSpace.s4,
+                    left: WaxSpace.s8,
+                  ),
+                  // Named, so the row's node says where a tap goes, as
+                  // the glyph says it to a sighted reader.
+                  child: WaxIcon(
+                    WaxIcons.forward,
+                    size: 16,
+                    color: colors.textTertiary,
+                    semanticLabel: open.name,
+                  ),
+                ),
               if (_finished(task)) ...<Widget>[
                 const SizedBox(width: WaxSpace.s8),
                 WaxIconButton(

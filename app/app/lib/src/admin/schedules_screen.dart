@@ -53,7 +53,6 @@ class SchedulesScreen extends ConsumerWidget {
                 EmptyState(
                   glyph: WaxIcons.recent,
                   title: l10n.adminSchedulesEmptyTitle,
-                  message: l10n.adminSchedulesEmptyMessage,
                 ),
             ],
           ),
@@ -111,16 +110,11 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
     _ => kind,
   };
 
-  /// What a kind costs, where that is not obvious. Analyze has one
-  /// because it is the sole pass that decodes audio, and an
-  /// administrator who reads it as another scan switches it on for a
-  /// large library and wonders why the machine is busy all night.
-  /// Enrich has one because its two surprises are invisible from the
-  /// row: the nightly cap, and that a provider's refusal stands until
-  /// somebody forces a run.
+  /// What a kind costs, where that is not obvious: analyze is the sole
+  /// pass that decodes audio, enrich is capped each night, and prune
+  /// clears data for good.
   static String blurb(AppLocalizations l10n, String kind) => switch (kind) {
     'scan' => l10n.adminScheduleScanBlurb,
-    'backup' => l10n.adminScheduleBackupBlurb,
     'prune' => l10n.adminSchedulePruneBlurb,
     'analyze' => l10n.adminScheduleAnalyzeBlurb,
     'enrich' => l10n.adminScheduleEnrichBlurb,

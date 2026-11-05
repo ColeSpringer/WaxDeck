@@ -1,10 +1,6 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
-  "aboutDefectsSubtitle": "Errors the app caught on its own, newest first, with a way to copy them into a bug report.",
-  "@aboutDefectsSubtitle": {
-    "description": "Second line of the row opening the defect log."
-  },
   "aboutDiagnosticsTitle": "Diagnostics",
   "@aboutDiagnosticsTitle": {
     "description": "Heading over the way into the defect log."
@@ -13,7 +9,7 @@
   "@aboutLicenses": {
     "description": "Row opening the bundled licence texts."
   },
-  "aboutLicensesSubtitle": "WaxDeck is GPL-3.0-only. This page also lists the bundled type and icon notices.",
+  "aboutLicensesSubtitle": "GPL-3.0-only",
   "@aboutLicensesSubtitle": {
     "description": "Second line of the licences row. GPL-3.0-only is a licence identifier and stays as it is."
   },
@@ -52,10 +48,6 @@
   "aboutServerUnreachable": "unreachable",
   "@aboutServerUnreachable": {
     "description": "Stands in for the server's version when it did not answer. Lower case: it sits where a version number would."
-  },
-  "aboutTagline": "A player, library manager, and metadata completer for music, podcasts, and audiobooks.",
-  "@aboutTagline": {
-    "description": "One sentence saying what WaxDeck is, under the wordmark on the About page."
   },
   "aboutTitle": "About",
   "@aboutTitle": {

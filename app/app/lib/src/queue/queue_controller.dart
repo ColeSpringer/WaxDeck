@@ -166,11 +166,10 @@ class QueueController extends Notifier<QueueState> {
   /// Appends more of the scope this queue is a window over, and records
   /// where the source stands after it.
   ///
-  /// [more] false seals the window: the scope ran out, the caption goes,
-  /// and nothing draws again. An empty [pids] with [more] true is a page
-  /// that landed empty and says nothing either way - everything visible
-  /// was filtered out of it, say - so the cursor moves on and the next
-  /// drain tries again.
+  /// [more] false seals the window: the scope ran out and nothing draws
+  /// again. An empty [pids] with [more] true is a page that landed empty
+  /// and says nothing either way - everything visible was filtered out of
+  /// it, say - so the cursor moves on and the next drain tries again.
   ///
   void appendWindow(
     List<String> pids, {

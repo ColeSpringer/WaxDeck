@@ -49,7 +49,9 @@ test('a multi-part book resumes at the right chapter across devices', async ({ a
   await expect(app.books.chapter(0)).toBeVisible();
   await expect(app.books.chapter(2)).toBeVisible();
   // A multi-file book says so where a listener is looking at it.
-  await expect(app.books.partsNote()).toBeVisible();
+  await expect
+    .poll(() => app.books.facts(), { timeout: T.assert, message: 'the facts line counts the parts' })
+    .toContain('3 parts');
   await app.books.play();
 
   // Playback continues on the book timeline: the next checkpoints land

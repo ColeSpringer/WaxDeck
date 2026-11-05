@@ -555,6 +555,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
               if (_source.canBind)
                 WaxSettingRow(
                   title: l10n.playlistImportKeepMatched,
+                  // Printed, not a tip: a re-match drops hand-added tracks.
                   help: l10n.playlistImportKeepMatchedHelp,
                   control: WaxSwitch(
                     value: _keepMatched,
@@ -595,7 +596,6 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
                   (report.gaps.isEmpty || report.rule != null))
                 WaxSettingRow(
                   title: l10n.playlistSharedWithEveryone,
-                  help: l10n.playlistSharedHelp,
                   control: WaxSwitch(
                     value: _nspShared,
                     label: l10n.playlistSharedWithEveryone,

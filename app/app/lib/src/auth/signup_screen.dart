@@ -152,7 +152,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       semanticsId: SemanticsIds.signupInviteToken,
                       controller: _inviteToken,
                       label: l10n.authInviteToken,
-                      helperText: l10n.authInviteHelp,
                       onSubmitted: (_) => _submit(),
                     ),
                     const SizedBox(height: WaxSpace.s24),

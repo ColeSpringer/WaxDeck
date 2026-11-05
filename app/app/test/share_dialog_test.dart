@@ -62,6 +62,12 @@ void main() {
     await tester.pumpAndSettle();
     // Music offers no start-at switch.
     expect(_byId(SemanticsIds.shareStartAt), findsNothing);
+    // The switch and the picker are labelled; no line explains them.
+    expect(find.text('When the link stops working'), findsNothing);
+    expect(
+      find.text('The page offers the original file, not just playback'),
+      findsNothing,
+    );
 
     await tester.tap(_byId(SemanticsIds.shareExpiry));
     await tester.pumpAndSettle();

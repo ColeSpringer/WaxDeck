@@ -21,6 +21,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _endpoint = PlayerEndpoint(
   id: 'pe-speaker',
@@ -330,11 +331,11 @@ void main() {
   testWidgets('the picker during live radio says where a station stays', (
     tester,
   ) async {
-    // A station is not a session and does not travel. The rows say so
-    // rather than offering a handoff that would hand over silence, and
-    // the sessions running elsewhere stay controllable from here.
+    // A station is not a session and does not travel. The sheet says so
+    // once rather than offering a handoff that would hand over silence,
+    // and the sessions running elsewhere stay controllable from here.
     final repo = FakeRepository(items: [testItem('tr-current')])
-      ..playerEndpoints = [_endpoint]
+      ..playerEndpoints = [_endpoint, _offline]
       ..playbackSessions = [_session()];
     final station = RadioStation(
       pid: 'rs-1',
@@ -368,6 +369,16 @@ void main() {
     );
     expect(row.onTap, isNull);
     expect(row.enabled, isFalse);
+    // The sentence is said once at the sheet's top, not under each row,
+    // and an online row nothing can be sent to draws no endpoint line.
+    expect(row.subtitle, isNull);
+    final offline = tester.widget<WaxOptionRow>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-porch')),
+        matching: find.byType(WaxOptionRow),
+      ),
+    );
+    expect(offline.subtitle, isNotNull);
 
     // A session somewhere else is still somewhere else, and still
     // controllable from here.
@@ -414,6 +425,7 @@ void main() {
       find.text('Stations play on the device that tuned them'),
       findsNothing,
     );
+    expect(find.text('Take over, or leave it playing'), findsNothing);
     final row = tester.widget<WaxOptionRow>(
       find.ancestor(
         of: find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-speaker')),
@@ -465,6 +477,99 @@ void main() {
 
     container.read(remoteSessionProvider.notifier).release();
   });
+
+  // What a row says under a device's name, in the app's language: every
+  // line, and none for a device nobody is on that takes no control.
+  for (final (locale, lines) in const [
+    (
+      Locale('en'),
+      [
+        'Offline',
+        'Remote volume control',
+        'Remote speed control',
+        'Remote volume and speed control',
+        'In use',
+        'In use, volume control',
+        'In use, speed control',
+        'In use, volume and speed control',
+      ],
+    ),
+    (
+      Locale('es'),
+      [
+        'Sin conexión',
+        'Control remoto de volumen',
+        'Control remoto de velocidad',
+        'Control remoto de volumen y velocidad',
+        'En uso',
+        'En uso, control de volumen',
+        'En uso, control de velocidad',
+        'En uso, control de volumen y velocidad',
+      ],
+    ),
+  ]) {
+    testWidgets('a device row says what it can be told '
+        '(${locale.languageCode})', (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      PlayerEndpoint endpoint(
+        int n, {
+        bool online = true,
+        bool volume = false,
+        bool speed = false,
+        bool inUse = false,
+      }) => PlayerEndpoint(
+        id: 'pe-$n',
+        kind: 'cast',
+        name: 'Speaker $n',
+        online: online,
+        shared: true,
+        mine: false,
+        volumeControl: volume,
+        rateControl: speed,
+        activeSessionId: inUse ? 'ps-$n' : null,
+      );
+      final repo = FakeRepository(items: [testItem('tr-current')])
+        ..playerEndpoints = [
+          endpoint(1, online: false),
+          endpoint(2, volume: true),
+          endpoint(3, speed: true),
+          endpoint(4, volume: true, speed: true),
+          endpoint(5, inUse: true),
+          endpoint(6, volume: true, inUse: true),
+          endpoint(7, speed: true, inUse: true),
+          endpoint(8, volume: true, speed: true, inUse: true),
+          endpoint(9),
+        ];
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: _container(repo: repo),
+          child: routedHost(const _PickerHost(), locale: locale),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      Finder row(int n) =>
+          find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-$n'));
+      for (final (i, line) in lines.indexed) {
+        expect(
+          find.descendant(of: row(i + 1), matching: find.text(line)),
+          findsOneWidget,
+          reason: 'pe-${i + 1}',
+        );
+      }
+      expect(
+        tester
+            .widget<WaxOptionRow>(
+              find.ancestor(of: row(9), matching: find.byType(WaxOptionRow)),
+            )
+            .subtitle,
+        isNull,
+      );
+    });
+  }
 
   testWidgets('an offline endpoint says why rather than disappearing', (
     tester,
@@ -1004,6 +1109,13 @@ void main() {
     );
     expect(find.text('http://192.168.1.20:4420'), findsOneWidget);
     expect(find.text('Detected on this network, reachable'), findsOneWidget);
+    expect(infoTipContaining('The server checked'), findsOneWidget);
+    expect(
+      find.textContaining('The server checked these itself'),
+      findsNothing,
+    );
+    expect(infoTipContaining('second of silence'), findsOneWidget);
+    expect(find.textContaining('this server reaching itself'), findsNothing);
   });
 
   testWidgets('the check tests on a device and renders both verdicts', (
@@ -1114,6 +1226,33 @@ void main() {
     // is playing and a listener has to know what to go and stop.
     expect(
       find.textContaining('YouTube is running on this device'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('with no address to try the check names the setting that '
+      'gives one', (tester) async {
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_endpoint]
+      ..preflightBases = const [];
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: _container(repo: repo),
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerCheck));
+    await tester.pumpAndSettle();
+
+    // An environment variable, not a settings screen: there is no
+    // address field in the server settings to send anyone to.
+    expect(find.text('No addresses to try'), findsOneWidget);
+    expect(
+      find.text('Set WAXDECK_ADVERTISE_BASE on the server.'),
       findsOneWidget,
     );
   });

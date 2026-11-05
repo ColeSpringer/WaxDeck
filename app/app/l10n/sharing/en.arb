@@ -5,10 +5,6 @@
   "@sharingAllowDownload": {
     "description": "The switch letting the shared page offer the original file, and its accessible name."
   },
-  "sharingAllowDownloadHelp": "The page offers the original file, not just playback",
-  "@sharingAllowDownloadHelp": {
-    "description": "Help under the allow-download switch."
-  },
   "sharingCopyLink": "Copy link",
   "@sharingCopyLink": {
     "description": "Accessible name of the control that copies one share link."
@@ -17,9 +13,9 @@
   "@sharingCreate": {
     "description": "Confirming button of the share dialog."
   },
-  "sharingDialogBody": "Anyone with the link can play this. It goes on your clipboard as soon as it is made.",
+  "sharingDialogBody": "Anyone with the link can play this.",
   "@sharingDialogBody": {
-    "description": "Body of the share dialog, saying what a link is and where it goes."
+    "description": "Body of the share dialog: who a link admits."
   },
   "sharingDialogTitle": "Share link",
   "@sharingDialogTitle": {
@@ -29,7 +25,7 @@
   "@sharingDownloadAllowed": {
     "description": "In a share row's caption, for a link that offers the original file. Lower case: the caption is a line of facts."
   },
-  "sharingEmptyMessage": "Share a track, an episode, a book, or a playlist and the link turns up here, with how often it has been played and a way to switch it off.",
+  "sharingEmptyMessage": "Share an item and its link appears here.",
   "@sharingEmptyMessage": {
     "description": "Empty state of the share-links screen."
   },
@@ -50,10 +46,6 @@
   "sharingExpires": "Expires",
   "@sharingExpires": {
     "description": "The row choosing when a link stops working, and the accessible name of its picker."
-  },
-  "sharingExpiresHelp": "When the link stops working",
-  "@sharingExpiresHelp": {
-    "description": "Help under the expiry picker."
   },
   "sharingExpiresOn": "expires {date}",
   "@sharingExpiresOn": {
@@ -130,10 +122,6 @@
         "example": "12:04"
       }
     }
-  },
-  "sharingStartAtHelp": "The link opens where you are now",
-  "@sharingStartAtHelp": {
-    "description": "Help under the start-at-position switch."
   },
   "sharingStartAtLabel": "Start at this position",
   "@sharingStartAtLabel": {

@@ -10,6 +10,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const _album = 'al-01JZX5N8QW3F4V9T2B7KDALBUM';
 
@@ -306,12 +307,22 @@ void main() {
     // holds, and the pin is what explains one refusing every cover.
     expect(_byId(SemanticsIds.artSlot('front')), findsOneWidget);
     expect(_byId(SemanticsIds.artLock), findsOneWidget);
+    // Each heading names its section; no kicker repeats it.
+    expect(find.text('Release identity'), findsOneWidget);
+    expect(find.text('On this release'), findsOneWidget);
+    for (final kicker in <String>[
+      'What this edition is',
+      'What a write-back reaches',
+      'On the tracks',
+    ]) {
+      expect(find.text(kicker.toUpperCase()), findsNothing, reason: kicker);
+    }
   });
 
   testWidgets('total tracks is a derived number, not a field', (tester) async {
     // The album bug asked to edit it; nothing stores it. The row says
-    // the count and why there is no input, so the answer is on the
-    // screen rather than silently missing from the form.
+    // the count, and its Derived chip why there is no input, so the
+    // answer is on the screen rather than silently missing from the form.
     final repo = _repo(
       album: const AlbumDetail(
         pid: _album,
@@ -365,23 +376,27 @@ void main() {
     });
   });
 
-  testWidgets("a field's help sits under it, selectable and spoken", (
+  testWidgets('a format example sits inside its field, with no help under it', (
     tester,
   ) async {
     final repo = _repo();
     await _pump(tester, repo);
-    const help =
-        'How this release files in an A-to-Z list. Empty files it under '
-        'its title.';
 
-    expect(find.widgetWithText(WaxProse, help), findsOneWidget);
+    // Media is empty on this release, so its example is what shows.
+    final media = tester.widget<WaxTextField>(
+      waxControl<WaxTextField>(SemanticsIds.metadataField('media')),
+    );
+    expect(media.hint, 'CD, 2xVinyl, Digital Media');
+    expect(media.helperText, isNull);
+    expect(find.textContaining('A-to-Z'), findsNothing);
+    expect(find.textContaining('Counted from the tracks'), findsNothing);
+    // The write-back consequence rides an info tip beside its switch.
     expect(
-      tester
-          .getSemantics(
-            find.bySemanticsIdentifier(SemanticsIds.metadataField('sort')),
-          )
-          .hint,
-      help,
+      infoTipHolding(
+        'Also rewrites the matching tags in every track on this release; '
+        'media stays here',
+      ),
+      findsOneWidget,
     );
   });
 

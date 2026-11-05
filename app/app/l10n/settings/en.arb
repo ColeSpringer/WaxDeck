@@ -13,17 +13,13 @@
   "@settingsAccountSignedIn": {
     "description": "What the account row reads for an account with no display name of its own."
   },
-  "settingsAdminConsoleBlurb": "Libraries, users, scans, backups, and the audit log",
-  "@settingsAdminConsoleBlurb": {
-    "description": "The line under the row that opens the admin console."
-  },
   "settingsAdminConsoleKeywords": "read-only, signup, libraries, users, backups, schedules, trash, audit, transcoding, genres",
   "@settingsAdminConsoleKeywords": {
     "description": "Comma-separated search keywords for the \"Admin console\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
   },
   "settingsAdminConsoleOpenTitle": "Open the admin console",
   "@settingsAdminConsoleOpenTitle": {
-    "description": "Name of the row that leads out of settings into the admin console."
+    "description": "Name of the row that leads out of settings into the admin console, and of the same way out an administrator's settings search offers when it matches nothing."
   },
   "settingsAdminConsoleTitle": "Admin console",
   "@settingsAdminConsoleTitle": {
@@ -37,8 +33,8 @@
   "@settingsAppPasswordCreate": {
     "description": "Button that creates the app password."
   },
-  "settingsAppPasswordCreatedMessage": "Copy it now; the server stores it sealed and never shows it again.",
-  "@settingsAppPasswordCreatedMessage": {
+  "settingsAppPasswordCreatedBody": "Copy it now; the server stores it sealed and never shows it again.",
+  "@settingsAppPasswordCreatedBody": {
     "description": "Body of the dialog showing a newly created app password."
   },
   "settingsAppPasswordCreatedTitle": "App password created",
@@ -53,9 +49,9 @@
   "@settingsAppPasswordLabel": {
     "description": "Field for what an app password is called."
   },
-  "settingsAppPasswordLabelHelp": "Which app is this for?",
-  "@settingsAppPasswordLabelHelp": {
-    "description": "The line under the app password label field."
+  "settingsAppPasswordLabelHint": "Which app is this for?",
+  "@settingsAppPasswordLabelHint": {
+    "description": "The hint inside the app password label field."
   },
   "settingsAppPasswordNewAction": "New",
   "@settingsAppPasswordNewAction": {
@@ -79,7 +75,7 @@
   "@settingsAppPasswordUnlabeled": {
     "description": "What an app password with no label of its own is called."
   },
-  "settingsAppPasswordsBlurb": "For Subsonic apps and podcast sync clients. Your login password never works there.",
+  "settingsAppPasswordsBlurb": "For Subsonic and podcast sync clients",
   "@settingsAppPasswordsBlurb": {
     "description": "The line under the app passwords heading, saying what they are for."
   },
@@ -107,10 +103,6 @@
   "@settingsArtworkCacheCleared": {
     "description": "Snackbar after the artwork cache has been emptied."
   },
-  "settingsArtworkCacheHelp": "Covers are re-fetched as they are needed again",
-  "@settingsArtworkCacheHelp": {
-    "description": "The line under the artwork cache row, saying what clearing it costs."
-  },
   "settingsArtworkCacheKeywords": "covers, images, clear, space",
   "@settingsArtworkCacheKeywords": {
     "description": "Comma-separated search keywords for the \"Artwork cache\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -118,10 +110,6 @@
   "settingsArtworkCacheTitle": "Artwork cache",
   "@settingsArtworkCacheTitle": {
     "description": "Name of the \"Artwork cache\" setting, drawn on its own row and in settings search."
-  },
-  "settingsArtworkCycleHelp": "Moves the full-screen player on to the next picture by itself, when a track or book has more than one",
-  "@settingsArtworkCycleHelp": {
-    "description": "The line under the artwork cycling switch."
   },
   "settingsArtworkCycleKeywords": "slideshow, rotate, covers, back cover, booklet, player",
   "@settingsArtworkCycleKeywords": {
@@ -131,10 +119,6 @@
   "@settingsArtworkCycleTitle": {
     "description": "Name of the \"Cycle through artwork\" setting, drawn on its own row and in settings search."
   },
-  "settingsArtworkGlowHelp": "The colour a cover casts behind the player",
-  "@settingsArtworkGlowHelp": {
-    "description": "The line under the artwork glow switch."
-  },
   "settingsArtworkGlowKeywords": "backdrop, colour, color, player, wash",
   "@settingsArtworkGlowKeywords": {
     "description": "Comma-separated search keywords for the \"Artwork glow\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -143,17 +127,13 @@
   "@settingsArtworkGlowTitle": {
     "description": "Name of the \"Artwork glow\" setting, drawn on its own row and in settings search."
   },
-  "settingsAutoRemoveAfterHelp": "How long a finished episode stays before it goes",
-  "@settingsAutoRemoveAfterHelp": {
-    "description": "The line under the wait-before-removing setting."
-  },
   "settingsAutoRemoveAfterTitle": "Wait before removing",
   "@settingsAutoRemoveAfterTitle": {
     "description": "Name of the setting for how long a finished episode is kept."
   },
-  "settingsAutoRemoveFinishedHelp": "Reclaims a downloaded episode once it has been finished for a while. Books and albums are left alone",
+  "settingsAutoRemoveFinishedHelp": "Episodes only; books and albums stay",
   "@settingsAutoRemoveFinishedHelp": {
-    "description": "The line under the remove-finished-episodes switch."
+    "description": "The line under the remove-finished-episodes switch: which downloads it reaches."
   },
   "settingsAutoRemoveFinishedKeywords": "tidy, reclaim, space, listened, podcast",
   "@settingsAutoRemoveFinishedKeywords": {
@@ -163,9 +143,9 @@
   "@settingsAutoRemoveFinishedTitle": {
     "description": "Name of the \"Remove finished episodes\" setting, drawn on its own row and in settings search."
   },
-  "settingsAutoplayHelp": "Lets a queue another device hands over start here. Off means it arrives ready and waits to be tapped",
+  "settingsAutoplayHelp": "Off: a handed-over queue waits to be tapped",
   "@settingsAutoplayHelp": {
-    "description": "The line under the start-without-asking switch."
+    "description": "The line under the start-without-asking switch: what off does to a queue another device hands over."
   },
   "settingsAutoplayKeywords": "autoplay, resume, handover, connect, browser",
   "@settingsAutoplayKeywords": {
@@ -175,10 +155,6 @@
   "@settingsAutoplayTitle": {
     "description": "Name of the \"Start playing without asking\" setting, drawn on its own row and in settings search."
   },
-  "settingsBookSpeedHelp": "The speed a book plays at until you set one for it",
-  "@settingsBookSpeedHelp": {
-    "description": "The line under the default audiobook speed setting."
-  },
   "settingsBookSpeedKeywords": "rate, faster, default, narration",
   "@settingsBookSpeedKeywords": {
     "description": "Comma-separated search keywords for the \"Audiobook speed\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -186,10 +162,6 @@
   "settingsBookSpeedTitle": "Audiobook speed",
   "@settingsBookSpeedTitle": {
     "description": "Name of the \"Audiobook speed\" setting, drawn on its own row and in settings search."
-  },
-  "settingsBoostDefaultHelp": "Shows and books with no stored choice of their own open with loudness normalization on",
-  "@settingsBoostDefaultHelp": {
-    "description": "The line under the voice boost default."
   },
   "settingsBoostDefaultKeywords": "loudness, normalize, volume, speech, quiet",
   "@settingsBoostDefaultKeywords": {
@@ -209,10 +181,6 @@
       }
     }
   },
-  "settingsBrowseOrderHelp": "The order this index opens in",
-  "@settingsBrowseOrderHelp": {
-    "description": "The line under one library index's default order, on the row that already names the index."
-  },
   "settingsBrowseOrderKeywords": "sort, order, alphabetical, browse, index",
   "@settingsBrowseOrderKeywords": {
     "description": "Comma-separated search keywords for the \"Default order\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -220,10 +188,6 @@
   "settingsBrowseOrderTitle": "Default order",
   "@settingsBrowseOrderTitle": {
     "description": "Name of the \"Default order\" setting, drawn on its own row and in settings search."
-  },
-  "settingsBrowseUnknownHelp": "Lists the group for what has no genre, no album, or no year of its own",
-  "@settingsBrowseUnknownHelp": {
-    "description": "The line under the show-unknown-groups switch."
   },
   "settingsBrowseUnknownKeywords": "unknown, untagged, missing, no genre, browse",
   "@settingsBrowseUnknownKeywords": {
@@ -241,10 +205,6 @@
   "@settingsCaptionsOnHover": {
     "description": "Card captions option: the names under a cover appear when the pointer is over them."
   },
-  "settingsCarButtonHelp": "Puts car mode on the player itself instead of inside its menu",
-  "@settingsCarButtonHelp": {
-    "description": "The line under the car mode button switch."
-  },
   "settingsCarButtonKeywords": "driving, large, dashboard, player",
   "@settingsCarButtonKeywords": {
     "description": "Comma-separated search keywords for the \"Car mode button\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -253,25 +213,17 @@
   "@settingsCarButtonTitle": {
     "description": "Name of the \"Car mode button\" setting, drawn on its own row and in settings search."
   },
-  "settingsCardCaptionsHelp": "The lines under a cover in a grid",
-  "@settingsCardCaptionsHelp": {
-    "description": "The line under the card captions setting, where the choice is offered."
-  },
   "settingsCardCaptionsKeywords": "labels, titles, hover, grid, covers",
   "@settingsCardCaptionsKeywords": {
     "description": "Comma-separated search keywords for the \"Card captions\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
   },
-  "settingsCardCaptionsNoPointerHelp": "Always shown: hiding them needs a pointer to bring them back",
+  "settingsCardCaptionsNoPointerHelp": "Always shown: hiding needs a pointer",
   "@settingsCardCaptionsNoPointerHelp": {
     "description": "The line under the card captions setting on a device with no pointer, where the choice is refused rather than stored and ignored."
   },
   "settingsCardCaptionsTitle": "Card captions",
   "@settingsCardCaptionsTitle": {
     "description": "Name of the \"Card captions\" setting, drawn on its own row and in settings search."
-  },
-  "settingsCastCheckBlurb": "Whether a cast device can reach this server",
-  "@settingsCastCheckBlurb": {
-    "description": "The line under the row that opens the cast connection check."
   },
   "settingsCastCheckKeywords": "preflight, diagnose, reachable, cast",
   "@settingsCastCheckKeywords": {
@@ -281,9 +233,9 @@
   "@settingsCastCheckTitle": {
     "description": "Name of the \"Connection check\" setting, drawn on its own row and in settings search."
   },
-  "settingsCrossfadeHelp": "Fades one track into the next wherever the server renders the queue: a cast speaker, and gapless playback in a browser",
+  "settingsCrossfadeHelp": "Applies to cast speakers and browser gapless playback",
   "@settingsCrossfadeHelp": {
-    "description": "The line under the crossfade setting."
+    "description": "The line under the crossfade setting: where it applies."
   },
   "settingsCrossfadeKeywords": "fade, gapless, seam, chromecast, casting",
   "@settingsCrossfadeKeywords": {
@@ -300,10 +252,6 @@
   "settingsDensityCompact": "Compact",
   "@settingsDensityCompact": {
     "description": "Density option: more rows on a screen."
-  },
-  "settingsDensityHelp": "How tightly rows pack; text size stays the system's",
-  "@settingsDensityHelp": {
-    "description": "The line under the density setting, saying what it does and what it does not touch."
   },
   "settingsDensityKeywords": "compact, comfortable, spacing, rows",
   "@settingsDensityKeywords": {
@@ -329,8 +277,8 @@
   "@settingsDeviceSignOutAction": {
     "description": "The button on a session row that revokes it."
   },
-  "settingsDeviceSignOutCurrentMessage": "This is the device you are using now. Revoking its session signs you out.",
-  "@settingsDeviceSignOutCurrentMessage": {
+  "settingsDeviceSignOutCurrentBody": "This is the device you are using now. Revoking its session signs you out.",
+  "@settingsDeviceSignOutCurrentBody": {
     "description": "Body of the sign-out dialog for the device being used right now."
   },
   "settingsDeviceSignOutCurrentTitle": "Sign out this device?",
@@ -401,25 +349,25 @@
   "@settingsDevicesTitle": {
     "description": "Name of the \"Signed-in devices\" setting, drawn on its own row and in settings search."
   },
-  "settingsDiscordApplicationHelp": "Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and the image for albums with no cover",
+  "settingsDiscordApplicationHelp": "Empty publishes as WaxDeck",
   "@settingsDiscordApplicationHelp": {
-    "description": "The line under the Discord application ID field."
+    "description": "Help line under the Discord application field: what an empty box means. No full stop."
+  },
+  "settingsDiscordApplicationHint": "Application ID",
+  "@settingsDiscordApplicationHint": {
+    "description": "The hint inside the Discord application field: what goes in it."
   },
   "settingsDiscordApplicationLabel": "Publish as another application (optional)",
   "@settingsDiscordApplicationLabel": {
     "description": "Field for a Discord application ID of the listener's own, instead of WaxDeck's."
   },
-  "settingsDiscordCoversHelp": "This device asks the Cover Art Archive for the cover of each album it plays that has a MusicBrainz release ID. Off, or with none found, Discord shows the application's own image.",
+  "settingsDiscordCoversHelp": "This device asks the Cover Art Archive for each album's cover",
   "@settingsDiscordCoversHelp": {
-    "description": "Help under the album covers switch: what it contacts and what shows otherwise."
+    "description": "Help under the album covers switch: the third party it contacts."
   },
   "settingsDiscordCoversTitle": "Show album covers",
   "@settingsDiscordCoversTitle": {
     "description": "Title of the switch that has Discord presence show album covers."
-  },
-  "settingsDiscordPresenceHelp": "Sets your Discord status while WaxDeck plays, through the Discord app on this machine",
-  "@settingsDiscordPresenceHelp": {
-    "description": "The line under the Discord presence switch."
   },
   "settingsDiscordPresenceKeywords": "discord, rich presence, status, listening to, album cover",
   "@settingsDiscordPresenceKeywords": {
@@ -441,10 +389,6 @@
   "@settingsDisplayNameTitle": {
     "description": "Name of the \"Display name\" setting, drawn on its own row and in settings search."
   },
-  "settingsDownloadsManagerBlurb": "What this device holds offline, and how to free it",
-  "@settingsDownloadsManagerBlurb": {
-    "description": "The line under the row that opens the download manager."
-  },
   "settingsDownloadsManagerKeywords": "offline, storage, space, remove",
   "@settingsDownloadsManagerKeywords": {
     "description": "Comma-separated search keywords for the \"Manage downloads\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -452,10 +396,6 @@
   "settingsDownloadsManagerTitle": "Manage downloads",
   "@settingsDownloadsManagerTitle": {
     "description": "Name of the \"Manage downloads\" setting, drawn on its own row and in settings search."
-  },
-  "settingsDownloadsWifiHelp": "Holds transfers until this device is on wifi, rather than failing them",
-  "@settingsDownloadsWifiHelp": {
-    "description": "The line under the download-on-wifi-only switch."
   },
   "settingsDownloadsWifiKeywords": "data, metered, mobile, cellular",
   "@settingsDownloadsWifiKeywords": {
@@ -465,10 +405,6 @@
   "@settingsDownloadsWifiTitle": {
     "description": "Name of the \"Download on wifi only\" setting, drawn on its own row and in settings search."
   },
-  "settingsEndpointsBlurb": "Cast targets, renderers, and your other devices",
-  "@settingsEndpointsBlurb": {
-    "description": "The line under the row that opens the playback endpoint list."
-  },
   "settingsEndpointsKeywords": "cast, chromecast, dlna, speaker, connect",
   "@settingsEndpointsKeywords": {
     "description": "Comma-separated search keywords for the \"Playback endpoints\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -477,17 +413,17 @@
   "@settingsEndpointsTitle": {
     "description": "Name of the \"Playback endpoints\" setting, drawn on its own row and in settings search."
   },
+  "settingsEngineLacksThese": "Some settings need features this server's engine lacks",
+  "@settingsEngineLacksThese": {
+    "description": "Line under a Playback group heading, once per group, when the engine answers but lacks the feature of several settings, which are drawn disabled. No full stop."
+  },
   "settingsEngineLacksThis": "This server's streaming engine doesn't offer this",
   "@settingsEngineLacksThis": {
-    "description": "Help line under the voice boost or silence trimming default, whose switch is hidden, when the server's streaming engine answers but does not offer that feature (voice boost, or the silence analysis trimming reads). No full stop."
+    "description": "Help line under a Playback setting that is drawn disabled because the server's streaming engine answers but does not offer that one feature, when no other setting says the same. No full stop."
   },
-  "settingsEngineUnreachable": "The streaming engine is unreachable right now",
+  "settingsEngineUnreachable": "Some settings wait on the streaming engine, which is unreachable",
   "@settingsEngineUnreachable": {
-    "description": "Help line under the gapless, voice boost and silence trimming switches while the server's streaming engine is configured but not answering. Temporary: the server retries it. No full stop."
-  },
-  "settingsFollowsAccountHelp": "Follows you to your other devices",
-  "@settingsFollowsAccountHelp": {
-    "description": "The line under the Appearance setting stored on the account rather than on this device: the language."
+    "description": "Line under each Playback group heading whose settings wait on the streaming engine, while it is configured but not answering; the settings stay live. Temporary: the server retries it. No full stop."
   },
   "settingsGridLarge": "Large",
   "@settingsGridLarge": {
@@ -496,10 +432,6 @@
   "settingsGridMedium": "Medium",
   "@settingsGridMedium": {
     "description": "Artwork size option."
-  },
-  "settingsGridSizeHelp": "How large covers are drawn in grids",
-  "@settingsGridSizeHelp": {
-    "description": "The line under the artwork size setting."
   },
   "settingsGridSizeKeywords": "grid, tiles, covers, large, small",
   "@settingsGridSizeKeywords": {
@@ -557,10 +489,6 @@
   "@settingsGroupPlayer": {
     "description": "Heading over the settings rows about the player screen itself."
   },
-  "settingsGroupScreenReaders": "Screen readers",
-  "@settingsGroupScreenReaders": {
-    "description": "Heading over the settings rows about how the app reads out."
-  },
   "settingsGroupSonicSimilarity": "Sonic similarity",
   "@settingsGroupSonicSimilarity": {
     "description": "Heading over the settings rows about coverage of the audio analysis behind similar tracks and mixes."
@@ -593,9 +521,9 @@
   "@settingsGroupWhereSoundComesOut": {
     "description": "Heading over the settings rows about cast targets and other devices."
   },
-  "settingsIdentifyUploadsHelp": "Matches what you add against MusicBrainz. Off adds it with the tags it has, without review",
+  "settingsIdentifyUploadsHelp": "Asks MusicBrainz; off files uploads unreviewed",
   "@settingsIdentifyUploadsHelp": {
-    "description": "The line under the identify-uploads switch."
+    "description": "Help line under the identify-uploads switch: the third party it asks, and that off files uploads as they are, without review. No full stop."
   },
   "settingsIdentifyUploadsKeywords": "musicbrainz, match, identify, upload, tags, acquire",
   "@settingsIdentifyUploadsKeywords": {
@@ -604,10 +532,6 @@
   "settingsIdentifyUploadsTitle": "Identify uploads",
   "@settingsIdentifyUploadsTitle": {
     "description": "Name of the \"Identify uploads\" setting, drawn on its own row and in settings search."
-  },
-  "settingsKeepPlayingHelp": "When a music queue runs out, keep going with tracks like the last one. The queue's own toggle sets the same thing.",
-  "@settingsKeepPlayingHelp": {
-    "description": "Help line under the keep-playing setting. Says what happens and where else the same switch is."
   },
   "settingsKeepPlayingKeywords": "continuous, endless, radio, mix, similar, autoplay, queue",
   "@settingsKeepPlayingKeywords": {
@@ -631,7 +555,7 @@
   },
   "settingsLastfmApiKeyHelp": "Register at last.fm/api/account/create",
   "@settingsLastfmApiKeyHelp": {
-    "description": "The line under the Last.fm API key field, saying where a key comes from."
+    "description": "Help line under the Last.fm API key field, saying where a key comes from."
   },
   "settingsLastfmCredentialsClear": "Clear",
   "@settingsLastfmCredentialsClear": {
@@ -651,27 +575,23 @@
   },
   "settingsLastfmSecretHelp": "Stored sealed; never shown again",
   "@settingsLastfmSecretHelp": {
-    "description": "The line under the Last.fm secret field once a secret is stored."
-  },
-  "settingsLibraryAccessAll": "You can see every library on this server",
-  "@settingsLibraryAccessAll": {
-    "description": "The read-only access line for an account granted every library."
-  },
-  "settingsLibraryAccessChecking": "Checking",
-  "@settingsLibraryAccessChecking": {
-    "description": "The access line while the account is still being read."
+    "description": "Help line under the Last.fm secret field once a secret is stored: it is kept sealed and never shown."
   },
   "settingsLibraryAccessError": "Could not read your access",
   "@settingsLibraryAccessError": {
     "description": "The access line when the account read failed."
   },
+  "settingsLibraryAccessEverything": "All libraries",
+  "@settingsLibraryAccessEverything": {
+    "description": "The value of the \"What I can see\" row for an account that can see every library on the server."
+  },
   "settingsLibraryAccessKeywords": "permissions, libraries, access",
   "@settingsLibraryAccessKeywords": {
     "description": "Comma-separated search keywords for the \"What I can see\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
   },
-  "settingsLibraryAccessSome": "{count, plural, =1{You can see 1 of this server's libraries} other{You can see {count} of this server's libraries}}",
+  "settingsLibraryAccessSome": "{count, plural, =1{1 library} other{{count} libraries}}",
   "@settingsLibraryAccessSome": {
-    "description": "The read-only access line for an account granted some libraries. {count} is how many.",
+    "description": "The value of the \"What I can see\" row for an account granted some libraries. {count} is how many.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -690,9 +610,9 @@
   "@settingsListenBrainzApi": {
     "description": "Field for an alternative ListenBrainz-compatible server."
   },
-  "settingsListenBrainzApiHelp": "For a compatible server; empty for listenbrainz.org",
+  "settingsListenBrainzApiHelp": "Empty uses listenbrainz.org",
   "@settingsListenBrainzApiHelp": {
-    "description": "The line under the ListenBrainz API server field."
+    "description": "Help line under the ListenBrainz API server field: what an empty box means. No full stop."
   },
   "settingsListenBrainzTitle": "Connect ListenBrainz",
   "@settingsListenBrainzTitle": {
@@ -704,15 +624,15 @@
   },
   "settingsListenBrainzTokenHelp": "From your ListenBrainz profile page",
   "@settingsListenBrainzTokenHelp": {
-    "description": "The line under the ListenBrainz token field, saying where to find it."
+    "description": "Help line under the ListenBrainz token field, saying where to find it."
   },
   "settingsMatchTheSystem": "Match the system",
   "@settingsMatchTheSystem": {
     "description": "The option that follows the device's own setting rather than choosing one. Shown in both the theme picker and the language picker."
   },
-  "settingsNeedsEngine": "Needs the streaming engine, which this server runs without",
+  "settingsNeedsEngine": "Some settings need the streaming engine, which this server lacks",
   "@settingsNeedsEngine": {
-    "description": "Help line under the voice boost and silence trimming defaults, whose switches are hidden, on a server that runs without a streaming engine. No full stop."
+    "description": "Line under each Playback group heading whose settings are drawn disabled because the server runs without a streaming engine. No full stop."
   },
   "settingsNotificationsKeywords": "ntfy, webhook, discord, push, alerts",
   "@settingsNotificationsKeywords": {
@@ -738,9 +658,13 @@
   "@settingsNotifyAppriseTargets": {
     "description": "Apprise field: the Apprise URLs the notification fans out to."
   },
-  "settingsNotifyAppriseTargetsHelp": "Apprise URLs; empty uses the server's own configuration",
+  "settingsNotifyAppriseTargetsHelp": "Empty uses the server's own configuration",
   "@settingsNotifyAppriseTargetsHelp": {
-    "description": "The line under the Apprise targets field."
+    "description": "Help line under the Apprise targets field: what an empty box means. No full stop."
+  },
+  "settingsNotifyAppriseTargetsHint": "Apprise URLs",
+  "@settingsNotifyAppriseTargetsHint": {
+    "description": "The hint inside the Apprise targets field: what goes in it."
   },
   "settingsNotifyCatalogError": "Could not load the event catalog",
   "@settingsNotifyCatalogError": {
@@ -750,9 +674,9 @@
   "@settingsNotifyDeliverVia": {
     "description": "Field choosing which service a new notification target uses."
   },
-  "settingsNotifyDiscordWebhookHelp": "A discord.com webhook URL",
-  "@settingsNotifyDiscordWebhookHelp": {
-    "description": "The line under the Discord webhook field."
+  "settingsNotifyDiscordWebhookHint": "A discord.com webhook URL",
+  "@settingsNotifyDiscordWebhookHint": {
+    "description": "The hint inside the Discord webhook field."
   },
   "settingsNotifyEndpointUrl": "Endpoint URL",
   "@settingsNotifyEndpointUrl": {
@@ -788,17 +712,17 @@
       }
     }
   },
-  "settingsNotifyGotifyPriorityHelp": "0 to 10",
-  "@settingsNotifyGotifyPriorityHelp": {
-    "description": "The range the Gotify priority field accepts."
+  "settingsNotifyGotifyPriorityHint": "0 to 10",
+  "@settingsNotifyGotifyPriorityHint": {
+    "description": "The hint inside the Gotify priority field: the range it accepts."
   },
   "settingsNotifyHeaders": "Extra headers",
   "@settingsNotifyHeaders": {
     "description": "Label of the webhook target's extra-headers field in the target editor."
   },
-  "settingsNotifyHeadersHelp": "One per line, as Name: value. At most eight.",
-  "@settingsNotifyHeadersHelp": {
-    "description": "Helper under the extra-headers field, saying how to write them."
+  "settingsNotifyHeadersHint": "One per line, as Name: value. At most eight.",
+  "@settingsNotifyHeadersHint": {
+    "description": "The hint inside the extra-headers field, saying how to write them."
   },
   "settingsNotifyHeadersMalformed": "Each header goes on its own line, as Name: value.",
   "@settingsNotifyHeadersMalformed": {
@@ -828,7 +752,7 @@
   "@settingsNotifyMinInterval": {
     "description": "Label of the field pacing a notification target; 0 paces nothing."
   },
-  "settingsNotifyMinIntervalHelp": "0 sends everything as it happens. Up to 3600; a delivery inside the gap waits.",
+  "settingsNotifyMinIntervalHelp": "0 sends everything; events inside the gap wait",
   "@settingsNotifyMinIntervalHelp": {
     "description": "Helper under the pacing field."
   },
@@ -840,14 +764,6 @@
   "@settingsNotifyMutedBadge": {
     "description": "Mark on a target row in the list, for a destination that is paused."
   },
-  "settingsNotifyMutedHelp": "Delivers nothing but the test button, and keeps everything else as it is.",
-  "@settingsNotifyMutedHelp": {
-    "description": "Helper under the mute switch, saying what a pause does and does not touch."
-  },
-  "settingsNotifyMyBlurb": "Where your events (new episodes, review queue) get delivered: Pushover, ntfy, Gotify, Discord, webhooks, or this device's push registration.",
-  "@settingsNotifyMyBlurb": {
-    "description": "The line under this account's notification targets, listing what can carry them."
-  },
   "settingsNotifyMyEvents": "My events",
   "@settingsNotifyMyEvents": {
     "description": "Heading over the events that are about this account, in the event checklist an administrator sees."
@@ -858,7 +774,7 @@
   },
   "settingsNotifyNtfyServerHelp": "Empty uses ntfy.sh",
   "@settingsNotifyNtfyServerHelp": {
-    "description": "The line under the ntfy server field, naming the public default."
+    "description": "Help line under the ntfy server field: an empty box uses the public server."
   },
   "settingsNotifyNtfyTopic": "Topic",
   "@settingsNotifyNtfyTopic": {
@@ -868,9 +784,9 @@
   "@settingsNotifyPriority": {
     "description": "Pushover and Gotify field: how loudly the notification arrives."
   },
-  "settingsNotifyPushoverPriorityHelp": "-2 (quietest) to 2 (emergency)",
-  "@settingsNotifyPushoverPriorityHelp": {
-    "description": "The range the Pushover priority field accepts."
+  "settingsNotifyPushoverPriorityHint": "-2 (quietest) to 2 (emergency)",
+  "@settingsNotifyPushoverPriorityHint": {
+    "description": "The hint inside the Pushover priority field: the range it accepts."
   },
   "settingsNotifyPushoverToken": "Application token",
   "@settingsNotifyPushoverToken": {
@@ -884,17 +800,13 @@
   "@settingsNotifySecret": {
     "description": "Label of the webhook target's signing-secret field."
   },
-  "settingsNotifySecretHelp": "Signs every request, so the receiver can tell it came from here.",
+  "settingsNotifySecretHelp": "Empty sends posts unsigned",
   "@settingsNotifySecretHelp": {
-    "description": "Helper under the signing-secret field."
+    "description": "Help line under the webhook signing-secret field: an empty box sends the posts without a signature."
   },
   "settingsNotifySendTest": "Send test",
   "@settingsNotifySendTest": {
     "description": "The button that sends a test notification to one target."
-  },
-  "settingsNotifyServerBlurb": "Operations events (account requests, backup outcomes) delivered to server-wide destinations.",
-  "@settingsNotifyServerBlurb": {
-    "description": "The line under the server's notification targets."
   },
   "settingsNotifyServerEvents": "Server events",
   "@settingsNotifyServerEvents": {
@@ -968,17 +880,13 @@
   "@settingsNotifyTestUnanswered": {
     "description": "Message when a test notification's outcome did not arrive within half a minute; the target's status line shows it once it does."
   },
-  "settingsNotifyUnifiedPushHelp": "Usually registered by the app through its distributor",
-  "@settingsNotifyUnifiedPushHelp": {
-    "description": "The line under the UnifiedPush endpoint field, saying it is not usually typed by hand."
-  },
   "settingsNotifyUrl": "URL",
   "@settingsNotifyUrl": {
     "description": "Webhook field: where the notification is posted."
   },
   "settingsNotifyWebhookHelp": "Receives a JSON object with event, title, body and timestamp",
   "@settingsNotifyWebhookHelp": {
-    "description": "The line under the webhook URL field. The four names are the JSON keys the request carries and stay as they are; only the sentence around them is translated."
+    "description": "Help line under the webhook URL field: what the URL receives. The four names are the JSON keys the request carries and stay as they are; only the sentence around them is translated."
   },
   "settingsNotifyWebhookUrl": "Webhook URL",
   "@settingsNotifyWebhookUrl": {
@@ -1020,10 +928,6 @@
   "@settingsPasswordTitle": {
     "description": "Name of the \"Change password\" setting, drawn on its own row and in settings search."
   },
-  "settingsPodcastSpeedHelp": "The speed a show plays at until you set one for it",
-  "@settingsPodcastSpeedHelp": {
-    "description": "The line under the default podcast speed setting."
-  },
   "settingsPodcastSpeedKeywords": "rate, faster, default",
   "@settingsPodcastSpeedKeywords": {
     "description": "Comma-separated search keywords for the \"Podcast speed\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -1031,10 +935,6 @@
   "settingsPodcastSpeedTitle": "Podcast speed",
   "@settingsPodcastSpeedTitle": {
     "description": "Name of the \"Podcast speed\" setting, drawn on its own row and in settings search."
-  },
-  "settingsPreloadWifiHelp": "Gapless playback buffers the next track early; this holds that back on mobile data",
-  "@settingsPreloadWifiHelp": {
-    "description": "The line under the preload-on-wifi-only switch."
   },
   "settingsPreloadWifiKeywords": "gapless, preload, data, metered, mobile",
   "@settingsPreloadWifiKeywords": {
@@ -1044,10 +944,6 @@
   "@settingsPreloadWifiTitle": {
     "description": "Name of the \"Prepare the next track on wifi only\" setting, drawn on its own row and in settings search."
   },
-  "settingsRadioScrobblingHelp": "Radio segments report as tracks where a station names them honestly",
-  "@settingsRadioScrobblingHelp": {
-    "description": "The line under the scrobble-radio switch."
-  },
   "settingsRadioScrobblingKeywords": "last.fm, listenbrainz, station, stream",
   "@settingsRadioScrobblingKeywords": {
     "description": "Comma-separated search keywords for the \"Scrobble radio\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -1056,25 +952,17 @@
   "@settingsRadioScrobblingTitle": {
     "description": "Name of the \"Scrobble radio\" setting, drawn on its own row and in settings search."
   },
-  "settingsReduceMotionHelp": "Stills transitions and the playing indicator",
-  "@settingsReduceMotionHelp": {
-    "description": "The line under the reduce motion switch."
-  },
   "settingsReduceMotionKeywords": "animation, transitions, vestibular",
   "@settingsReduceMotionKeywords": {
     "description": "Comma-separated search keywords for the \"Reduce motion\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
   },
-  "settingsReduceMotionPlatformHelp": "Already reduced: this device asks every app for less motion",
+  "settingsReduceMotionPlatformHelp": "Reduced by your device",
   "@settingsReduceMotionPlatformHelp": {
     "description": "The line under the reduce motion switch when the device itself already asks for less motion, so the switch looks like it is doing nothing."
   },
   "settingsReduceMotionTitle": "Reduce motion",
   "@settingsReduceMotionTitle": {
     "description": "Name of the \"Reduce motion\" setting, drawn on its own row and in settings search."
-  },
-  "settingsReplayGainHelp": "Plays a server-rendered queue at one loudness, where the files have been analyzed",
-  "@settingsReplayGainHelp": {
-    "description": "The line under the level-the-volume switch."
   },
   "settingsReplayGainKeywords": "replaygain, loudness, normalize, gain, casting",
   "@settingsReplayGainKeywords": {
@@ -1084,13 +972,9 @@
   "@settingsReplayGainTitle": {
     "description": "Name of the \"Level the volume\" setting, drawn on its own row and in settings search."
   },
-  "settingsScreenReaderBlurb": "Every control is named, the queue reorders from the keyboard, and the deck bar is one landmark",
-  "@settingsScreenReaderBlurb": {
-    "description": "The line under the screen reader row."
-  },
-  "settingsScreenReaderTitle": "How WaxDeck reads out",
-  "@settingsScreenReaderTitle": {
-    "description": "Name of the row describing the app's screen reader support."
+  "settingsScopeAccountHelp": "Follows your account",
+  "@settingsScopeAccountHelp": {
+    "description": "The scope tip on a setting stored on the account rather than on this device, such as the language."
   },
   "settingsScrobblerApprove": "Approve WaxDeck in the browser tab, then come back here",
   "@settingsScrobblerApprove": {
@@ -1174,9 +1058,9 @@
   "@settingsSearchLabel": {
     "description": "The search field at the top of the settings home: both its accessible name and the placeholder shown while it is empty."
   },
-  "settingsSearchNoMatchMessage": "Server-wide settings live in the admin console, not here. A per-show or per-book setting is on that show or book.",
-  "@settingsSearchNoMatchMessage": {
-    "description": "Second line of the settings search empty state: where the settings that are not here can be found."
+  "settingsSearchNoMatchEmptyMessage": "Shows and books keep their own settings",
+  "@settingsSearchNoMatchEmptyMessage": {
+    "description": "Line under the settings search's no-match title, for every account: a setting for one podcast show or one book is on that show or book, not here. No full stop."
   },
   "settingsSearchNoMatchTitle": "No setting matches \"{query}\"",
   "@settingsSearchNoMatchTitle": {
@@ -1188,81 +1072,41 @@
       }
     }
   },
-  "settingsSectionAccessibilityBlurb": "Motion, and how the app reads out",
-  "@settingsSectionAccessibilityBlurb": {
-    "description": "The line under Accessibility on the settings home, saying what is inside it."
-  },
   "settingsSectionAccessibilityTitle": "Accessibility",
   "@settingsSectionAccessibilityTitle": {
     "description": "Name of the Accessibility settings section, on the settings home and as the title of the section's own screen."
-  },
-  "settingsSectionAccountBlurb": "You, your devices, and how you sign in",
-  "@settingsSectionAccountBlurb": {
-    "description": "The line under Account on the settings home, saying what is inside it."
   },
   "settingsSectionAccountTitle": "Account",
   "@settingsSectionAccountTitle": {
     "description": "Name of the Account settings section, on the settings home and as the title of the section's own screen."
   },
-  "settingsSectionAppearanceBlurb": "Theme, density, and how large artwork is drawn",
-  "@settingsSectionAppearanceBlurb": {
-    "description": "The line under Appearance on the settings home, saying what is inside it."
-  },
   "settingsSectionAppearanceTitle": "Appearance",
   "@settingsSectionAppearanceTitle": {
     "description": "Name of the Appearance settings section, on the settings home and as the title of the section's own screen."
-  },
-  "settingsSectionDevicesBlurb": "Where else your listening can come out",
-  "@settingsSectionDevicesBlurb": {
-    "description": "The line under Devices and casting on the settings home, saying what is inside it."
   },
   "settingsSectionDevicesTitle": "Devices and casting",
   "@settingsSectionDevicesTitle": {
     "description": "Name of the Devices and casting settings section, on the settings home and as the title of the section's own screen."
   },
-  "settingsSectionDownloadsBlurb": "What this device keeps offline, and how much room it takes",
-  "@settingsSectionDownloadsBlurb": {
-    "description": "The line under Downloads and storage on the settings home, saying what is inside it."
-  },
   "settingsSectionDownloadsTitle": "Downloads and storage",
   "@settingsSectionDownloadsTitle": {
     "description": "Name of the Downloads and storage settings section, on the settings home and as the title of the section's own screen."
-  },
-  "settingsSectionIntegrationsBlurb": "Scrobbling, other apps, and notifications",
-  "@settingsSectionIntegrationsBlurb": {
-    "description": "The line under Integrations on the settings home, saying what is inside it."
   },
   "settingsSectionIntegrationsTitle": "Integrations",
   "@settingsSectionIntegrationsTitle": {
     "description": "Name of the Integrations settings section, on the settings home and as the title of the section's own screen."
   },
-  "settingsSectionLibraryBlurb": "What browsing shows you, and what you can see",
-  "@settingsSectionLibraryBlurb": {
-    "description": "The line under Library and metadata on the settings home, saying what is inside it."
-  },
   "settingsSectionLibraryTitle": "Library and metadata",
   "@settingsSectionLibraryTitle": {
     "description": "Name of the Library and metadata settings section, on the settings home and as the title of the section's own screen."
-  },
-  "settingsSectionPlaybackBlurb": "Speeds, skips, casting, and what plays next",
-  "@settingsSectionPlaybackBlurb": {
-    "description": "The line under Playback on the settings home, saying what is inside it."
   },
   "settingsSectionPlaybackTitle": "Playback",
   "@settingsSectionPlaybackTitle": {
     "description": "Name of the Playback settings section, on the settings home and as the title of the section's own screen."
   },
-  "settingsSectionServerBlurb": "This instance, for administrators",
-  "@settingsSectionServerBlurb": {
-    "description": "The line under Server on the settings home, saying what is inside it."
-  },
   "settingsSectionServerTitle": "Server",
   "@settingsSectionServerTitle": {
     "description": "Name of the Server settings section, on the settings home and as the title of the section's own screen."
-  },
-  "settingsServerAdminOnlyMessage": "This section is about the server itself.",
-  "@settingsServerAdminOnlyMessage": {
-    "description": "Second line of the administrators-only empty state."
   },
   "settingsServerAdminOnlyTitle": "Administrators only",
   "@settingsServerAdminOnlyTitle": {
@@ -1275,10 +1119,6 @@
   "settingsServerSummaryTitle": "This server",
   "@settingsServerSummaryTitle": {
     "description": "Name of the \"This server\" setting, drawn on its own row and in settings search."
-  },
-  "settingsShareLinksBlurb": "Public links you have handed out",
-  "@settingsShareLinksBlurb": {
-    "description": "The line under the share links row."
   },
   "settingsShareLinksTitle": "Share links",
   "@settingsShareLinksTitle": {
@@ -1356,10 +1196,6 @@
   "@settingsSimilarityNoWorker": {
     "description": "The sonic similarity row when no analysis worker may connect."
   },
-  "settingsSkipBackHelp": "How far the back control jumps on a podcast or a book",
-  "@settingsSkipBackHelp": {
-    "description": "The line under the skip back setting."
-  },
   "settingsSkipBackKeywords": "rewind, seconds, podcast, audiobook",
   "@settingsSkipBackKeywords": {
     "description": "Comma-separated search keywords for the \"Skip back by\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -1368,10 +1204,6 @@
   "@settingsSkipBackTitle": {
     "description": "Name of the \"Skip back by\" setting, drawn on its own row and in settings search."
   },
-  "settingsSkipForwardHelp": "How far the forward control jumps",
-  "@settingsSkipForwardHelp": {
-    "description": "The line under the skip forward setting."
-  },
   "settingsSkipForwardKeywords": "seconds, podcast, audiobook, ad",
   "@settingsSkipForwardKeywords": {
     "description": "Comma-separated search keywords for the \"Skip forward by\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -1379,10 +1211,6 @@
   "settingsSkipForwardTitle": "Skip forward by",
   "@settingsSkipForwardTitle": {
     "description": "Name of the \"Skip forward by\" setting, drawn on its own row and in settings search."
-  },
-  "settingsSmartRewindHelp": "Steps back a little when you come back to a show or a book after a break, so you land before the sentence you lost",
-  "@settingsSmartRewindHelp": {
-    "description": "The line under the rewind-on-resume setting."
   },
   "settingsSmartRewindKeywords": "smart rewind, back, context, podcast, book",
   "@settingsSmartRewindKeywords": {
@@ -1404,13 +1232,13 @@
   "@settingsStreamQualityAuto": {
     "description": "Streaming quality option: no cap, the original plays directly whenever the server can manage it."
   },
-  "settingsStreamQualityHelp": "Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which can turn off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads",
+  "settingsStreamQualityHelp": "Auto sends originals; a cap re-encodes and can turn off gapless playback",
   "@settingsStreamQualityHelp": {
     "description": "The line under the streaming quality settings, naming the trade a cap makes so it arrives as a known one."
   },
   "settingsStreamQualityHigh": "High",
   "@settingsStreamQualityHigh": {
-    "description": "Streaming quality option: the 320 kbps cap. The number stays in the help line, never in this label."
+    "description": "Streaming quality option: the 320 kbps cap. The number stays out of this label."
   },
   "settingsStreamQualityKeywords": "bitrate, quality, bandwidth, data, transcode, cellular",
   "@settingsStreamQualityKeywords": {
@@ -1436,10 +1264,6 @@
   "@settingsStreamQualityWifiTitle": {
     "description": "Name of the streaming quality setting for unmetered connections, drawn on the mobile platforms beside the mobile-data row."
   },
-  "settingsTechnicalDetailsHelp": "Draws codec and format chips beside what they describe",
-  "@settingsTechnicalDetailsHelp": {
-    "description": "The line under the technical details switch."
-  },
   "settingsTechnicalDetailsKeywords": "codec, bitrate, format, flac, provenance",
   "@settingsTechnicalDetailsKeywords": {
     "description": "Comma-separated search keywords for the \"Show technical details\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -1451,10 +1275,6 @@
   "settingsThemeDark": "Dark",
   "@settingsThemeDark": {
     "description": "Theme option: the dark palette."
-  },
-  "settingsThemeHelp": "Set on this device; your other devices keep their own",
-  "@settingsThemeHelp": {
-    "description": "The line under the theme setting, which is per device: a phone carried outdoors and a desktop in a dark room are not one choice."
   },
   "settingsThemeKeywords": "dark, light, oled, black",
   "@settingsThemeKeywords": {
@@ -1472,9 +1292,9 @@
   "@settingsThemeTitle": {
     "description": "Name of the \"Theme\" setting, drawn on its own row and in settings search."
   },
-  "settingsTimezoneFieldHelp": "Calendar stats bucket days in this timezone; empty uses the server default (UTC)",
+  "settingsTimezoneFieldHelp": "Empty uses the server default (UTC)",
   "@settingsTimezoneFieldHelp": {
-    "description": "The line under the timezone field, saying what the timezone decides and what leaving it empty does."
+    "description": "The line under the timezone field: what leaving it empty does."
   },
   "settingsTimezoneFieldHint": "Europe/Amsterdam",
   "@settingsTimezoneFieldHint": {
@@ -1500,10 +1320,6 @@
   "@settingsTitle": {
     "description": "Title of the settings home screen."
   },
-  "settingsTrimDefaultHelp": "Shows and books with no stored choice of their own open with silence trimming on",
-  "@settingsTrimDefaultHelp": {
-    "description": "The line under the trim silence default."
-  },
   "settingsTrimDefaultKeywords": "silence, skip, spoken word, podcast, book",
   "@settingsTrimDefaultKeywords": {
     "description": "Comma-separated search keywords for the \"Trim silence by default\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
@@ -1511,10 +1327,6 @@
   "settingsTrimDefaultTitle": "Trim silence by default",
   "@settingsTrimDefaultTitle": {
     "description": "Name of the \"Trim silence by default\" setting, drawn on its own row and in settings search."
-  },
-  "settingsVisualizerIdleHelp": "Fills the screen with the track once music has been playing untouched for a few minutes",
-  "@settingsVisualizerIdleHelp": {
-    "description": "The line under the idle visualizer switch."
   },
   "settingsVisualizerIdleKeywords": "screensaver, waveform, platter, away",
   "@settingsVisualizerIdleKeywords": {
@@ -1524,35 +1336,27 @@
   "@settingsVisualizerIdleTitle": {
     "description": "Name of the \"Open the visualizer when idle\" setting, drawn on its own row and in settings search."
   },
-  "settingsWebGaplessBrowser": "This browser cannot play a queue as one stream, so tracks play one at a time",
+  "settingsWebGaplessBrowser": "This browser cannot play a queue gaplessly",
   "@settingsWebGaplessBrowser": {
     "description": "The line under the gapless switch when the browser itself cannot play a rendered queue - no media source, or no format it decodes."
   },
-  "settingsWebGaplessBusy": "The server is at its transcoding limit, so gapless playback is off for now",
+  "settingsWebGaplessBusy": "Transcoding limit reached; gapless is off for now",
   "@settingsWebGaplessBusy": {
     "description": "The line under the gapless switch when the server refused to render the queue because its transcode session limit is reached. Temporary, unlike the other refusals."
   },
-  "settingsWebGaplessFormat": "This server renders no format this browser can play, so tracks play one at a time",
+  "settingsWebGaplessFormat": "This server renders no format this browser plays",
   "@settingsWebGaplessFormat": {
     "description": "The line under the gapless switch when the server rendered the queue in a format this browser cannot decode."
-  },
-  "settingsWebGaplessHelp": "Plays a music queue as one stream, so tracks run into each other the way they were mastered",
-  "@settingsWebGaplessHelp": {
-    "description": "The line under the gapless-playback switch, on the web."
   },
   "settingsWebGaplessKeywords": "gapless, crossfade, seam, stream, browser",
   "@settingsWebGaplessKeywords": {
     "description": "Comma-separated search keywords for the \"Gapless playback\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
   },
-  "settingsWebGaplessNoEngine": "This server runs without a streaming engine, which is what renders a queue as one stream",
-  "@settingsWebGaplessNoEngine": {
-    "description": "Help line under the browser's gapless switch, which is hidden, on a server that runs without a streaming engine. No full stop, like every setting's help."
-  },
   "settingsWebGaplessTitle": "Gapless playback",
   "@settingsWebGaplessTitle": {
     "description": "Name of the \"Gapless playback\" setting, drawn on its own row and in settings search. Web only."
   },
-  "settingsWebGaplessUnavailable": "This server cannot render a queue as one stream, so tracks play one at a time",
+  "settingsWebGaplessUnavailable": "This server cannot render queues as one stream",
   "@settingsWebGaplessUnavailable": {
     "description": "Replaces the gapless help text when the server has answered that it renders no timelines."
   }

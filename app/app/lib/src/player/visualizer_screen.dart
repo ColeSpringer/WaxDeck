@@ -43,7 +43,6 @@ class VisualizerScreen extends ConsumerWidget {
             child: EmptyState(
               glyph: WaxIcons.waveform,
               title: context.l10n.playerNothingPlaying,
-              message: context.l10n.playerVisualizerIdleMessage,
               semanticsId: SemanticsIds.visualizerSurface,
             ),
           ),
@@ -175,7 +174,7 @@ class _VisualizerState extends ConsumerState<_Visualizer> {
         _ => EmptyState(
           glyph: WaxIcons.waveform,
           title: context.l10n.playerNoShape,
-          message: context.l10n.playerNoShapeMessage,
+          message: context.l10n.playerNoShapeEmptyMessage,
           semanticsId: SemanticsIds.visualizerSurface,
         ),
       },

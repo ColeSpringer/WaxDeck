@@ -51,7 +51,7 @@
   "@downloadsClearAll": {
     "description": "Removes every download from this device."
   },
-  "downloadsClearBody": "This frees {size}. Nothing leaves the library: everything here plays again with the server reachable.",
+  "downloadsClearBody": "This frees {size}. Nothing leaves the library.",
   "@downloadsClearBody": {
     "description": "Body of the clear-downloads dialog. {size} is a formatted size.",
     "placeholders": {
@@ -81,7 +81,7 @@
   "@downloadsDownloading": {
     "description": "Accessible name of the download control while the transfer is running."
   },
-  "downloadsEmptyMessage": "Download a book, an album, or an episode and it plays here with the server unreachable. Its cover comes with it.",
+  "downloadsEmptyMessage": "Downloads play here without the server.",
   "@downloadsEmptyMessage": {
     "description": "Empty state of the downloads screen."
   },

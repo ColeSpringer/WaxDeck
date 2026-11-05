@@ -17,50 +17,35 @@
   "../packages/waxdeck_ui/lib/src/components/wordmark.dart": {
     "hardcoded-copy": 2
   },
-  "lib/src/admin/admin_shares_screen.dart": {
-    "prose-slot-args": 1
-  },
-  "lib/src/admin/audit_screen.dart": {
-    "prose-slot-args": 1
-  },
   "lib/src/admin/backups_screen.dart": {
     "prose-slot-args": 2
   },
   "lib/src/admin/enrichment_screen.dart": {
-    "prose-slot-args": 16
-  },
-  "lib/src/admin/genres_screen.dart": {
     "prose-slot-args": 3
   },
-  "lib/src/admin/libraries_screen.dart": {
-    "prose-slot-args": 6
-  },
-  "lib/src/admin/migrate_screen.dart": {
-    "prose-slot-args": 7
-  },
-  "lib/src/admin/schedules_screen.dart": {
-    "prose-slot-args": 1
-  },
-  "lib/src/admin/server_settings_screen.dart": {
-    "prose-slot-args": 7
-  },
-  "lib/src/admin/trash_screen.dart": {
+  "lib/src/admin/genres_screen.dart": {
     "prose-slot-args": 2
   },
+  "lib/src/admin/libraries_screen.dart": {
+    "prose-slot-args": 4
+  },
+  "lib/src/admin/migrate_screen.dart": {
+    "prose-slot-args": 2
+  },
+  "lib/src/admin/server_settings_screen.dart": {
+    "prose-slot-args": 6
+  },
   "lib/src/admin/user_edit_screen.dart": {
-    "prose-slot-args": 15
+    "prose-slot-args": 6
   },
   "lib/src/admin/users_screen.dart": {
-    "prose-slot-args": 7
+    "prose-slot-args": 4
   },
   "lib/src/app.dart": {
     "hardcoded-copy": 1
   },
-  "lib/src/auth/signup_screen.dart": {
-    "prose-slot-args": 1
-  },
   "lib/src/books/book_screen.dart": {
-    "prose-slot-args": 4
+    "prose-slot-args": 1
   },
   "lib/src/books/books_screen.dart": {
     "prose-slot-args": 2
@@ -90,8 +75,7 @@
     "hardcoded-copy": 1
   },
   "lib/src/diagnostics/defect_log_screen.dart": {
-    "hardcoded-copy": 3,
-    "prose-slot-args": 1
+    "hardcoded-copy": 3
   },
   "lib/src/discovery/track_list_screen.dart": {
     "prose-slot-args": 1
@@ -102,14 +86,11 @@
   "lib/src/health/catalog_check_section.dart": {
     "prose-slot-args": 1
   },
-  "lib/src/health/diagnostics_screen.dart": {
+  "lib/src/health/folds_section.dart": {
     "prose-slot-args": 1
   },
-  "lib/src/health/folds_section.dart": {
-    "prose-slot-args": 2
-  },
   "lib/src/health/health_screen.dart": {
-    "prose-slot-args": 7
+    "prose-slot-args": 2
   },
   "lib/src/home/home_screen.dart": {
     "prose-slot-args": 1
@@ -120,52 +101,22 @@
   "lib/src/library/item_delete.dart": {
     "prose-slot-args": 2
   },
-  "lib/src/library/item_detach.dart": {
-    "prose-slot-args": 1
-  },
-  "lib/src/library/item_kind.dart": {
-    "prose-slot-args": 1
-  },
   "lib/src/metadata/acquisition_sheet.dart": {
-    "prose-slot-args": 2
+    "prose-slot-args": 1
   },
   "lib/src/metadata/album_pane.dart": {
-    "prose-slot-args": 14
-  },
-  "lib/src/metadata/artwork_manager.dart": {
-    "prose-slot-args": 2
+    "prose-slot-args": 1
   },
   "lib/src/metadata/bulk_pane.dart": {
-    "prose-slot-args": 3
+    "prose-slot-args": 1
   },
   "lib/src/metadata/chapter_section.dart": {
     "prose-slot-args": 1
   },
   "lib/src/metadata/entity_editor_screen.dart": {
-    "prose-slot-args": 8
-  },
-  "lib/src/metadata/metadata_form.dart": {
-    "prose-slot-args": 2
-  },
-  "lib/src/metadata/metadata_screen.dart": {
-    "prose-slot-args": 8
+    "prose-slot-args": 1
   },
   "lib/src/metadata/release_workbench.dart": {
-    "prose-slot-args": 1
-  },
-  "lib/src/metadata/rename_section.dart": {
-    "prose-slot-args": 2
-  },
-  "lib/src/music/album_screen.dart": {
-    "prose-slot-args": 2
-  },
-  "lib/src/music/artist_screen.dart": {
-    "prose-slot-args": 1
-  },
-  "lib/src/music/index_screen.dart": {
-    "prose-slot-args": 1
-  },
-  "lib/src/music/listing_screen.dart": {
     "prose-slot-args": 1
   },
   "lib/src/music/music_hub_screen.dart": {
@@ -175,60 +126,33 @@
     "prose-slot-args": 1
   },
   "lib/src/organize/organize_screen.dart": {
-    "prose-slot-args": 8
-  },
-  "lib/src/organize/profile_editor_sheet.dart": {
-    "prose-slot-args": 2
-  },
-  "lib/src/player/car_mode_screen.dart": {
-    "prose-slot-args": 1
-  },
-  "lib/src/player/lyrics.dart": {
     "prose-slot-args": 3
   },
   "lib/src/player/player_screen.dart": {
-    "prose-slot-args": 2
+    "prose-slot-args": 1
   },
   "lib/src/player/visualizer_screen.dart": {
-    "prose-slot-args": 2
-  },
-  "lib/src/playlists/playlist_create.dart": {
     "prose-slot-args": 1
   },
   "lib/src/playlists/playlist_import.dart": {
-    "prose-slot-args": 2
-  },
-  "lib/src/playlists/playlist_screen.dart": {
-    "prose-slot-args": 1
-  },
-  "lib/src/playlists/playlists_screen.dart": {
     "prose-slot-args": 1
   },
   "lib/src/playlists/rule_editor_screen.dart": {
-    "prose-slot-args": 2
+    "prose-slot-args": 1
   },
   "lib/src/podcasts/add_podcast.dart": {
     "prose-slot-args": 1
   },
-  "lib/src/podcasts/podcasts_screen.dart": {
-    "prose-slot-args": 1
-  },
   "lib/src/podcasts/show_screen.dart": {
-    "prose-slot-args": 2
+    "prose-slot-args": 1
   },
   "lib/src/podcasts/subscription_settings_sheet.dart": {
-    "prose-slot-args": 7
-  },
-  "lib/src/queue/queue_view.dart": {
-    "prose-slot-args": 1
+    "prose-slot-args": 5
   },
   "lib/src/radio/radio_saved_menu.dart": {
-    "prose-slot-args": 2
-  },
-  "lib/src/radio/radio_saved_screen.dart": {
     "prose-slot-args": 1
   },
-  "lib/src/radio/radio_screen.dart": {
+  "lib/src/radio/radio_saved_screen.dart": {
     "prose-slot-args": 1
   },
   "lib/src/review/review_entry_screen.dart": {
@@ -238,14 +162,14 @@
     "prose-slot-args": 2
   },
   "lib/src/search/search_screen.dart": {
-    "prose-slot-args": 8
+    "prose-slot-args": 4
   },
   "lib/src/settings/account_sections.dart": {
     "hardcoded-copy": 1,
     "prose-slot-args": 1
   },
   "lib/src/settings/integrations_sections.dart": {
-    "prose-slot-args": 12
+    "prose-slot-args": 13
   },
   "lib/src/settings/listening_sections.dart": {
     "prose-slot-args": 2
@@ -254,10 +178,7 @@
     "prose-slot-args": 1
   },
   "lib/src/settings/settings_section_screen.dart": {
-    "prose-slot-args": 46
-  },
-  "lib/src/sharing/share_dialog.dart": {
-    "prose-slot-args": 3
+    "prose-slot-args": 21
   },
   "lib/src/sharing/shares_screen.dart": {
     "prose-slot-args": 1
@@ -265,21 +186,11 @@
   "lib/src/shell/forbidden_page.dart": {
     "prose-slot-args": 1
   },
-  "lib/src/stats/listen_log_screen.dart": {
-    "prose-slot-args": 1
-  },
-  "lib/src/stats/share_cards.dart": {
-    "prose-slot-args": 1
-  },
   "lib/src/stats/stats_screen.dart": {
-    "prose-slot-args": 4
+    "prose-slot-args": 3
   },
   "lib/src/tools/tasks_screen.dart": {
-    "prose-slot-args": 1,
     "raw-ink": 1
-  },
-  "lib/src/uploads/add_to_library.dart": {
-    "prose-slot-args": 2
   },
   "lib/src/uploads/uploads_screen.dart": {
     "prose-slot-args": 1

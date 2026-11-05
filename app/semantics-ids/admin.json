@@ -121,6 +121,7 @@
     "thumbsClear": "thumbs-clear",
     "thumbsClearConfirm": "thumbs-clear-confirm",
     "transcodingActivity": "transcoding-activity",
+    "transcodingActivityInfo": "transcoding-activity-info",
     "transcodingActivityRefresh": "transcoding-activity-refresh",
     "transcodingDefaultKbps": "transcoding-default-kbps",
     "transcodingMaxConcurrent": "transcoding-max-concurrent",

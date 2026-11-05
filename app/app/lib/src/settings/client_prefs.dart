@@ -247,21 +247,13 @@ final voiceBoostDefaultProvider = NotifierProvider<VoiceBoostDefault, bool>(
   VoiceBoostDefault.new,
 );
 
-/// Whether each spoken-word effect has explained itself once.
+/// Whether voice boost has explained itself once.
 ///
-/// Not settings, and deliberately absent from the settings registry:
-/// nothing offers these as a control, because "show me that hint again"
-/// is not a preference anybody has. They are a note that a sentence has
+/// Not a setting, and deliberately absent from the settings registry:
+/// nothing offers this as a control, because "show me that hint again"
+/// is not a preference anybody has. It is a note that a sentence has
 /// been said, kept per device because the hint is about the first time
 /// somebody presses the chip on this machine.
-class TrimSilenceExplained extends BoolSetting {
-  @override
-  String get settingKey => ClientSettingKeys.trimSilenceExplained;
-
-  @override
-  bool get defaultValue => false;
-}
-
 class VoiceBoostExplained extends BoolSetting {
   @override
   String get settingKey => ClientSettingKeys.voiceBoostExplained;
@@ -270,8 +262,6 @@ class VoiceBoostExplained extends BoolSetting {
   bool get defaultValue => false;
 }
 
-final trimSilenceExplainedProvider =
-    NotifierProvider<TrimSilenceExplained, bool>(TrimSilenceExplained.new);
 final voiceBoostExplainedProvider = NotifierProvider<VoiceBoostExplained, bool>(
   VoiceBoostExplained.new,
 );

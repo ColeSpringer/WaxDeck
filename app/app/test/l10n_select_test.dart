@@ -1,13 +1,14 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/books/books_controller.dart';
+import 'package:waxdeck/src/connect/device_picker.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
 import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/stats/share_cards.dart';
-import 'package:waxdeck/src/stats/stats_controller.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 
 /// The messages that select on a token - a Dart enum's `name`, or a
 /// word the server sent. Nothing references those case strings, so
@@ -66,11 +67,6 @@ void main() {
         dimensions,
         (n) => l10n.musicIndexEmptyTitle(n),
       );
-      covers(
-        'musicIndexEmptyMessage',
-        dimensions,
-        (n) => l10n.musicIndexEmptyMessage(n),
-      );
       covers('musicIndexStartOf', dimensions, (n) => l10n.musicIndexStartOf(n));
       covers(
         'musicListingBucketEmptyTitle',
@@ -84,6 +80,11 @@ void main() {
         (n) => l10n.musicIndexCountAtLeast(n, 3),
       );
       covers('booksSortRow', BookSort.values, (n) => l10n.booksSortRow(n));
+      covers(
+        'devicesEndpointControl',
+        EndpointControl.values,
+        (n) => l10n.devicesEndpointControl(n),
+      );
       covers(
         'podcastSortRow',
         SubscriptionSort.values,
@@ -114,17 +115,6 @@ void main() {
           expect(
             l10n.homePinSheetUnpin(what),
             isNot(l10n.homePinSheetUnpin('x')),
-          );
-        }
-      });
-
-      test('the recap names every ranked list it can draw', () {
-        final fallback = l10n.statsTopEmptyMessage('none-of-them');
-        for (final kind in topListKinds) {
-          expect(
-            l10n.statsTopEmptyMessage(kind),
-            isNot(fallback),
-            reason: 'statsTopEmptyMessage has no arm for $kind',
           );
         }
       });
@@ -181,6 +171,21 @@ void main() {
         if (locale == 'es') {
           expect(l10n.formatListenTime(45000), '45 s');
           expect(l10n.formatListenTime(126 * 60000), '2 h 6 min');
+        }
+      });
+
+      // A track is the select's other arm; a book and an episode name
+      // their own kind, and an episode names no uploader.
+      test('metadataForbiddenTitle names every item kind', () {
+        final track = l10n.metadataForbiddenTitle(MediaType.music.wireName);
+        for (final kind in MediaType.values.where(
+          (k) => k != MediaType.music,
+        )) {
+          expect(
+            l10n.metadataForbiddenTitle(kind.wireName),
+            isNot(track),
+            reason: kind.wireName,
+          );
         }
       });
 

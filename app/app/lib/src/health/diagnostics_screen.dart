@@ -226,7 +226,6 @@ class _Table extends ConsumerWidget {
           empty: EmptyState(
             glyph: WaxIcons.success,
             title: l10n.healthDiagnosticsEmptyTitle,
-            message: l10n.healthDiagnosticsEmptyMessage,
           ),
           columns: <WaxColumn<FileDiagnostic>>[
             WaxColumn<FileDiagnostic>(

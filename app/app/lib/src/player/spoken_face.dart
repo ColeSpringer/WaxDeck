@@ -83,8 +83,8 @@ class _WhenChangedState<T> extends State<WhenChanged<T>> {
 }
 
 /// A chapter's own name, or its number when the source named none.
-String chapterTitle(ChapterMark chapter) =>
-    chapter.title ?? 'Chapter ${chapter.index + 1}';
+String chapterTitle(AppLocalizations l10n, ChapterMark chapter) =>
+    chapter.title ?? l10n.bookChapterFallback(chapter.index + 1);
 
 /// The show an episode is from, above its title and tappable.
 class ShowOverline extends ConsumerWidget {
@@ -135,7 +135,7 @@ class BookSubtitle extends StatelessWidget {
       builder: (context, chapter) {
         if (chapter == null) return const SizedBox.shrink();
         return Text(
-          chapterTitle(chapter),
+          chapterTitle(context.l10n, chapter),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: WaxType.body.copyWith(color: colors.textSecondary),
@@ -415,19 +415,13 @@ class SpeedChip extends StatelessWidget {
   }
 }
 
-/// Says what an effect does, the first time somebody presses it.
-///
-/// Once per device, and only on the way on: an effect that is being
-/// turned off has already explained itself, and a sentence that
-/// appears every time is one nobody reads. The flag is written before
-/// the message so a double press cannot say it twice.
-void explainOnce(
-  WidgetRef ref,
-  NotifierProvider<BoolSetting, bool> seen,
-  String message,
-) {
-  if (ref.read(seen)) return;
-  ref.read(seen.notifier).set(true);
+/// Says once per device that voice boost reopens what is playing, on the
+/// way on only: a sentence that appears every time is one nobody reads.
+/// The flag is written before the message so a double press cannot say
+/// it twice.
+void explainVoiceBoostOnce(WidgetRef ref, String message) {
+  if (ref.read(voiceBoostExplainedProvider)) return;
+  ref.read(voiceBoostExplainedProvider.notifier).set(true);
   ref.read(shellMessengerProvider.notifier).show(message, channel: _effects);
 }
 
@@ -440,7 +434,7 @@ const _effects = ShellChannel.spokenEffects;
 /// is deliberate: this is the trim control, and the number beside it is
 /// the reason to leave the trim control on. Crediting it with what the
 /// speed chip saved would be the wrong number under the wrong toggle.
-class TrimChip extends ConsumerWidget {
+class TrimChip extends StatelessWidget {
   const TrimChip({required this.session, super.key});
 
   final PlaybackSession session;
@@ -454,7 +448,7 @@ class TrimChip extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
       valueListenable: session.trimEnabled,
       builder: (context, enabled, _) {
@@ -473,16 +467,7 @@ class TrimChip extends ConsumerWidget {
               label: label,
               text: label,
               selected: enabled,
-              onPressed: () {
-                if (!enabled) {
-                  explainOnce(
-                    ref,
-                    trimSilenceExplainedProvider,
-                    l10n.playerTrimExplained,
-                  );
-                }
-                session.setTrimEnabled(!enabled);
-              },
+              onPressed: () => session.setTrimEnabled(!enabled),
             );
           },
         );
@@ -514,11 +499,7 @@ class _VoiceBoostChipState extends ConsumerState<VoiceBoostChip> {
     if (_busy) return;
     final l10n = context.l10n;
     if (to) {
-      explainOnce(
-        ref,
-        voiceBoostExplainedProvider,
-        l10n.playerVoiceBoostExplained,
-      );
+      explainVoiceBoostOnce(ref, l10n.playerVoiceBoostExplained);
     }
     final messenger = ref.read(shellMessengerProvider.notifier);
     setState(() => _busy = true);
@@ -818,8 +799,8 @@ class _ChapterList extends StatelessWidget {
                   WaxInkTappable(
                     semanticsId: SemanticsIds.playerChapter(chapter.index),
                     label: playing
-                        ? l10n.playerChapterPlaying(chapterTitle(chapter))
-                        : chapterTitle(chapter),
+                        ? l10n.playerChapterPlaying(chapterTitle(l10n, chapter))
+                        : chapterTitle(l10n, chapter),
                     selected: playing,
                     onPressed: () => unawaited(
                       session.seek(Duration(milliseconds: chapter.startMs)),
@@ -842,7 +823,7 @@ class _ChapterList extends StatelessWidget {
                           const SizedBox(width: WaxSpace.s12),
                           Expanded(
                             child: Text(
-                              chapterTitle(chapter),
+                              chapterTitle(l10n, chapter),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: WaxType.body.copyWith(

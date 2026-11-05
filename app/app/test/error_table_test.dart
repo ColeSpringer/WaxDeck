@@ -318,6 +318,27 @@ void main() {
       );
     });
 
+    test('a station directory that will not answer names the way out', () {
+      // One code serves both directories, and only the station surface
+      // knows it asked that one, so it takes its own sentence.
+      final down = _fake('directory-unavailable');
+      expect(
+        explainStationDirectory(en, down),
+        en.errorStationDirectoryUnavailable,
+      );
+      expect(
+        explainStationDirectory(es, down),
+        es.errorStationDirectoryUnavailable,
+      );
+      expect(explainError(en, down), en.errorDirectoryUnavailable);
+      // Anything else reads from the table.
+      expect(explainStationDirectory(en, _fake('timeout')), en.errorTimeout);
+      expect(
+        explainStationDirectory(es, StateError('boom')),
+        es.errorUnexpected,
+      );
+    });
+
     test('unsupported-format is refined by its reason', () {
       const unreadable = WaxDeckApiException(
         code: 'unsupported-format',
@@ -512,7 +533,7 @@ void main() {
       );
       expect(
         healthRuleLabel(es, rule('missing-art', label: 'Missing cover art')),
-        'Sin carátula',
+        'Sin portada',
       );
     });
 
@@ -535,9 +556,11 @@ void main() {
         notifyEventTitle(es, event('review-ready')),
         'Pendiente de revisión',
       );
+      // The title says it; the checklist row draws no line under it.
+      expect(notifyEventHelp(es, event('review-ready')), isNull);
       expect(
-        notifyEventHelp(es, event('review-ready')),
-        es.notifReviewReadyHelp,
+        notifyEventHelp(es, event('job-finished')),
+        es.notifJobFinishedHelp,
       );
     });
 

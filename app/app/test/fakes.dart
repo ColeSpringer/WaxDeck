@@ -5995,8 +5995,12 @@ class FakeRepository implements WaxDeckRepository {
     return updated;
   }
 
+  /// Holds every account read until completed, when set.
+  Completer<void>? getUserGate;
+
   @override
   Future<UserAccount> getUser(String userId) async {
+    await getUserGate?.future;
     final account = usersById[userId];
     if (account == null) {
       throw const WaxDeckApiException(
@@ -6309,8 +6313,7 @@ class FakeRepository implements WaxDeckRepository {
 
   /// Engine-backed sessions the server reports in flight, how many of
   /// them are gapless queues, and how many times it has been asked (the
-  /// screen reads once and again on demand, never on a timer). A null
-  /// timeline count is the older server that does not separate them.
+  /// screen reads once and again on demand, never on a timer).
   int activeTranscodeSessions = 0;
   int? activeTranscodeTimelines = 0;
   int transcodingActivityReads = 0;

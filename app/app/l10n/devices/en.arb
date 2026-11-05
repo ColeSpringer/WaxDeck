@@ -31,13 +31,13 @@
   "@devicesBaseUnreachable": {
     "description": "Says a cast address did not answer. Lower case: it follows a comma on the same line."
   },
-  "devicesCastBlurb": "A cast device fetches audio from this server by address. These are the addresses it will try, in order.",
+  "devicesCastBlurb": "Addresses a cast device will try, in order.",
   "@devicesCastBlurb": {
-    "description": "Under the connection check heading, saying why the addresses matter."
+    "description": "Under the connection check heading: the addresses a cast device will try."
   },
-  "devicesCastCaveat": "The server checked these itself. An address it cannot reach will not work from a speaker either; one it can may still fail if the speaker is on another network.",
-  "@devicesCastCaveat": {
-    "description": "The caveat over the address list: the server checking itself is not the speaker checking, and a reader deciding what to fix needs to know which of the two this is."
+  "devicesCastHelp": "The server checked these itself; a speaker on another network may still fail.",
+  "@devicesCastHelp": {
+    "description": "Info tip on the connection check heading: the server checking itself is not the speaker checking, and a reader deciding what to fix needs to know which of the two this is."
   },
   "devicesCastingOverline": "Casting",
   "@devicesCastingOverline": {
@@ -54,6 +54,20 @@
   "devicesCurrentlyElsewhere": "Currently elsewhere",
   "@devicesCurrentlyElsewhere": {
     "description": "Line above the device list when the sheet was opened over a session running on another device."
+  },
+  "devicesEndpointControl": "{state, select, inUse{In use} inUseVolume{In use, volume control} inUseSpeed{In use, speed control} inUseBoth{In use, volume and speed control} remoteVolume{Remote volume control} remoteSpeed{Remote speed control} remoteBoth{Remote volume and speed control} other{Remote control}}",
+  "@devicesEndpointControl": {
+    "description": "Line under an online device's name in the device picker: whether something is playing on it, and what can be changed on it from here (its volume, its speed, or both). {state} names the case.",
+    "placeholders": {
+      "state": {
+        "type": "String",
+        "example": "remoteVolume"
+      }
+    }
+  },
+  "devicesEndpointOffline": "Offline",
+  "@devicesEndpointOffline": {
+    "description": "Line under an offline device's name in the device picker, whose row cannot be picked."
   },
   "devicesGroupApps": "WaxDeck apps",
   "@devicesGroupApps": {
@@ -79,8 +93,8 @@
   "@devicesListError": {
     "description": "Row in the device sheet when the device list could not be read."
   },
-  "devicesListErrorMessage": "The server did not answer. Playback here is unaffected.",
-  "@devicesListErrorMessage": {
+  "devicesListErrorBody": "The server did not answer. Playback here is unaffected.",
+  "@devicesListErrorBody": {
     "description": "Under the device-list error, saying that local playback still works."
   },
   "devicesLooking": "Looking for devices",
@@ -95,27 +109,27 @@
   "@devicesNoAddresses": {
     "description": "Empty state of the connection check."
   },
-  "devicesNoAddressesMessage": "This server has not been told a public address and could not detect one on the network. Casting needs one; set it in the server settings.",
-  "@devicesNoAddressesMessage": {
-    "description": "Empty state of the connection check, saying what to do about it."
+  "devicesNoAddressesEmptyMessage": "Set WAXDECK_ADVERTISE_BASE on the server.",
+  "@devicesNoAddressesEmptyMessage": {
+    "description": "Line under the connection check's no-address title: the server setting that gives cast devices an address. The variable name stays as it is."
   },
   "devicesNoDevicesToTest": "No devices to test",
   "@devicesNoDevicesToTest": {
     "description": "Empty state in the connection check when no cast device or renderer has been found."
   },
-  "devicesNoDevicesToTestMessage": "No Chromecast or renderer has turned up on this network. Discovery needs multicast, which does not cross Docker's default network.",
-  "@devicesNoDevicesToTestMessage": {
+  "devicesNoDevicesToTestEmptyMessage": "Discovery needs multicast, which Docker's default network lacks.",
+  "@devicesNoDevicesToTestEmptyMessage": {
     "description": "Body of the empty state when the connection check has no device to run against."
   },
   "devicesNothingElsewhere": "Nothing playing elsewhere",
   "@devicesNothingElsewhere": {
     "description": "Empty state of the remote playback screen."
   },
-  "devicesNothingElsewhereMessage": "Pick a device from the now-playing bar to send playback somewhere else.",
-  "@devicesNothingElsewhereMessage": {
+  "devicesNothingElsewhereEmptyMessage": "Pick a device from the now-playing bar.",
+  "@devicesNothingElsewhereEmptyMessage": {
     "description": "Empty state of the remote playback screen, saying where the device list is."
   },
-  "devicesNothingToSend": "Nothing is playing here to send. Start something first.",
+  "devicesNothingToSend": "Nothing playing here to send.",
   "@devicesNothingToSend": {
     "description": "Snackbar when the device picker is asked to hand playback over with nothing playing."
   },
@@ -183,7 +197,7 @@
   },
   "devicesRadioStaysHere": "Stations play on the device that tuned them",
   "@devicesRadioStaysHere": {
-    "description": "Under every device row while live radio plays here: a station is not a session and cannot be sent anywhere."
+    "description": "One line at the top of the device sheet while live radio plays here: a station is not a session and cannot be sent anywhere."
   },
   "devicesRemoteTitle": "Remote playback",
   "@devicesRemoteTitle": {
@@ -209,23 +223,15 @@
       }
     }
   },
-  "devicesTakeOverBody": "This device can take over, or leave it playing where it is.",
-  "@devicesTakeOverBody": {
-    "description": "Body of the dialog asking what to do about playback already running elsewhere."
-  },
-  "devicesTakeOverOrLeave": "Take over, or leave it playing",
-  "@devicesTakeOverOrLeave": {
-    "description": "Under this device's row while something is playing elsewhere."
-  },
   "devicesTestOnDevice": "Test on a device",
   "@devicesTestOnDevice": {
     "description": "Section header in the connection check for the half a real device runs."
   },
-  "devicesTestOnDeviceBlurb": "The check above is this server reaching itself. Pick a speaker and it will fetch a second of silence through each address and say what happened.",
-  "@devicesTestOnDeviceBlurb": {
-    "description": "Explains what the device half of the connection check does."
+  "devicesTestOnDeviceHelp": "Pick a speaker and it fetches a second of silence through each address.",
+  "@devicesTestOnDeviceHelp": {
+    "description": "Info tip on the test-on-a-device heading: what the device half of the connection check does."
   },
-  "devicesTesting": "Testing. This takes a few seconds per address.",
+  "devicesTesting": "Testing",
   "@devicesTesting": {
     "description": "Subtitle on a device row while its connection test runs, which is slow enough to say so."
   },

@@ -465,7 +465,6 @@ class _DiscordPresenceSectionState
           id: 'discord-presence',
           child: WaxSettingRow(
             title: l10n.settingsDiscordPresenceRowTitle,
-            help: l10n.settingsDiscordPresenceHelp,
             control: WaxSwitch(
               value: on,
               label: l10n.settingsDiscordPresenceTitle,
@@ -492,6 +491,7 @@ class _DiscordPresenceSectionState
                     key: const Key('discord-application-id-field'),
                     controller: _id,
                     label: l10n.settingsDiscordApplicationLabel,
+                    hint: l10n.settingsDiscordApplicationHint,
                     helperText: l10n.settingsDiscordApplicationHelp,
                     keyboardType: TextInputType.number,
                     onSubmitted: (_) => _commit(),
@@ -534,7 +534,7 @@ class AppPasswordsSection extends ConsumerWidget {
           key: const Key('app-password-label-field'),
           controller: controller,
           label: l10n.settingsAppPasswordLabel,
-          helperText: l10n.settingsAppPasswordLabelHelp,
+          hint: l10n.settingsAppPasswordLabelHint,
           autofocus: true,
         ),
         actions: [
@@ -565,7 +565,7 @@ class AppPasswordsSection extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              WaxProse(l10n.settingsAppPasswordCreatedMessage),
+              WaxProse(l10n.settingsAppPasswordCreatedBody),
               const SizedBox(height: WaxSpace.s12),
               WaxProse(
                 created.secret,
@@ -670,7 +670,8 @@ class _ConfigField {
     this.integer = false,
     this.secret = false,
     this.headers = false,
-    this.helper,
+    this.hint,
+    this.help,
   });
 
   final String key;
@@ -685,7 +686,12 @@ class _ConfigField {
   /// them down anyway.
   final bool headers;
 
-  final String? helper;
+  /// A format or an example, inside the box: one line, gone at the
+  /// first keystroke.
+  final String? hint;
+
+  /// What the box hides, such as what leaving it empty does, under it.
+  final String? help;
 
   /// Whether the field is drawn as a text area rather than one line.
   bool get multiline => headers;
@@ -709,7 +715,7 @@ Map<String, List<_ConfigField>> _kindFields(
       l10n.settingsNotifyPriority,
       optional: true,
       integer: true,
-      helper: l10n.settingsNotifyPushoverPriorityHelp,
+      hint: l10n.settingsNotifyPushoverPriorityHint,
     ),
   ],
   'ntfy': <_ConfigField>[
@@ -718,7 +724,7 @@ Map<String, List<_ConfigField>> _kindFields(
       'serverUrl',
       l10n.settingsNotifyServerUrl,
       optional: true,
-      helper: l10n.settingsNotifyNtfyServerHelp,
+      help: l10n.settingsNotifyNtfyServerHelp,
     ),
     _ConfigField(
       'accessToken',
@@ -735,7 +741,7 @@ Map<String, List<_ConfigField>> _kindFields(
       l10n.settingsNotifyPriority,
       optional: true,
       integer: true,
-      helper: l10n.settingsNotifyGotifyPriorityHelp,
+      hint: l10n.settingsNotifyGotifyPriorityHint,
     ),
   ],
   'discord': <_ConfigField>[
@@ -743,28 +749,28 @@ Map<String, List<_ConfigField>> _kindFields(
       'webhookUrl',
       l10n.settingsNotifyWebhookUrl,
       secret: true,
-      helper: l10n.settingsNotifyDiscordWebhookHelp,
+      hint: l10n.settingsNotifyDiscordWebhookHint,
     ),
   ],
   'webhook': <_ConfigField>[
     _ConfigField(
       'url',
       l10n.settingsNotifyUrl,
-      helper: l10n.settingsNotifyWebhookHelp,
+      help: l10n.settingsNotifyWebhookHelp,
     ),
     _ConfigField(
       'headers',
       l10n.settingsNotifyHeaders,
       optional: true,
       headers: true,
-      helper: l10n.settingsNotifyHeadersHelp,
+      hint: l10n.settingsNotifyHeadersHint,
     ),
     _ConfigField(
       'secret',
       l10n.settingsNotifySecret,
       optional: true,
       secret: true,
-      helper: l10n.settingsNotifySecretHelp,
+      help: l10n.settingsNotifySecretHelp,
     ),
   ],
   'apprise': <_ConfigField>[
@@ -773,15 +779,12 @@ Map<String, List<_ConfigField>> _kindFields(
       'targets',
       l10n.settingsNotifyAppriseTargets,
       optional: true,
-      helper: l10n.settingsNotifyAppriseTargetsHelp,
+      hint: l10n.settingsNotifyAppriseTargetsHint,
+      help: l10n.settingsNotifyAppriseTargetsHelp,
     ),
   ],
   'unifiedpush': <_ConfigField>[
-    _ConfigField(
-      'endpoint',
-      l10n.settingsNotifyEndpointUrl,
-      helper: l10n.settingsNotifyUnifiedPushHelp,
-    ),
+    _ConfigField('endpoint', l10n.settingsNotifyEndpointUrl),
   ],
 };
 
@@ -1110,7 +1113,8 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
                   label: field.optional
                       ? l10n.settingsNotifyFieldOptional(field.label)
                       : field.label,
-                  helperText: field.helper,
+                  hint: field.hint,
+                  helperText: field.help,
                   obscureText: field.secret,
                   maxLines: field.multiline ? 4 : 1,
                 ),
@@ -1135,7 +1139,6 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
               WaxSettingRow(
                 key: const Key('notify-target-muted'),
                 title: l10n.settingsNotifyMuted,
-                help: l10n.settingsNotifyMutedHelp,
                 control: WaxSwitch(
                   value: _muted,
                   label: l10n.settingsNotifyMuted,
@@ -1185,7 +1188,6 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
 class _TargetList extends ConsumerWidget {
   const _TargetList({
     required this.title,
-    required this.subtitle,
     required this.serverScope,
     required this.ownerIsAdmin,
     required this.targets,
@@ -1194,7 +1196,6 @@ class _TargetList extends ConsumerWidget {
   });
 
   final String title;
-  final String subtitle;
   final bool serverScope;
   final bool ownerIsAdmin;
   final AsyncValue<List<NotificationTarget>> targets;
@@ -1265,7 +1266,6 @@ class _TargetList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1275,10 +1275,6 @@ class _TargetList extends ConsumerWidget {
           spokenActionLabel: l10n.settingsNotifyTargetAddSpoken,
           semanticsId: addKey,
           onAction: () => _edit(context, ref),
-        ),
-        Text(
-          subtitle,
-          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
         ),
         const SizedBox(height: WaxSpace.s8),
         switch (targets) {
@@ -1365,7 +1361,6 @@ class PersonalNotificationTargetsSection extends ConsumerWidget {
     final user = ref.watch(authControllerProvider).value?.user;
     return _TargetList(
       title: l10n.settingsNotifyMyTitle,
-      subtitle: l10n.settingsNotifyMyBlurb,
       serverScope: false,
       ownerIsAdmin: user?.roles.contains('admin') ?? false,
       targets: ref.watch(myNotificationTargetsProvider),
@@ -1384,7 +1379,6 @@ class ServerNotificationTargetsSection extends ConsumerWidget {
     final l10n = context.l10n;
     return _TargetList(
       title: l10n.settingsNotifyServerTitle,
-      subtitle: l10n.settingsNotifyServerBlurb,
       serverScope: true,
       // The section renders behind the admin gate; the flag only
       // shapes the personal checklist, which server scope never shows.

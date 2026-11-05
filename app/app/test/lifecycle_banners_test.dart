@@ -181,10 +181,7 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.readOnlyBanner),
         findsOneWidget,
       );
-      expect(
-        find.textContaining('This server is read-only right now'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Read-only mode'), findsOneWidget);
 
       // The account marker is what makes an open client read it again.
       repo.sessionState = session(readOnly: false);

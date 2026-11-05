@@ -309,7 +309,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         child: value.hasMore
             ? EmptyState(
                 title: l10n.podcastNothingMatchesYet,
-                message: l10n.podcastNothingMatchesYetMessage(
+                message: l10n.podcastNothingMatchesYetEmptyMessage(
                   value.items.length,
                 ),
                 glyph: WaxIcons.podcasts,
@@ -322,9 +322,6 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
                 title: _narrowed
                     ? l10n.podcastNothingMatches
                     : l10n.podcastNoEpisodes,
-                message: _narrowed
-                    ? l10n.podcastNothingMatchesMessage
-                    : l10n.podcastNoEpisodesMessage,
                 glyph: WaxIcons.podcasts,
               ),
       ),

@@ -68,7 +68,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
         if (query.trim().isNotEmpty)
-          _Results(results: results, query: query)
+          _Results(results: results, query: query, isAdmin: isAdmin)
         else
           SliverPadding(
             padding: sizeClass.gutter,
@@ -78,7 +78,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 final section = sections[index];
                 return WaxOptionRow(
                   title: section.titleOf(l10n),
-                  subtitle: section.blurbOf(l10n),
                   glyph: section.glyph,
                   semanticsId: SemanticsIds.settingsSection(section.segment),
                   trailing: const WaxIcon(WaxIcons.forward, size: 16),
@@ -102,10 +101,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 /// next to it, and a result set of three rows under three headings is
 /// mostly headings.
 class _Results extends StatelessWidget {
-  const _Results({required this.results, required this.query});
+  const _Results({
+    required this.results,
+    required this.query,
+    required this.isAdmin,
+  });
 
   final List<SettingEntry> results;
   final String query;
+
+  /// Whether the server's own settings, in the admin console, are this
+  /// account's to reach: the way there is offered only to one that can.
+  final bool isAdmin;
 
   @override
   Widget build(BuildContext context) {
@@ -116,8 +123,10 @@ class _Results extends StatelessWidget {
         hasScrollBody: false,
         child: EmptyState(
           title: l10n.settingsSearchNoMatchTitle(query.trim()),
-          message: l10n.settingsSearchNoMatchMessage,
+          message: l10n.settingsSearchNoMatchEmptyMessage,
           glyph: WaxIcons.search,
+          actionLabel: isAdmin ? l10n.settingsAdminConsoleOpenTitle : null,
+          onAction: isAdmin ? () => context.go(WaxRoute.admin) : null,
         ),
       );
     }

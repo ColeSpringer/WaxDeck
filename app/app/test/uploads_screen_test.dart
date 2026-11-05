@@ -817,8 +817,7 @@ void main() {
       find.descendant(
         of: find.bySemanticsIdentifier(SemanticsIds.uploadDuplicate('up-1')),
         matching: find.text(
-          'Already in the library: Neon Meridian by The Cardinal Waves. '
-          'Its details stay as they were.',
+          'Already in the library: Neon Meridian by The Cardinal Waves',
         ),
       ),
       findsOneWidget,
@@ -929,6 +928,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('512 KB of 1.0 MB'), findsOneWidget);
+    expect(find.textContaining('may sit staged'), findsNothing);
   });
 
   testWidgets('hides upload affordances without upload rights', (tester) async {

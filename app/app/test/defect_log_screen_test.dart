@@ -6,9 +6,11 @@ import 'package:waxdeck/src/diagnostics/defect_log_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/about_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
 
@@ -36,6 +38,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.textContaining('newest first'), findsNothing);
     await tester.tap(_byId(SemanticsIds.aboutDefects));
     await tester.pumpAndSettle();
 
@@ -56,6 +59,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nothing has gone wrong'), findsOneWidget);
+    expect(
+      tester
+          .widget<EmptyState>(emptyStateTitled('Nothing has gone wrong'))
+          .message,
+      isNull,
+    );
     expect(_byId(SemanticsIds.defectsCopy), findsNothing);
   });
 

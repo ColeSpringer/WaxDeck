@@ -86,7 +86,6 @@ class RadioScreen extends ConsumerWidget {
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.radioEmptyTitle,
-              message: l10n.radioEmptyMessage,
               glyph: WaxIcons.radio,
               actionLabel: l10n.radioEmptyAction,
               onAction: () => unawaited(showAddStationDialog(context)),
@@ -209,7 +208,6 @@ class _SavedSongsDoor extends StatelessWidget {
       child: WaxOptionRow(
         glyph: WaxIcons.heart,
         title: context.l10n.radioSavedTitle,
-        subtitle: context.l10n.radioSavedDoorSubtitle,
         semanticsId: SemanticsIds.radioSavedOpen,
         onTap: () => context.go(WaxRoute.radioSaved),
       ),

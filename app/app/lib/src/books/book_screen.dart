@@ -133,7 +133,6 @@ class _BookScreenState extends ConsumerState<BookScreen> {
               _Header(book: value, onToolQueued: _watchTask),
               _Description(book: value),
               _Chapters(book: value),
-              _PartsNote(book: value),
               _Edition(book: value),
               const SizedBox(height: WaxSpace.s32),
             ],
@@ -198,6 +197,9 @@ class _Header extends ConsumerWidget {
     final l10n = context.l10n;
 
     return EntityHeader(
+      // The e2e driver reads the facts line through the header's own
+      // words, so the line stays in the header's reading order.
+      semanticsId: SemanticsIds.bookHeader,
       title: book.title,
       subtitle: book.subtitle,
       metadata: _facts(
@@ -482,36 +484,6 @@ class _Chapters extends ConsumerWidget {
             : book.durationMs);
     final length = endMs - chapter.startMs;
     return length > 0 ? formatTimecode(Duration(milliseconds: length)) : null;
-  }
-}
-
-/// The footnote a multi-file book gets, so a listener who wonders why
-/// their book is three files has the answer where they are looking.
-class _PartsNote extends StatelessWidget {
-  const _PartsNote({required this.book});
-
-  final BookDetail book;
-
-  @override
-  Widget build(BuildContext context) {
-    if (book.parts.length <= 1) return const SizedBox.shrink();
-    final colors = WaxColors.of(context);
-    final sizeClass = WaxSizeClass.of(context);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        sizeClass.gutter.horizontal / 2,
-        WaxSpace.s16,
-        sizeClass.gutter.horizontal / 2,
-        0,
-      ),
-      child: Semantics(
-        identifier: SemanticsIds.bookPartsNote,
-        child: Text(
-          context.l10n.bookPartsNote(book.parts.length),
-          style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
-        ),
-      ),
-    );
   }
 }
 
@@ -952,7 +924,6 @@ class _BookToolDialogState extends State<_BookToolDialog> {
           const SizedBox(height: WaxSpace.s12),
           WaxSettingRow(
             title: keepLabel,
-            help: merge ? l10n.bookMergeKeepHelp : l10n.bookSplitKeepHelp,
             control: WaxSwitch(
               label: keepLabel,
               value: _keep,
@@ -1110,7 +1081,6 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
           WaxSettingRow(
             key: const Key('book-settings-boost'),
             title: l10n.bookVoiceBoost,
-            help: l10n.bookVoiceBoostHelp,
             control: WaxSwitch(
               value: _voiceBoost,
               label: l10n.bookVoiceBoost,
@@ -1120,7 +1090,6 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
           WaxSettingRow(
             key: const Key('book-settings-trim'),
             title: l10n.bookTrimSilence,
-            help: l10n.bookTrimSilenceHelp,
             control: WaxSwitch(
               value: _trimSilence,
               label: l10n.bookTrimSilence,

@@ -112,7 +112,7 @@ void main() {
       status: _status(configured: false, phases: const []),
     );
 
-    expect(find.textContaining('nothing to do'), findsOneWidget);
+    expect(find.textContaining('Nothing can run'), findsOneWidget);
     await _tap(tester, SemanticsIds.enrichmentRun);
     expect(repo.runEnrichmentCalls, isEmpty);
   });
@@ -142,8 +142,8 @@ void main() {
     );
     expect(
       find.text(
-        'A pass has nothing to do: the sources that could run are switched '
-        'off. Switch one on below, or set a MusicBrainz contact and restart.',
+        'Nothing can run: switch a source on below or set a MusicBrainz '
+        'contact.',
       ),
       findsOneWidget,
     );
@@ -163,6 +163,15 @@ void main() {
     await _tap(tester, SemanticsIds.enrichmentRunMode('phases'));
     expect(_id(SemanticsIds.enrichmentPhase('identity')), findsNothing);
     expect(find.text('Release-group artwork'), findsWidgets);
+    // What a phase fills rides an info tip, not a printed line.
+    expect(find.text('Lyrics for tracks without them'), findsNothing);
+    final tip = infoTipHolding('Lyrics for tracks without them');
+    expect(tip, findsOneWidget);
+    expect(
+      hasOwnSemanticsNode(tester, tip),
+      isTrue,
+      reason: 'a tap must reach the tip on web',
+    );
     await _tap(tester, SemanticsIds.enrichmentPhase('lyrics'));
     await _tap(tester, SemanticsIds.enrichmentRun);
     expect(repo.runEnrichmentCalls.last.forcePhases, ['lyrics']);
@@ -179,16 +188,26 @@ void main() {
     tester,
   ) async {
     final repo = await _pump(tester);
-    // The catalog's built-in moves and switches like the rest, and says
-    // what it waits on.
+    // The catalog's built-in moves and switches like the rest, is marked
+    // built in with or without a contact, and switched on with none set
+    // says what it waits on.
     expect(
       find.text(
-        'Lyrics. Built into the catalog. Waits on a MusicBrainz contact.',
+        'Lyrics. Built into the catalog. Waits on a MusicBrainz contact',
       ),
       findsOneWidget,
     );
     await _tap(tester, SemanticsIds.enrichmentSourceUp('lrclib'));
     await _tap(tester, SemanticsIds.enrichmentSourceEnabled('lrclib'));
+    // Switched off, it waits on nothing; it is still built in.
+    expect(find.textContaining('Waits on a MusicBrainz contact'), findsNothing);
+    expect(
+      find.descendant(
+        of: _id(SemanticsIds.enrichmentSource('lrclib')),
+        matching: find.text('Lyrics. Built into the catalog'),
+      ),
+      findsOneWidget,
+    );
     await _tap(tester, SemanticsIds.enrichmentSourceDown('fanarttv'));
     await _tap(tester, SemanticsIds.enrichmentSourceEnabled('fanarttv'));
     await _tap(tester, SemanticsIds.enrichmentSourcesSave);
@@ -388,9 +407,8 @@ void main() {
     expect(find.text('Left owed'), findsOneWidget);
     expect(
       find.text(
-        'Stopped early: Lyrics, Release-group artwork. Every source serving '
-        'them failed three times in a row and sat out the pass; the lookups '
-        'they owe are asked once more on the next pass.',
+        'Stopped early: Lyrics, Release-group artwork. Their sources failed '
+        'three times; asked again next pass.',
       ),
       findsOneWidget,
     );
@@ -440,13 +458,47 @@ void main() {
     );
     expect(find.text('Covers, Artist portraits, Details'), findsOneWidget);
     expect(find.text('Lyrics. Built into the catalog'), findsOneWidget);
+    // Marked built in like its peer, and saying what its switch leaves
+    // running: it ranks only the genres, so identification still asks.
     expect(
       find.text(
-        'Genres. Built into the catalog. Switched off, its genres are left '
-        'out; the identity lookups still run.',
+        'Genres. Built into the catalog. Identification still asks '
+        'MusicBrainz',
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('the run modes print only the cost a label hides', (
+    tester,
+  ) async {
+    await _pump(tester);
+    expect(find.text('Everything again; slow on a large library'), findsOne);
+    expect(find.text('What has no answer yet'), findsNothing);
+    expect(find.text('Only chosen phases'), findsNothing);
+  });
+
+  testWidgets('the source order is the heading\'s tip, not a line under it', (
+    tester,
+  ) async {
+    await _pump(tester);
+    expect(find.text('Sources are asked in this order.'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is SectionHeader && w.title == 'Sources',
+        ),
+        matching: infoTipHolding('Sources are asked in this order.'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('an empty cache is said by its zero counts alone', (
+    tester,
+  ) async {
+    await _pump(tester);
+    expect(find.text('Nothing is cached yet.'), findsNothing);
   });
 
   testWidgets('a status read that fails keeps the page and the edits', (

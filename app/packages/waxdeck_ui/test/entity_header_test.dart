@@ -59,6 +59,40 @@ void main() {
     );
   });
 
+  testWidgets('the header reads its lines in the order it draws them', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await _pump(
+      tester,
+      EntityHeader(
+        title: 'The Harbour Tapes',
+        subtitle: 'Read by someone',
+        metadata: '1975 · 3 parts',
+        description: 'People line',
+        semanticsId: 'header',
+        links: <EntityHeaderLink>[
+          EntityHeaderLink(
+            label: 'by An Author',
+            semanticsId: 'author',
+            onPressed: () {},
+          ),
+        ],
+        actions: <WaxAction>[
+          WaxAction(label: 'Play', semanticsId: 'play', onPressed: () {}),
+        ],
+      ),
+    );
+    // One node for the words, title to people line, with the links and
+    // the actions as their own nodes: nothing in between is lifted out
+    // of its place.
+    expect(
+      tester.getSemantics(find.bySemanticsIdentifier('header')).label,
+      'The Harbour Tapes\nRead by someone\n1975 · 3 parts\nPeople line',
+    );
+    semantics.dispose();
+  });
+
   testWidgets('a header with nothing to do draws no bar', (tester) async {
     await _pump(tester, const EntityHeader(title: 'Series'));
     expect(find.byType(WaxActionBar), findsNothing);

@@ -9,13 +9,9 @@
   "@searchAddStation": {
     "description": "Button on a directory result that adds that station to this server."
   },
-  "searchDirectoryDegraded": "Could not reach the directory, so only your own stations are listed. Adding a station by its stream URL still works.",
+  "searchDirectoryDegraded": "Directory unreachable; add a station by URL in Radio",
   "@searchDirectoryDegraded": {
-    "description": "Banner under the stations this server already has, when the public directory could not be reached."
-  },
-  "searchDirectoryErrorDetail": "Adding a station by its stream URL still works.",
-  "@searchDirectoryErrorDetail": {
-    "description": "The way out offered beside the station-directory error: a stream URL needs no directory."
+    "description": "Banner under the stations this server already has, when the public directory could not be reached: the cause, and where the way out is (Radio's add-station dialog takes a stream URL). Its one action is Retry."
   },
   "searchDirectoryErrorTitle": "Could not reach the directory",
   "@searchDirectoryErrorTitle": {
@@ -25,17 +21,9 @@
   "@searchDirectoryOverline": {
     "description": "Overline marking the results that come from a public directory rather than from this server."
   },
-  "searchDirectoryPromptMessage": "Type a station name to look it up in the public directory, then add it to this server.",
-  "@searchDirectoryPromptMessage": {
-    "description": "Empty state under the Radio chip, saying what typing will do."
-  },
   "searchDirectoryPromptTitle": "Search the station directory",
   "@searchDirectoryPromptTitle": {
     "description": "Empty state under the Radio chip before enough has been typed to look anything up."
-  },
-  "searchEmptyMessage": "Try searching for an artist, show, or book.",
-  "@searchEmptyMessage": {
-    "description": "Empty state of the search screen with nothing typed."
   },
   "searchEmptyTitle": "Search your library",
   "@searchEmptyTitle": {
@@ -83,10 +71,6 @@
   "@searchLibraryOverline": {
     "description": "Overline marking the results that are already on this server."
   },
-  "searchNoStationsMessage": "The directory lists nothing under that name.",
-  "@searchNoStationsMessage": {
-    "description": "Empty state when the station directory matched nothing."
-  },
   "searchNoStationsTitle": "No stations for \"{query}\"",
   "@searchNoStationsTitle": {
     "description": "Empty state when the station directory matched nothing. {query} is what was typed.",
@@ -96,10 +80,6 @@
         "example": "jazz fm"
       }
     }
-  },
-  "searchNothingMessage": "Check the spelling or try fewer words.",
-  "@searchNothingMessage": {
-    "description": "Empty state when a library search matched nothing."
   },
   "searchNothingTitle": "Nothing for \"{query}\"",
   "@searchNothingTitle": {
@@ -111,9 +91,9 @@
       }
     }
   },
-  "searchPodcastDirectoryDegraded": "The podcast directory did not answer, so only your own episodes are listed. Subscribing by feed URL still works.",
+  "searchPodcastDirectoryDegraded": "Podcast directory unreachable; subscribe by feed URL in Podcasts",
   "@searchPodcastDirectoryDegraded": {
-    "description": "Banner beside the library's own episodes when the public podcast directory could not be reached."
+    "description": "Banner beside the library's own episodes when the public podcast directory could not be reached: the cause, and where the way out is (Podcasts' subscribe dialog takes a feed URL). Its one action is Retry."
   },
   "searchRecentOverline": "Recent",
   "@searchRecentOverline": {
@@ -181,7 +161,7 @@
   "@searchTopResult": {
     "description": "Heading over the one artist or album whose name is the search, shown above the result groups."
   },
-  "searchTruncated": "There are more matches than fit here. Refine your search to narrow them down.",
+  "searchTruncated": "More matches exist; refine your search",
   "@searchTruncated": {
     "description": "Note under the results when the server capped how many it answered with."
   },

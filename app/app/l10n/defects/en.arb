@@ -21,10 +21,6 @@
   "@defectsCopySpoken": {
     "description": "What the Copy button is called for a screen reader, where the surrounding heading is not in earshot."
   },
-  "defectsEmptyMessage": "Errors the app catches on its own turn up here, so a bug report can carry them. An empty list is the good outcome.",
-  "@defectsEmptyMessage": {
-    "description": "Empty state of the defect log."
-  },
   "defectsEmptyTitle": "Nothing has gone wrong",
   "@defectsEmptyTitle": {
     "description": "Empty state of the defect log."

@@ -68,13 +68,6 @@ class _IndexCopy {
     null => l10n.musicIndexEmptyTitle(dimension.name),
   };
 
-  /// None for books: an empty books index means a library with no books,
-  /// which its title already says.
-  String? get emptyMessage => switch (book) {
-    _? => null,
-    null => l10n.musicIndexEmptyMessage(dimension.name),
-  };
-
   String get loadError => switch (book) {
     final book? => l10n.booksIndexLoadError(book.name),
     null => l10n.musicIndexLoadError(dimension.name),
@@ -381,11 +374,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
     if (state.buckets.isEmpty && !state.hasFloor) {
       return SliverFillRemaining(
         hasScrollBody: false,
-        child: EmptyState(
-          title: copy.emptyTitle,
-          message: copy.emptyMessage,
-          glyph: dimension.glyph,
-        ),
+        child: EmptyState(title: copy.emptyTitle, glyph: dimension.glyph),
       );
     }
     // A re-anchored window's earlier buckets are unreachable by

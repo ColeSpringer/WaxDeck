@@ -204,10 +204,7 @@ class HealthScreen extends ConsumerWidget {
       children: <Widget>[
         _ScoreHeadline(summary: summary),
         const SizedBox(height: WaxSpace.s32),
-        SectionHeader(
-          title: context.l10n.healthRulesTitle,
-          overline: context.l10n.healthRulesOverline,
-        ),
+        SectionHeader(title: context.l10n.healthRulesTitle),
         _RuleTable(
           rules: summary.rules,
           // The fixes are an administrator's; everyone reads the standing.
@@ -486,15 +483,11 @@ class _DuplicatesSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionHeader(
-          title: l10n.healthDuplicatesTitle,
-          overline: l10n.healthDuplicatesOverline,
-        ),
+        SectionHeader(title: l10n.healthDuplicatesTitle),
         switch (duplicates) {
           AsyncData(:final value) when value.isEmpty => EmptyState(
             glyph: WaxIcons.success,
             title: l10n.healthDuplicatesEmptyTitle,
-            message: l10n.healthDuplicatesEmptyMessage,
           ),
           AsyncData(:final value) => WaxTable<DuplicateGroup>(
             rows: value,
@@ -614,7 +607,6 @@ class _UpgradesSection extends ConsumerWidget {
           AsyncData(:final value) when value.isEmpty => EmptyState(
             glyph: WaxIcons.success,
             title: l10n.healthUpgradesEmptyTitle,
-            message: l10n.healthUpgradesEmptyMessage,
           ),
           AsyncData(:final value) => WaxTable<UpgradeGroup>(
             rows: value,
@@ -866,7 +858,6 @@ class HealthIssuesScreen extends ConsumerWidget {
               child: EmptyState(
                 glyph: WaxIcons.success,
                 title: context.l10n.healthIssuesEmptyTitle,
-                message: context.l10n.healthIssuesEmptyMessage,
               ),
             ),
             builder: (context, value) => SliverPadding(

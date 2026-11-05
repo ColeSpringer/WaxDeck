@@ -36,7 +36,6 @@ class MetadataChaptersSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
     // The part count is the book read's; the editor's own read does not
     // carry it. Absent (still loading, or failed) draws nothing: a
@@ -62,6 +61,7 @@ class MetadataChaptersSection extends ConsumerWidget {
                 child: SectionHeader(
                   title: l10n.bookChaptersTitle,
                   overline: l10n.bookChaptersOverline(rows.length),
+                  info: l10n.bookChapterEditorHelp,
                 ),
               ),
               Builder(
@@ -82,10 +82,6 @@ class MetadataChaptersSection extends ConsumerWidget {
                 },
               ),
             ],
-          ),
-          WaxProse(
-            l10n.bookChapterEditorHelp,
-            style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
           ),
           const SizedBox(height: WaxSpace.s12),
           for (var i = 0; i < rows.length; i++) ...<Widget>[

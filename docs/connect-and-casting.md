@@ -59,8 +59,9 @@ Two settings shape that stream, both under Settings, Playback, and both
 on your account rather than on one device - the server re-renders a cast
 queue whenever you edit it, and it does that from what it holds. On a
 server without the streaming engine there is no such stream, so neither
-is offered and their rows say why; while the engine is unreachable they
-stay, and apply once it answers.
+is offered: they show disabled, and one line under their group's heading
+says why. While the engine is unreachable they stay live, and apply once
+it answers.
 
 - **Crossfade** fades each seam instead of butting the tracks
   together. Zero is the gapless default.
@@ -82,9 +83,9 @@ because nothing else needs it.
 What it does is play a music queue through the same rendering a cast
 speaker gets: one stream for the whole queue, seams the server cut,
 crossfade and levelling from the two settings above. So the switch
-needs the streaming engine, and says so on its own row when a server
-has none. Off by default, because it asks the server for work an
-ordinary listen does not.
+needs the streaming engine; on a server without one it shows disabled,
+with the line under its group's heading saying why. Off by default,
+because it asks the server for work an ordinary listen does not.
 
 Only music, and only what follows it: a podcast or an audiobook in the
 queue plays the ordinary way and ends the rendered run there. Editing

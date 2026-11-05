@@ -240,7 +240,6 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
     return WaxSettingRow(
       key: const Key('migrate-account-row'),
       title: l10n.adminMigrateAccountLabel,
-      help: l10n.adminMigrateAccountHelp,
       control: WaxChoice<String?>(
         key: const Key(SemanticsIds.migrateAccount),
         value: picked,
@@ -462,7 +461,6 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                   WaxSettingRow(
                     key: const Key('migrate-stars'),
                     title: l10n.adminMigrateStarsTitle,
-                    help: l10n.adminMigrateStarsHelp,
                     control: WaxSwitch(
                       value: _stars,
                       label: l10n.adminMigrateStarsTitle,
@@ -473,7 +471,6 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                     WaxSettingRow(
                       key: const Key('migrate-ratings'),
                       title: l10n.adminMigrateRatingsTitle,
-                      help: l10n.adminMigrateRatingsHelp,
                       control: WaxSwitch(
                         value: _ratings,
                         label: l10n.adminMigrateRatingsTitle,
@@ -483,7 +480,6 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                   WaxSettingRow(
                     key: const Key('migrate-history'),
                     title: l10n.adminMigrateHistoryTitle,
-                    help: l10n.adminMigrateHistoryHelp,
                     control: WaxSwitch(
                       value: _history,
                       label: l10n.adminMigrateHistoryTitle,
@@ -494,7 +490,6 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                     WaxSettingRow(
                       key: const Key('migrate-progress'),
                       title: l10n.adminMigrateProgressTitle,
-                      help: l10n.adminMigrateProgressHelp,
                       control: WaxSwitch(
                         value: _progress,
                         label: l10n.adminMigrateProgressTitle,

@@ -102,11 +102,6 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
             title: playlist.isSmart
                 ? l10n.playlistSmartEmptyTitle
                 : l10n.playlistEmptyTitle,
-            message: playlist.isSmart
-                ? l10n.playlistSmartEmptyMessage
-                : view.isEditable
-                ? l10n.playlistEditableEmptyMessage
-                : l10n.playlistForeignEmptyMessage,
             glyph: WaxIcons.playlists,
           ),
         )
@@ -202,7 +197,6 @@ class _StatusChips extends ConsumerWidget {
         ? ref.watch(playlistSyncProvider(view.playlist.pid)).value
         : null;
     if (rule == null && binding == null) return const SizedBox.shrink();
-    final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
     final l10n = context.l10n;
     final syncChip = binding == null
@@ -281,22 +275,12 @@ class _StatusChips extends ConsumerWidget {
         sizeClass.gutter.horizontal / 2,
         WaxSpace.s8,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Semantics(
-            identifier: SemanticsIds.playlistRuleSummary,
-            container: true,
-            explicitChildNodes: true,
-            label: l10n.playlistRulesSpoken(chips.join(', ')),
-            child: summary,
-          ),
-          const SizedBox(height: WaxSpace.s8),
-          Text(
-            l10n.playlistRulesLive,
-            style: WaxType.caption.copyWith(color: colors.textTertiary),
-          ),
-        ],
+      child: Semantics(
+        identifier: SemanticsIds.playlistRuleSummary,
+        container: true,
+        explicitChildNodes: true,
+        label: l10n.playlistRulesSpoken(chips.join(', ')),
+        child: summary,
       ),
     );
   }

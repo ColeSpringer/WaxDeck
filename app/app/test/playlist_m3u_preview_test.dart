@@ -372,8 +372,7 @@ void main() {
     await tester.tap(_id(SemanticsIds.playlistM3uCheck));
     await tester.pump();
 
-    const checking =
-        'Checking each line of the file. A long one takes a while.';
+    const checking = 'Checking file';
     expect(find.text(checking), findsOneWidget);
     expect(find.byType(SkeletonShapes), findsOneWidget);
     // The one spinner is the pressed button's own, busy where it stood.
@@ -411,10 +410,7 @@ void main() {
     await _tap(tester, SemanticsIds.playlistM3uCheck);
     await tester.tap(_id(SemanticsIds.playlistM3uImport));
     await tester.pump();
-    expect(
-      find.text('Importing the playlist. A long file takes a while.'),
-      findsOneWidget,
-    );
+    expect(find.text('Importing playlist'), findsOneWidget);
     // The check's lines are already up, so the wait is on the button.
     expect(find.byType(SkeletonShapes), findsNothing);
     expect(

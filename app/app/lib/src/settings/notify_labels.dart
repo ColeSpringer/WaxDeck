@@ -13,8 +13,13 @@ import '../l10n/l10n.dart';
 String notifyEventTitle(AppLocalizations l10n, NotifyEvent event) =>
     _title(l10n, event.name) ?? event.name;
 
-String notifyEventHelp(AppLocalizations l10n, NotifyEvent event) =>
-    _help(l10n, event.name) ?? event.description;
+/// The line under an event's switch: the events whose title leaves
+/// something out draw one ([_help] marks them), a known event the title
+/// says plainly draws none, and one this client does not know falls back
+/// to the server's own words.
+String? notifyEventHelp(AppLocalizations l10n, NotifyEvent event) =>
+    _help(l10n, event.name)?.checklistLine ??
+    (_title(l10n, event.name) == null ? event.description : null);
 
 /// The same table by wire token, for a surface holding an event name
 /// without the catalogue row it came from: an inbox row carries the
@@ -23,7 +28,7 @@ String notifyTokenTitle(AppLocalizations l10n, String token, String fallback) =>
     _title(l10n, token) ?? fallback;
 
 String notifyTokenHelp(AppLocalizations l10n, String token, String fallback) =>
-    _help(l10n, token) ?? fallback;
+    _help(l10n, token)?.text ?? fallback;
 
 String? _title(AppLocalizations l, String token) => switch (token) {
   'backup-completed' => l.notifBackupCompletedTitle,
@@ -45,22 +50,37 @@ String? _title(AppLocalizations l, String token) => switch (token) {
   _ => null,
 };
 
-String? _help(AppLocalizations l, String token) => switch (token) {
-  'backup-completed' => l.notifBackupCompletedHelp,
-  'backup-failed' => l.notifBackupFailedHelp,
-  'catalog-reset' => l.notifCatalogResetHelp,
-  'episode-arrived' => l.notifEpisodeArrivedHelp,
-  'episode-downloaded' => l.notifEpisodeDownloadedHelp,
-  'feed-disabled' => l.notifFeedDisabledHelp,
-  'gpodder-device-removed' => l.notifGpodderDeviceRemovedHelp,
-  'health-fix-finished' => l.notifHealthFixFinishedHelp,
-  'import-completed' => l.notifImportCompletedHelp,
-  'job-failed' => l.notifJobFailedHelp,
-  'job-finished' => l.notifJobFinishedHelp,
-  'playlist-synced' => l.notifPlaylistSyncedHelp,
-  'review-ready' => l.notifReviewReadyHelp,
-  'signup-requested' => l.notifSignupRequestedHelp,
-  'subscription-failed' => l.notifSubscriptionFailedHelp,
-  'tool-task-failed' => l.notifToolTaskFailedHelp,
+_Help? _help(AppLocalizations l, String token) => switch (token) {
+  'backup-completed' => _Help(l.notifBackupCompletedHelp, drawn: false),
+  'backup-failed' => _Help(l.notifBackupFailedHelp, drawn: false),
+  'catalog-reset' => _Help(l.notifCatalogResetHelp, drawn: true),
+  'episode-arrived' => _Help(l.notifEpisodeArrivedHelp, drawn: false),
+  'episode-downloaded' => _Help(l.notifEpisodeDownloadedHelp, drawn: false),
+  'feed-disabled' => _Help(l.notifFeedDisabledHelp, drawn: false),
+  'gpodder-device-removed' => _Help(
+    l.notifGpodderDeviceRemovedHelp,
+    drawn: true,
+  ),
+  'health-fix-finished' => _Help(l.notifHealthFixFinishedHelp, drawn: false),
+  'import-completed' => _Help(l.notifImportCompletedHelp, drawn: true),
+  'job-failed' => _Help(l.notifJobFailedHelp, drawn: false),
+  'job-finished' => _Help(l.notifJobFinishedHelp, drawn: true),
+  'playlist-synced' => _Help(l.notifPlaylistSyncedHelp, drawn: true),
+  'review-ready' => _Help(l.notifReviewReadyHelp, drawn: false),
+  'signup-requested' => _Help(l.notifSignupRequestedHelp, drawn: false),
+  'subscription-failed' => _Help(l.notifSubscriptionFailedHelp, drawn: true),
+  'tool-task-failed' => _Help(l.notifToolTaskFailedHelp, drawn: true),
   _ => null,
 };
+
+/// An event's sentence, and whether the checklist draws it under the
+/// switch. The inbox uses the sentence either way, as the body of a row
+/// the server sent none for.
+class _Help {
+  const _Help(this.text, {required this.drawn});
+
+  final String text;
+  final bool drawn;
+
+  String? get checklistLine => drawn ? text : null;
+}

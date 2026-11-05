@@ -1,17 +1,13 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
-  "uploadsAcquireQueued": "Downloading. It will appear in the review queue when ready.",
+  "uploadsAcquireQueued": "Downloading; appears in review when ready",
   "@uploadsAcquireQueued": {
     "description": "Snackbar after asking the server to download from a URL."
   },
   "uploadsAcquireTasks": "Tasks",
   "@uploadsAcquireTasks": {
     "description": "Action on the downloading snackbar, opening the background-task screen."
-  },
-  "uploadsAddOverline": "Both routes land in the review queue",
-  "@uploadsAddOverline": {
-    "description": "Overline of the add sheet, saying nothing is filed without a decision."
   },
   "uploadsAddTitle": "Add to the library",
   "@uploadsAddTitle": {
@@ -27,7 +23,7 @@
       }
     }
   },
-  "uploadsDiscardBody": "\"{fileName}\" and its staged bytes are removed, and the space they hold against your quota is released.",
+  "uploadsDiscardBody": "\"{fileName}\" is removed and its quota space freed.",
   "@uploadsDiscardBody": {
     "description": "Body of the discard confirmation. {fileName} is the file's own name.",
     "placeholders": {
@@ -101,7 +97,7 @@
   "@uploadsDuplicateId": {
     "description": "How a duplicate matched: the file's tags carry the same MusicBrainz recording id as an item in the library. Lower case: it sits in brackets."
   },
-  "uploadsDuplicateJoined": "Already in the library: {what}. Its details stay as they were.",
+  "uploadsDuplicateJoined": "Already in the library: {what}",
   "@uploadsDuplicateJoined": {
     "description": "Note on an imported upload whose audio the library already held: the file was added to that item as a copy (or nothing was added), and the item kept its details. {what} names the item.",
     "placeholders": {
@@ -118,14 +114,6 @@
   "uploadsDuplicateUnseen": "an item in a library you cannot open",
   "@uploadsDuplicateUnseen": {
     "description": "What a duplicate matched when it sits in a library the uploader cannot see, so its title is not theirs to read."
-  },
-  "uploadsEmptyMessage": "Pick files from the bar above, or drop them anywhere on this page.",
-  "@uploadsEmptyMessage": {
-    "description": "Empty state of the uploads screen for an account that may upload."
-  },
-  "uploadsEmptyNoPermission": "This account cannot upload. Ask an administrator for the permission.",
-  "@uploadsEmptyNoPermission": {
-    "description": "Empty state of the uploads screen for an account without the upload right."
   },
   "uploadsEmptyTitle": "No uploads yet",
   "@uploadsEmptyTitle": {
@@ -195,17 +183,9 @@
   "@uploadsFromUrlMusic": {
     "description": "Title of the add-from-URL dialog opened from the music section, which already knows the kind."
   },
-  "uploadsFromUrlSubtitle": "A video, a playlist, or a channel",
-  "@uploadsFromUrlSubtitle": {
-    "description": "Second line of the add-from-URL row, naming what a source URL may point at."
-  },
   "uploadsGroupingAlbum": "One album",
   "@uploadsGroupingAlbum": {
     "description": "Grouping choice: every file is part of one release."
-  },
-  "uploadsGroupingAlbumHelp": "Review all files as one release",
-  "@uploadsGroupingAlbumHelp": {
-    "description": "Help under the one-album grouping choice."
   },
   "uploadsGroupingAuto": "Auto-detect",
   "@uploadsGroupingAuto": {
@@ -223,10 +203,6 @@
   "@uploadsGroupingBookEach": {
     "description": "Grouping choice for an audiobook: every file is a book of its own."
   },
-  "uploadsGroupingBookEachHelp": "Every file is a book of its own",
-  "@uploadsGroupingBookEachHelp": {
-    "description": "Help under the separate-books grouping choice."
-  },
   "uploadsGroupingBookOne": "{count, plural, =1{One book} other{One book in {count} parts}}",
   "@uploadsGroupingBookOne": {
     "description": "Grouping choice for an audiobook: every file is a part of one book.",
@@ -237,10 +213,6 @@
       }
     }
   },
-  "uploadsGroupingBookOneHelp": "Parts of one book, in folder and track order",
-  "@uploadsGroupingBookOneHelp": {
-    "description": "Help under the one-book grouping choice."
-  },
   "uploadsGroupingTitle": "How should these files be grouped?",
   "@uploadsGroupingTitle": {
     "description": "Heading over the grouping choice for a multi-file upload."
@@ -249,27 +221,23 @@
   "@uploadsGroupingTracks": {
     "description": "Grouping choice: every file stands on its own."
   },
-  "uploadsGroupingTracksHelp": "Review every file on its own",
-  "@uploadsGroupingTracksHelp": {
-    "description": "Help under the separate-tracks grouping choice."
-  },
   "uploadsIdentifyMusic": "Identify against MusicBrainz",
   "@uploadsIdentifyMusic": {
     "description": "The switch that matches music against the MusicBrainz catalogue before filing it. MusicBrainz is a service name and stays."
   },
-  "uploadsIdentifyMusicHelp": "Matches it, then waits for your decision. Off adds it with the tags it has",
+  "uploadsIdentifyMusicHelp": "Matches it against MusicBrainz; off files it with the tags it has, unreviewed",
   "@uploadsIdentifyMusicHelp": {
-    "description": "Help under the identify switch for music."
+    "description": "Info on the identify switch for music."
   },
   "uploadsIdentifyOther": "Review before adding",
   "@uploadsIdentifyOther": {
     "description": "The same switch for a book, where there is no catalogue to match against, so all it decides is whether the submission waits."
   },
-  "uploadsIdentifyOtherHelp": "Waits for your decision. Off adds it with the tags it has",
+  "uploadsIdentifyOtherHelp": "Waits for your review; off files it with the tags it has",
   "@uploadsIdentifyOtherHelp": {
-    "description": "Help under the review-before-adding switch."
+    "description": "Info on the review-before-adding switch."
   },
-  "uploadsIdentifying": "{count, plural, =1{Uploaded 1 file. It's being identified and will appear once it clears review} other{Uploaded {count} files. They're being identified and will appear once they clear review}}",
+  "uploadsIdentifying": "{count, plural, =1{Uploaded 1 file; identifying it} other{Uploaded {count} files; identifying them}}",
   "@uploadsIdentifying": {
     "description": "Raised after an identify-on upload finishes: what arrived is in the review queue rather than on the shelves, and this is what says so. Counts what actually uploaded, not what was picked.",
     "placeholders": {
@@ -287,9 +255,9 @@
   "@uploadsLibrary": {
     "description": "Accessible name of the picker choosing which library an upload or download is filed under. Shown only where the server offers more than one for the chosen medium."
   },
-  "uploadsLibraryHelp": "Which library's settings apply. Where the files are placed is the server's own choice.",
+  "uploadsLibraryHelp": "Picks whose settings apply, not where files go",
   "@uploadsLibraryHelp": {
-    "description": "Help line under the library picker, saying what the choice does. It selects the library whose matching and auto-apply settings govern the import, not the folder the file lands in."
+    "description": "Info tip beside the upload dialog's library picker: it chooses the library whose matching and singles settings apply; where the files land is the server's choice."
   },
   "uploadsLoadError": "Could not load uploads",
   "@uploadsLoadError": {
@@ -307,6 +275,10 @@
   "@uploadsMediaMusic": {
     "description": "Medium choice on the upload dialogs."
   },
+  "uploadsNoPermissionEmptyMessage": "Uploading needs a permission; ask an administrator.",
+  "@uploadsNoPermissionEmptyMessage": {
+    "description": "Line under the uploads screen's empty title for an account without the upload right: the cause and the next step."
+  },
   "uploadsOpenReview": "Open review entry",
   "@uploadsOpenReview": {
     "description": "Opens the review queue on the entry this upload made."
@@ -323,25 +295,9 @@
   "@uploadsPickFolderFailed": {
     "description": "Shown when the folder pick itself failed - the device has no documents picker, or the storage provider errored while listing - as opposed to a folder that merely held nothing usable."
   },
-  "uploadsPickFolderSubtitle": "Keeps your folder grouping, disc subfolders and all",
-  "@uploadsPickFolderSubtitle": {
-    "description": "Second line of the upload-folder row. Names what the folder pick does that the file pick does not - the hierarchy rides along as the grouping hint - because the two rows otherwise read as the same thing."
-  },
-  "uploadsPickSubtitle": "Tracks you choose by hand, grouped by their tags",
-  "@uploadsPickSubtitle": {
-    "description": "Second line of the upload-files row in the add sheet. Contrasts with the folder row: picked files carry no folder hierarchy, so grouping falls back to tags."
-  },
   "uploadsQuotaFull": "You already have as much waiting as your limit allows. Import or discard some in Past uploads, then try again.",
   "@uploadsQuotaFull": {
     "description": "Why a picked file was not uploaded: the uploader's staged sessions already fill their allowance (`quota-exceeded`). Shown as {reason} in uploadsFileFailed. 'Past uploads' is the uploads screen's list of sessions."
-  },
-  "uploadsQuotaHelp": "This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.",
-  "@uploadsQuotaHelp": {
-    "description": "Under the staging figure, saying what the cap is a cap on."
-  },
-  "uploadsQuotaHelpUncapped": "Staged files are held until they are imported or discarded.",
-  "@uploadsQuotaHelpUncapped": {
-    "description": "Under the staging figure on a server with no cap."
   },
   "uploadsQuotaOf": "{used} of {cap}",
   "@uploadsQuotaOf": {
@@ -386,10 +342,6 @@
   "uploadsRetry": "Retry upload",
   "@uploadsRetry": {
     "description": "Accessible name of the control that sends a failed upload again."
-  },
-  "uploadsSessionsSubtitle": "Quota, what is still going up, and what to retry",
-  "@uploadsSessionsSubtitle": {
-    "description": "Second line of the row in the add sheet that opens the upload sessions list."
   },
   "uploadsSessionsTitle": "Past uploads",
   "@uploadsSessionsTitle": {

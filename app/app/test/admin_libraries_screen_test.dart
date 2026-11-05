@@ -104,6 +104,19 @@ void main() {
     expect(find.text('/srv/media/audiobooks'), findsWidgets);
   });
 
+  testWidgets('the managed switch says it lets WaxDeck move files there', (
+    tester,
+  ) async {
+    final container = _container(FakeRepository());
+    await _pump(tester, _host(container));
+    // Chosen once, here: the table offers no switch for it afterwards.
+    expect(find.bySemanticsIdentifier(SemanticsIds.libraryManaged), findsOne);
+    expect(
+      find.text('Uploads and Organize write and move files here; set once'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a library made managed is one Organize counts at once', (
     tester,
   ) async {
@@ -269,10 +282,12 @@ void main() {
     expect(repo.setLibraryFolderFallbackCalls, [
       (libraryPid: 'lb-1', on: true),
     ]);
+    // The rest take it on a rescan that re-reads unchanged files, which
+    // a plain Rescan does not: the message names that switch.
     expect(
       shellMessageText(container.read(shellMessengerProvider)),
-      'Applies to new files now. Re-read unchanged files in Rescan to apply '
-      'it to files already scanned.',
+      'Applies to new files; for the rest, Rescan with Re-read unchanged '
+      'files.',
     );
   });
 
@@ -341,10 +356,8 @@ void main() {
     await choose('Books');
     expect(
       find.text(
-        'Every audio file in spoken becomes a book on the scan this '
-        'starts: parts sharing an album and author are one book, and '
-        'numbered parts with no album join the book their folder holds. '
-        'Items whose kind was set by hand keep it.',
+        'Every audio file in spoken becomes a book: parts sharing an album '
+        'and author join one book. Hand-set kinds are kept.',
       ),
       findsOneWidget,
     );

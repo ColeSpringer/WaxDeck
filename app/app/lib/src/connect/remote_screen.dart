@@ -40,7 +40,7 @@ class RemoteControlScreen extends ConsumerWidget {
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.devicesNothingElsewhere,
-              message: l10n.devicesNothingElsewhereMessage,
+              message: l10n.devicesNothingElsewhereEmptyMessage,
               glyph: WaxIcons.cast,
             ),
           ),

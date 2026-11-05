@@ -53,17 +53,9 @@
   "@statsCardFormatSquare": {
     "description": "The square card shape, meant for a feed post or a message."
   },
-  "statsCardFormatSquareBlurb": "For a post or a message",
-  "@statsCardFormatSquareBlurb": {
-    "description": "Under the square card, saying what it is for."
-  },
   "statsCardFormatStory": "Story",
   "@statsCardFormatStory": {
     "description": "The tall card shape, meant for a full-screen story post."
-  },
-  "statsCardFormatStoryBlurb": "For a full-screen story",
-  "@statsCardFormatStoryBlurb": {
-    "description": "Under the tall card, saying what it is for."
   },
   "statsCardMostPlayed": "MOST PLAYED",
   "@statsCardMostPlayed": {
@@ -77,10 +69,6 @@
   "@statsCardNoExport": {
     "description": "Banner on a platform with nowhere to save or share a picture."
   },
-  "statsCardOverline": "Your year, cut to shape",
-  "@statsCardOverline": {
-    "description": "Overline of the share-card sheet."
-  },
   "statsCardPreviewSpoken": "{format, select, story{Story card, for a full-screen story} square{Square card, for a post or a message} other{Share card}}",
   "@statsCardPreviewSpoken": {
     "description": "A card preview read as a whole: which shape it is and what it is for. One sentence per shape rather than a name and a blurb joined, because only English can lower-case the second half into the first.",
@@ -91,9 +79,9 @@
       }
     }
   },
-  "statsCardPrivacy": "Cards are drawn here and never sent anywhere: what happens next is up to you.",
-  "@statsCardPrivacy": {
-    "description": "Under the card previews, saying the drawing is local."
+  "statsCardPrivacyHelp": "Drawn here and never sent anywhere; sharing is your choice.",
+  "@statsCardPrivacyHelp": {
+    "description": "Info tip on the share cards heading: the card is drawn on this device and nothing is uploaded; where it goes is the listener's call."
   },
   "statsCardSaveUnsupported": "This build cannot save images",
   "@statsCardSaveUnsupported": {
@@ -185,7 +173,7 @@
   "@statsDoorYearInReviewSubtitle": {
     "description": "Second line of the row opening the year's recap."
   },
-  "statsEmptyMessage": "Pick a longer range, or go and play something.",
+  "statsEmptyMessage": "Pick a longer range.",
   "@statsEmptyMessage": {
     "description": "Empty state of the listening chart."
   },
@@ -258,10 +246,6 @@
   "statsLogAllClients": "All clients",
   "@statsLogAllClients": {
     "description": "The listen log's client filter with nothing chosen: every reporting device."
-  },
-  "statsLogEmptyMessage": "Every session a client finishes lands here, whichever device reported it.",
-  "@statsLogEmptyMessage": {
-    "description": "Empty state of the listen log."
   },
   "statsLogEmptyTitle": "No listens recorded yet",
   "@statsLogEmptyTitle": {
@@ -392,16 +376,6 @@
   "statsTitle": "Listening stats",
   "@statsTitle": {
     "description": "Title of the screen showing what this listener has played."
-  },
-  "statsTopEmptyMessage": "{kind, select, artists{A longer range, or an artist you have actually played.} albums{A longer range, or an album you have actually played.} genres{A longer range, or a genre you have actually played.} shows{A longer range, or a show you have actually played.} stations{A longer range, or a station you have actually tuned in.} other{A longer range, or something you have actually played.}}",
-  "@statsTopEmptyMessage": {
-    "description": "Empty state of a ranked list, naming what it lists. Whole sentences per kind rather than a noun in a frame, because the article follows the noun's gender.",
-    "placeholders": {
-      "kind": {
-        "type": "String",
-        "example": "artists"
-      }
-    }
   },
   "statsTopEmptyTitle": "Nothing here for this range",
   "@statsTopEmptyTitle": {

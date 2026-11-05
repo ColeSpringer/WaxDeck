@@ -365,27 +365,6 @@ void main() {
       await endEditedPlayback(tester, container);
     });
 
-    testWidgets('a rolling window says it is one', (tester) async {
-      final container = await _pump(tester);
-      container.read(queueControllerProvider.notifier).playNow(
-        ['tr-1', 'tr-2'],
-        source: const QueueSource(
-          kind: QueueSourceKind.genre,
-          label: 'Jazz',
-          pid: 'ge-1',
-          rolling: true,
-          cursor: 'c-1',
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        find.textContaining('A window over a larger scope'),
-        findsOneWidget,
-      );
-      await endEditedPlayback(tester, container);
-    });
-
     testWidgets('an earlier session can be put back from here', (tester) async {
       final repository = FakeRepository(items: _tracks)
         ..sessionHistory = <PlaybackSessionHistoryEntry>[

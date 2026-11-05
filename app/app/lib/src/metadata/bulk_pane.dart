@@ -269,7 +269,7 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
                 const SizedBox(height: WaxSpace.s8),
                 WaxSettingRow(
                   title: l10n.metadataWriteBackTitle,
-                  help: l10n.metadataWriteBackHelp,
+                  info: l10n.metadataWriteBackHelp,
                   control: WaxSwitch(
                     label: l10n.metadataWriteBackTitle,
                     value: _writeBack,
@@ -281,7 +281,6 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
                 ),
                 WaxSettingRow(
                   title: l10n.metadataBulkLockedPolicy,
-                  help: l10n.metadataBulkLockedPolicyHelp,
                   control: WaxChoice<BulkLockedPolicy>(
                     label: l10n.metadataBulkLockedPolicy,
                     value: _policy,

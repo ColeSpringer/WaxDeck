@@ -220,6 +220,23 @@ class _DevicePickerSheet extends ConsumerWidget {
             ],
           ),
         ),
+        // Kept on purpose: it is why every row below refuses, said once
+        // here rather than under each.
+        if (onRadio)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              WaxSpace.s16,
+              0,
+              WaxSpace.s16,
+              WaxSpace.s8,
+            ),
+            child: Text(
+              l10n.devicesRadioStaysHere,
+              style: WaxType.caption.copyWith(
+                color: WaxColors.of(context).textSecondary,
+              ),
+            ),
+          ),
         _ThisDevice(
           remote: remote,
           here: _here,
@@ -230,7 +247,7 @@ class _DevicePickerSheet extends ConsumerWidget {
           null when endpoints.hasError => <Widget>[
             WaxOptionRow(
               title: l10n.devicesListError,
-              subtitle: l10n.devicesListErrorMessage,
+              subtitle: l10n.devicesListErrorBody,
               glyph: WaxIcons.warning,
               enabled: false,
             ),
@@ -313,12 +330,12 @@ class _DevicePickerSheet extends ConsumerWidget {
             // keep the old one's identifier.
             key: ValueKey(SemanticsIds.endpoint(endpoint.id)),
             title: endpoint.name,
-            // The reason, where there is one that overrides the rest: a
-            // row saying "volume control" under a device nothing can be
-            // sent to is an offer, and this one is not on the table.
-            subtitle: onRadio
-                ? l10n.devicesRadioStaysHere
-                : _endpointLine(endpoint),
+            // While a station plays nothing can be sent anywhere, so an
+            // online row draws no line (a "volume control" note would be
+            // an offer); an offline row keeps its "Offline".
+            subtitle: onRadio && endpoint.online
+                ? null
+                : _endpointLine(l10n, endpoint),
             glyph: group.glyph,
             enabled: endpoint.online && !onRadio,
             // Active says sound is coming out here; selected says it is
@@ -345,16 +362,19 @@ class _DevicePickerSheet extends ConsumerWidget {
   /// answer a question asked before picking ("will I be able to turn this
   /// down from my phone?") and because two more icons on a row is two more
   /// things to learn.
-  static String? _endpointLine(PlayerEndpoint endpoint) {
-    if (!endpoint.online) return 'Offline';
-    final can = <String>[
-      if (endpoint.volumeControl) 'volume',
-      if (endpoint.rateControl) 'speed',
-    ];
-    if (endpoint.activeSessionId != null) {
-      return can.isEmpty ? 'In use' : 'In use, ${can.join(' and ')} control';
-    }
-    return can.isEmpty ? null : 'Remote ${can.join(' and ')} control';
+  static String? _endpointLine(AppLocalizations l10n, PlayerEndpoint endpoint) {
+    if (!endpoint.online) return l10n.devicesEndpointOffline;
+    final inUse = endpoint.activeSessionId != null;
+    final line = switch ((endpoint.volumeControl, endpoint.rateControl)) {
+      (true, true) =>
+        inUse ? EndpointControl.inUseBoth : EndpointControl.remoteBoth,
+      (true, false) =>
+        inUse ? EndpointControl.inUseVolume : EndpointControl.remoteVolume,
+      (false, true) =>
+        inUse ? EndpointControl.inUseSpeed : EndpointControl.remoteSpeed,
+      (false, false) => inUse ? EndpointControl.inUse : null,
+    };
+    return line == null ? null : l10n.devicesEndpointControl(line.name);
   }
 
   /// Sends playback to [endpoint].
@@ -486,7 +506,6 @@ class _DevicePickerSheet extends ConsumerWidget {
       context: handles.rootContext,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.devicesPlayingOn(name)),
-        content: WaxProse(l10n.devicesTakeOverBody),
         actions: <Widget>[
           WaxButton(
             label: l10n.devicesLeaveItPlaying,
@@ -578,7 +597,7 @@ class _ThisDevice extends StatelessWidget {
       subtitle: onRadio
           ? l10n.devicesPlayingRadioHere
           : elsewhere
-          ? l10n.devicesTakeOverOrLeave
+          ? null
           : l10n.devicesPlayingHere,
       glyph: WaxIcons.home,
       active: here,
@@ -592,6 +611,19 @@ class _ThisDevice extends StatelessWidget {
           : null,
     );
   }
+}
+
+/// The line under an online endpoint's name: whether something plays on
+/// it, and what can be changed on it from here. The cases of the
+/// `devicesEndpointControl` select.
+enum EndpointControl {
+  inUse,
+  inUseVolume,
+  inUseSpeed,
+  inUseBoth,
+  remoteVolume,
+  remoteSpeed,
+  remoteBoth,
 }
 
 /// How the picker groups endpoints, and what each group is drawn as.

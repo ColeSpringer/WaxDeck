@@ -431,7 +431,6 @@ class _SectionCards extends StatelessWidget {
               if (section.group == group)
                 WaxOptionRow(
                   title: section.titleOf(l10n),
-                  subtitle: section.blurbOf(l10n),
                   glyph: section.glyph,
                   trailing: const WaxIcon(WaxIcons.forward, size: 16),
                   semanticsId: section.semanticsId,

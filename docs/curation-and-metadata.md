@@ -377,12 +377,11 @@ country), each showing where its current value came from and whether
 it is locked. Only the fields that changed are sent, so a one-word
 correction does not lock the other six. Total tracks appears among
 them as a derived number, not a field: the release stores none - it is
-its membership counted - so the row shows the count, marks it derived,
-and says that editing the tracks is what changes it. Each track keeps
-its own track and disc totals, the "of 12" its file carries, and the
-track editor edits them; renumbering a track past a total the edit
-does not also set clears that total, in the file too under write-back,
-so nothing reads "7 of 1".
+its membership counted - so the row shows the count and marks it
+derived. Each track keeps its own track and disc totals, the "of 12"
+its file carries, and the track editor edits them; renumbering a track
+past a total the edit does not also set clears that total, in the file
+too under write-back, so nothing reads "7 of 1".
 
 The album title and album artist live on the tracks rather than the
 release, so the album form ends with a rewrite section that applies

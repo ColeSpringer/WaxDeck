@@ -153,6 +153,8 @@ void main() {
     );
 
     expect(find.text('Nothing matches "zz"'), findsOneWidget);
+    // The title says it; nothing is printed under it.
+    expect(tester.widget<EmptyState>(find.byType(EmptyState)).message, isNull);
     // The heading over an empty group is dropped: a title with no rows
     // under it reads as a group that failed to load.
     expect(find.text('ACTIONS'), findsNothing);

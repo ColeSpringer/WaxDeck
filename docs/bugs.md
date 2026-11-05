@@ -2,8 +2,6 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
-[10-16-26] - In general, there is too much explanatory text when visuals and intuitive UI design should suffice.
-
 [10-31-26] Each chapter (separate files) of a book now shows up in the recently added and never played sections under home. If a book contains a bunch of separate files it should really only show as the full book just like how it would if it were just in a singular file.
 
 [10-31-26] When adding music from a url, there should be a way to just accept the top / best match when choosing to identify against musicbrainz instead of putting it in the queue for the user.
@@ -25,3 +23,25 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 [10-31-26] The mouse on web (probably desktop too) doesn't change to the hand selection when you run it over parts of the minimized dock to bring it to full screen. In full screen it correctly does this when you run your mouse over blank areas that allow you to click to minimize full screen to just the dock. On a related note, the area that you are allowed to click when minimized to go full screen only appears to be from the very far left up until the current time in the song you are playing. Any blank area beyond that to the far right you cant click to full screen.
 
 [10-31-26] Switching theme appearances is very laggy. Or maybe it just doesn't update at a high frame rate so it just looks laggy? Either way the transition is not pleasant visually.
+
+[11-04-26] When editing artist and using the rename feature, the save does not fully work. It updates in the edit screen but when you go back to the specific artist screen it has not updated the name. It does seem to work for the actual files associated with the artist, just not within the UI? Maybe it's a cache problem? UPDATE: It was updated after i went to different screens and came back to the artist section under music. It probably is a cache issue.
+
+[11-04-26] Artist thumbnails are not updating. I thought this was working before?
+
+[11-04-26] Tracks downloaded from youtube are not given an album if they are not matched with a musicbrainz source. It should default to something like (title - Single) or something like that for the album when download from youtube and with no match from musicbrainz (including if a user skips the matching step or just marks as unoffical).
+
+[11-04-26] When trying to download a music playlist from youtube, there is not good feedback. If you go to the tasks section, it just says URL download and "Running" but you can't see exactly what its doing or even any progess. You also can't tell if its stuck or doing anything at all. There is also no option to cancel the action (this specifically might be a bigger problem outside of just playlist download and probably is the case for all tasks). NOTE: after waiting awhile i think it didn't work at all. Again, I can't see it updating anything but the playlist is not very large and there is no notice of any of the tracks having been downloaded. (playlist used: https://www.youtube.com/playlist?list=PLdmuawL0MnTd9DVQjap6ZEPHC8gYwUS2C). UPDATE: the playlist was private. we should not even accept private playlists and should give an obvious error message or popup. We should only accept lists we have access to (and videos). we should still have been able to cancel the neverending task (and had better feedback/visuals on what was happening, errors, stuck, whatever). UPDATE 2: The download eventually failed with the error message "URL is a playlist; use Enumerate". Pointless message. Doesn't tell the user anything useful.
+
+[11-04-26] When going from tasks to home then clicking on Music I was instead brought back to the tasks screen. I had to click music again to actually get to the section. This was saved through back actions as well.
+
+[11-04-26] Audiobook author shows under music sections (artist, albums, etcs.). We really need better separation for the various audio types (music, podcasts, audiobooks). They are not meant to intermingle at all.
+
+[11-04-26] When approving a track from the review queue, the screen stays at the track you approved. The track you approved is removed from the queue list but it highlights another track without going to it. I don't think we need to stay on a track after a decision has been made for it.
+
+[11-04-26] sponsorblock should default to only sponsors and non-music sections.
+
+[11-04-26] The tracks section under an artist page does not have the track play total like you see when you go to the album page.
+
+[11-04-26] In listening stats under top we should include small images next to the list items. At least for artists and albums. Also, what the hell is shows supposed to be? Where are books and podcasts?
+
+[11-04-26] "Treat as audiobook" seems to only be an option for music files but the option is not given to all of them? If its an audiobook users should just be selecting that on import or download. Probably get rid of this

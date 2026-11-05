@@ -70,7 +70,6 @@ class WaxCommandPalette extends StatefulWidget {
     this.label,
     this.busy = false,
     this.emptyTitle,
-    this.emptyMessage,
     this.width = 560,
     this.maxHeight = 440,
     this.semanticsId,
@@ -98,9 +97,9 @@ class WaxCommandPalette extends StatefulWidget {
   /// does not flicker once per character.
   final bool busy;
 
-  /// What an empty result says. Null takes the design system's own.
+  /// What an empty result says, as a title with nothing under it. Null
+  /// takes the design system's own.
   final String? emptyTitle;
-  final String? emptyMessage;
 
   final double width;
   final double maxHeight;
@@ -272,7 +271,6 @@ class _WaxCommandPaletteState extends State<WaxCommandPalette> {
         ? const SkeletonShapes(shape: SkeletonShape.list)
         : EmptyState(
             title: widget.emptyTitle ?? context.waxL10n.paletteEmptyTitle,
-            message: widget.emptyMessage ?? context.waxL10n.paletteEmptyMessage,
             glyph: WaxIcons.search,
           ),
   );

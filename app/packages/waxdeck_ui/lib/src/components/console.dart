@@ -915,13 +915,14 @@ class StatFigure extends StatelessWidget {
 /// One implementation, because three screens had grown three of them and
 /// the fourth would have grown a fourth. The confirm control stays
 /// disabled until the typed text matches, so a muscle-memory double tap
-/// through the dialog is not a delete.
+/// through the dialog is not a delete. Without a `message` it draws the
+/// title and the word field alone.
 Future<bool> showTypedConfirm(
   BuildContext context, {
   required String title,
-  required String message,
   required String confirmWord,
   required String confirmLabel,
+  String? message,
   String? fieldSemanticsId,
   String? confirmSemanticsId,
   String? cancelSemanticsId,
@@ -944,16 +945,16 @@ Future<bool> showTypedConfirm(
 class _TypedConfirmDialog extends StatefulWidget {
   const _TypedConfirmDialog({
     required this.title,
-    required this.message,
     required this.confirmWord,
     required this.confirmLabel,
+    this.message,
     this.fieldSemanticsId,
     this.confirmSemanticsId,
     this.cancelSemanticsId,
   });
 
   final String title;
-  final String message;
+  final String? message;
   final String confirmWord;
   final String confirmLabel;
   final String? fieldSemanticsId;
@@ -986,17 +987,19 @@ class _TypedConfirmDialogState extends State<_TypedConfirmDialog> {
         children: <Widget>[
           // The message alone: the field below keeps out of the
           // selection area, which would take its focus on a held press.
-          WaxProse(
-            widget.message,
-            style: WaxType.body.copyWith(color: colors.textSecondary),
-          ),
-          const SizedBox(height: WaxSpace.s16),
+          if (widget.message case final message?) ...<Widget>[
+            WaxProse(
+              message,
+              style: WaxType.body.copyWith(color: colors.textSecondary),
+            ),
+            const SizedBox(height: WaxSpace.s16),
+          ],
           WaxTextField(
             // Drawn, and this is the dialog that most needs it: the
             // label is the only place the word to type appears. The
-            // body above is the caller's warning and names the thing
-            // being destroyed rather than the word - so without this
-            // the dialog is a title, a sentence, a blank box, and a
+            // body above, when there is one, is the caller's warning and
+            // names the thing being destroyed rather than the word - so
+            // without this the dialog is a title, a blank box, and a
             // destructive button that can never enable.
             label: context.waxL10n.consoleConfirmHint(widget.confirmWord),
             controller: _controller,

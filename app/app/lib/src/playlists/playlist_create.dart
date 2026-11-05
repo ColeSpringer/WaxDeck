@@ -200,17 +200,16 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
               ],
               onSelect: (kind) => setState(() => _kind = kind),
             ),
-            const SizedBox(height: WaxSpace.s4),
-            WaxProse(
-              _kind == 'smart'
-                  ? l10n.playlistKindSmartHelp
-                  : l10n.playlistKindManualHelp,
-              style: WaxType.caption.copyWith(color: colors.textTertiary),
-            ),
+            if (_kind == 'smart') ...<Widget>[
+              const SizedBox(height: WaxSpace.s4),
+              WaxProse(
+                l10n.playlistKindSmartHelp,
+                style: WaxType.caption.copyWith(color: colors.textTertiary),
+              ),
+            ],
             WaxSettingRow(
               key: const Key(SemanticsIds.playlistCreateShared),
               title: l10n.playlistSharedWithEveryone,
-              help: l10n.playlistSharedHelp,
               control: WaxSwitch(
                 value: _shared,
                 label: l10n.playlistSharedWithEveryone,

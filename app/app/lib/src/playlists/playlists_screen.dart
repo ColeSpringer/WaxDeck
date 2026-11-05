@@ -63,7 +63,6 @@ class PlaylistsScreen extends ConsumerWidget {
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.playlistsEmptyTitle,
-              message: l10n.playlistsEmptyMessage,
               glyph: WaxIcons.playlists,
               actionLabel: l10n.playlistsNew,
               onAction: () => unawaited(showCreatePlaylistDialog(context)),

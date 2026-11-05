@@ -95,19 +95,15 @@ void main() {
     );
     expect(
       notifyTokenTitle(es, 'subscription-failed', ''),
-      'Suscripciones de podcasts sin modificar',
+      'Suscripciones de pódcasts sin modificar',
     );
     expect(
       notifyTokenHelp(en, 'subscription-failed', ''),
-      'A podcast app syncing over gpodder asked to add a feed that could '
-      'not be subscribed, or to change subscriptions this account may not '
-      'change.',
+      "A podcast app's subscription change failed or was refused",
     );
     expect(
       notifyTokenHelp(es, 'subscription-failed', ''),
-      'Una aplicación de podcasts que sincroniza por gpodder pidió añadir '
-      'un feed al que no se ha podido suscribir, o cambiar suscripciones que '
-      'esta cuenta no puede cambiar.',
+      'Falló o se rechazó un cambio de suscripción de una app de pódcasts',
     );
   });
 }

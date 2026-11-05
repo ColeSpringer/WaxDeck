@@ -10,6 +10,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/series_controller.dart';
 import 'package:waxdeck/src/books/series_merge.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/library/item_kind.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
@@ -394,7 +395,7 @@ void main() {
 
     expect(
       shellMessageText(raisedMessage(tester)),
-      'It carries on in the background; you will be told when it is done.',
+      'Running in the background',
     );
   });
 
@@ -419,7 +420,7 @@ void main() {
     expect(engine.playing, isFalse);
     expect(
       shellMessageText(raisedMessage(tester)),
-      'What was playing is part of the book now; play it from here.',
+      'Now in the book; play from here',
     );
     // An item the server no longer has is nothing to persist, nor to
     // offer back at the next launch.
@@ -777,6 +778,12 @@ void main() {
     await _pump(tester, repo, pids: [_a, _b], to: 'audiobook');
     await tester.tap(find.text('Start'));
     await tester.pumpAndSettle();
+    expect(
+      infoTipContaining('rebuilt catalog'),
+      findsOneWidget,
+      reason: 'the write-back switch explains itself in a tip',
+    );
+    expect(find.textContaining('rebuilt catalog'), findsNothing);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.kindConfirm));
     await tester.pump();
     await tester.pump(kindChangePoll);
@@ -860,13 +867,15 @@ void main() {
     );
   });
 
+  test('"already music" agrees with how many were named, in Spanish', () async {
+    final es = await AppLocalizations.delegate.load(const Locale('es'));
+    expect(es.libraryKindAlreadyMusic(1), 'Ya es música');
+    expect(es.libraryKindAlreadyMusic(3), 'Ya son música');
+  });
+
   for (final (to, pid, sentence) in [
-    ('audiobook', _a, 'This is already an audiobook, so nothing changed.'),
-    (
-      'music',
-      'bk-${_a.substring(3)}',
-      'This is already music, so nothing changed.',
-    ),
+    ('audiobook', _a, 'Already an audiobook'),
+    ('music', 'bk-${_a.substring(3)}', 'Already music'),
   ]) {
     testWidgets('a change to $to that found it already says so', (
       tester,

@@ -120,13 +120,9 @@ Future<void> showAddToLibrarySheet(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              SectionHeader(
-                title: sheetContext.l10n.uploadsAddTitle,
-                overline: sheetContext.l10n.uploadsAddOverline,
-              ),
+              SectionHeader(title: sheetContext.l10n.uploadsAddTitle),
               WaxOptionRow(
                 title: sheetContext.l10n.uploadsFromUrl,
-                subtitle: sheetContext.l10n.uploadsFromUrlSubtitle,
                 glyph: WaxIcons.downloads,
                 semanticsId: SemanticsIds.addFromUrl,
                 onTap: () => Navigator.of(sheetContext).pop('url'),
@@ -134,7 +130,6 @@ Future<void> showAddToLibrarySheet(
               if (picker != null)
                 WaxOptionRow(
                   title: sheetContext.l10n.uploadsPick,
-                  subtitle: sheetContext.l10n.uploadsPickSubtitle,
                   glyph: WaxIcons.add,
                   semanticsId: SemanticsIds.addUploadFile,
                   onTap: () => Navigator.of(sheetContext).pop('file'),
@@ -142,7 +137,6 @@ Future<void> showAddToLibrarySheet(
               if (picker != null && picker.canPickFolders)
                 WaxOptionRow(
                   title: sheetContext.l10n.uploadsPickFolder,
-                  subtitle: sheetContext.l10n.uploadsPickFolderSubtitle,
                   glyph: WaxIcons.albums,
                   semanticsId: SemanticsIds.addUploadFolder,
                   onTap: () => Navigator.of(sheetContext).pop('folder'),
@@ -155,7 +149,6 @@ Future<void> showAddToLibrarySheet(
               // line - are news, and news is gone by the next launch.
               WaxOptionRow(
                 title: sheetContext.l10n.uploadsSessionsTitle,
-                subtitle: sheetContext.l10n.uploadsSessionsSubtitle,
                 glyph: WaxIcons.recent,
                 semanticsId: SemanticsIds.addUploadSessions,
                 onTap: () => Navigator.of(sheetContext).pop('sessions'),
@@ -983,41 +976,25 @@ class UploadGroupingSelector extends StatelessWidget {
   final int fileCount;
   final ValueChanged<UploadGrouping> onChanged;
 
-  List<(UploadGrouping, String, String)> _options(AppLocalizations l10n) =>
+  List<(UploadGrouping, String, String?)> _options(AppLocalizations l10n) =>
       mediaType == MediaType.audiobook
-      ? <(UploadGrouping, String, String)>[
+      ? <(UploadGrouping, String, String?)>[
           (
             UploadGrouping.auto,
             l10n.uploadsGroupingAuto,
             l10n.uploadsGroupingBookAutoHelp,
           ),
-          (
-            UploadGrouping.album,
-            l10n.uploadsGroupingBookOne(fileCount),
-            l10n.uploadsGroupingBookOneHelp,
-          ),
-          (
-            UploadGrouping.tracks,
-            l10n.uploadsGroupingBookEach,
-            l10n.uploadsGroupingBookEachHelp,
-          ),
+          (UploadGrouping.album, l10n.uploadsGroupingBookOne(fileCount), null),
+          (UploadGrouping.tracks, l10n.uploadsGroupingBookEach, null),
         ]
-      : <(UploadGrouping, String, String)>[
+      : <(UploadGrouping, String, String?)>[
           (
             UploadGrouping.auto,
             l10n.uploadsGroupingAuto,
             l10n.uploadsGroupingAutoHelp,
           ),
-          (
-            UploadGrouping.album,
-            l10n.uploadsGroupingAlbum,
-            l10n.uploadsGroupingAlbumHelp,
-          ),
-          (
-            UploadGrouping.tracks,
-            l10n.uploadsGroupingTracks,
-            l10n.uploadsGroupingTracksHelp,
-          ),
+          (UploadGrouping.album, l10n.uploadsGroupingAlbum, null),
+          (UploadGrouping.tracks, l10n.uploadsGroupingTracks, null),
         ];
 
   @override
@@ -1099,10 +1076,6 @@ class MediaTypeSelector extends StatelessWidget {
 /// when nothing is named. It is also hidden while the read is in
 /// flight, so the dialog never grows a row under a pointer already
 /// moving to Upload.
-///
-/// The help line is there because the choice is narrower than the word
-/// "library" suggests: it selects whose settings govern the import, not
-/// the folder the bytes land in, which is the catalog's own routing.
 class UploadTargetSelector extends StatelessWidget {
   const UploadTargetSelector({
     super.key,
@@ -1118,30 +1091,24 @@ class UploadTargetSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (candidates.length < 2) return const SizedBox.shrink();
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final names = {for (final t in candidates) t.pid: t.name};
     return Padding(
       padding: const EdgeInsets.only(top: WaxSpace.s16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          WaxChoice<String>(
-            label: l10n.uploadsLibrary,
-            value: value,
-            semanticsId: SemanticsIds.uploadLibrary,
-            optionSemanticsIdFor: SemanticsIds.uploadLibraryOption,
-            options: candidates.map((t) => t.pid).toList(),
-            labelFor: (pid) => names[pid] ?? pid,
-            onChanged: onChanged,
-          ),
-          const SizedBox(height: WaxSpace.s4),
-          Text(
-            l10n.uploadsLibraryHelp,
-            style: WaxType.caption.copyWith(color: colors.textTertiary),
-          ),
-        ],
+      // The tip beside the picker, not inside it: the picker is one merged
+      // node, and a tip under one never opens. "Library" reads as where
+      // the files go, which the server decides.
+      child: titleWithInfo(
+        WaxChoice<String>(
+          label: l10n.uploadsLibrary,
+          value: value,
+          semanticsId: SemanticsIds.uploadLibrary,
+          optionSemanticsIdFor: SemanticsIds.uploadLibraryOption,
+          options: candidates.map((t) => t.pid).toList(),
+          labelFor: (pid) => names[pid] ?? pid,
+          onChanged: onChanged,
+        ),
+        l10n.uploadsLibraryHelp,
       ),
     );
   }
@@ -1182,7 +1149,7 @@ class IdentifySwitch extends StatelessWidget {
       ? l10n.uploadsIdentifyMusic
       : l10n.uploadsIdentifyOther;
 
-  String _help(AppLocalizations l10n) => mediaType == MediaType.music
+  String _info(AppLocalizations l10n) => mediaType == MediaType.music
       ? l10n.uploadsIdentifyMusicHelp
       : l10n.uploadsIdentifyOtherHelp;
 
@@ -1191,7 +1158,7 @@ class IdentifySwitch extends StatelessWidget {
     final l10n = context.l10n;
     return WaxSettingRow(
       title: _title(l10n),
-      help: _help(l10n),
+      info: _info(l10n),
       control: WaxSwitch(
         value: value ?? true,
         label: _title(l10n),

@@ -996,6 +996,11 @@ void main() {
           ),
           'Listening',
         ),
+        (
+          'a title given its info directly',
+          titleWithInfo(const Text('Listening'), _message, semanticsId: 'tip'),
+          'Listening',
+        ),
       ]) {
         testWidgets(name, (tester) async {
           final handle = tester.ensureSemantics();
@@ -1021,6 +1026,28 @@ void main() {
         });
       }
 
+      testWidgets('a title given its info directly can be any widget', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _page(
+            Center(
+              child: SizedBox(
+                width: 480,
+                child: titleWithInfo(toggle(), _message),
+              ),
+            ),
+          ),
+        );
+        final control = tester.getRect(find.byType(WaxSwitch));
+        final glyph = tester.getRect(find.byType(WaxInfoTip));
+        expect(glyph.left, moreOrLessEquals(control.right, epsilon: 0.01));
+        expect(
+          glyph.center.dy,
+          moreOrLessEquals(control.center.dy, epsilon: 1),
+        );
+      });
+
       testWidgets('and none without one', (tester) async {
         await tester.pumpWidget(
           _page(
@@ -1028,6 +1055,7 @@ void main() {
               children: <Widget>[
                 WaxSettingRow(title: 'Crossfade', control: toggle()),
                 const SectionHeader(title: 'Listening'),
+                titleWithInfo(const Text('Listening'), null),
               ],
             ),
           ),

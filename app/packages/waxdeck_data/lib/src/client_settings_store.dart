@@ -109,10 +109,9 @@ abstract final class ClientSettingKeys {
   static const podcastSpeed = 'waxdeck.playback.podcastSpeed';
   static const bookSpeed = 'waxdeck.playback.bookSpeed';
 
-  /// Whether the one-line explanation behind each spoken-word effect
-  /// has been shown on this device. Not a preference anybody sets: a
-  /// note that a thing has been said once, so it is not said again.
-  static const trimSilenceExplained = 'waxdeck.playback.trimExplained';
+  /// Whether the one-line explanation behind voice boost has been shown
+  /// on this device. Not a preference anybody sets: a note that a thing
+  /// has been said once, so it is not said again.
   static const voiceBoostExplained = 'waxdeck.playback.boostExplained';
 
   /// Whether a book's seek bars span the chapter playing or the whole

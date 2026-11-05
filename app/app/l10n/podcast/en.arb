@@ -21,10 +21,6 @@
   "@podcastAutoDownload": {
     "description": "Switch fetching arrivals without being asked."
   },
-  "podcastAutoDownloadHelp": "Keeps arrivals on this device as the feed refreshes",
-  "@podcastAutoDownloadHelp": {
-    "description": "Help under the auto-download switch."
-  },
   "podcastBacklogReadError": "Could not read the backlog. {reason}",
   "@podcastBacklogReadError": {
     "description": "Snackbar when the walk over a show's episodes failed before anything was written. {reason} is a whole translated sentence.",
@@ -195,7 +191,7 @@
       }
     }
   },
-  "podcastFilterActiveHelp": "Matched against episode titles only, and against new arrivals only: editing this never re-evaluates the backlog or removes anything already fetched.",
+  "podcastFilterActiveHelp": "New arrivals only; nothing already fetched is removed",
   "@podcastFilterActiveHelp": {
     "description": "What the auto-download filter does, with the switch on."
   },
@@ -293,7 +289,7 @@
   "@podcastMarkOlderAll": {
     "description": "How far back the mark-older dialog reaches: the whole backlog."
   },
-  "podcastMarkOlderBody": "Clears the unplayed dots on a backlog. Your positions on episodes you actually started are overwritten, and nothing is deleted.",
+  "podcastMarkOlderBody": "Overwrites positions on episodes you started; nothing is deleted",
   "@podcastMarkOlderBody": {
     "description": "What the mark-older dialog does, said before it is run."
   },
@@ -411,10 +407,6 @@
   "@podcastNoEpisodes": {
     "description": "Empty state of a show whose feed has published nothing."
   },
-  "podcastNoEpisodesMessage": "This feed has published nothing this server can see.",
-  "@podcastNoEpisodesMessage": {
-    "description": "Message under the no-episodes state."
-  },
   "podcastNoMatches": "No matches",
   "@podcastNoMatches": {
     "description": "Shown in the add dialog when the podcast directory answered with nothing."
@@ -427,17 +419,13 @@
   "@podcastNothingMatches": {
     "description": "Empty state where a filter or a search left nothing standing."
   },
-  "podcastNothingMatchesMessage": "Widen the filter, or clear the search, to see the rest.",
-  "@podcastNothingMatchesMessage": {
-    "description": "Message under the nothing-matches state."
-  },
   "podcastNothingMatchesYet": "Nothing matches yet",
   "@podcastNothingMatchesYet": {
     "description": "Empty state where the filter matched nothing among the episodes loaded, and the show has more."
   },
-  "podcastNothingMatchesYetMessage": "The filter runs over the {count} episodes loaded so far, and this show has more.",
-  "@podcastNothingMatchesYetMessage": {
-    "description": "Why a filter can come up empty on a show with a long back catalogue. The count rises with each fetch, so a press that finds nothing is still visibly progress.",
+  "podcastNothingMatchesYetEmptyMessage": "Filters cover the {count} episodes loaded so far",
+  "@podcastNothingMatchesYetEmptyMessage": {
+    "description": "Line under the empty state where the filter matched nothing among the episodes loaded, and the show has more. The count rises with each fetch, so a press that finds nothing is still visibly progress.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -567,7 +555,7 @@
   "@podcastReadingBacklog": {
     "description": "Shown under an indeterminate bar while the episodes to mark are still being counted."
   },
-  "podcastRefreshPaused": "Scheduled refresh is paused for this feed after repeated failures. Checking for new episodes turns it back on.",
+  "podcastRefreshPaused": "Refresh paused after repeated failures; checking for episodes resumes it",
   "@podcastRefreshPaused": {
     "description": "Banner on a show whose feed the server has stopped polling."
   },
@@ -810,11 +798,11 @@
   "@podcastTrimSilence": {
     "description": "Switch shortening the gaps in an episode's audio."
   },
-  "podcastTrimSilenceHelp": "Needs the episode fetched: silence is mapped from the audio this server holds",
+  "podcastTrimSilenceHelp": "Needs the episode fetched",
   "@podcastTrimSilenceHelp": {
     "description": "Help under the trim-silence switch."
   },
-  "podcastUnfollowBody": "Some episodes are downloaded on the server. Remove those files too? Removed files go to the trash, and your listening progress is kept either way. If someone else subscribes to this show, the files stay regardless.",
+  "podcastUnfollowBody": "Remove its downloaded files too? They go to the trash, unless another subscriber keeps them.",
   "@podcastUnfollowBody": {
     "description": "Body of the unfollow dialog, saying what goes and what stays."
   },
@@ -839,10 +827,6 @@
   "@podcastVoiceBoost": {
     "description": "Switch lifting speech above the rest of an episode's audio."
   },
-  "podcastVoiceBoostHelp": "Lifts speech over a noisy room",
-  "@podcastVoiceBoostHelp": {
-    "description": "Help under the voice-boost switch."
-  },
   "podcastYoutubeUrlLabel": "Channel or playlist URL",
   "@podcastYoutubeUrlLabel": {
     "description": "URL field label while the YouTube source is selected in the add-by-URL form; the parser takes either address."
@@ -850,10 +834,6 @@
   "podcastsEmptyAction": "Add a show",
   "@podcastsEmptyAction": {
     "description": "Button on the podcast hub's empty state."
-  },
-  "podcastsEmptyMessage": "Follow a show and its new episodes turn up here as the feed publishes them.",
-  "@podcastsEmptyMessage": {
-    "description": "Message under the empty state of the podcast hub."
   },
   "podcastsEmptyTitle": "No shows yet",
   "@podcastsEmptyTitle": {

@@ -214,7 +214,6 @@ class PlayerScreen extends ConsumerWidget {
           key: const Key('player-idle'),
           glyph: WaxIcons.headphones,
           title: context.l10n.playerNothingPlaying,
-          message: context.l10n.playerIdleMessage,
           semanticsId: SemanticsIds.playerSurface,
         ),
       );

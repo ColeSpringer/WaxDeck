@@ -33,12 +33,6 @@ enum ShareCardFormat {
     ShareCardFormat.square => l10n.statsCardFormatSquare,
   };
 
-  /// What it is for, under the preview.
-  String blurbOf(AppLocalizations l10n) => switch (this) {
-    ShareCardFormat.story => l10n.statsCardFormatStoryBlurb,
-    ShareCardFormat.square => l10n.statsCardFormatSquareBlurb,
-  };
-
   /// How many top artists the card has room for.
   int get artistCount => this == ShareCardFormat.story ? 5 : 3;
 }
@@ -294,7 +288,6 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet>
 
   @override
   Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final exporter = ref.watch(shareCardExporterProvider);
     return SafeArea(
@@ -312,7 +305,7 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet>
             children: <Widget>[
               SectionHeader(
                 title: l10n.statsCardTitle,
-                overline: l10n.statsCardOverline,
+                info: l10n.statsCardPrivacyHelp,
               ),
               if (!exporter.canExport)
                 WaxBanner(
@@ -343,11 +336,6 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet>
                       ),
                   ],
                 ),
-              ),
-              const SizedBox(height: WaxSpace.s8),
-              Text(
-                l10n.statsCardPrivacy,
-                style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ],
           ),
@@ -387,7 +375,6 @@ class _Preview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
     final cardWidth = _height * format.size.width / format.size.height;
     final width = cardWidth < _minWidth ? _minWidth : cardWidth;
     return SizedBox(
@@ -433,13 +420,6 @@ class _Preview extends StatelessWidget {
             semanticsId: SemanticsIds.shareCardExport(format.name),
             busy: busy,
             onPressed: onExport,
-          ),
-          Text(
-            format.blurbOf(context.l10n),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: WaxType.caption.copyWith(color: colors.textTertiary),
           ),
         ],
       ),

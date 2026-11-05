@@ -36,9 +36,7 @@ test('the rule editor builds, previews, and saves a smart playlist', async ({ ap
   // What the list is and how much it holds, read off the header's own
   // accessible name.
   await expect(app.playlists.header(/Smart playlist · [1-9]\d* items/)).toBeVisible();
-  await expect(
-    app.playlists.text('Evaluated live, every time this list is opened.'),
-  ).toBeVisible();
+  await expect(app.playlists.ruleSummary()).toContainText('Media type is');
 
   await app.seed.clearPlaylistsNamed('All The Music');
 });

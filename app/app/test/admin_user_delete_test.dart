@@ -78,15 +78,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Hand their shared playlists to me'), findsOneWidget);
-    expect(
-      find.textContaining('Their private playlists are deleted'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Private ones are deleted'), findsOneWidget);
     // What a smart playlist becomes when it depends on the account.
     expect(
       find.textContaining(
-        'A smart playlist that depends on their stars, ratings, plays or '
-        'private playlists becomes a fixed list of its tracks.',
+        'Smart playlists depending on this account become fixed lists.',
       ),
       findsOneWidget,
     );

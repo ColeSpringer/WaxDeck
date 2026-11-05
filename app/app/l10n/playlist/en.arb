@@ -9,7 +9,7 @@
   "@playlistAddLabel": {
     "description": "Field on a playlist screen that searches the library so a hit can be appended."
   },
-  "playlistAddNothing": "Nothing here to add. Artists and albums are not members of a playlist; their tracks are.",
+  "playlistAddNothing": "Nothing to add. Only tracks join.",
   "@playlistAddNothing": {
     "description": "Said under the add field when a search answered with nothing a playlist can hold."
   },
@@ -97,7 +97,7 @@
   "@playlistDelete": {
     "description": "Row in a playlist's overflow menu, and the confirming button of the dialog it opens."
   },
-  "playlistDeleteBody": "It goes for everyone it is shared with. The items in it are never touched.",
+  "playlistDeleteBody": "It goes for everyone it is shared with; its items stay.",
   "@playlistDeleteBody": {
     "description": "Body of the delete-playlist dialog, saying what goes and what does not."
   },
@@ -112,10 +112,6 @@
   "playlistEditRules": "Edit rules",
   "@playlistEditRules": {
     "description": "Button beside a smart playlist's rule chips, opening the rule editor."
-  },
-  "playlistEditableEmptyMessage": "Search above to add the first track, or use \"Add to playlist\" from anywhere something is playing.",
-  "@playlistEditableEmptyMessage": {
-    "description": "Message under the empty state of a manual playlist this account may edit. The quoted phrase names the sheet, so it matches that sheet's own title."
   },
   "playlistEmptyTitle": "Nothing in here",
   "@playlistEmptyTitle": {
@@ -197,10 +193,6 @@
   "@playlistFallbackTitle": {
     "description": "Title of a playlist screen opened cold, before the playlist it names has loaded."
   },
-  "playlistForeignEmptyMessage": "The owner has not put anything in this list yet.",
-  "@playlistForeignEmptyMessage": {
-    "description": "Message under the empty state of somebody else's playlist, which this account cannot fill."
-  },
   "playlistImportBindFailed": "The playlist was created, but keeping it matched to the export failed: {reason}",
   "@playlistImportBindFailed": {
     "description": "Line in the import report when the playlist was made but the source binding was refused. {reason} is the server's own sentence.",
@@ -211,7 +203,7 @@
       }
     }
   },
-  "playlistImportBound": "Kept matched to this export. Re-match it whenever you like from the playlist's sync settings.",
+  "playlistImportBound": "Kept matched to this export.",
   "@playlistImportBound": {
     "description": "Line in the import report when the created playlist was also bound to the pasted export."
   },
@@ -263,9 +255,9 @@
   "@playlistImportKeepMatched": {
     "description": "Switch in the import dialog binding the created playlist to the pasted export."
   },
-  "playlistImportKeepMatchedHelp": "The export is stored with the playlist and re-matched against the library on demand. Membership follows the export, so tracks added by hand are reconciled away",
+  "playlistImportKeepMatchedHelp": "Tracks added by hand are removed on re-match",
   "@playlistImportKeepMatchedHelp": {
-    "description": "Help line under the keep-matched switch, saying what binding the export does."
+    "description": "Help line under the keep-matched switch: the data loss binding the export brings. No full stop."
   },
   "playlistImportMenu": "Import playlist",
   "@playlistImportMenu": {
@@ -463,11 +455,7 @@
   "@playlistKindManual": {
     "description": "Chip picking a playlist that holds what is put in it, as opposed to a smart one."
   },
-  "playlistKindManualHelp": "A manual playlist holds what you put in it, in the order you put it.",
-  "@playlistKindManualHelp": {
-    "description": "Line under the kind chips when the manual kind is chosen."
-  },
-  "playlistKindSmartHelp": "A smart playlist keeps itself: you write the rules next and it evaluates them every time it is opened.",
+  "playlistKindSmartHelp": "You write rules next; it updates itself.",
   "@playlistKindSmartHelp": {
     "description": "Line under the kind chips when the smart kind is chosen."
   },
@@ -475,7 +463,7 @@
   "@playlistLoadError": {
     "description": "Title of the error state when one playlist could not be read."
   },
-  "playlistM3uPreviewChecking": "Checking each line of the file. A long one takes a while.",
+  "playlistM3uPreviewChecking": "Checking file",
   "@playlistM3uPreviewChecking": {
     "description": "Shown beside a spinner while the server checks each line of a pasted M3U file, which for a long file can take tens of seconds."
   },
@@ -494,7 +482,7 @@
       }
     }
   },
-  "playlistM3uPreviewImporting": "Importing the playlist. A long file takes a while.",
+  "playlistM3uPreviewImporting": "Importing playlist",
   "@playlistM3uPreviewImporting": {
     "description": "Shown beside a spinner while a checked M3U file is imported as a playlist, which for a long file can take tens of seconds."
   },
@@ -556,7 +544,7 @@
   "@playlistNameRequired": {
     "description": "Refusal under the name field when the create dialog is confirmed with it empty."
   },
-  "playlistNoManualLists": "No manual playlists yet. Make one below and this goes straight into it.",
+  "playlistNoManualLists": "No manual playlists yet.",
   "@playlistNoManualLists": {
     "description": "Said in the add-to-playlist sheet when the account owns no list an item could join."
   },
@@ -1413,7 +1401,7 @@
   "@playlistRuleNo": {
     "description": "How a smart rule draws the value false."
   },
-  "playlistRuleNoMatches": "Nothing in the library answers this yet.",
+  "playlistRuleNoMatches": "Nothing matches yet.",
   "@playlistRuleNoMatches": {
     "description": "Said in the preview when the draft rule matches nothing."
   },
@@ -1535,8 +1523,8 @@
   "@playlistRuleRandomOrder": {
     "description": "Said where the sort card would be, when the limit already decides the order."
   },
-  "playlistRuleReadOnlyMessage": "It uses something this editor cannot draw yet, so it is shown rather than edited. Nothing here will change it.",
-  "@playlistRuleReadOnlyMessage": {
+  "playlistRuleReadOnlyEmptyMessage": "This editor cannot draw it yet.",
+  "@playlistRuleReadOnlyEmptyMessage": {
     "description": "Why the rule editor opened read-only."
   },
   "playlistRuleReadOnlyTitle": "This rule opens read-only",
@@ -1554,10 +1542,6 @@
   "playlistRuleRemoveSort": "Remove sort",
   "@playlistRuleRemoveSort": {
     "description": "Accessible name of the control dropping one sort key."
-  },
-  "playlistRuleSeedHelp": "Pins which tracks the budget picks, so the list is the same on the next rebuild",
-  "@playlistRuleSeedHelp": {
-    "description": "Help under the pinned-selection switch."
   },
   "playlistRuleSeedTitle": "Keep the same selection each time",
   "@playlistRuleSeedTitle": {
@@ -1625,10 +1609,6 @@
   "@playlistRuleYes": {
     "description": "How a smart rule draws the value true. Lower case: it stands where a value stands, after an operator."
   },
-  "playlistRulesLive": "Evaluated live, every time this list is opened.",
-  "@playlistRulesLive": {
-    "description": "Line under a smart playlist's rule chips, saying the membership is not stored."
-  },
   "playlistRulesSpoken": "Rules: {rules}",
   "@playlistRulesSpoken": {
     "description": "The rule chips read as one thing for a screen reader. {rules} is the chips joined by commas.",
@@ -1665,10 +1645,6 @@
   "@playlistSharedByYou": {
     "description": "Byline on a card for a playlist this account owns and shared with everyone."
   },
-  "playlistSharedHelp": "Anyone on this server can see and play it",
-  "@playlistSharedHelp": {
-    "description": "Help under the shared switch on the create dialog."
-  },
   "playlistSharedWithEveryone": "Shared with everyone",
   "@playlistSharedWithEveryone": {
     "description": "Switch on the create dialog offering the playlist to the whole server, and the header line saying a playlist is."
@@ -1680,10 +1656,6 @@
   "playlistSmart": "Smart",
   "@playlistSmart": {
     "description": "A playlist that writes itself from rules: the badge on its card and the chip that picks that kind when making one."
-  },
-  "playlistSmartEmptyMessage": "No item in the library answers these rules. Loosen one and the list fills itself.",
-  "@playlistSmartEmptyMessage": {
-    "description": "Message under the empty state of a smart playlist."
   },
   "playlistSmartEmptyTitle": "Nothing matches yet",
   "@playlistSmartEmptyTitle": {
@@ -1819,35 +1791,13 @@
   "@playlistSyncLastRunNothing": {
     "description": "The last-run line when the run completed with every count at zero."
   },
-  "playlistSyncMatchedModeHelp": "An export downloads nothing, so there are no files to move to the trash.",
-  "@playlistSyncMatchedModeHelp": {
-    "description": "Line under the mode choice on a matched binding, saying why mirror-trash is not offered."
-  },
-  "playlistSyncMatchedNote": "A {source} export re-matches against the library on demand and downloads nothing.",
-  "@playlistSyncMatchedNote": {
-    "description": "Note in the sync sheet for a binding recorded from a streaming export rather than a live URL. {source} is the export format's label, e.g. spotify.",
-    "placeholders": {
-      "source": {
-        "type": "String",
-        "example": "spotify"
-      }
-    }
-  },
   "playlistSyncModeAppend": "Append",
   "@playlistSyncModeAppend": {
     "description": "Sync mode that only adds new source entries and never touches manual edits."
   },
-  "playlistSyncModeHelpAppend": "New source entries join the end; your own edits are never touched.",
-  "@playlistSyncModeHelpAppend": {
+  "playlistSyncModeAppendHelp": "New entries join the end; your edits stay.",
+  "@playlistSyncModeAppendHelp": {
     "description": "Help line under the mode choice while append is selected."
-  },
-  "playlistSyncModeHelpMirror": "Membership and order follow the source. A removed entry leaves the list but its file stays in the library.",
-  "@playlistSyncModeHelpMirror": {
-    "description": "Help line under the mode choice while mirror is selected."
-  },
-  "playlistSyncModeHelpMirrorTrash": "Membership and order follow the source, and a removed entry's file goes to the recoverable trash.",
-  "@playlistSyncModeHelpMirrorTrash": {
-    "description": "Help line under the mode choice while mirror-and-trash is selected."
   },
   "playlistSyncModeLabel": "Sync mode",
   "@playlistSyncModeLabel": {
@@ -1857,9 +1807,17 @@
   "@playlistSyncModeMirror": {
     "description": "Sync mode where membership and order follow the source, keeping removed entries' files."
   },
+  "playlistSyncModeMirrorHelp": "Follows the source; removed entries keep their files.",
+  "@playlistSyncModeMirrorHelp": {
+    "description": "Help line under the mode choice while mirror is selected."
+  },
   "playlistSyncModeMirrorTrash": "Mirror and trash",
   "@playlistSyncModeMirrorTrash": {
     "description": "Sync mode where membership follows the source and a removed entry's file goes to the recoverable trash."
+  },
+  "playlistSyncModeMirrorTrashHelp": "Follows the source; removed files go to recoverable trash.",
+  "@playlistSyncModeMirrorTrashHelp": {
+    "description": "Help line under the mode choice while mirror-and-trash is selected."
   },
   "playlistSyncNow": "Sync now",
   "@playlistSyncNow": {
@@ -1993,7 +1951,7 @@
   "@playlistSyncSourceLabel": {
     "description": "Label over the choice of which service an export came from."
   },
-  "playlistSyncSuspended": "Syncing is suspended after repeated failures. A successful sync turns it back on.",
+  "playlistSyncSuspended": "Suspended after failures; a successful sync resumes it.",
   "@playlistSyncSuspended": {
     "description": "Note in the sync sheet while the schedule is auto-disabled."
   },
@@ -2012,10 +1970,6 @@
   "playlistSyncUrlLabel": "Source playlist URL",
   "@playlistSyncUrlLabel": {
     "description": "Label of the field naming the live source playlist to follow."
-  },
-  "playlistsEmptyMessage": "Make one, or add a track to a new list from anywhere it is playing. A smart playlist writes itself from rules and keeps up as the library grows.",
-  "@playlistsEmptyMessage": {
-    "description": "Message under the empty state of the playlists screen, saying the two ways to fill it."
   },
   "playlistsEmptyTitle": "No playlists yet",
   "@playlistsEmptyTitle": {

@@ -151,7 +151,6 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
           const SizedBox(height: WaxSpace.s16),
           WaxSettingRow(
             title: l10n.sharingExpires,
-            help: l10n.sharingExpiresHelp,
             control: WaxChoice<ShareExpiry>(
               value: _expiry,
               options: ShareExpiry.values,
@@ -163,7 +162,6 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
           ),
           WaxSettingRow(
             title: l10n.sharingAllowDownload,
-            help: l10n.sharingAllowDownloadHelp,
             control: WaxSwitch(
               value: _allowDownload,
               label: l10n.sharingAllowDownload,
@@ -176,7 +174,6 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
               title: l10n.sharingStartAt(
                 formatTimecode(Duration(milliseconds: positionMs)),
               ),
-              help: l10n.sharingStartAtHelp,
               control: WaxSwitch(
                 value: _startAtPosition,
                 label: l10n.sharingStartAtLabel,

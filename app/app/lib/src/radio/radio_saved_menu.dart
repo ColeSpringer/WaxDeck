@@ -44,14 +44,12 @@ Future<void> showRadioSavedMenu(
             ),
             WaxOptionRow(
               title: l10n.radioSavedAcquire,
-              subtitle: l10n.radioSavedAcquireHelp,
               glyph: WaxIcons.downloads,
               semanticsId: SemanticsIds.radioSavedAcquire,
               onTap: () => Navigator.of(sheetContext).pop('acquire'),
             ),
             WaxOptionRow(
               title: l10n.radioSavedIdentify,
-              subtitle: l10n.radioSavedIdentifyHelp,
               // Not the magnifying glass the row's own button draws:
               // that one searches the library for a title, and this one
               // works out what the recording is.
@@ -185,7 +183,6 @@ class _RadioSavedIdentifySheetState
               title: l10n.radioSavedIdentifyTitle(
                 song.title ?? song.nowPlaying,
               ),
-              overline: l10n.radioSavedIdentifyOverline,
             ),
             if (_error != null)
               Padding(

@@ -48,7 +48,6 @@ class _DefectLogScreenState extends ConsumerState<DefectLogScreen> {
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.defectsEmptyTitle,
-              message: l10n.defectsEmptyMessage,
               glyph: WaxIcons.info,
             ),
           )
