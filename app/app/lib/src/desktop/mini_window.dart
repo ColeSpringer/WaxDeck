@@ -254,8 +254,11 @@ class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
           actions: DeckBarActions(
             // The same commands the keys and the deck bar run: a mini
             // window is a smaller surface onto one playback, not a
-            // second transport with rules of its own.
-            onPlayPause: () => togglePlayback(ref),
+            // second transport with rules of its own. As the keys have
+            // it, only a station or an item up has a play to press.
+            onPlayPause: slot is StationSlot || slot is ItemSlot
+                ? () => togglePlayback(ref)
+                : null,
             // As the keys do: only an item up has a queue to step through.
             onNext: slot is! ItemSlot || !ref.watch(queueCanAdvanceProvider)
                 ? null

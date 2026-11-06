@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -43,6 +45,52 @@ func (l *Library) QueueEntries(ctx context.Context, userID string, pids []string
 		})
 	}
 	return out, nil
+}
+
+// QueueEntriesVisible answers which of a queue's pids the account may
+// see, as QueueEntries resolves them: inside its library grants and
+// content rules. An account that cannot be read sees none, and a read
+// that fails answers none: the caller shows an empty slot for each.
+func (l *Library) QueueEntriesVisible(userID string, pids []string) map[string]bool {
+	ctx := context.Background()
+	out := make(map[string]bool, len(pids))
+	uc, err := l.userCtxByID(ctx, userID)
+	if err != nil {
+		return out
+	}
+	if seesEverything(uc) {
+		for _, pid := range pids {
+			out[pid] = true
+		}
+		return out
+	}
+	bare := make([]model.PID, 0, len(pids))
+	for _, api := range pids {
+		if prefix, pid, ok := parseAPIPID(api); ok && itemPrefix(prefix) {
+			bare = append(bare, pid)
+		}
+	}
+	views, err := l.readItems(ctx, bare)
+	if err != nil {
+		l.log.Warn("reading a shared session's queue for a receiver", "err", err)
+		return out
+	}
+	verdicts, err := l.tagVerdicts(ctx, uc, slices.Collect(maps.Values(views)))
+	if err != nil {
+		l.log.Warn("reading a shared session's queue for a receiver", "err", err)
+		return out
+	}
+	for _, api := range pids {
+		prefix, pid, ok := parseAPIPID(api)
+		if !ok {
+			continue
+		}
+		if v := views[pid]; v != nil && prefixFitsKind(prefix, v.Kind) &&
+			l.viewVisible(ctx, uc, v) && l.contentAllows(ctx, uc, verdicts, v) {
+			out[api] = true
+		}
+	}
+	return out
 }
 
 // UserCtxByID rebuilds a user context from a bare user id (the connect

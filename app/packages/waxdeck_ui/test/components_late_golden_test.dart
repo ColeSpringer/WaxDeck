@@ -861,6 +861,17 @@ void main() {
                         ],
                       ),
                       const SizedBox(height: WaxSpace.s12),
+                      // The same choice while it cannot be made.
+                      const WaxSegmented(
+                        label: 'Order',
+                        selected: 'added',
+                        onSelect: null,
+                        segments: <WaxSegment>[
+                          WaxSegment(name: 'az', label: 'A-Z'),
+                          WaxSegment(name: 'added', label: 'Added'),
+                        ],
+                      ),
+                      const SizedBox(height: WaxSpace.s12),
                       Row(
                         children: <Widget>[
                           WaxPill(
@@ -1023,9 +1034,43 @@ void main() {
                               busy: busy,
                               onPressed: () {},
                             ),
+                            const SizedBox(width: WaxSpace.s8),
+                            WaxPill(
+                              label: 'Voice boost',
+                              busy: busy,
+                              onPressed: () {},
+                            ),
                           ],
                         ),
                       ),
+                    // A state to read is drawn lit, in the accent while
+                    // active; only the last, with nothing to do, takes
+                    // the disabled tint.
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        WaxIconButton(
+                          glyph: WaxIcons.success,
+                          label: 'Downloaded',
+                          active: true,
+                          status: true,
+                          onPressed: null,
+                        ),
+                        SizedBox(width: WaxSpace.s8),
+                        WaxIconButton(
+                          glyph: WaxIcons.downloads,
+                          label: 'Waiting for wifi',
+                          status: true,
+                          onPressed: null,
+                        ),
+                        SizedBox(width: WaxSpace.s8),
+                        WaxIconButton(
+                          glyph: WaxIcons.downloads,
+                          label: 'Download',
+                          onPressed: null,
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -1260,6 +1305,13 @@ void main() {
     goldenTest(
       'a disclosure holds its section shut until it is opened',
       fileName: 'disclosure',
+      // Opened before the harness sizes the scene, so it makes room.
+      pumpBeforeTest: (tester) async {
+        for (var i = 0; i < _lightAndDark.length; i++) {
+          await tester.tap(find.text('Edition').at(i));
+        }
+        await tester.pumpAndSettle();
+      },
       builder: () => GoldenTestGroup(
         columns: 2,
         children: <Widget>[
@@ -1275,7 +1327,6 @@ void main() {
                     children: <Widget>[
                       WaxDisclosure(
                         title: 'Edition',
-                        initiallyExpanded: true,
                         children: <Widget>[
                           MonoDetailRow(
                             label: 'Publisher',

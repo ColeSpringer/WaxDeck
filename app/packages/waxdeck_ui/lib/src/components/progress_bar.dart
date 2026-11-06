@@ -14,16 +14,12 @@ import '../tokens/radii.dart';
 /// under reduced motion. It is a page's bar: a button's own progress and
 /// a control's spinner are drawn by those controls.
 class WaxProgressBar extends StatefulWidget {
-  const WaxProgressBar({this.value, this.semanticsLabel, this.tone, super.key});
+  const WaxProgressBar({this.value, this.tone, super.key});
 
   /// How far along, from zero to one (held to that range). Null is
   /// indeterminate, and so is any value that is not finite (NaN from 0
   /// of 0, or infinity).
   final double? value;
-
-  /// What the bar is measuring, such as "Scanning". Without one the bar
-  /// reports only its value.
-  final String? semanticsLabel;
 
   /// The fill's colour where it carries a verdict, such as a quota at or
   /// over its cap. Null draws it in the accent, which is what most bars
@@ -123,7 +119,6 @@ class _WaxProgressBarState extends State<WaxProgressBar>
     }
     return Semantics(
       container: true,
-      label: widget.semanticsLabel,
       value: value == null ? null : context.waxL10n.spellPercent(value),
       excludeSemantics: true,
       child: SizedBox(

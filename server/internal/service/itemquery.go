@@ -33,6 +33,12 @@ func visibleTracks() *query.Builder {
 	return unarchived(query.New(query.EntityTracks))
 }
 
+// trashedItems is every item in the trash, for the library journal's walk,
+// which places those too.
+func trashedItems() *query.Builder {
+	return query.New(query.EntityItems).Where("state", query.OpIs, string(model.StateArchived))
+}
+
 // unarchived applies the state predicate to a builder.
 //
 // Named rather than inlined so the predicate has one spelling where a

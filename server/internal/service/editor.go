@@ -1187,12 +1187,32 @@ type ArtworkLockDTO struct {
 // means its own pin is clear, and the effective lock is then whatever
 // the front row's own pin says, since that is the whole-artwork pin
 // reaching across; no front row either means nothing is pinned at all.
-func (l *Library) EntityArtworkLock(ctx context.Context, entityType, apiEntityPID, role string) (ArtworkLockDTO, error) {
+func (l *Library) EntityArtworkLock(ctx context.Context, uc *UserCtx, entityType, apiEntityPID, role string) (ArtworkLockDTO, error) {
 	ent, pid, artRole, err := lockableArtSlot(entityType, apiEntityPID, role)
 	if err != nil {
 		return ArtworkLockDTO{}, err
 	}
+	if err := l.showArtworkReached(ctx, uc, ent, pid, apiEntityPID); err != nil {
+		return ArtworkLockDTO{}, err
+	}
 	return l.artworkLockFor(ctx, ent, pid, artRole)
+}
+
+// showArtworkReached refuses a show's artwork to a caller the show's
+// detail does not answer (showReached), with the not-found every show
+// read answers: managing podcasts is no reach of its own.
+func (l *Library) showArtworkReached(ctx context.Context, uc *UserCtx, ent model.ArtEntity, pid model.PID, apiEntityPID string) error {
+	if ent != model.ArtPodcast {
+		return nil
+	}
+	reached, err := l.showReached(ctx, uc, pid)
+	if err != nil {
+		return err
+	}
+	if !reached {
+		return errNotFound("no podcast with pid " + apiEntityPID)
+	}
+	return nil
 }
 
 // artworkLockFor reads one slot's two pins from the entity's role list.
@@ -1221,9 +1241,12 @@ func (l *Library) artworkLockFor(ctx context.Context, ent model.ArtEntity, pid m
 // of a cover that was cleared and left pinned. An empty role writes the
 // front cover's pin, which also gates enrichment's fills in every other
 // role; a named role writes that slot's own pin alone.
-func (l *Library) SetEntityArtworkLock(ctx context.Context, entityType, apiEntityPID, role string, lock bool) (ArtworkLockDTO, error) {
+func (l *Library) SetEntityArtworkLock(ctx context.Context, uc *UserCtx, entityType, apiEntityPID, role string, lock bool) (ArtworkLockDTO, error) {
 	ent, pid, artRole, err := lockableArtSlot(entityType, apiEntityPID, role)
 	if err != nil {
+		return ArtworkLockDTO{}, err
+	}
+	if err := l.showArtworkReached(ctx, uc, ent, pid, apiEntityPID); err != nil {
 		return ArtworkLockDTO{}, err
 	}
 	was, err := l.lib.ArtLocked(ctx, ent, pid, artRole)
@@ -1408,6 +1431,9 @@ func (l *Library) SetEntityArtwork(ctx context.Context, uc *UserCtx, entityType,
 	if err != nil {
 		return EditOutcomeDTO{}, err
 	}
+	if err := l.showArtworkReached(ctx, uc, ent, pid, apiEntityPID); err != nil {
+		return EditOutcomeDTO{}, err
+	}
 	// Only a front cover fans into member files; the auxiliary slots are
 	// catalog-only.
 	writeBack = writeBack && art == model.ArtRoleFront
@@ -1449,6 +1475,9 @@ func (l *Library) ClearEntityArtwork(ctx context.Context, uc *UserCtx, entityTyp
 	}
 	pid, err := editorEntityPID(entityType, apiEntityPID)
 	if err != nil {
+		return err
+	}
+	if err := l.showArtworkReached(ctx, uc, ent, pid, apiEntityPID); err != nil {
 		return err
 	}
 	// No write-back on a clear: a cover already embedded in a file is the
@@ -1802,8 +1831,9 @@ func (l *Library) RenameEntity(ctx context.Context, entityType, apiEntityPID str
 	return res, nil
 }
 
-// EntityCurationFor reads an entity's curated fields with provenance.
-func (l *Library) EntityCurationFor(ctx context.Context, entityType, apiEntityPID string) ([]EntityCuratedFieldDTO, error) {
+// EntityCurationFor reads an entity's curated fields with provenance,
+// behind the gate the entity's detail keeps (entityReached).
+func (l *Library) EntityCurationFor(ctx context.Context, uc *UserCtx, entityType, apiEntityPID string) ([]EntityCuratedFieldDTO, error) {
 	et, ok := mergeEntityForType(entityType)
 	if !ok {
 		return nil, errInvalid("unknown entity type " + entityType)
@@ -1811,6 +1841,11 @@ func (l *Library) EntityCurationFor(ctx context.Context, entityType, apiEntityPI
 	pid, err := editorEntityPID(entityType, apiEntityPID)
 	if err != nil {
 		return nil, err
+	}
+	if reached, err := l.entityReached(ctx, uc, et, pid); err != nil {
+		return nil, err
+	} else if !reached {
+		return nil, errNotFound("no " + entityType + " with pid " + apiEntityPID)
 	}
 	rows, err := l.lib.EntityCuration(ctx, et, pid)
 	if err != nil {

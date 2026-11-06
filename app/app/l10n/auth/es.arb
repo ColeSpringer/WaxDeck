@@ -16,6 +16,8 @@
   "authHaveInvite": "¿Tienes una invitación?",
   "authInviteToken": "Código de invitación (opcional)",
   "authLogIn": "Iniciar sesión",
+  "authLoopbackMessage": "Cierra esta pestaña y vuelve a WaxDeck.",
+  "authLoopbackTitle": "Sesión iniciada",
   "authOr": "o",
   "authPassword": "Contraseña",
   "authPasswordTooShort": "Usa al menos 8 caracteres",

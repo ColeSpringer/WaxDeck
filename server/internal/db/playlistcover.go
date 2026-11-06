@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -66,26 +67,50 @@ func (d *DB) BumpArtEpoch(ctx context.Context) error {
 
 // PlaylistCover records where one playlist's stored cover came from.
 // Fingerprint is over the member list and the art epoch a generated
-// cover was built from, and is empty for a custom one.
+// cover was built from, and is empty for a custom one. Sources are the
+// members a generated cover's tiles came from, nil where that is not
+// known.
 type PlaylistCover struct {
 	PlaylistPID string
 	Origin      string
 	Fingerprint string
 	UpdatedAtNS int64
+	Sources     []string
 }
 
 // PutPlaylistCover stores or replaces one playlist's cover provenance.
 func (d *DB) PutPlaylistCover(ctx context.Context, c PlaylistCover) error {
+	sources := ""
+	if c.Sources != nil {
+		raw, err := json.Marshal(c.Sources)
+		if err != nil {
+			return fmt.Errorf("db: writing playlist cover: %w", err)
+		}
+		sources = string(raw)
+	}
 	_, err := d.w.ExecContext(ctx, `
-		INSERT INTO playlist_cover (playlist_pid, origin, fingerprint, updated_at_ns)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO playlist_cover (playlist_pid, origin, fingerprint, updated_at_ns, sources)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT (playlist_pid) DO UPDATE SET
 			origin = excluded.origin,
 			fingerprint = excluded.fingerprint,
-			updated_at_ns = excluded.updated_at_ns`,
-		c.PlaylistPID, c.Origin, c.Fingerprint, c.UpdatedAtNS)
+			updated_at_ns = excluded.updated_at_ns,
+			sources = excluded.sources`,
+		c.PlaylistPID, c.Origin, c.Fingerprint, c.UpdatedAtNS, sources)
 	if err != nil {
 		return fmt.Errorf("db: writing playlist cover: %w", err)
+	}
+	return nil
+}
+
+// ForgetPlaylistCoverSources marks a generated cover's sources unknown,
+// leaving its origin as it stands: what is about to replace the image is
+// not what the recorded sources were drawn from.
+func (d *DB) ForgetPlaylistCoverSources(ctx context.Context, playlistPID string) error {
+	if _, err := d.w.ExecContext(ctx, `
+		UPDATE playlist_cover SET sources = '' WHERE playlist_pid = ? AND origin = ?`,
+		playlistPID, CoverGenerated); err != nil {
+		return fmt.Errorf("db: forgetting playlist cover sources: %w", err)
 	}
 	return nil
 }
@@ -94,15 +119,22 @@ func (d *DB) PutPlaylistCover(ctx context.Context, c PlaylistCover) error {
 // when the playlist has never had a cover stored.
 func (d *DB) PlaylistCoverFor(ctx context.Context, playlistPID string) (PlaylistCover, error) {
 	var c PlaylistCover
+	var sources string
 	err := d.r.QueryRowContext(ctx, `
-		SELECT playlist_pid, origin, fingerprint, updated_at_ns
+		SELECT playlist_pid, origin, fingerprint, updated_at_ns, sources
 		FROM playlist_cover WHERE playlist_pid = ?`, playlistPID).
-		Scan(&c.PlaylistPID, &c.Origin, &c.Fingerprint, &c.UpdatedAtNS)
+		Scan(&c.PlaylistPID, &c.Origin, &c.Fingerprint, &c.UpdatedAtNS, &sources)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PlaylistCover{}, ErrNotFound
 	}
 	if err != nil {
 		return PlaylistCover{}, fmt.Errorf("db: reading playlist cover: %w", err)
+	}
+	if sources != "" {
+		// A list that does not parse is one not known.
+		if json.Unmarshal([]byte(sources), &c.Sources) != nil {
+			c.Sources = nil
+		}
 	}
 	return c, nil
 }

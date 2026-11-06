@@ -144,8 +144,8 @@ void main() {
     );
   });
 
-  testWidgets('a fix task draws the edit glyph, which says nothing of how '
-      'it went, not a download arrow', (tester) async {
+  testWidgets('a fix task draws the catalog mark, which says nothing of how '
+      'it went and is no control\'s glyph', (tester) async {
     final repo = FakeRepository();
     final at = DateTime.utc(2026, 10, 1);
     for (final type in ['catalog-repair', 'health-fix', 'genre-normalize']) {
@@ -184,7 +184,7 @@ void main() {
       final name = WaxIcons.all.entries
           .firstWhere((entry) => entry.value == glyph)
           .key;
-      expect(name, 'edit', reason: type);
+      expect(name, 'library', reason: type);
     }
   });
 }

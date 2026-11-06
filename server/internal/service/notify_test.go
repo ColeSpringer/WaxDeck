@@ -163,7 +163,7 @@ func TestNotificationLinks(t *testing.T) {
 	svc.publicBase = "https://wax.example.com"
 	for _, c := range []struct{ event, pid, want string }{
 		{"review-ready", "", "https://wax.example.com/review"},
-		{"signup-requested", "", "https://wax.example.com/admin/users"},
+		{"signup-requested", "", "https://wax.example.com/admin/users?view=requests"},
 		{"backup-completed", "", "https://wax.example.com/admin/backups"},
 		{"backup-failed", "", "https://wax.example.com/admin/backups"},
 		{"catalog-reset", "", "https://wax.example.com/admin/libraries"},

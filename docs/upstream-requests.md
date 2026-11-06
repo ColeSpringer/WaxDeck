@@ -648,6 +648,43 @@ note.
   or one whose links could not be followed at create (a loop, a
   permission error, logged), keeps its path and still scans nothing
   whole-library.
+- **An archived item does not say why it was archived.** `RemoveRoot`
+  archives each item left with no file, keeping its pid so `AddRoot` of
+  the same path and a scan re-link it, and a permanent delete, a prune
+  or a purge archives the same way. A removal drops the library's trash
+  rows, a purge deletes its own, and a permanent or prune delete writes
+  none, so `RestorableTrash` answers nothing for any of them, and
+  `ItemView` and `RemoveRootReport` hold nothing else that tells them
+  apart. Two WaxDeck readers need the difference: the item lookup's
+  `departed` (`ResolveItems`), which should name a deleted or purged
+  item and never a removed library's, and the sync tombstone
+  (`tombstoneReason`, `RemovedItems`), which tells a device whether a
+  download's bytes are gone for good. Wanted: an archive reason on each
+  archived item (a root removal, which `AddRoot` and a scan undo, or a
+  delete: permanent, prune, purge), readable in batch beside
+  `RestorableTrash`. Shipped workaround: the item lookup answers every
+  archived item as `GET /items/{pid}` does, so a purged or deleted item
+  lingers in a queue until the player reaches it and skips it with a
+  notice, and the sync feed still names every archived item with no
+  trash row `removed`, so removing a library reclaims its downloads on
+  every device although its items come back with the folder.
+- **A change does not say where its item sat.** A `Changes` row names
+  an entity, an op and a sequence. WaxDeck's catalog delta decides
+  whether an account granted some libraries is owed an item's tombstone
+  from a journal of the library each item sat in, read from the item when
+  the journal reaches a change to it. An item moved twice between two of
+  those reads, A to B to C, is placed in C, and the journal never learns
+  of B: an account granted B but not A or C that was handed the item in B
+  meanwhile is sent no tombstone, and keeps the row until it next mirrors.
+  Wanted: the library the item's primary file sits under after the
+  change, on the change row (or a mark on a change that moves an item
+  between libraries), readable with the rows. Shipped workaround: the
+  journal follows each change within milliseconds of it and places the
+  item where it sits then (a file re-homed between libraries writes
+  several change rows in one scan and is one placement); a journal that
+  fell behind is caught up the same way, a batch at a time; an item it
+  cannot place at all (a trash row naming no library the server can
+  place) is tombstoned to every such account.
 
 ## WaxTap
 

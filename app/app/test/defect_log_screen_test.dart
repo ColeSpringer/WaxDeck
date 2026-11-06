@@ -6,6 +6,7 @@ import 'package:waxdeck/src/diagnostics/defect_log_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/about_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
@@ -45,6 +46,34 @@ void main() {
     expect(_byId(SemanticsIds.defectsScreen), findsOneWidget);
     expect(find.textContaining('a decode failure'), findsOneWidget);
     expect(find.textContaining('[async]'), findsOneWidget);
+  });
+
+  testWidgets("a server version that cannot be read says why, in the app's "
+      'words', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(
+            FakeRepository()
+              ..serverHealthError = const WaxDeckApiException(
+                code: 'internal',
+                message: 'boom',
+                statusCode: 500,
+              ),
+          ),
+        ],
+        child: routedHost(const AboutScreen()),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(
+      find.text('The server ran into a problem it could not handle.'),
+      findsOneWidget,
+    );
+    // Unmounted inside the test, so no retry timer outlives it.
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('an empty log says so rather than showing a blank page', (

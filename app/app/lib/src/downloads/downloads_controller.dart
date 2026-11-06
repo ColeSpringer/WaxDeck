@@ -248,7 +248,14 @@ class DownloadsController extends AsyncNotifier<DownloadsState> {
   /// canceling behind the caller's back.
   Future<bool> pause(String pid) async => await _port?.pause(pid) ?? false;
 
-  Future<void> resume(String pid) async => _port?.resume(pid);
+  /// Re-reads the list after, as [cancel] does: the screen's fold reloads
+  /// on the pauses it saw, so one from an earlier run or visit would leave
+  /// the row's record paused while the transfer waits for the gate.
+  Future<void> resume(String pid) async {
+    await _port?.resume(pid);
+    ref.invalidateSelf();
+    await future;
+  }
 
   /// Asks the OS for notifications again, after the app has said why.
   Future<void> askForNotifications() async =>

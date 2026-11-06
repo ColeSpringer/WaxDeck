@@ -226,6 +226,24 @@ final mediaSessionProvider = Provider<MediaSessionHandle>(
   (ref) => MediaSessionHandle(),
 );
 
+/// Whether new playback is refused because the signed-in account is on
+/// its way out: from the first step of its cleanup until the next account
+/// is adopted. Its screens stay up while the cleanup runs, and a play
+/// started there would outlive it, queued and saved, for whoever signs in
+/// next.
+final playbackHeldProvider = NotifierProvider<PlaybackHold, bool>(
+  PlaybackHold.new,
+);
+
+class PlaybackHold extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void hold() => state = true;
+
+  void release() => state = false;
+}
+
 /// Client identifier reported with listen sessions.
 String get listenClientId {
   if (kIsWeb) return 'waxdeck-flutter-web';

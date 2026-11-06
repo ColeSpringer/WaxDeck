@@ -16,6 +16,7 @@ import (
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
+	"github.com/colespringer/waxbin/read"
 	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -328,9 +329,10 @@ var mediaTypeRuleValues = map[string]string{
 	"audiobook": string(model.KindBook),
 }
 
-// RuleVocabulary returns the rule field vocabulary plus the catalog's
-// custom tag keys, most used first.
-func (l *Library) RuleVocabulary(ctx context.Context) (RuleFields, error) {
+// RuleVocabulary returns the rule field vocabulary plus the custom tag
+// keys the caller's items carry, most used first, each counted over
+// those items.
+func (l *Library) RuleVocabulary(ctx context.Context, uc *UserCtx) (RuleFields, error) {
 	out := RuleFields{Fields: make([]RuleFieldInfo, 0, len(ruleFieldSpecs))}
 	for _, s := range ruleFieldSpecs {
 		out.Fields = append(out.Fields, RuleFieldInfo{
@@ -346,10 +348,42 @@ func (l *Library) RuleVocabulary(ctx context.Context) (RuleFields, error) {
 	if err != nil {
 		return RuleFields{}, classify(err)
 	}
+	if !fullReach(uc) {
+		if keys, err = l.tagKeysInReach(ctx, uc, keys); err != nil {
+			return RuleFields{}, err
+		}
+	}
 	out.TagKeys = make([]RuleTagKey, 0, len(keys))
 	for _, k := range keys {
 		out.TagKeys = append(out.TagKeys, RuleTagKey{Key: k.Key, ItemCount: k.Count})
 	}
+	return out, nil
+}
+
+// tagKeysInReach recounts the catalog's tag keys over the items the
+// caller may enumerate, the scope a tag facet counts in, dropping the
+// keys none of them carries. The catalog counts every library.
+func (l *Library) tagKeysInReach(ctx context.Context, uc *UserCtx, keys []read.TagKeyCount) ([]read.TagKeyCount, error) {
+	out := make([]read.TagKeyCount, 0, len(keys))
+	for _, k := range keys {
+		if model.IsReservedTagKey(k.Key) {
+			continue
+		}
+		q := l.facetScopeBuilder(ctx, uc).WherePresence(facetTagPrefix+k.Key, query.OpIsPresent).Build()
+		n, err := l.lib.Count(ctx, q, "")
+		if err != nil {
+			return nil, classify(err)
+		}
+		if n > 0 {
+			out = append(out, read.TagKeyCount{Key: k.Key, Count: n})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Key < out[j].Key
+	})
 	return out, nil
 }
 
@@ -837,6 +871,9 @@ func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playli
 // argument here would silently evaluate a shared `played = false` rule
 // against each reader.
 func (l *Library) playlistMembers(ctx context.Context, pl *model.Playlist) ([]*model.ItemView, error) {
+	if l.memberReadHook != nil {
+		l.memberReadHook(pl)
+	}
 	if pl.Kind != model.PlaylistStatic && pl.Rule != nil {
 		items, err := l.lib.Query(ctx, evaluableRule(*pl.Rule), pl.OwnerPID)
 		if err != nil {
@@ -1479,27 +1516,34 @@ func (l *Library) PlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylistPID
 	// contributing cover art; that is a deliberate consequence of moving
 	// the predicate into the query rather than a second policy.
 	l.syncPlaylistCover(ctx, pl, items)
-	static := pl.Kind == model.PlaylistStatic
 	// A static list's members are stored rows and are filtered here; a
-	// smart list's already left the query filtered. Positions still count
-	// off the full stored list, exactly as they do for members the caller
-	// cannot see, so a restore lands where it was.
-	f, err := l.withTagVerdicts(ctx, l.newMemberFilter(uc, pl), items[min(off, len(items)):])
+	// smart list's already left the query filtered. Positions count off
+	// the full stored list, members the caller cannot see included, so a
+	// restore lands where it was; only the owner removes by position, and
+	// anyone else would read in their gaps where the hidden members sit.
+	// The cursor counts the entries the caller was shown for the same
+	// reason, and a page says there is more only when another one follows.
+	positioned := pl.Kind == model.PlaylistStatic && string(pl.OwnerPID) == uc.CatalogPID
+	f, err := l.withTagVerdicts(ctx, l.newMemberFilter(uc, pl), items)
 	if err != nil {
 		return PlaylistItemsPage{}, err
 	}
 	out := PlaylistItemsPage{Entries: []PlaylistEntry{}}
-	for i := off; i < len(items); i++ {
-		if len(out.Entries) == limit {
-			out.Next = encodeOffsetCursor(i)
-			break
-		}
-		it := items[i]
+	shown := 0
+	for i, it := range items {
 		if !l.memberVisible(ctx, f, it) {
 			continue
 		}
+		shown++
+		if shown <= off {
+			continue
+		}
+		if len(out.Entries) == limit {
+			out.Next = encodeOffsetCursor(off + limit)
+			break
+		}
 		entry := PlaylistEntry{Item: summary(it)}
-		if static {
+		if positioned {
 			pos := i
 			entry.Position = &pos
 		}
@@ -1970,17 +2014,18 @@ func (l *Library) announcePlaylist(ctx context.Context, exceptID, barePID string
 }
 
 // encodeOffsetCursor and decodeOffsetCursor page in-memory lists (a
-// playlist's members, the playlist listing itself). The offset is
-// opaque on the wire; positions inside one evaluation are what the
-// contract promises.
+// playlist's members, the playlist listing itself). The offset counts
+// the entries the caller has been shown, and is opaque on the wire;
+// positions inside one evaluation are what the contract promises.
 //
 // The prefix carries a version, retired the same way the scoped
 // cursors' one is: bump it in the change that alters what the offset
 // indexes into, and the old spelling stops parsing, so a cursor from
 // before the change answers 400 instead of walking a shifted window.
-// It went to o1 when a smart playlist's offset stopped indexing into
-// the unfiltered member list and started indexing into the rule's own
-// filtered evaluation: the same number names a different row.
+// It went to o2 when the member listing's offset stopped indexing into
+// the evaluation, members hidden from the caller included, and started
+// counting what the caller was shown: a reader decoding it learned how
+// many members it cannot see sit between the ones it can.
 //
 // Two surfaces mint these, and only one of them changed: the member
 // listing above and the playlist listing itself. They share the prefix
@@ -1989,7 +2034,7 @@ func (l *Library) announcePlaylist(ctx context.Context, exceptID, barePID string
 // scroll of both. The blast radius is one scroll, which is why that is
 // the cheaper trade; whoever bumps it next should know they are
 // retiring both.
-const offsetCursorVersion = "o1:"
+const offsetCursorVersion = "o2:"
 
 func encodeOffsetCursor(off int) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(offsetCursorVersion + strconv.Itoa(off)))

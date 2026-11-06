@@ -63,7 +63,8 @@ class NowPlaying {
 
   static const NowPlaying nothing = NowPlaying();
 
-  /// The queue entry being played, or null when the queue is empty.
+  /// The queue entry being played, or null when nothing is: an empty
+  /// queue, or one a station holds back ([parkedEntryProvider]).
   final QueueEntry? entry;
 
   /// The item that entry names, once it has been resolved.
@@ -885,10 +886,6 @@ class NowPlayingController extends Notifier<NowPlaying> {
     if (state.session != null || _starting != null) return;
     final entry = ref.read(queueControllerProvider).currentEntry;
     if (entry == null) return;
-    // A start that failed asks again for the position it was asked for.
-    // One that let go of the engine checkpointed where it stood on its
-    // way out, and that checkpoint is the truthful place to come back
-    // to; the original request is where it began, which is behind.
     // Both states this answers are resumes: a start that failed asks
     // again for where it was going, and an item that let go of the
     // engine to radio comes back to the checkpoint it wrote on its way
@@ -1838,6 +1835,12 @@ class NowPlayingController extends Notifier<NowPlaying> {
         if (entry != null) _inFlight = _start(entry);
       case QueueAdvance.ended:
       case QueueAdvance.empty:
+        // The entry left standing is still the session's: a queue edit
+        // must not start it, and a station taking the engine parks it.
+        _sessionEntryId = ref
+            .read(queueControllerProvider)
+            .currentEntry
+            ?.queueId;
         unawaited(_engine.stop());
         state = NowPlaying(entry: state.entry, item: state.item);
     }
@@ -2017,13 +2020,16 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// ordinary path, so a rendering that keeps failing costs a mint or two
   /// rather than one per loss.
   Future<void> _recoverTimeline(bool wasPlaying) async {
+    final began = _startToken;
     final queue = ref.read(queueControllerProvider);
     final session = _session;
     final spent = session != null && !session.mayRecover;
     if (spent) _feeder.clear();
     final recovered =
         !spent && await _feeder.onLost(session, queue, resume: wasPlaying);
-    if (recovered || _radioOwnsEngine) return;
+    // A station took the engine, or something else started or stopped,
+    // while the mint was out: that owns the engine now, park included.
+    if (recovered || _superseded(began) || _radioOwnsEngine) return;
     final entry = queue.currentEntry;
     if (entry == null) return;
     await _start(entry, useSavedPosition: true, ordinary: spent);

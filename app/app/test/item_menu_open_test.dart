@@ -21,6 +21,7 @@ class _Opener extends ConsumerWidget {
   const _Opener({
     required this.pid,
     required this.mediaType,
+    this.artist = 'F. Herbert',
     this.artistPid,
     this.onPlay,
     this.inProgress = false,
@@ -30,6 +31,7 @@ class _Opener extends ConsumerWidget {
 
   final String pid;
   final MediaType mediaType;
+  final String artist;
   final String? artistPid;
   final void Function(WidgetRef ref)? onPlay;
   final bool inProgress;
@@ -47,7 +49,7 @@ class _Opener extends ConsumerWidget {
           pid: pid,
           title: 'Something',
           mediaType: mediaType,
-          artist: 'F. Herbert',
+          artist: artist,
           artistPid: artistPid,
           onPlay: onPlay,
           inProgress: inProgress,
@@ -154,10 +156,14 @@ void main() {
       const _Opener(
         pid: _book,
         mediaType: MediaType.audiobook,
+        // The credit names both; the door opens the first author alone,
+        // so the row names nobody it does not open.
+        artist: 'F. Herbert, B. Herbert',
         artistPid: 'ar-1',
       ),
     );
     expect(_byId(SemanticsIds.itemMenuGoArtist), findsNothing);
+    expect(find.textContaining('B. Herbert'), findsNothing);
     expect(
       find.descendant(
         of: _byId(SemanticsIds.itemMenuGoAuthor),

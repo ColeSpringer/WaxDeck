@@ -202,6 +202,10 @@ final _locations = <String, Type>{
   WaxRoute.organizePreviewOwn: OrganizeScreen,
   WaxRoute.adminEnrichment: EnrichmentScreen,
   WaxRoute.users: UsersScreen,
+  // The same screen on its signup requests, where a signup notification
+  // lands, and on its invites. A query, so the one route answers all three.
+  WaxRoute.userRequests: UsersScreen,
+  WaxRoute.userInvites: UsersScreen,
   WaxRoute.adminShares: AdminSharesScreen,
   WaxRoute.adminSettings: ServerSettingsScreen,
   WaxRoute.adminNotifications: AdminNotificationsScreen,
@@ -285,6 +289,16 @@ final _stackedInShell = <String>{
   WaxRoute.healthRule('missing-artwork'),
 };
 
+/// The view the users screen on screen shows, by its segment's name.
+String _usersView(WidgetTester tester) => tester
+    .widget<WaxSegmented>(
+      find.descendant(
+        of: find.byType(UsersScreen),
+        matching: find.byType(WaxSegmented),
+      ),
+    )
+    .selected;
+
 Future<GoRouter> _pumpApp(WidgetTester tester) async {
   final container = ProviderContainer(
     overrides: [
@@ -322,6 +336,50 @@ void main() {
         reason: '${entry.key} back affordance',
       );
     }
+  });
+
+  testWidgets('the users location opens on the view it names', (tester) async {
+    final router = await _pumpApp(tester);
+
+    router.go(WaxRoute.userRequests);
+    await tester.pumpAndSettle();
+    expect(_usersView(tester), WaxRoute.usersRequestsView);
+    router.go(WaxRoute.userInvites);
+    await tester.pumpAndSettle();
+    expect(_usersView(tester), WaxRoute.usersInvitesView);
+
+    // One page under every query, so the view follows the location.
+    router.go(WaxRoute.users);
+    await tester.pumpAndSettle();
+    expect(_usersView(tester), 'users');
+    router.go(WaxRoute.userRequests);
+    await tester.pumpAndSettle();
+    expect(_usersView(tester), WaxRoute.usersRequestsView);
+  });
+
+  testWidgets('a users view chosen by tap is the location, and a reload of '
+      'it opens that view', (tester) async {
+    final router = await _pumpApp(tester);
+    router.go(WaxRoute.users);
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(WaxSegmented),
+        matching: find.text('Invites'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final location = router.routerDelegate.currentConfiguration.uri.toString();
+    expect(location, WaxRoute.userInvites);
+    expect(_usersView(tester), WaxRoute.usersInvitesView);
+
+    // A reload: a fresh app, opened at the location the tap wrote.
+    await tester.pumpWidget(const SizedBox());
+    tester.platformDispatcher.defaultRouteNameTestValue = location;
+    addTearDown(tester.platformDispatcher.clearDefaultRouteNameTestValue);
+    await _pumpApp(tester);
+    expect(_usersView(tester), WaxRoute.usersInvitesView);
   });
 
   testWidgets('a listing reads the scope its location states', (tester) async {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../admin/admin_providers.dart';
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 import '../tools/tool_tasks_provider.dart';
 
@@ -164,6 +165,9 @@ class HealthIssuesController extends AsyncNotifier<HealthIssuesState> {
   @override
   Future<HealthIssuesState> build() async {
     _generation++;
+    // Keyed on the account: the worklist lists the items its grants
+    // offer, and the repository moves only with the server.
+    ref.watch(signedInAccountProvider);
     final page = await ref
         .watch(repositoryProvider)
         .listHealthIssues(rule: rule, limit: pageSize);

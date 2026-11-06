@@ -270,7 +270,7 @@ class FirstRunCard extends ConsumerWidget {
           icon: WaxIcons.artists,
           kind: WaxButtonKind.tonal,
           semanticsId: SemanticsIds.adminAction('users'),
-          onPressed: () => context.go(WaxRoute.users),
+          onPressed: () => context.go(WaxRoute.userInvites),
         ),
         WaxButton(
           label: l10n.adminSectionReview,

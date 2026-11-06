@@ -227,13 +227,17 @@ failure. `error` frames carry the API error vocabulary in `code` (
 the server's routing deadline, ten seconds). A command routed to a client
 endpoint may also come back with what that endpoint answered, from the
 same short vocabulary the REST surface whitelists: `conflict`,
-`feature-unavailable`, and `endpoint-failed` where it took the command
-and could not carry it out. An `error` frame without an
-`id` is connection-level (a malformed frame that could not be parsed far
-enough to find one). A refusal whose code covers several causes may also
-carry `params`, the same flat string map on the same best-effort terms
-the REST `Error` schema documents, so a refusal reachable over either
-transport says the same thing on both. A `cmd-result` from a player
+`feature-unavailable`, `endpoint-failed` where it took the command
+and could not carry it out, and `endpoint-idle`, `no-session`,
+`queue-end` and `queue-start` where it found nothing to act on. The
+server says `queue-end` itself for a `next` past the end of a session
+it drives on a cast or DLNA device. An `error` frame without an `id`
+is connection-level (a malformed frame that could not be parsed far
+enough to find one). A refusal whose code
+covers several causes may also carry `params`, the same flat string
+map on the same best-effort terms the REST `Error` schema documents,
+so a refusal reachable over either transport says the same thing on
+both. A `cmd-result` from a player
 client never carries params: the codes a client endpoint may answer are
 whitelisted before they reach the wire, and passing its own detail
 through to other listeners would need the same treatment.
@@ -266,6 +270,8 @@ order.
 
 Commands are authorized like the REST session surface: your own sessions
 always; another user's session only when it plays on a shared endpoint.
+A `set-queue` on another user's session resolves its `itemPids` for you
+first: one you may not see answers `not-found`, the queue unchanged.
 
 ### Endpoint registration (player client to server)
 
@@ -379,7 +385,9 @@ echoing the frame's optional `id` when it sent one:
 The `session` payload is the REST `PlaybackSession` schema, with one
 economy: `entries` rides the first frame of a watch and every frame
 where `queueVersion` bumped, and is omitted otherwise (state frames at
-1 Hz must not carry a 500-row queue). Controllers render position by
+1 Hz must not carry a 500-row queue). On another user's session, an
+entry you may not see arrives as an empty slot, as over REST.
+Controllers render position by
 extrapolating from `positionMs` at `positionAt` using `rate` while
 `playing`, against the clock offset below, so scrubbers track smoothly
 instead of jittering with delivery latency. A `session` frame with

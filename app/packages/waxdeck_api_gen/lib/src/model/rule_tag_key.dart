@@ -12,14 +12,14 @@ part 'rule_tag_key.g.dart';
 ///
 /// Properties:
 /// * [key] - Canonical tag key; address it as `tag.KEY`.
-/// * [itemCount] - Distinct items carrying this key.
+/// * [itemCount] - Distinct items the caller may see carrying this key.
 @BuiltValue()
 abstract class RuleTagKey implements Built<RuleTagKey, RuleTagKeyBuilder> {
   /// Canonical tag key; address it as `tag.KEY`.
   @BuiltValueField(wireName: r'key')
   String get key;
 
-  /// Distinct items carrying this key.
+  /// Distinct items the caller may see carrying this key.
   @BuiltValueField(wireName: r'itemCount')
   int get itemCount;
 

@@ -45,10 +45,6 @@
       }
     }
   },
-  "aboutServerUnreachable": "unreachable",
-  "@aboutServerUnreachable": {
-    "description": "Stands in for the server's version when it did not answer. Lower case: it sits where a version number would."
-  },
   "aboutTitle": "About",
   "@aboutTitle": {
     "description": "Title of the About page."

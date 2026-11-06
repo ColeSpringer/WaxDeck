@@ -126,6 +126,8 @@ class EntityHeader extends StatelessWidget {
             ),
           );
 
+    // Each optional row is keyed, so one coming or going above the bar
+    // leaves the bar, and the focus on its pills, where it was.
     final text = Column(
       crossAxisAlignment: stacked
           ? CrossAxisAlignment.center
@@ -139,6 +141,7 @@ class EntityHeader extends StatelessWidget {
         ),
         if (subtitle != null)
           Padding(
+            key: const ValueKey<String>('subtitle'),
             padding: const EdgeInsets.only(top: WaxSpace.s4),
             child: Text(
               subtitle!,
@@ -148,6 +151,7 @@ class EntityHeader extends StatelessWidget {
           ),
         for (final link in links)
           Padding(
+            key: ValueKey<String>('link-${link.semanticsId}'),
             padding: const EdgeInsets.only(top: WaxSpace.s4),
             // The button's label takes the ambient alignment, so a link
             // that wraps lines up with the text around it.
@@ -163,6 +167,7 @@ class EntityHeader extends StatelessWidget {
           ),
         if (metadata != null)
           Padding(
+            key: const ValueKey<String>('metadata'),
             padding: const EdgeInsets.only(top: WaxSpace.s4),
             child: Text(
               metadata!,
@@ -172,6 +177,7 @@ class EntityHeader extends StatelessWidget {
           ),
         if (description != null)
           Padding(
+            key: const ValueKey<String>('description'),
             padding: const EdgeInsets.only(top: WaxSpace.s12),
             child: ConstrainedBox(
               constraints: const BoxConstraints(
@@ -188,6 +194,7 @@ class EntityHeader extends StatelessWidget {
           ),
         if (actions.isNotEmpty || trailing.isNotEmpty || overflow != null)
           Padding(
+            key: const ValueKey<String>('actions'),
             padding: const EdgeInsets.only(top: WaxSpace.s16),
             child: WaxActionBar(
               actions: actions,

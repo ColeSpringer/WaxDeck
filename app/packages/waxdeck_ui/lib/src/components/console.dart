@@ -14,7 +14,6 @@ import 'inputs.dart';
 import 'prose.dart';
 import 'reserved_size.dart';
 import 'sheet.dart';
-import 'tooltip.dart';
 
 /// How much a table column matters when there is not room for all of
 /// them.
@@ -535,7 +534,6 @@ class StatTile extends StatefulWidget {
     this.tone,
     this.onTap,
     this.semanticsId,
-    this.reserveCaption = false,
     super.key,
   });
 
@@ -546,8 +544,7 @@ class StatTile extends StatefulWidget {
 
   /// A line under the number: what it means, or what to do about it.
   /// Cut to one line; the whole of it is in the tile's spoken label, and
-  /// in a tooltip where it is cut, which keyboard focus shows on a tile
-  /// that goes somewhere.
+  /// in a tooltip where it is cut, which keyboard focus shows.
   final String? caption;
 
   final WaxGlyph? glyph;
@@ -558,15 +555,11 @@ class StatTile extends StatefulWidget {
   final Color? tone;
 
   /// Where the tile doors into. A tile with nowhere to go is not
-  /// tappable, and says so to a screen reader by not being a button.
+  /// tappable, and says so to a screen reader by not being a button; it
+  /// is a tab stop only while its room cuts a line.
   final VoidCallback? onTap;
 
   final String? semanticsId;
-
-  /// Keep the caption line open when there is no caption, so the tile
-  /// matches its neighbours that have one. A [WaxStatGrid] holds it open
-  /// for every tile when any has a caption; alone, the tile leaves it off.
-  final bool reserveCaption;
 
   static const double _glyphSize = 14;
 
@@ -575,9 +568,9 @@ class StatTile extends StatefulWidget {
 }
 
 class _StatTileState extends State<StatTile> {
-  /// Which of a tappable tile's lines its room cuts. The tile carries their
-  /// whole text as its own tooltip, so keyboard focus on it shows them as
-  /// a pointer resting on them would.
+  /// Which of the tile's lines its room cuts. The tile carries their whole
+  /// text as its own tooltip, so keyboard focus on it shows them as a
+  /// pointer resting on them would.
   bool _valueCut = false;
   bool _captionCut = false;
 
@@ -606,17 +599,14 @@ class _StatTileState extends State<StatTile> {
       :tone,
       :onTap,
       :semanticsId,
-      :reserveCaption,
     ) = widget;
-    final tappable = onTap != null;
     final colors = WaxColors.of(context);
     final captionStyle = WaxType.caption.copyWith(color: colors.textTertiary);
     final reserve =
-        reserveCaption ||
-        (context
-                .dependOnInheritedWidgetOfExactType<_StatGridScope>()
-                ?.reserveCaption ??
-            false);
+        context
+            .dependOnInheritedWidgetOfExactType<_StatGridScope>()
+            ?.reserveCaption ??
+        false;
     final body = Container(
       padding: const EdgeInsets.all(WaxSpace.s16),
       decoration: BoxDecoration(
@@ -662,7 +652,7 @@ class _StatTileState extends State<StatTile> {
             style: WaxType.titleEntity.copyWith(
               color: tone ?? colors.textPrimary,
             ),
-            onCut: tappable ? _valueCutIs : null,
+            onCut: _valueCutIs,
           ),
           if (caption != null || reserve)
             Padding(
@@ -675,7 +665,7 @@ class _StatTileState extends State<StatTile> {
                     : _OneLine(
                         caption,
                         style: captionStyle,
-                        onCut: tappable ? _captionCutIs : null,
+                        onCut: _captionCutIs,
                       ),
               ),
             ),
@@ -685,27 +675,33 @@ class _StatTileState extends State<StatTile> {
     final spoken = caption == null
         ? context.waxL10n.consoleStat(label, value)
         : context.waxL10n.consoleStatWithCaption(label, value, caption);
-    // The whole tile reads as one thing either way: as a button when it
-    // goes somewhere, and as a labelled value when it does not.
-    if (onTap == null) {
-      return Semantics(
-        identifier: semanticsId,
-        container: true,
-        label: spoken,
-        excludeSemantics: true,
-        child: body,
-      );
-    }
     final cut = <String>[
       if (_valueCut) value,
       if (_captionCut && caption != null) caption,
     ];
+    final tooltip = cut.isEmpty ? null : cut.join('\n');
+    // The whole tile reads as one thing either way: as a button when it
+    // goes somewhere, and as a labelled value when it does not. Either way
+    // it carries what its room cut, which keyboard focus shows, so a tile
+    // with nowhere to go is a stop only while it has that to show.
+    if (onTap == null) {
+      return WaxTappable(
+        label: spoken,
+        semanticsId: semanticsId,
+        borderRadius: WaxRadius.card,
+        onPressed: null,
+        inert: true,
+        tooltip: tooltip,
+        tooltipOnLongPress: true,
+        child: body,
+      );
+    }
     return WaxInkTappable(
       label: spoken,
       semanticsId: semanticsId,
       borderRadius: WaxRadius.card,
       onPressed: onTap,
-      tooltip: cut.isEmpty ? null : cut.join('\n'),
+      tooltip: tooltip,
       // The cut text has no other way onto a touch screen.
       tooltipOnLongPress: true,
       child: body,
@@ -713,82 +709,58 @@ class _StatTileState extends State<StatTile> {
   }
 }
 
-/// A tile's line cut to one line, with the whole of it in a tooltip once
-/// the room has proved too narrow to show it.
+/// A tile's line cut to one line, which tells the tile when its room cuts
+/// it, so the tile can carry the whole of it.
 ///
 /// The cut is read off the laid-out paragraph rather than measured from
 /// the incoming width in a [LayoutBuilder], which cannot answer a dry
 /// layout and so breaks any parent that asks for one.
 class _OneLine extends StatefulWidget {
-  const _OneLine(this.text, {required this.style, this.onCut});
+  const _OneLine(this.text, {required this.style, required this.onCut});
 
   final String text;
   final TextStyle style;
 
-  /// Told when the room starts or stops cutting the line, by a host that
-  /// carries the whole of it itself; with one, the line draws no tooltip.
-  final ValueChanged<bool>? onCut;
+  /// Told when the room starts or stops cutting the line.
+  final ValueChanged<bool> onCut;
 
   @override
   State<_OneLine> createState() => _OneLineState();
 }
 
 class _OneLineState extends State<_OneLine> {
-  final GlobalKey _lineKey = GlobalKey();
   bool _cut = false;
 
   void _setCut(bool cut) {
     if (!mounted || cut == _cut) return;
-    setState(() => _cut = cut);
-    widget.onCut?.call(cut);
+    _cut = cut;
+    widget.onCut(cut);
   }
 
   @override
   void initState() {
     super.initState();
-    if (widget.onCut != null) _report();
-  }
-
-  @override
-  void didUpdateWidget(_OneLine old) {
-    super.didUpdateWidget(old);
-    if (widget.onCut != null && old.onCut == null) _report();
-  }
-
-  /// Tells a host new to this line where its room stands, once it has been
-  /// measured, so the host never keeps a cut from text it no longer shows.
-  void _report() {
+    // Tells the tile where a line new to it stands, once it has been
+    // measured, so the tile never keeps a cut from text it no longer shows.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onCut?.call(_cut);
+      if (mounted) widget.onCut(_cut);
     });
   }
 
   @override
-  Widget build(BuildContext context) {
-    final line = _CutProbe(
-      key: _lineKey,
-      onChanged: _setCut,
-      child: Text(
-        widget.text,
-        style: widget.style,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-    // The key keeps the probe, and the paragraph under it, through the
-    // tooltip arriving.
-    return _cut && widget.onCut == null
-        ? WaxTooltip(
-            message: widget.text,
-            excludeFromSemantics: true,
-            child: line,
-          )
-        : line;
-  }
+  Widget build(BuildContext context) => _CutProbe(
+    onChanged: _setCut,
+    child: Text(
+      widget.text,
+      style: widget.style,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    ),
+  );
 }
 
 class _CutProbe extends SingleChildRenderObjectWidget {
-  const _CutProbe({required this.onChanged, required super.child, super.key});
+  const _CutProbe({required this.onChanged, required super.child});
 
   final ValueChanged<bool> onChanged;
 
@@ -839,28 +811,34 @@ class _StatGridScope extends InheritedWidget {
 /// A row of [StatTile]s that owns their width and spacing, and holds the
 /// caption line open on all of them when any one has a caption.
 class WaxStatGrid extends StatelessWidget {
-  const WaxStatGrid({
-    required this.tiles,
-    this.tileWidth = WaxStatGrid.defaultTileWidth,
-    super.key,
-  });
+  const WaxStatGrid({required this.tiles, super.key});
 
-  /// The width a tile gets unless a grid asks for another.
-  static const double defaultTileWidth = 220;
+  /// The width every tile in a grid gets at a text scale of 1; its text
+  /// part grows with the text, up to the grid's own width.
+  static const double tileWidth = 220;
 
   final List<StatTile> tiles;
-  final double tileWidth;
 
   @override
   Widget build(BuildContext context) {
     final reserve = tiles.any((tile) => tile.caption != null);
+    // The text grows and the tile's padding does not, so a fixed width cut
+    // the values at large text; large text takes fewer, wider columns. The
+    // text part follows the caption's own growth, which is what binds a
+    // tile and is not the size-1 point of a nonlinear scale. The wrap's own
+    // width holds each tile to the grid.
+    final captionSize = WaxType.caption.fontSize!;
+    final growth =
+        MediaQuery.textScalerOf(context).scale(captionSize) / captionSize;
+    const padding = 2 * WaxSpace.s16;
+    final width = padding + (tileWidth - padding) * growth;
     return _StatGridScope(
       reserveCaption: reserve,
       child: Wrap(
         spacing: WaxSpace.s12,
         runSpacing: WaxSpace.s12,
         children: <Widget>[
-          for (final tile in tiles) SizedBox(width: tileWidth, child: tile),
+          for (final tile in tiles) SizedBox(width: width, child: tile),
         ],
       ),
     );

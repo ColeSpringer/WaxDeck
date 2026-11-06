@@ -30,7 +30,7 @@ class GenreTreeScreen extends ConsumerStatefulWidget {
 }
 
 /// The tree's two writes, for the button that started one to draw.
-enum _GenreWork { save, revert }
+enum _GenreWork { save, revert, preview, normalize }
 
 class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen>
     with InFlight<GenreTreeScreen, _GenreWork> {
@@ -212,23 +212,26 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen>
     });
   }
 
-  Future<void> _normalize({required bool dryRun}) async {
+  Future<void> _normalize({required bool dryRun}) {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     // Hoisted: the offer outlives this screen.
     final router = GoRouter.of(context);
-    try {
-      await ref.read(repositoryProvider).normalizeGenres(dryRun: dryRun);
-      if (!mounted) return;
-      messenger.show(
-        dryRun ? l10n.adminGenreDryRunStarted : l10n.adminGenreNormalizing,
-        actionLabel: l10n.adminOpenTasks,
-        actionSemanticsId: SemanticsIds.adminAction('genre-tasks'),
-        onAction: () => router.pushInShell<void>(WaxRoute.tasks),
-      );
-    } on WaxDeckApiException catch (error) {
-      messenger.show(explainError(l10n, error));
-    }
+    // Each press queues a whole-catalog pass, so a second one waits.
+    return runAs(dryRun ? _GenreWork.preview : _GenreWork.normalize, () async {
+      try {
+        await ref.read(repositoryProvider).normalizeGenres(dryRun: dryRun);
+        if (!mounted) return;
+        messenger.show(
+          dryRun ? l10n.adminGenreDryRunStarted : l10n.adminGenreNormalizing,
+          actionLabel: l10n.adminOpenTasks,
+          actionSemanticsId: SemanticsIds.adminAction('genre-tasks'),
+          onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+        );
+      } on WaxDeckApiException catch (error) {
+        messenger.show(explainError(l10n, error));
+      }
+    });
   }
 
   @override
@@ -274,6 +277,8 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen>
               _Header(
                 source: value.source,
                 busy: busy,
+                previewing: busyBy(_GenreWork.preview),
+                normalizing: busyBy(_GenreWork.normalize),
                 reverting: busyBy(_GenreWork.revert),
                 onRevert: value.isDefault ? null : _revert,
                 onNormalize: (dryRun) => _normalize(dryRun: dryRun),
@@ -374,6 +379,8 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.source,
     required this.busy,
+    required this.previewing,
+    required this.normalizing,
     required this.reverting,
     required this.onRevert,
     required this.onNormalize,
@@ -382,7 +389,10 @@ class _Header extends StatelessWidget {
   final String source;
   final bool busy;
 
-  /// The revert is the write in flight, which its own button draws.
+  /// Which of the three is the write in flight, which its own button
+  /// draws.
+  final bool previewing;
+  final bool normalizing;
   final bool reverting;
   final VoidCallback? onRevert;
   final void Function(bool dryRun) onNormalize;
@@ -409,6 +419,7 @@ class _Header extends StatelessWidget {
               label: l10n.adminGenrePreviewNormalize,
               kind: WaxButtonKind.tonal,
               semanticsId: SemanticsIds.genreNormalizeDryRun,
+              busy: previewing,
               onPressed: busy ? null : () => onNormalize(true),
             ),
             WaxButton(
@@ -416,6 +427,7 @@ class _Header extends StatelessWidget {
               detail: l10n.adminGenreNormalizeHelp,
               kind: WaxButtonKind.tonal,
               semanticsId: SemanticsIds.genreNormalize,
+              busy: normalizing,
               onPressed: busy ? null : () => onNormalize(false),
             ),
             WaxButton(

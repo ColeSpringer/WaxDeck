@@ -537,6 +537,16 @@ void main() {
       ),
     );
     expect(glyph, findsOneWidget);
+    // The glyph says nothing to a screen reader: the row is named by what
+    // it does and valued by the line it corrects.
+    final node = tester.getSemantics(
+      find.bySemanticsIdentifier(SemanticsIds.originEdit),
+    );
+    expect(node.label, 'Correct the origin');
+    expect(
+      node.value,
+      'Origin: an unnamed source - https://feeds.example.test/show/ep-12.mp3',
+    );
   });
 
   testWidgets('the origin glyph grows with the text it marks', (tester) async {
@@ -591,6 +601,7 @@ void main() {
       ),
       findsNothing,
     );
+    expect(find.bySemanticsIdentifier(SemanticsIds.originEdit), findsNothing);
   });
 
   testWidgets('an origin with no shareable address still names its kind', (

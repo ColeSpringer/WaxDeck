@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/dashboard_screen.dart';
 import 'package:waxdeck/src/admin/first_run_wizard.dart';
@@ -9,6 +10,7 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -207,6 +209,42 @@ void main() {
     expect(
       find.bySemanticsIdentifier(SemanticsIds.adminTile('health')),
       findsOneWidget,
+    );
+  });
+
+  // The invites have a location of their own, so the step's invite
+  // button opens them rather than the account list beside them.
+  testWidgets('step three invites listeners on the invites view', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..healthSummary = const HealthSummary(
+        score: 0,
+        totalItems: 0,
+        evaluatedItems: 0,
+        warmingUp: true,
+      );
+    final container = _container(repo);
+    await _pump(tester, container);
+    repo.libraries.add(_library());
+    repo.jobs = <Job>[_scan('running')];
+    container.invalidate(librariesProvider);
+    container.invalidate(adminJobsProvider);
+    await tester.pumpAndSettle();
+    expect(_step(FirstRunStep.warming), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.adminAction('users')),
+    );
+    await tester.pumpAndSettle();
+
+    final create = find.bySemanticsIdentifier(SemanticsIds.inviteCreate);
+    expect(create, findsOneWidget);
+    expect(
+      GoRouter.of(
+        tester.element(create),
+      ).routerDelegate.currentConfiguration.uri.toString(),
+      WaxRoute.userInvites,
     );
   });
 

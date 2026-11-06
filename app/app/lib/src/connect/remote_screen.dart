@@ -65,7 +65,7 @@ class _Remote extends ConsumerWidget {
     final session = remote.session;
 
     return WaxScaffold(
-      title: remote.endpointName,
+      title: remote.endpointNameIn(l10n),
       largeTitle: false,
       onBack: () => context.leave(),
       actions: <Widget>[
@@ -113,7 +113,7 @@ class _Remote extends ConsumerWidget {
                   ),
                 Text(
                   <String?>[
-                    l10n.devicesOnEndpoint(remote.endpointName),
+                    l10n.devicesOnEndpoint(remote.endpointNameIn(l10n)),
                     if (session.ownerName != null)
                       l10n.devicesStartedBy(session.ownerName!),
                   ].nonNulls.join(', '),
@@ -163,7 +163,7 @@ class _Remote extends ConsumerWidget {
                   Center(
                     child: WaxSlider(
                       value: remote.volume ?? 1.0,
-                      label: l10n.devicesVolumeOn(remote.endpointName),
+                      label: l10n.devicesVolumeOn(remote.endpointNameIn(l10n)),
                       glyph: WaxIcons.volume,
                       mutedGlyph: WaxIcons.volumeMuted,
                       trackWidth: 200,
@@ -202,7 +202,7 @@ class _Remote extends ConsumerWidget {
                 ),
                 const SizedBox(height: WaxSpace.s8),
                 WaxButton(
-                  label: l10n.devicesStopOn(remote.endpointName),
+                  label: l10n.devicesStopOn(remote.endpointNameIn(l10n)),
                   kind: WaxButtonKind.text,
                   icon: WaxIcons.stop,
                   semanticsId: SemanticsIds.remoteStopThere,

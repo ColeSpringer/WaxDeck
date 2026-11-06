@@ -18,6 +18,7 @@ import 'profile_editor_sheet.dart';
 /// they can lay out.
 final organizeProfilesProvider = FutureProvider<OrganizeProfiles>(
   (ref) => ref.watch(repositoryProvider).listOrganizeProfiles(),
+  retry: retryUnlessRefused,
 );
 
 /// The organize runs the server can still undo, newest first, a page at a
@@ -691,7 +692,6 @@ class _HistorySection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final history = ref.watch(organizeHistoryProvider);
     final List<Widget> body;
@@ -716,11 +716,12 @@ class _HistorySection extends ConsumerWidget {
               ),
             ),
         ];
-      case AsyncValue(:final error?):
+      case AsyncValue(hasError: true):
         body = <Widget>[
-          Text(
-            context.explain(error),
-            style: WaxType.bodySmall.copyWith(color: colors.error),
+          AsyncFailureCard.from(
+            history,
+            title: l10n.organizeHistoryLoadError,
+            onRetry: () => ref.invalidate(organizeHistoryProvider),
           ),
         ];
       default:

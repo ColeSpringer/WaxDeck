@@ -158,6 +158,39 @@ void main() {
       expect(count.buckets, expected);
     });
   }
+
+  testWidgets('a refused count is final, a dropped one is asked again', (
+    tester,
+  ) async {
+    // A tile's count is decoration: a refusal will not change on asking
+    // again, and a dropped connection may.
+    final repo = FakeRepository()
+      ..facetErrorAfterGate = const WaxDeckApiException(
+        code: 'forbidden',
+        message: 'no',
+        statusCode: 403,
+      );
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    final held = container.listen(musicIndexCountProvider(_artists), (_, _) {});
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(repo.facetReads, hasLength(1));
+    final refused = container.read(musicIndexCountProvider(_artists));
+    expect((refused.hasError, refused.isLoading), (true, false));
+
+    repo.facetErrorAfterGate = const WaxDeckApiException(
+      code: 'transport',
+      message: 'dropped',
+    );
+    container.invalidate(musicIndexCountProvider(_artists));
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(repo.facetReads.length, greaterThan(2));
+    held.close();
+    container.dispose();
+  });
 }
 
 /// The account's document as given, past the session the real controller

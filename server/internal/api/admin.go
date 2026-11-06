@@ -98,38 +98,16 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 	if req.Body == nil {
 		return PutAdminSettings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
-	// Absent keeps the current value: a settings writer predating either
-	// field must never flip analysis off or clear retention by omission.
-	sonic := s.svc.SonicAnalysisEnabled()
-	if req.Body.SonicAnalysis != nil {
-		sonic = *req.Body.SonicAnalysis
-	}
-	retentionDays := s.svc.TrashRetentionDays(ctx)
-	if req.Body.TrashRetentionDays != nil {
-		retentionDays = *req.Body.TrashRetentionDays
-	}
-	taskDays := s.svc.TaskRetentionDays(ctx)
-	if req.Body.TaskRetentionDays != nil {
-		taskDays = *req.Body.TaskRetentionDays
-	}
-	writeTags := s.svc.EnrichmentWriteTagsEnabled()
-	if req.Body.EnrichmentWriteTags != nil {
-		writeTags = *req.Body.EnrichmentWriteTags
-	}
-	radioArt := s.svc.RadioExternalArtEnabled()
-	if req.Body.RadioExternalArt != nil {
-		radioArt = *req.Body.RadioExternalArt
-	}
-	st, err := s.svc.AdminSettingsPut(ctx, uc, service.AdminSettings{
+	st, err := s.svc.AdminSettingsPut(ctx, uc, service.AdminSettingsChange{
 		SignupEnabled:       req.Body.SignupEnabled,
 		ReadOnly:            req.Body.ReadOnly,
-		SonicAnalysis:       sonic,
+		SonicAnalysis:       req.Body.SonicAnalysis,
 		BackupKeepCount:     req.Body.BackupKeepCount,
 		BackupKeepBytes:     req.Body.BackupKeepBytes,
-		TrashRetentionDays:  retentionDays,
-		TaskRetentionDays:   taskDays,
-		EnrichmentWriteTags: writeTags,
-		RadioExternalArt:    radioArt,
+		TrashRetentionDays:  req.Body.TrashRetentionDays,
+		TaskRetentionDays:   req.Body.TaskRetentionDays,
+		EnrichmentWriteTags: req.Body.EnrichmentWriteTags,
+		RadioExternalArt:    req.Body.RadioExternalArt,
 	})
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {

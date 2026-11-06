@@ -69,12 +69,10 @@ class AsyncFailureCard extends StatelessWidget {
     required this.failed,
     required this.onRetry,
     this.title,
-    this.message,
-    this.detail,
-    this.semanticsId,
-    this.retrySemanticsId,
     super.key,
-  });
+  }) : message = null,
+       semanticsId = null,
+       retrySemanticsId = null;
 
   /// The card for [state], a read that failed: retrying while it is
   /// loading again, which Riverpod's own retry is.
@@ -83,7 +81,6 @@ class AsyncFailureCard extends StatelessWidget {
     required this.onRetry,
     this.title,
     this.message,
-    this.detail,
     this.semanticsId,
     this.retrySemanticsId,
     super.key,
@@ -104,9 +101,6 @@ class AsyncFailureCard extends StatelessWidget {
 
   final VoidCallback onRetry;
 
-  /// A technical line under the sentence; see [ErrorState.detail].
-  final String? detail;
-
   final String? semanticsId;
   final String? retrySemanticsId;
 
@@ -114,7 +108,6 @@ class AsyncFailureCard extends StatelessWidget {
   Widget build(BuildContext context) => ErrorState(
     title: title,
     message: message ?? context.explain(failed.error),
-    detail: detail,
     onRetry: failed.gone ? null : onRetry,
     retrying: failed.retrying,
     semanticsId: semanticsId,

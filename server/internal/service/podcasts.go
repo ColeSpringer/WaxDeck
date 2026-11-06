@@ -1439,6 +1439,26 @@ func (l *Library) subscriptionRow(ctx context.Context, uc *UserCtx, pod *model.P
 // account without explicit content.
 func showWithheld(uc *UserCtx, pod *model.Podcast) bool { return pod.Explicit && !uc.Explicit }
 
+// showReached reports whether the show's detail answers the caller: the
+// podcast library in its grants, and an explicit show only with explicit
+// content. A show the catalog does not hold is not reached.
+func (l *Library) showReached(ctx context.Context, uc *UserCtx, pid model.PID) (bool, error) {
+	if !l.podcastsVisible(ctx, uc) {
+		return false, nil
+	}
+	if uc.Explicit {
+		return true, nil
+	}
+	pod, err := l.lib.Podcasts().Get(ctx, pid)
+	if waxerr.CodeOf(err) == waxerr.CodeNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, classify(err)
+	}
+	return !showWithheld(uc, pod), nil
+}
+
 func settingsDTO(row wdb.Subscription) SubscriptionSettings {
 	return SubscriptionSettings{
 		RetentionKeep: row.RetentionKeep,

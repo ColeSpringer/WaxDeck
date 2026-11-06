@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../l10n/l10n.dart';
 import '../providers.dart';
 import 'connect_bus.dart';
 import 'connect_providers.dart';
@@ -52,10 +53,14 @@ class RemoteSession {
   /// What the bar and the screen call the place playback is happening.
   /// The server names an endpoint whenever it knows one; the fallback
   /// says the true thing rather than printing an id at a listener.
-  String get endpointName => session.endpointName ?? 'another device';
+  String endpointNameIn(AppLocalizations l10n) =>
+      session.endpointName ?? l10n.devicesAnotherDevice;
 
+  /// What is playing, unless the slot is withheld from this account.
   PlaybackSessionEntry? get currentEntry =>
-      session.index >= 0 && session.index < entries.length
+      session.index >= 0 &&
+          session.index < entries.length &&
+          !entries[session.index].withheld
       ? entries[session.index]
       : null;
 

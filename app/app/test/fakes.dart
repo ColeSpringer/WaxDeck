@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
-import 'package:waxdeck/src/queue/queue_controller.dart' show ulidOf;
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
@@ -261,6 +260,9 @@ class FakeRepository implements WaxDeckRepository {
   /// Held open, [subscribePodcast] waits on it before answering.
   Completer<void>? subscribeGate;
   final List<String> unsubscribeCalls = [];
+
+  /// Holds [unsubscribePodcast] until completed, with the call recorded.
+  Completer<void>? unsubscribeGate;
   final List<String> unsubscribeRemoveDownloadsCalls = [];
   final List<({String pid, SubscriptionSettings settings})>
   putSubscriptionSettingsCalls = [];
@@ -1382,8 +1384,13 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<List<PlayState>> listPlayStates(List<String> pids) async {
     playStateBatches.add(List<String>.of(pids));
+    final error = playStatesError;
+    if (error != null) throw error;
     return [for (final pid in pids) _playStateOf(pid)];
   }
+
+  /// Thrown by [listPlayStates] when set, with the batch recorded.
+  Object? playStatesError;
 
   /// Entity stars and ratings, keyed by entity pid. Their own maps, not
   /// the item ones: an entity star is independent of its members'.
@@ -1725,6 +1732,7 @@ class FakeRepository implements WaxDeckRepository {
     bool removeDownloads = false,
   }) async {
     unsubscribeCalls.add(pid);
+    await unsubscribeGate?.future;
     subscriptions.remove(pid);
     if (!removeDownloads) return;
     unsubscribeRemoveDownloadsCalls.add(pid);
@@ -2604,6 +2612,12 @@ class FakeRepository implements WaxDeckRepository {
   /// the refusal the add dialog most has to render.
   WaxDeckApiException? createStationError;
 
+  /// Every station create asked for, by stream URL.
+  final List<String> createStationCalls = [];
+
+  /// Holds [createRadioStation] until completed, with the call recorded.
+  Completer<void>? createStationGate;
+
   @override
   Future<RadioStation> createRadioStation({
     required String name,
@@ -2611,6 +2625,8 @@ class FakeRepository implements WaxDeckRepository {
     String? homepageUrl,
     String? logoUrl,
   }) async {
+    createStationCalls.add(streamUrl);
+    await createStationGate?.future;
     final error = createStationError;
     if (error != null) throw error;
     final st = RadioStation(
@@ -6281,15 +6297,29 @@ class FakeRepository implements WaxDeckRepository {
   /// Thrown by the admin mutation endpoints when set.
   WaxDeckApiException? adminError;
 
-  @override
-  Future<AdminSettings> getAdminSettings() async => adminSettings;
+  /// How many times the settings were read.
+  int adminSettingsReads = 0;
 
   @override
-  Future<AdminSettings> putAdminSettings(AdminSettings settings) async {
+  Future<AdminSettings> getAdminSettings() async {
+    adminSettingsReads++;
+    return adminSettings;
+  }
+
+  @override
+  Future<AdminSettings> putAdminSettings(AdminSettingsChange change) async {
     final error = adminError;
     if (error != null) throw error;
-    adminSettings = settings;
-    return settings;
+    return adminSettings = adminSettings.copyWith(
+      signupEnabled: change.signupEnabled,
+      readOnly: change.readOnly,
+      sonicAnalysis: change.sonicAnalysis,
+      backupKeepCount: change.backupKeepCount,
+      backupKeepBytes: change.backupKeepBytes,
+      trashRetentionDays: change.trashRetentionDays,
+      taskRetentionDays: change.taskRetentionDays,
+      radioExternalArt: change.radioExternalArt,
+    );
   }
 
   TranscodingLimits transcodingLimits = const TranscodingLimits(

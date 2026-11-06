@@ -71,6 +71,24 @@
       }
     }
   },
+  "settingsAppPasswordRevokeAction": "Revoke",
+  "@settingsAppPasswordRevokeAction": {
+    "description": "The confirming button of the dialog that revokes one app password."
+  },
+  "settingsAppPasswordRevokeBody": "Apps that sign in with \"{label}\" lose access immediately.",
+  "@settingsAppPasswordRevokeBody": {
+    "description": "Body of the dialog confirming that an app password is revoked. {label} is what that password is called.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Feishin"
+      }
+    }
+  },
+  "settingsAppPasswordRevokeTitle": "Revoke app password?",
+  "@settingsAppPasswordRevokeTitle": {
+    "description": "Title of the dialog confirming that an app password is revoked."
+  },
   "settingsAppPasswordUnlabeled": "Unlabeled",
   "@settingsAppPasswordUnlabeled": {
     "description": "What an app password with no label of its own is called."
@@ -333,10 +351,6 @@
       }
     }
   },
-  "settingsDevicesErrorMessage": "The server did not answer.",
-  "@settingsDevicesErrorMessage": {
-    "description": "Second line of the session list error state."
-  },
   "settingsDevicesErrorTitle": "Could not load devices",
   "@settingsDevicesErrorTitle": {
     "description": "Error state where the session list would be."
@@ -561,10 +575,6 @@
   "@settingsLastfmCredentialsClear": {
     "description": "Button that removes the stored Last.fm credentials, falling back to the server environment's own."
   },
-  "settingsLastfmCredentialsError": "Could not load the credential state",
-  "@settingsLastfmCredentialsError": {
-    "description": "Shown in the Last.fm credentials dialog when the read failed."
-  },
   "settingsLastfmCredentialsTitle": "Last.fm API credentials",
   "@settingsLastfmCredentialsTitle": {
     "description": "Title of the administrator dialog holding the server's Last.fm credentials."
@@ -665,10 +675,6 @@
   "settingsNotifyAppriseTargetsHint": "Apprise URLs",
   "@settingsNotifyAppriseTargetsHint": {
     "description": "The hint inside the Apprise targets field: what goes in it."
-  },
-  "settingsNotifyCatalogError": "Could not load the event catalog",
-  "@settingsNotifyCatalogError": {
-    "description": "Shown where the event checklist would be when the read failed."
   },
   "settingsNotifyDeliverVia": "Deliver via",
   "@settingsNotifyDeliverVia": {
@@ -849,6 +855,20 @@
   "settingsNotifyTargetRemove": "Remove",
   "@settingsNotifyTargetRemove": {
     "description": "The button that deletes one notification target."
+  },
+  "settingsNotifyTargetRemoveBody": "\"{name}\" stops receiving notifications.",
+  "@settingsNotifyTargetRemoveBody": {
+    "description": "Body of the dialog confirming that a notification target is removed. {name} is the target's label, or its kind where it has none.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tablet"
+      }
+    }
+  },
+  "settingsNotifyTargetRemoveTitle": "Remove notification target?",
+  "@settingsNotifyTargetRemoveTitle": {
+    "description": "Title of the dialog confirming that a notification target is removed."
   },
   "settingsNotifyTargetsEmpty": "No notification targets yet",
   "@settingsNotifyTargetsEmpty": {

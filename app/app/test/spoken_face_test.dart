@@ -506,6 +506,23 @@ void main() {
   });
 
   group('the book face', () {
+    testWidgets('says how far through and how much is left in the '
+        'listener\'s language', (tester) async {
+      final repo = FakeRepository()
+        ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: _book(),
+        host: (player) => localizedHost(player, locale: const Locale('es')),
+      );
+
+      expect(find.text('0 por ciento, quedan 1 h'), findsOneWidget);
+      expect(find.textContaining('percent'), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('spans the chapter by default and the book on request', (
       tester,
     ) async {
@@ -537,13 +554,13 @@ void main() {
       // drawn.
       expect(find.text('An Unexpected Party'), findsWidgets);
       // And the book's own progress reads beside it either way.
-      expect(find.textContaining('percent'), findsOneWidget);
+      expect(find.text('0 percent, 1 hr left'), findsOneWidget);
 
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.playerTimeline('book')),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('percent'), findsOneWidget);
+      expect(find.text('0 percent, 1 hr left'), findsOneWidget);
 
       // The choice outlives the face: the next open of the player draws
       // the book again.

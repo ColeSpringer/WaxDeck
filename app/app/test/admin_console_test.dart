@@ -18,6 +18,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 /// An administrator's session, which is what the console frame asks for
 /// before it draws anything. Only the tests that mount the frame plant
@@ -25,6 +26,27 @@ import 'routed_host.dart';
 /// server with an empty library, so a session the test does not need
 /// changes what the screen under it is.
 const _admin = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
+
+/// Holds the console's one-shot writes until [release], counting them.
+class _HeldWrites extends FakeRepository {
+  final release = Completer<void>();
+  var backupsAsked = 0;
+  var normalizesAsked = 0;
+
+  @override
+  Future<Backup> createBackup() async {
+    backupsAsked++;
+    await release.future;
+    return super.createBackup();
+  }
+
+  @override
+  Future<ToolTask> normalizeGenres({bool dryRun = false}) async {
+    normalizesAsked++;
+    await release.future;
+    return super.normalizeGenres(dryRun: dryRun);
+  }
+}
 
 ProviderContainer _container(FakeRepository repo, {WaxDeckUser? user}) {
   if (user != null) {
@@ -310,6 +332,36 @@ void main() {
     );
   });
 
+  testWidgets('Back up now takes one press while it runs, drawn busy', (
+    tester,
+  ) async {
+    final repo = _HeldWrites();
+    final container = _container(repo);
+    await _pump(tester, container, const AdminDashboardScreen());
+    final id = SemanticsIds.adminAction('backup');
+    WaxButton button() => tester.widget<WaxButton>(waxControl<WaxButton>(id));
+
+    await tester.tap(find.bySemanticsIdentifier(id));
+    await tester.pump();
+    expect(button().busy, isTrue);
+    await tester.tap(find.bySemanticsIdentifier(id), warnIfMissed: false);
+    await tester.pump();
+    expect(repo.backupsAsked, 1);
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+    expect(button().busy, isFalse);
+    expect(repo.createBackupCalls, 1);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Backup started',
+    );
+    // The running archive has the list polling; one with none ends it.
+    repo.backupsById.clear();
+    await tester.pump(backupsRunningPoll);
+    await tester.pumpAndSettle();
+  });
+
   // A tile that landed after the page drew would push the actions down
   // under a press already on its way.
   testWidgets('a scan that starts leaves the actions where they were', (
@@ -549,5 +601,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.genreNormalizations, <bool>[true, false]);
+  });
+
+  testWidgets('a normalize takes one press while it runs, and holds the '
+      'other maintenance buttons', (tester) async {
+    final repo = _HeldWrites();
+    final container = _container(repo);
+    await _pump(tester, container, const GenreTreeScreen());
+    WaxButton button(String id) =>
+        tester.widget<WaxButton>(waxControl<WaxButton>(id));
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.genreNormalize));
+    await tester.pump();
+    expect(button(SemanticsIds.genreNormalize).busy, isTrue);
+    expect(button(SemanticsIds.genreNormalizeDryRun).onPressed, isNull);
+    expect(button(SemanticsIds.genreRevert).onPressed, isNull);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.genreNormalize),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    expect(repo.normalizesAsked, 1);
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+    expect(button(SemanticsIds.genreNormalize).busy, isFalse);
+    expect(button(SemanticsIds.genreNormalizeDryRun).onPressed, isNotNull);
+    expect(repo.genreNormalizations, <bool>[false]);
   });
 }

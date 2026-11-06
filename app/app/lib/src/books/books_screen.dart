@@ -8,7 +8,6 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/hub_tiles.dart';
-import '../library/item_menu.dart';
 import '../library/item_play.dart';
 import '../music/music_controllers.dart';
 import '../player/play_progress.dart';
@@ -68,13 +67,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> with PagedScroll {
     final state = ref.watch(booksProvider);
     final view = ref.watch(bookViewProvider);
     final loaded = state.value?.books ?? const <ItemSummary>[];
-    // Windowed, like every other listing that reads play states: one key
-    // per page of rows, so paging never re-reads the pages before it.
-    final states = <String, PlayProgress>{};
-    for (final key in playProgressKeys(loaded)) {
-      states.addAll(ref.watch(playProgressProvider(key)).value ?? const {});
-    }
-    final progress = PlayProgressView(states);
+    final progress = watchPlayProgress(ref, loaded);
     final shown = arrangeBooks(loaded, view, progress);
     final l10n = context.l10n;
     final canUpload = canAddToLibrary(ref);
@@ -115,7 +108,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> with PagedScroll {
         HubTiles(tiles: _tiles(l10n), semanticsIdOf: SemanticsIds.bookTile),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s16)),
         SliverToBoxAdapter(
-          child: _ContinueShelf(books: loaded, states: states),
+          child: _ContinueShelf(books: loaded, progress: progress),
         ),
         const SliverToBoxAdapter(child: _SeriesShelf()),
         if (loaded.isNotEmpty) const SliverToBoxAdapter(child: _AllHeader()),
@@ -271,14 +264,14 @@ class _AllHeader extends ConsumerWidget {
 
 /// What is part way through, with how much is left.
 class _ContinueShelf extends ConsumerWidget {
-  const _ContinueShelf({required this.books, required this.states});
+  const _ContinueShelf({required this.books, required this.progress});
 
   final List<ItemSummary> books;
-  final Map<String, PlayProgress> states;
+  final PlayProgressView progress;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reading = continueListening(books, states);
+    final reading = continueListening(books, progress);
     if (reading.isEmpty) return const SizedBox.shrink();
     final store = ref.watch(artworkStoreProvider);
     final l10n = context.l10n;
@@ -288,7 +281,7 @@ class _ContinueShelf extends ConsumerWidget {
     void resume(WidgetRef ref, int at) {
       if (at < 0) return;
       final book = reading[at];
-      playOrResumeItem(ref, book, states[book.pid] ?? PlayProgress.none);
+      playOrResumeItem(ref, book, progress[book.pid]);
     }
 
     final tiles = <MediaTileData>[
@@ -299,18 +292,18 @@ class _ContinueShelf extends ConsumerWidget {
           artwork: store.source(book.artUrl),
           domain: WaxDomain.audiobooks,
           shape: ArtworkShape.portrait,
-          progress: states[book.pid]?.fractionOf(book.durationMs),
+          progress: progress[book.pid].fractionOf(book.durationMs),
           trailingText: _left(
             l10n,
             wax,
-            states[book.pid],
+            progress[book.pid],
             book.durationMs,
             short: true,
           ),
           trailingSpoken: _left(
             l10n,
             wax,
-            states[book.pid],
+            progress[book.pid],
             book.durationMs,
             short: false,
           ),
@@ -334,26 +327,16 @@ class _ContinueShelf extends ConsumerWidget {
         playSemanticsIdAt: (at) =>
             SemanticsIds.bookContinuePlay(reading[at].pid),
         playLabelAt: (at) =>
-            playResumes(
-              reading[at],
-              states[reading[at].pid] ?? PlayProgress.none,
-            )
-            ? l10n.libraryResumeItem(reading[at].title)
-            : null,
+            resumeLabel(l10n, reading[at], progress[reading[at].pid]),
         onMoreItem: (tile) {
           final at = tiles.indexOf(tile);
           if (at < 0) return;
           unawaited(
-            showItemMenuForSummary(
+            showItemCardMenu(
               context,
               ref,
               reading[at],
-              withPin: true,
-              onPlay: (ref) => resume(ref, at),
-              inProgress: playResumes(
-                reading[at],
-                states[reading[at].pid] ?? PlayProgress.none,
-              ),
+              progress[reading[at].pid],
               withOpen: true,
             ),
           );
@@ -507,19 +490,9 @@ class BookGrid extends ConsumerWidget {
                 onTap: () => onOpen(book),
                 onPlay: () => playOrResumeItem(ref, book, state),
                 playSemanticsId: SemanticsIds.bookPlay(book.pid),
-                playLabel: playResumes(book, state)
-                    ? l10n.libraryResumeItem(book.title)
-                    : null,
-                onMore: () => unawaited(
-                  showItemMenuForSummary(
-                    context,
-                    ref,
-                    book,
-                    withPin: true,
-                    onPlay: (ref) => playOrResumeItem(ref, book, state),
-                    inProgress: playResumes(book, state),
-                  ),
-                ),
+                playLabel: resumeLabel(l10n, book, state),
+                onMore: () =>
+                    unawaited(showItemCardMenu(context, ref, book, state)),
               );
             },
           );

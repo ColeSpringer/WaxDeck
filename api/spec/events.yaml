@@ -118,7 +118,10 @@ components:
           description: For `set-rate`.
         itemPids:
           type: array
-          description: For `set-queue`, the new queue in play order.
+          description: >
+            For `set-queue`, the new queue in play order. A PID the
+            sending account may not see answers an `error` frame with
+            `not-found` and leaves the queue as it was.
           maxItems: 500
           items:
             type: string

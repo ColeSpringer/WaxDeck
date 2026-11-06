@@ -514,7 +514,10 @@ components:
           description: Distinct tracks, episodes, and books played that year.
         newInLibrary:
           type: integer
-          description: Items that joined the library that year.
+          description: >
+            Tracks and books that joined the library that year, of the
+            ones the caller may see, inside their library grants and
+            content rules.
         timeSavedMs:
           type: integer
           format: int64

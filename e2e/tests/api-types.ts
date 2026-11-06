@@ -216,7 +216,7 @@ export interface paths {
         };
         /**
          * List recent catalog jobs
-         * @description Recent catalog jobs, newest first: `limit` of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (`set-kind`), an organize undo (`organize-undo`) and a library removal (`remove-root`), which list with their result. A finished job of a kind that runs once per item (an upload's `import`, a `delete`, a `restore`, a `purge-trash`) is left out too, and lists only while it runs. Jobs the caller cleared (`POST /jobs/clear-finished`) are left out. A job left out takes no place on the page: the server reads back through as many as the 800 newest jobs to fill it. The `job` sync marker says when to read again. Administrators only.
+         * @description Recent catalog jobs, newest first: `limit` of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (`set-kind`), an organize undo (`organize-undo`) and a library removal (`remove-root`), which list with their result. A finished job that answers its own request (an upload's `import`, a `delete`, one for a whole deletion request, a trash `restore` or `purge-trash`) is left out too, and lists only while it runs. Jobs the caller cleared (`POST /jobs/clear-finished`) are left out. A job left out takes no place on the page: the server reads back through as many as the 800 newest jobs to fill it. The `job` sync marker says when to read again. Administrators only.
          */
         get: operations["listJobs"];
         put?: never;
@@ -280,8 +280,8 @@ export interface paths {
          */
         get: operations["getAdminSettings"];
         /**
-         * Replace the server's runtime settings
-         * @description Replaces the runtime settings with the given object and returns the stored result. Settings apply immediately, no restart. Administrators only.
+         * Write the server's runtime settings
+         * @description Writes the settings in the body and keeps every setting it leaves out as stored, so two administrators changing different settings never undo each other. Returns the stored result. Settings apply immediately, no restart. Administrators only.
          */
         put: operations["putAdminSettings"];
         post?: never;
@@ -1380,7 +1380,7 @@ export interface paths {
         };
         /**
          * Metadata health summary
-         * @description The library completeness score with its per-rule breakdown. Health is computed by a background sweep; `warmingUp` is true until the first sweep covers the library (a fresh install shows honest progress instead of a wall of red), and `sweptAt` dates the numbers. Items marked unofficial are exempt from rules that assume a canonical release. Rule names are server-defined strings; the current set is `missing-art`, `small-art`, `missing-mbid`, `missing-year`, `missing-genre`, `genre-whitelist`, `missing-lyrics`, `missing-narrator`, `missing-asin`, `path-mismatch`, `write-unsynced`, `legacy-tags`, `corrupt-audio`, and `duration-mismatch`. `duration-mismatch` flags an analyzed file whose header states a length its decoded audio does not have, off by more than two seconds and two percent; it has no bulk fix. A multi-file book fails a file's rule (`corrupt-audio`, `write-unsynced`, `legacy-tags`, `duration-mismatch`) when any of its parts does. `write-unsynced` lists files whose tags lag the catalog: a refused or failed write-back, a value the format could not store, and a value an edit changed in the catalog without writing it (a value a clean-up pass normalized in the catalog alone does not count). Its fix writes those values and counts an item filled only when none remains. `genre-whitelist` flags an item carrying a genre the server's genre tree does not know; it is deliberately not bulk-fixable, because the background normalizer already rewrites everything the tree does know, so what remains is answered by editing the tree (`/admin/genre-tree`), not the item.
+         * @description The library completeness score with its per-rule breakdown. Health is computed by a background sweep; `warmingUp` is true until the first sweep covers the library (a fresh install shows honest progress instead of a wall of red), and `sweptAt` dates the numbers. The counts, totals and score are taken over the items the caller may see, inside their library grants and content rules; administrators read the whole library's. Items marked unofficial are exempt from rules that assume a canonical release. Rule names are server-defined strings; the current set is `missing-art`, `small-art`, `missing-mbid`, `missing-year`, `missing-genre`, `genre-whitelist`, `missing-lyrics`, `missing-narrator`, `missing-asin`, `path-mismatch`, `write-unsynced`, `legacy-tags`, `corrupt-audio`, and `duration-mismatch`. `duration-mismatch` flags an analyzed file whose header states a length its decoded audio does not have, off by more than two seconds and two percent; it has no bulk fix. A multi-file book fails a file's rule (`corrupt-audio`, `write-unsynced`, `legacy-tags`, `duration-mismatch`) when any of its parts does. `write-unsynced` lists files whose tags lag the catalog: a refused or failed write-back, a value the format could not store, and a value an edit changed in the catalog without writing it (a value a clean-up pass normalized in the catalog alone does not count). Its fix writes those values and counts an item filled only when none remains. `genre-whitelist` flags an item carrying a genre the server's genre tree does not know; it is deliberately not bulk-fixable, because the background normalizer already rewrites everything the tree does know, so what remains is answered by editing the tree (`/admin/genre-tree`), not the item.
          */
         get: operations["getLibraryHealth"];
         put?: never;
@@ -1400,7 +1400,7 @@ export interface paths {
         };
         /**
          * List items failing health rules
-         * @description Keyset-paginated items with outstanding issues, optionally restricted to one rule, worst first (most failed rules, then title). Each row carries every rule the item currently fails so the list doubles as a per-item worklist.
+         * @description Keyset-paginated items with outstanding issues, optionally restricted to one rule, worst first (most failed rules, then title). Each row carries every rule the item currently fails so the list doubles as a per-item worklist. Lists only the items the caller may see, inside their library grants and content rules; administrators see every item. A page can hold fewer than `limit` items, none at all, and still carry a `nextCursor`: each request reads a bounded part of the list. A cursor carries nothing of an item the caller may not see.
          */
         get: operations["listHealthIssues"];
         put?: never;
@@ -1739,7 +1739,7 @@ export interface paths {
          *
          *     Each answer is the summary part of what `GET /items/{pid}` answers for that PID, and answers come in request order, a repeated PID once per occurrence. An item whose kind changed answers under the prefix its kind has now, with the same ULID, so match an answer to its request by the ULID after the prefix, never by position.
          *
-         *     PIDs that cannot be answered for are omitted rather than erroring. Of the omissions, `departed` names the ones gone for everyone: no item answers to the PID any more (a kind change folded it into another) or ever did, or its item lost its files for good (purged from the trash, deleted permanently, or its library removed), which this lookup leaves out although `GET /items/{pid}` still reads it. An item in the trash, which a restore brings back, is answered as that read answers it. One merely out of the caller's sight (a library grant, a content setting) stays an unnamed omission, because it can come back. A client holding a list may drop exactly the departed PIDs.
+         *     PIDs that cannot be answered for are omitted rather than erroring. Of the omissions, `departed` names the ones gone for everyone: no item answers to the PID any more (a kind change folded it into another) or ever did. An archived item (in the trash, purged from it, deleted permanently, or its library removed) is answered as `GET /items/{pid}` answers it, since adding a removed library's folder again brings its items back under the same PIDs. One merely out of the caller's sight (a library grant, a content setting) stays an unnamed omission, because it can come back. A client holding a list may drop exactly the departed PIDs.
          *
          *     At most 100 PIDs per request (`invalid-request` past that); a longer list is read in pieces.
          */
@@ -1803,7 +1803,7 @@ export interface paths {
         };
         /**
          * Get artwork
-         * @description Artwork as image bytes: the stored image, or a square-fit thumbnail when `size` is given. The server stores a picture larger than 2000 pixels on its longest side as a copy scaled to fit when that copy is smaller. Besides item PIDs this endpoint also accepts album (`al-`), artist (`ar-`), podcast show (`pc-`), and playlist (`pl-`) PIDs, so search hits, subscription lists, and playlist grids can render artwork directly. A playlist answers its own cover, whether the owner uploaded one or the server built it from the members, and follows the same visibility rule as every other playlist read. Items without any artwork in their fallback chain return 404. Responses carry a content-addressed `ETag`; revalidate with `If-None-Match` instead of refetching.
+         * @description Artwork as image bytes: the stored image, or a square-fit thumbnail when `size` is given. The server stores a picture larger than 2000 pixels on its longest side as a copy scaled to fit when that copy is smaller. Besides item PIDs this endpoint also accepts album (`al-`), artist (`ar-`), podcast show (`pc-`), and playlist (`pl-`) PIDs, so search hits, subscription lists, and playlist grids can render artwork directly. Each answers what its own reads would show the caller, `not-found` otherwise: an album or artist none of whose items (as their artist, album artist, or a credit) the caller may see inside their library grants and content rules, and a show whose detail answers the caller `not-found` (the podcast library outside their grants, or an explicit show for an account without explicit content). A playlist answers its own cover, whether the owner uploaded one or the server built it from the members, and follows the same visibility rule as every other playlist read; somebody else's shared playlist whose built cover was drawn from a member the caller may not see answers instead the cover of the first member the caller may see that has one. Items without any artwork in their fallback chain return 404. Responses carry a content-addressed `ETag`; revalidate with `If-None-Match` instead of refetching.
          *
          *     Responses are cacheable for a day and reusable while revalidating for a week (`Cache-Control`), so a warm grid paints from the cache instead of spending a conditional GET per cover. The bytes are per-caller (artwork follows the item's visibility), so the directive is `private` and the response varies by the credential presented (`Cookie` or `Authorization`): a browser shared by two accounts must not answer one from the other's cache.
          *
@@ -1829,7 +1829,7 @@ export interface paths {
         };
         /**
          * List the artwork slots an entity holds
-         * @description The artwork slots present at the entity's own level, not inherited from the album or artist chain, each with its stored format and pixel dimensions (0 when the image was not decodable). Besides item PIDs this accepts album (`al-`), artist (`ar-`), podcast show (`pc-`), and playlist (`pl-`) PIDs. It answers the own-versus-inherited question a front-cover read cannot: an item that lists a `front` slot here holds its own cover, while one that resolves art only through `/items/{pid}/art` inherits it from the chain.
+         * @description The artwork slots present at the entity's own level, not inherited from the album or artist chain, each with its stored format and pixel dimensions (0 when the image was not decodable). Besides item PIDs this accepts album (`al-`), artist (`ar-`), podcast show (`pc-`), and playlist (`pl-`) PIDs, each answering `not-found` where the artwork read would. It answers the own-versus-inherited question a front-cover read cannot: an item that lists a `front` slot here holds its own cover, while one that resolves art only through `/items/{pid}/art` inherits it from the chain.
          *
          *     Each slot carries where its image came from and whether the front cover is pinned, and `artSource` alongside them describes the cover a front-cover read would actually answer with - which is the inherited one when the entity holds none of its own. That is what a surface drawing the cover marks; the per-slot rows are what an artwork manager edits.
          */
@@ -2162,13 +2162,13 @@ export interface paths {
         get?: never;
         /**
          * Set entity artwork
-         * @description Stores the image in one artwork slot (`role`; an artist's portrait is its `front`), and with `writeBack` embeds an album front in its files. Administrators; a playlist's owner, and `managePodcasts` for a show.
+         * @description Stores the image in one artwork slot (`role`; an artist's portrait is its `front`), and with `writeBack` embeds an album front in its files. Administrators; a playlist's owner, and `managePodcasts` for a show whose detail answers the caller (the podcast library in their grants, and explicit content for an explicit show): any other show answers `not-found`.
          */
         put: operations["setEntityArtwork"];
         post?: never;
         /**
          * Clear entity artwork
-         * @description Removes one artwork slot (`role`, default `front`) from an album, artist, release group, genre, playlist, or podcast entity. Files already carrying an embedded cover are untouched; this clears the catalog's copy. Clearing a playlist's uploaded cover hands the slot back to the mosaic the server builds from the members, so the playlist keeps a cover rather than going bare. Clearing a podcast show's cover hands the slot back to the feed, whose image refills on the next sync - provided no pin stands: setting a cover by hand pinned it, so resetting a hand-set show cover to the feed's image is two steps, unpin through the lock endpoint and then clear. Catalog entities are administrators-only; a playlist cover is cleared by its owner, and a podcast show cover by `managePodcasts` holders as well.
+         * @description Removes one artwork slot (`role`, default `front`) from an album, artist, release group, genre, playlist, or podcast entity. Files already carrying an embedded cover are untouched; this clears the catalog's copy. Clearing a playlist's uploaded cover hands the slot back to the mosaic the server builds from the members, so the playlist keeps a cover rather than going bare. Clearing a podcast show's cover hands the slot back to the feed, whose image refills on the next sync - provided no pin stands: setting a cover by hand pinned it, so resetting a hand-set show cover to the feed's image is two steps, unpin through the lock endpoint and then clear. Catalog entities are administrators-only; a playlist cover is cleared by its owner, and a podcast show cover by `managePodcasts` holders as well, provided the show's detail answers them (the podcast library in their grants, and explicit content for an explicit show; any other show answers `not-found`).
          */
         delete: operations["clearEntityArtwork"];
         options?: never;
@@ -2190,14 +2190,14 @@ export interface paths {
         };
         /**
          * Read an entity's artwork lock
-         * @description Whether one of an album, artist, release group, genre, or podcast's artwork slots is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says "do not refill this" rather than "this has no cover yet". Administrators only, like every other catalog-entity curation read, except the podcast pin, which `managePodcasts` holders read too.
+         * @description Whether one of an album, artist, release group, genre, or podcast's artwork slots is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says "do not refill this" rather than "this has no cover yet". Administrators only, like every other catalog-entity curation read, except the podcast pin, which `managePodcasts` holders read too for a show whose detail answers them (the podcast library in their grants, and explicit content for an explicit show; any other show answers `not-found`).
          *
          *     `locked` for an auxiliary role is the **effective** lock - the whole-artwork pin or that role's own - and `roleLocked` is the slot's own pin by itself, so the pair says which of the two set it. `ArtRoleInfo` on the artwork read carries the same pair.
          */
         get: operations["getEntityArtworkLock"];
         /**
          * Pin or unpin an entity's artwork
-         * @description Sets or clears one slot's pin without touching the image itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only, except the podcast pin, which `managePodcasts` holders set too - the pin is what keeps a hand-set show cover from being refetched on the next feed sync, so it belongs to whoever may set the cover.
+         * @description Sets or clears one slot's pin without touching the image itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only, except the podcast pin, which `managePodcasts` holders set too - the pin is what keeps a hand-set show cover from being refetched on the next feed sync, so it belongs to whoever may set the cover, and it needs the show's detail to answer the caller as the cover does.
          *
          *     `role` decides the reach. The default `front` writes the entity's whole-artwork pin, which gates the front cover and also enrichment's fills in every other role; a named auxiliary role writes that slot's own pin alone. Unpinning one auxiliary role therefore does not lift a whole-artwork pin standing over it: the response's `locked` is the effective reading and still true, while `roleLocked` is the pin that was just cleared.
          *
@@ -2376,7 +2376,7 @@ export interface paths {
         };
         /**
          * Read entity edit provenance
-         * @description The entity's curated fields with source and time.
+         * @description The entity's curated fields with source and time. An entity none of whose items the caller may see, inside their library grants and content rules, answers `not-found`, as its own reads do.
          */
         get: operations["getEntityCuration"];
         put?: never;
@@ -3514,7 +3514,7 @@ export interface paths {
         };
         /**
          * Discover smart rule fields
-         * @description The field vocabulary for smart playlist rules: every rule field with its value kind, the operators it accepts, whether it reads per-user state, and whether it can sort; plus the catalog's custom tag keys (usable as `tag.KEY` fields) with item counts, most used first. Rule editors build their dropdowns from this instead of hardcoding the vocabulary.
+         * @description The field vocabulary for smart playlist rules: every rule field with its value kind, the operators it accepts, whether it reads per-user state, and whether it can sort; plus the custom tag keys (usable as `tag.KEY` fields) carried by the items the caller may see, inside their library grants and content rules, each with how many of those items carry it, most used first. Rule editors build their dropdowns from this instead of hardcoding the vocabulary.
          */
         get: operations["getRuleFields"];
         put?: never;
@@ -3676,7 +3676,7 @@ export interface paths {
         };
         /**
          * List a playlist's items
-         * @description The playlist's members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner's user state for shared lists, the caller's for their own). Entries the caller cannot see (outside their library grants, denied by their content settings, or episodes of shows they do not follow) are omitted, and the list's `itemCount` counts the same way, so a restricted viewer's `position` values can skip numbers. `position` is the entry's index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry's item pid as `itemPid`, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries.
+         * @description The playlist's members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner's user state for shared lists, the caller's for their own). Entries the caller cannot see (outside their library grants, denied by their content settings, or episodes of shows they do not follow) are omitted, and the list's `itemCount` counts the same way. `position` goes to the owner of a static playlist alone, the one caller that may remove by it, and can skip numbers where entries are hidden from the owner too. It is the entry's index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry's item pid as `itemPid`, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries. A page's `nextCursor` counts only the entries shown to the caller, and comes only when another one follows.
          */
         get: operations["listPlaylistItems"];
         /**
@@ -4724,7 +4724,7 @@ export interface paths {
         };
         /**
          * Similarity analysis status
-         * @description Coverage of the sonic-similarity surface: whether a worker token is configured, which embedding model the stored vectors carry, how much of the library is embedded, and the analysis backlog. Clients use `coveragePct` to decide whether to show sonic affordances (the adventurousness knob, sonic paths).
+         * @description Coverage of the sonic-similarity surface: whether a worker token is configured, which embedding model the stored vectors carry, how much of the library is embedded, and the analysis backlog. The counts are taken over the tracks the caller may see, inside their library grants and content rules; administrators read the whole library's. Clients use `coveragePct` to decide whether to show sonic affordances (the adventurousness knob, sonic paths).
          */
         get: operations["getSimilarityStatus"];
         put?: never;
@@ -4906,7 +4906,7 @@ export interface paths {
         };
         /**
          * Mirror the catalog (snapshot or changed-since delta)
-         * @description The catalog half of delta sync, feeding client-side library mirrors with hydrated item summaries (episodes carry their full episode summaries, and podcast shows ride the same stream as `upsert-show` entries; see the entry schema). Shows and episodes are scoped to the caller's own subscriptions, and a subscription change retires the caller's cursors the same way a visibility grant change does (410 `sync-reset`, then re-mirror). Two modes. Without `since`: a snapshot, keyset-paged via `cursor`; every page carries `nextSince`, an opaque change cursor captured at or before the first page's read, which the client stores and syncs from after mirroring every page (changes landing mid-snapshot are covered by the first delta). With `since`: the changes after that cursor, as `upsert` entries carrying fresh summaries and `delete` tombstones for items that no longer exist or whose change left them outside what the caller can see (its library visibility or content settings; a file re-homed under an ungranted root keeps its item PID; a tombstone for an item never mirrored is a no-op); entries are coalesced within a page (an item may recur on later pages; application is idempotent, latest wins). The returned `nextSince` advances the cursor, and `more` signals another page should be fetched immediately. Snapshots contain only items the caller can see, and a change to the caller's visibility grants invalidates their catalog cursors, so the next delta answers 410 `sync-reset` and the re-snapshot reflects the new grants. 410 likewise answers any cursor the server can no longer serve contiguously: one behind its pruned change history, one past the end of its history, one from a history it has since rolled back (a full restore of the server), even once that history has grown past the cursor again, one from a rebuilt catalog, and one handed out before a catalog repair (`POST /admin/catalog/repair`) that got past its first step, since what the repair rewrites reaches no delta: drop the mirror and snapshot again. Short of those, snapshot-minted cursors stay serviceable for at least the server's change retention horizon. A snapshot carries no tombstones, so a client that re-mirrors learns which of the items it holds downloads for are gone for good from `POST /sync/catalog/removed`. The WebSocket channel (`api/events.md`) signals when to pull deltas; polling works without it.
+         * @description The catalog half of delta sync, feeding client-side library mirrors with hydrated item summaries (episodes carry their full episode summaries, and podcast shows ride the same stream as `upsert-show` entries; see the entry schema). Shows and episodes are scoped to the caller's own subscriptions, and a subscription change retires the caller's cursors the same way a visibility grant change does (410 `sync-reset`, then re-mirror). Two modes. Without `since`: a snapshot, keyset-paged via `cursor`; every page carries `nextSince`, an opaque change cursor captured at or before the first page's read, which the client stores and syncs from after mirroring every page (changes landing mid-snapshot are covered by the first delta). With `since`: the changes after that cursor, as `upsert` entries carrying fresh summaries and `delete` tombstones for items that no longer exist or whose change left them outside what the caller can see (its library visibility or content settings; a file re-homed under an ungranted root keeps its item PID; a tombstone for an item never mirrored is a no-op). A caller granted only some libraries gets a tombstone for an item that sat inside them at the cursor or since, and for one the server cannot place in any library; an item that sat only in libraries outside them from the cursor on (changed, moved between them, trashed, purged, deleted outright, or archived with its library's removal) gets none, and an episode sits in the podcast library, fetched or not. Entries are coalesced within a page (an item may recur on later pages; application is idempotent, latest wins). The returned `nextSince` advances the cursor, and `more` signals another page should be fetched immediately. Snapshots contain only items the caller can see, and a change to the caller's visibility grants invalidates their catalog cursors, so the next delta answers 410 `sync-reset` and the re-snapshot reflects the new grants. 410 likewise answers any cursor the server can no longer serve contiguously: one behind its pruned change history, one past the end of its history, one from a history it has since rolled back (a full restore of the server), even once that history has grown past the cursor again, one from a rebuilt catalog, one handed out before a catalog repair (`POST /admin/catalog/repair`) that got past its first step, since what the repair rewrites reaches no delta, and, for a caller granted only some libraries, one from before the server last rebuilt its record of which library each item sat in: drop the mirror and snapshot again. Short of those, snapshot-minted cursors stay serviceable for at least the server's change retention horizon. A snapshot carries no tombstones, so a client that re-mirrors learns which of the items it holds downloads for are gone for good from `POST /sync/catalog/removed`. The WebSocket channel (`api/events.md`) signals when to pull deltas; polling works without it.
          */
         get: operations["syncCatalog"];
         put?: never;
@@ -5927,16 +5927,16 @@ export interface components {
             signupEnabled: boolean;
             /** @description Server-wide read-only mode: every library behaves read-only (uploads, organizing, write-back, deletion, and the file tools are refused with code `read-only`). */
             readOnly: boolean;
-            /** @description Whether the server analyzes its own library for sonic similarity in the background (the embedded analyzer). Applies immediately; turning it off mid-library keeps the embeddings already computed. The boot default comes from `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it once saved. External workers are unaffected (their access is the worker-token configuration). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. */
+            /** @description Whether the server analyzes its own library for sonic similarity in the background (the embedded analyzer). Applies immediately; turning it off mid-library keeps the embeddings already computed. The boot default comes from `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it once saved. External workers are unaffected (their access is the worker-token configuration). Always present in responses. */
             sonicAnalysis?: boolean;
-            /** @description Whether enrichment writes what it filled into the files, off by default (turning it on catches earlier values up; a read-only server writes nothing). Optional on PUT, always in responses. */
+            /** @description Whether enrichment writes what it filled into the files, off by default (turning it on catches earlier values up; a read-only server writes nothing). Always present in responses. */
             enrichmentWriteTags?: boolean;
             /**
              * @description Whether radio may look a station's announced title up externally when nothing in this library matches it, so the full-screen player can draw the song's cover instead of the station's mark. The hosts it may reach are `api.deezer.com`, then `musicbrainz.org` and `coverartarchive.org` where metadata matching is enabled (the default), asked in that order and stopping at the first that answers.
              *
              *     On by default, and the only setting here that governs whether this server talks to a third party at all: it sends a string a station chose - an artist and a track title - off this machine. Only about one station in twenty announces a picture of its own, so a server with this off draws the station mark for the rest and nothing says why; the opt-out is here for the households that want it. Turned off, radio still draws a library match when it finds one, then the picture the station announced, then the station logo, then the station mark, and makes no outbound request.
              *
-             *     Each host is paced separately, at the etiquette it asks for (MusicBrainz allows one request per second, and wants an identifying agent), and answers are cached server-side, so the rung costs no per-device traffic. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
+             *     Each host is paced separately, at the etiquette it asks for (MusicBrainz allows one request per second, and wants an identifying agent), and answers are cached server-side, so the rung costs no per-device traffic. Always present in responses.
              */
             radioExternalArt?: boolean;
             /** @description How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. */
@@ -5946,9 +5946,33 @@ export interface components {
              * @description Total archive bytes to keep, oldest deleted first when exceeded. 0 is unlimited. Imported archives are exempt.
              */
             backupKeepBytes: number;
-            /** @description Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention (the trash keeps entries until an administrator empties it). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. */
+            /** @description Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention (the trash keeps entries until an administrator empties it). Always present in responses. */
             trashRetentionDays?: number;
-            /** @description Clear finished tool tasks older than this many days on the scheduled prune; terminal rows only. The same prune drops the Organizer's journal of runs older than this, after which a run can no longer be undone. 0 keeps both, and an unconfigured server answers 30 - so unlike `trashRetentionDays`, 0 here is a choice rather than the default. Optional on PUT (absent keeps the current value), always present in responses. */
+            /** @description Clear finished tool tasks older than this many days on the scheduled prune; terminal rows only. The same prune drops the Organizer's journal of runs older than this, after which a run can no longer be undone. 0 keeps both, and an unconfigured server answers 30 - so unlike `trashRetentionDays`, 0 here is a choice rather than the default. Always present in responses. */
+            taskRetentionDays?: number;
+        };
+        /** @description A write of runtime settings. Every field is optional, and a field left out keeps its stored value. */
+        AdminSettingsChange: {
+            /** @description Whether open self-serve signup is accepted (registrations land pending). Invite links work regardless. */
+            signupEnabled?: boolean;
+            /** @description Server-wide read-only mode: every library behaves read-only (uploads, organizing, write-back, deletion, and the file tools are refused with code `read-only`). */
+            readOnly?: boolean;
+            /** @description Whether the server analyzes its own library for sonic similarity in the background. Applies immediately; turning it off mid-library keeps the embeddings already computed. */
+            sonicAnalysis?: boolean;
+            /** @description Whether enrichment writes what it filled into the files (turning it on catches earlier values up; a read-only server writes nothing). */
+            enrichmentWriteTags?: boolean;
+            /** @description Whether radio may look a station's announced title up externally when nothing in this library matches it. Turning it off drops what it fetched and makes no outbound request. */
+            radioExternalArt?: boolean;
+            /** @description How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. */
+            backupKeepCount?: number;
+            /**
+             * Format: int64
+             * @description Total archive bytes to keep, oldest deleted first when exceeded. 0 is unlimited. Imported archives are exempt.
+             */
+            backupKeepBytes?: number;
+            /** @description Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention. */
+            trashRetentionDays?: number;
+            /** @description Clear finished tool tasks older than this many days on the scheduled prune, and drop the Organizer's journal of runs older than this; 0 keeps both. */
             taskRetentionDays?: number;
         };
         /** @description Transcode session limits, enforced at the media proxy when a stream engages the streaming engine (direct-played originals never count). */
@@ -7156,7 +7180,7 @@ export interface components {
              * @description For `set-rate`.
              */
             rate?: number;
-            /** @description For `set-queue`, the new queue in play order. */
+            /** @description For `set-queue`, the new queue in play order. A PID the sending account may not see answers an `error` frame with `not-found` and leaves the queue as it was. */
             itemPids?: string[];
             /** @description For `set-queue`, the entry to play. */
             index?: number;
@@ -7799,7 +7823,7 @@ export interface components {
         /** @description Summaries for the requested PIDs, in request order, minus the ones that could not be resolved. */
         ItemResolution: {
             items: components["schemas"]["ItemSummary"][];
-            /** @description The requested PIDs gone for everyone: no item answers to it any more (a kind change folded it into another) or ever did, or its item lost its files for good (purged from the trash, deleted permanently, or its library removed). As requested, in request order, a repeated PID once, and absent rather than empty when no miss was one of these. */
+            /** @description The requested PIDs gone for everyone: no item answers to it any more (a kind change folded it into another) or ever did. An archived item is answered rather than named here. As requested, in request order, a repeated PID once, and absent rather than empty when no miss was one of these. */
             departed?: string[];
         };
         /** @description Display facts for one entity: what a card draws. Artwork is not a field - `/items/{pid}/art` takes every prefix this endpoint answers for except `rg-`, which statically has none, so a client builds the URL from the pid rather than being handed it. */
@@ -9691,14 +9715,14 @@ export interface components {
         PlayerEndpointList: {
             endpoints: components["schemas"]["PlayerEndpoint"][];
         };
-        /** @description One queue entry of a playback session, hydrated for display. */
+        /** @description One queue entry of a playback session, hydrated for display. On a session the caller does not own, an entry for an item the caller may not see, outside their library grants or content rules, keeps its place with an empty `pid` and `title` and no `artist` or `durationMs`, so `index` still lines up. */
         PlaybackSessionEntry: {
             /**
-             * @description The item's PID.
+             * @description The item's PID; empty in a slot the caller may not see.
              * @example tr-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             pid: string;
-            /** @description Display title. */
+            /** @description Display title; empty in a slot the caller may not see. */
             title: string;
             /** @description Display artist, when the item has one. */
             artist?: string;
@@ -10304,7 +10328,7 @@ export interface components {
         };
         /** @description One playlist member. */
         PlaylistEntry: {
-            /** @description Zero-based index in the full stored member order, contiguous after every change (hidden entries leave gaps in a viewer's listing); static playlists only, and what the removal takes. */
+            /** @description Zero-based index in the full stored member order, contiguous after every change (entries hidden from the owner leave gaps in the owner's listing); static playlists only, sent to their owner alone, and what the removal takes. */
             position?: number;
             item: components["schemas"]["ItemSummary"];
         };
@@ -10399,7 +10423,7 @@ export interface components {
              * @example MOOD
              */
             key: string;
-            /** @description Distinct items carrying this key. */
+            /** @description Distinct items the caller may see carrying this key. */
             itemCount: number;
         };
         /** @description The rule field vocabulary for smart rule editors. `tag.KEY` fields are uniform and therefore not repeated per key: they are text-kind, accept `is`, `isNot`, `contains`, `startsWith`, `endsWith`, `isPresent`, and `isMissing` (never the ordered operators), and can never sort. On a tag field `isNot` matches items that do not carry that value, including items without the tag at all: the deny-list reading. */
@@ -11712,7 +11736,7 @@ export interface components {
             sessions: number;
             /** @description Distinct tracks, episodes, and books played that year. */
             distinctItems: number;
-            /** @description Items that joined the library that year. */
+            /** @description Tracks and books that joined the library that year, of the ones the caller may see, inside their library grants and content rules. */
             newInLibrary: number;
             /**
              * Format: int64
@@ -12726,7 +12750,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The command could not be completed on the target player endpoint. Read `code` rather than the status: this answer carries five, and they call for different things. `endpoint-offline` means the endpoint is not connected - refresh the endpoint list; the device may have left the network or the client may have disconnected. `timeout` means it is connected but did not answer within the routing deadline, so retrying beats refreshing. `conflict` is the endpoint itself refusing because of something it is in the middle of, and the message says what. `endpoint-busy` is the server refusing on the device's behalf, and only where the request would have taken it over rather than played for somebody: the device probe, which names what is playing instead of interrupting it. Stop that and retry, or leave it alone. `endpoint-failed` is that endpoint taking the command and failing at it - a part it could not load, a start that did not take - so nothing about the request or the endpoint list needs changing and retrying is reasonable; the message carries whatever the endpoint could say about it. */
+        /** @description The command could not be completed on the target player endpoint. Read `code` rather than the status: this answer carries several, and they call for different things. `endpoint-offline` means the endpoint is not connected - refresh the endpoint list; the device may have left the network or the client may have disconnected. `timeout` means it is connected but did not answer within the routing deadline, so retrying beats refreshing. `conflict` is the endpoint itself refusing because of something it is in the middle of, and the message says what. `endpoint-busy` is the server refusing on the device's behalf, and only where the request would have taken it over rather than played for somebody: the device probe, which names what is playing instead of interrupting it. Stop that and retry, or leave it alone. `endpoint-failed` is that endpoint taking the command and failing at it - a part it could not load, a start that did not take - so nothing about the request or the endpoint list needs changing and retrying is reasonable; the message carries whatever the endpoint could say about it. `endpoint-idle`, `no-session`, `queue-end` and `queue-start` are the endpoint finding nothing to act on: nothing live there, a session it is no longer playing, or no entry in that direction. Retrying repeats each until something changes there: `endpoint-idle` clears once something is loaded, `no-session` once the session is refreshed, and `queue-end` and `queue-start` once the queue has an entry in that direction (one added, or repeat all). */
         PlaybackConflict: {
             headers: {
                 [name: string]: unknown;
@@ -13259,7 +13283,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AdminSettings"];
+                "application/json": components["schemas"]["AdminSettingsChange"];
             };
         };
         responses: {

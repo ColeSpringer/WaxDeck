@@ -479,7 +479,8 @@ Future<void> uploadPickedFiles(
       continue;
     }
     try {
-      await container
+      // A file discarded on its way is neither counted nor reported.
+      final sent = await container
           .read(uploadsProvider.notifier)
           .uploadPicked(
             file,
@@ -488,7 +489,7 @@ Future<void> uploadPickedFiles(
             batchId: batchId,
             identify: choice.identify,
           );
-      uploaded++;
+      if (sent) uploaded++;
     } on WaxDeckApiException catch (e) {
       messenger.show(
         l10n.uploadsFileFailed(

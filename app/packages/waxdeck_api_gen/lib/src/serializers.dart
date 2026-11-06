@@ -17,6 +17,7 @@ import 'package:waxdeck_api_gen/src/model/date.dart';
 import 'package:waxdeck_api_gen/src/model/acquisition_format.dart';
 import 'package:waxdeck_api_gen/src/model/acquisition_request.dart';
 import 'package:waxdeck_api_gen/src/model/admin_settings.dart';
+import 'package:waxdeck_api_gen/src/model/admin_settings_change.dart';
 import 'package:waxdeck_api_gen/src/model/album_detail.dart';
 import 'package:waxdeck_api_gen/src/model/app_password.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_create.dart';
@@ -444,6 +445,7 @@ part 'serializers.g.dart';
   AcquisitionFormat,
   AcquisitionRequest,
   AdminSettings,
+  AdminSettingsChange,
   AlbumDetail,
   AppPassword,$AppPassword,
   AppPasswordCreate,

@@ -22,9 +22,6 @@ enum BookDimension {
   /// opens. Selected on `name`, as [MusicDimension.titleOf] is.
   String titleOf(AppLocalizations l10n) => l10n.booksDimensionTitle(name);
 
-  static BookDimension? bySegment(String segment) =>
-      values.where((d) => d.segment == segment).firstOrNull;
-
   static BookDimension? byDimension(MusicDimension dimension) =>
       values.where((d) => d.dimension == dimension).firstOrNull;
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 
 /// Accumulated pages of the caller's share links.
@@ -43,6 +44,8 @@ class SharesController extends AsyncNotifier<SharesState> {
   @override
   Future<SharesState> build() async {
     _generation++;
+    // Keyed on the account: the repository moves only with the server.
+    ref.watch(signedInAccountProvider);
     final page = await ref
         .watch(repositoryProvider)
         .listShares(limit: pageSize, all: all);

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxdeck/fixtures"
 
+	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -861,5 +863,404 @@ func TestDuplicateAlbumsNameTheirMembersWhateverTheirTitles(t *testing.T) {
 	}
 	if grp.Survivor.Name != "Hot Rocks / 1964-1971" || len(grp.Losers) != 1 || grp.Losers[0].Name != "Hot Rocks / 1964-1971" {
 		t.Fatalf("group = %+v, want both albums named", *grp)
+	}
+}
+
+// The issues worklist lists only what the caller may see: an account
+// granted one library reads that library's issues, never the other's, and
+// pages through them with a cursor over its own rows.
+func TestHealthIssuesFollowTheCallersGrants(t *testing.T) {
+	t.Parallel()
+	books := t.TempDir()
+	if _, err := fixtures.GenerateSeriesBooks(books, "Tidewater", 3); err != nil {
+		t.Fatalf("generating the series: %v", err)
+	}
+	h := newHarness(t, service.Root{Name: "books", Path: books})
+	if err := h.svc.RunHealthSweep(context.Background()); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+
+	issues := func(token, query string) HealthIssuePage {
+		t.Helper()
+		resp := get(t, h.ts, "/api/v1/library/health/issues"+query, token)
+		if resp.StatusCode != 200 {
+			t.Fatalf("issues status = %d", resp.StatusCode)
+		}
+		return decode[HealthIssuePage](t, resp)
+	}
+	byMedia := func(page HealthIssuePage) map[string]int {
+		out := map[string]int{}
+		for _, it := range page.Items {
+			out[string(it.MediaType)]++
+		}
+		return out
+	}
+
+	all := byMedia(issues(h.token, "?limit=500"))
+	if all["music"] == 0 || all["audiobook"] != 3 {
+		t.Fatalf("the administrator reads %v, want music and 3 audiobooks", all)
+	}
+
+	libs := decode[Libraries](t, get(t, h.ts, "/api/v1/libraries", h.token))
+	var booksLib, musicLib string
+	for _, lib := range libs.Libraries {
+		if lib.Name == "books" {
+			booksLib = lib.Pid
+		} else {
+			musicLib = lib.Pid
+		}
+	}
+	granted := func(name, lib string) string {
+		t.Helper()
+		resp := h.postJSON(t, "/api/v1/users", map[string]any{
+			"username": name, "password": name + "-pass",
+			"libraryAccess": map[string]any{"mode": "granted", "libraryPids": []string{lib}},
+		})
+		wantStatus(t, resp, 201, "create "+name)
+		return loginAs(t, h.ts, name, name+"-pass").Token
+	}
+
+	reader := granted("healthbooks", booksLib)
+	if got := byMedia(issues(reader, "?limit=500")); len(got) != 1 || got["audiobook"] != 3 {
+		t.Fatalf("an account granted the books library reads %v, want only its 3 audiobooks", got)
+	}
+	// Paged over its own rows: two, then the last, with no cursor after.
+	first := issues(reader, "?limit=2")
+	if len(first.Items) != 2 || first.NextCursor == nil {
+		t.Fatalf("first page = %d items, cursor %v", len(first.Items), first.NextCursor)
+	}
+	second := issues(reader, "?limit=2&cursor="+url.QueryEscape(*first.NextCursor))
+	if len(second.Items) != 1 || second.NextCursor != nil {
+		t.Fatalf("second page = %d items, cursor %v", len(second.Items), second.NextCursor)
+	}
+
+	listener := granted("healthmusic", musicLib)
+	if got := byMedia(issues(listener, "?limit=500")); got["audiobook"] != 0 || got["music"] != all["music"] {
+		t.Fatalf("an account granted the music library reads %v, want its %d tracks", got, all["music"])
+	}
+}
+
+// The health listing and summary leave out what the explicit toggle
+// hides: an account with every library and no tag rules but explicit
+// content off is listed neither a feed-flagged episode's issues nor
+// counted them, as its item detail answers not-found for the episode,
+// while one with explicit content on reads both episodes.
+func TestHealthLeavesFlaggedEpisodesToExplicitContent(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	feed := newCountsFeed(t, []countsEpisode{{title: "Flagged", explicit: true}, {title: "Unflagged"}})
+	show := decodeStatus[Subscription](t, h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()}), 201, "subscribe").Show.Pid
+	episodes := map[string]string{}
+	for _, ep := range decode[EpisodePage](t, get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)).Items {
+		episodes[ep.Title] = ep.Pid
+	}
+	if len(episodes) != 2 {
+		t.Fatalf("episodes = %v, want both", episodes)
+	}
+	ctx := context.Background()
+	if err := h.svc.RunHealthSweep(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+	// What a sweep writes for an episode whose file fails a check: the
+	// fixture's are never fetched, so the rows are put in place.
+	for title, pid := range episodes {
+		if err := h.store.UpsertHealthRow(ctx, db.HealthRow{
+			ItemPID: pid[strings.Index(pid, "-")+1:], MediaType: "podcast", Title: title,
+			Rules: `["corrupt-audio"]`, RuleCount: 1, SweptAtNS: time.Now().UnixNano(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, hidden := listenerAccount(t, h, "noexplicit", false)
+	_, open := listenerAccount(t, h, "explicit", true)
+	wantStatus(t, reqAs(t, h, "GET", "/api/v1/items/"+episodes["Flagged"], hidden, nil), 404,
+		"the flagged episode's detail without explicit content")
+	listed := func(token string) map[string]bool {
+		t.Helper()
+		out := map[string]bool{}
+		for _, it := range decodeStatus[HealthIssuePage](t, reqAs(t, h, "GET", "/api/v1/library/health/issues?limit=500", token, nil), 200, "the issues").Items {
+			out[it.Pid] = true
+		}
+		return out
+	}
+	corrupt := func(token string) int {
+		t.Helper()
+		for _, r := range decodeStatus[HealthSummary](t, reqAs(t, h, "GET", "/api/v1/library/health", token, nil), 200, "the summary").Rules {
+			if r.Rule == "corrupt-audio" {
+				return r.Failing
+			}
+		}
+		return 0
+	}
+	if got := listed(open); !got[episodes["Flagged"]] || !got[episodes["Unflagged"]] {
+		t.Errorf("the account with explicit content lists %v, want both episodes", got)
+	}
+	got := listed(hidden)
+	if got[episodes["Flagged"]] {
+		t.Error("the account without explicit content is listed the flagged episode")
+	}
+	if !got[episodes["Unflagged"]] {
+		t.Error("the account without explicit content is not listed the unflagged episode")
+	}
+	if all, mine := corrupt(h.token), corrupt(hidden); mine != all-1 {
+		t.Errorf("the account without explicit content counts %d corrupt items of the %d, want the flagged one left out", mine, all)
+	}
+}
+
+// A restricted account's page reads a bounded part of the index: with
+// thousands of rows it cannot see ahead of its own, the first page comes
+// back empty with a cursor rather than reading all of them, and the
+// cursors lead on to exactly the rows it may see.
+func TestHealthIssuesReadABoundedPartOfTheIndexPerPage(t *testing.T) {
+	t.Parallel()
+	s := newGrantsScene(t)
+	ctx := context.Background()
+	if err := s.h.svc.RunHealthSweep(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+	// Rows for items the catalog does not hold, worse than any real one
+	// so they sort first: the account is offered none of them.
+	for i := range 4000 {
+		if err := s.h.store.UpsertHealthRow(ctx, db.HealthRow{
+			ItemPID: fmt.Sprintf("01J%023d", i), MediaType: "music", Title: fmt.Sprintf("Elsewhere %04d", i),
+			Rules: `["missing-art"]`, RuleCount: 9, SweptAtNS: time.Now().UnixNano(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Every demo track fails a rule (none carries art, a genre or a year),
+	// so the account's own rows are its items.
+	want := map[string]bool{}
+	for _, it := range s.items(t, s.token, "") {
+		want[it.Pid] = true
+	}
+	got := map[string]bool{}
+	cursor, pages := "", 0
+	for {
+		q := "/api/v1/library/health/issues?limit=100"
+		if cursor != "" {
+			q += "&cursor=" + url.QueryEscape(cursor)
+		}
+		page := decodeStatus[HealthIssuePage](t, reqAs(t, s.h, "GET", q, s.token, nil), 200, "a page")
+		pages++
+		if pages == 1 && (len(page.Items) != 0 || page.NextCursor == nil) {
+			t.Fatalf("the first page = %d items, cursor %v; want it cut short before the account's rows, with a cursor",
+				len(page.Items), page.NextCursor)
+		}
+		for _, it := range page.Items {
+			got[it.Pid] = true
+		}
+		if page.NextCursor == nil {
+			break
+		}
+		cursor = *page.NextCursor
+		if pages > 20 {
+			t.Fatal("the cursors do not end")
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("the pages list %v, want the account's own failing items %v", got, want)
+	}
+	for pid := range got {
+		if !want[pid] {
+			t.Errorf("the pages list %s, which the account cannot see", pid)
+		}
+	}
+}
+
+// A page the scan budget cuts short hands back a cursor that names no row
+// the caller may not see, though the row it stops on is one: the second
+// library's track, failing as many rules as the rows sorting ahead of it.
+// Paging on from it still reaches each of the caller's rows once.
+func TestHealthIssuesCutCursorNamesNoHiddenRow(t *testing.T) {
+	t.Parallel()
+	s := newGrantsScene(t)
+	ctx := context.Background()
+	if err := s.h.svc.RunHealthSweep(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+	for i := range 1599 {
+		if err := s.h.store.UpsertHealthRow(ctx, db.HealthRow{
+			ItemPID: fmt.Sprintf("01J%023d", i), MediaType: "music", Title: fmt.Sprintf("A%04d", i),
+			Rules: `["missing-art"]`, RuleCount: 9, SweptAtNS: time.Now().UnixNano(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bare := bareULID(s.hidden.Pid)
+	if err := s.h.store.UpsertHealthRow(ctx, db.HealthRow{
+		ItemPID: bare, MediaType: "music", Title: "Hidden Song",
+		Rules: `["missing-art"]`, RuleCount: 9, SweptAtNS: time.Now().UnixNano(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{}
+	for _, it := range s.items(t, s.token, "") {
+		want[it.Pid] = true
+	}
+	got := map[string]int{}
+	cursor := ""
+	for pages := 1; ; pages++ {
+		q := "/api/v1/library/health/issues?limit=100"
+		if cursor != "" {
+			q += "&cursor=" + url.QueryEscape(cursor)
+		}
+		page := decodeStatus[HealthIssuePage](t, reqAs(t, s.h, "GET", q, s.token, nil), 200, "a page")
+		if pages == 1 && (len(page.Items) != 0 || page.NextCursor == nil) {
+			t.Fatalf("the first page = %d items, cursor %v; want it cut short on the hidden row, with a cursor",
+				len(page.Items), page.NextCursor)
+		}
+		for _, it := range page.Items {
+			got[it.Pid]++
+		}
+		if page.NextCursor == nil {
+			break
+		}
+		cursor = *page.NextCursor
+		if what := cursorNames(cursor, bare, "Hidden Song"); what != "" {
+			t.Errorf("page %d's cursor %q carries the hidden row's %s", pages, cursor, what)
+		}
+		if pages > 20 {
+			t.Fatal("the cursors do not end")
+		}
+	}
+	for pid, n := range got {
+		if !want[pid] || n != 1 {
+			t.Errorf("the pages list %s %d times; want each of the account's own failing items once", pid, n)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("the pages list %d items, want the account's own %d", len(got), len(want))
+	}
+}
+
+// cursorNames answers which of needles a cursor carries, read as it
+// stands and with it and each dot-separated part decoded as base64url;
+// empty when none.
+func cursorNames(cursor string, needles ...string) string {
+	readings := []string{cursor}
+	for _, part := range append([]string{cursor}, strings.Split(cursor, ".")...) {
+		for _, enc := range []*base64.Encoding{base64.RawURLEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.StdEncoding} {
+			if raw, err := enc.DecodeString(part); err == nil {
+				readings = append(readings, string(raw))
+			}
+		}
+	}
+	for _, needle := range needles {
+		for _, r := range readings {
+			if strings.Contains(r, needle) {
+				return needle
+			}
+		}
+	}
+	return ""
+}
+
+// A cut page's sealed cursor is one length whatever the hidden row it
+// stands on holds: cursors cut on hidden titles of different lengths, each
+// still leading to every row of the account's once.
+func TestHealthCutCursorsHaveOneLength(t *testing.T) {
+	t.Parallel()
+	s := newGrantsScene(t)
+	ctx := context.Background()
+	if err := s.h.svc.RunHealthSweep(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+	for i := range 1599 {
+		if err := s.h.store.UpsertHealthRow(ctx, db.HealthRow{
+			ItemPID: fmt.Sprintf("01J%023d", i), MediaType: "music", Title: fmt.Sprintf("A%04d", i),
+			Rules: `["missing-art"]`, RuleCount: 9, SweptAtNS: time.Now().UnixNano(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := len(s.items(t, s.token, ""))
+	lengths := map[int]bool{}
+	for _, title := range []string{"Hidden Song", "Hidden Song " + strings.Repeat("with a much longer title ", 3)} {
+		if err := s.h.store.UpsertHealthRow(ctx, db.HealthRow{
+			ItemPID: bareULID(s.hidden.Pid), MediaType: "music", Title: title,
+			Rules: `["missing-art"]`, RuleCount: 9, SweptAtNS: time.Now().UnixNano(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		page := decodeStatus[HealthIssuePage](t, reqAs(t, s.h, "GET", "/api/v1/library/health/issues?limit=100", s.token, nil), 200, "a page")
+		if len(page.Items) != 0 || page.NextCursor == nil {
+			t.Fatalf("the first page = %d items, cursor %v; want it cut short on the hidden row", len(page.Items), page.NextCursor)
+		}
+		lengths[len(*page.NextCursor)] = true
+		got := map[string]int{}
+		for cursor := page.NextCursor; cursor != nil; {
+			next := decodeStatus[HealthIssuePage](t, reqAs(t, s.h, "GET",
+				"/api/v1/library/health/issues?limit=100&cursor="+url.QueryEscape(*cursor), s.token, nil), 200, "a page")
+			for _, it := range next.Items {
+				got[it.Pid]++
+			}
+			cursor = next.NextCursor
+		}
+		if len(got) != want {
+			t.Errorf("paging on from the cursor cut on a %d-byte title reaches %d rows, want the account's %d", len(title), len(got), want)
+		}
+		for pid, n := range got {
+			if n != 1 {
+				t.Errorf("paging on from the cursor cut on a %d-byte title lists %s %d times", len(title), pid, n)
+			}
+		}
+	}
+	if len(lengths) != 1 {
+		t.Errorf("cursors cut on hidden titles of different lengths are %v long, want one length", lengths)
+	}
+}
+
+// A cut cursor stands on a hidden row whose title runs past the bytes the
+// cursor keeps. Retitled between two requests, keeping those bytes and its
+// rule count, the row must not move the position past the account's own
+// rows: paging on reaches every one of them.
+func TestHealthCutCursorOverARetitledRowSkipsNothing(t *testing.T) {
+	t.Parallel()
+	s := newGrantsScene(t)
+	ctx := context.Background()
+	if err := s.h.svc.RunHealthSweep(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+	failing := func(pid, title string) {
+		t.Helper()
+		if err := s.h.store.UpsertHealthRow(ctx, db.HealthRow{
+			ItemPID: pid, MediaType: "music", Title: title,
+			Rules: `["missing-art"]`, RuleCount: 9, SweptAtNS: time.Now().UnixNano(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prefix := strings.Repeat("Q", 64)
+	own := s.items(t, s.token, "")
+	for i, it := range own {
+		failing(bareULID(it.Pid), fmt.Sprintf("%s m%02d", prefix, i))
+	}
+	for i := range 1599 {
+		failing(fmt.Sprintf("01J%023d", i), fmt.Sprintf("A%04d", i))
+	}
+	bare := bareULID(s.hidden.Pid)
+	failing(bare, prefix+" a-old")
+	page := decodeStatus[HealthIssuePage](t, reqAs(t, s.h, "GET", "/api/v1/library/health/issues?limit=100", s.token, nil), 200, "a page")
+	if len(page.Items) != 0 || page.NextCursor == nil {
+		t.Fatalf("the first page = %d items, cursor %v; want it cut short on the hidden row", len(page.Items), page.NextCursor)
+	}
+	failing(bare, prefix+" z-new")
+	got := map[string]int{}
+	for cursor := page.NextCursor; cursor != nil; {
+		next := decodeStatus[HealthIssuePage](t, reqAs(t, s.h, "GET",
+			"/api/v1/library/health/issues?limit=100&cursor="+url.QueryEscape(*cursor), s.token, nil), 200, "a page")
+		for _, it := range next.Items {
+			got[it.Pid]++
+		}
+		cursor = next.NextCursor
+	}
+	if len(got) != len(own) {
+		t.Errorf("paging on past the retitled row reaches %d rows, want the account's %d", len(got), len(own))
+	}
+	for pid, n := range got {
+		if n != 1 {
+			t.Errorf("paging on past the retitled row lists %s %d times", pid, n)
+		}
 	}
 }

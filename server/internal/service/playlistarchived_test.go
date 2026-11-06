@@ -509,7 +509,7 @@ func TestPlaylistRuleField(t *testing.T) {
 	pids := fixtureItemPIDs(t, ctx, svc, uc)
 	archive := playlistWith(t, ctx, svc, uc, "Archive", pids[:2])
 
-	vocab, err := svc.RuleVocabulary(ctx)
+	vocab, err := svc.RuleVocabulary(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -256,6 +256,71 @@ void main() {
     );
   });
 
+  testWidgets('a fetch on the episode screen pushed over the hub flips its '
+      'Latest row', (tester) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode(
+          'tr-new',
+          showPid: 'pc-A',
+          title: 'Brand New',
+          downloaded: false,
+        ),
+      ];
+    await _pump(tester, repo);
+    Finder byId(String id) => find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.identifier == id,
+    );
+
+    await tester.tap(byId(SemanticsIds.episodeInfo('tr-new')));
+    await tester.pumpAndSettle();
+    // The screen's own pill: the hub row beneath it is offstage.
+    await tester.tap(byId(SemanticsIds.episodeFetch('tr-new')));
+    await tester.pumpAndSettle();
+    expect(repo.fetchEpisodeCalls, <String>['tr-new']);
+
+    GoRouter.of(tester.element(find.byType(EpisodeScreen))).pop();
+    await tester.pumpAndSettle();
+    expect(byId(SemanticsIds.episodeFetch('tr-new')), findsNothing);
+    expect(
+      find.text('Barliman Butterbur · Queued for download'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a hub fetch reaches a show listing built earlier', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode(
+          'tr-new',
+          showPid: 'pc-A',
+          title: 'Brand New',
+          downloaded: false,
+        ),
+      ];
+    await _pump(tester, repo);
+    Finder byId(String id) => find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.identifier == id,
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(PodcastsScreen)),
+    );
+    // A show page visited earlier leaves its listing built.
+    final before = await container.read(episodesProvider('pc-A').future);
+    expect(before.items.single.fetchState, isNull);
+
+    await tester.tap(byId(SemanticsIds.episodeFetch('tr-new')));
+    await tester.pumpAndSettle();
+    expect(repo.fetchEpisodeCalls, <String>['tr-new']);
+
+    final after = await container.read(episodesProvider('pc-A').future);
+    expect(after.items.single.fetchState, 'queued');
+  });
+
   testWidgets('a Latest row with no show title says just where its audio '
       'stands', (tester) async {
     final repo = FakeRepository()

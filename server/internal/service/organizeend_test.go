@@ -492,7 +492,7 @@ func TestThePruneLetsTheJournalGoPastTheTaskWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.TaskRetentionDays = 0
-	if _, err := svc.AdminSettingsPut(ctx, admin, st); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.RunPrune(ctx); err != nil {
@@ -502,7 +502,7 @@ func TestThePruneLetsTheJournalGoPastTheTaskWindow(t *testing.T) {
 		t.Fatalf("pruned the journal past %v with retention off", asked)
 	}
 	st.TaskRetentionDays = 7
-	if _, err := svc.AdminSettingsPut(ctx, admin, st); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.RunPrune(ctx); err != nil {

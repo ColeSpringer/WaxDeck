@@ -94,9 +94,10 @@ abstract class QueueGateway {
   /// False when there was nothing to start, the way [next] and
   /// [previous] answer for a queue with nowhere to go - so a routed
   /// command can refuse instead of reporting a success nobody heard.
-  /// The reachable case is a play that follows a pause during live
-  /// radio: pause lets the station go, which leaves no station, no
-  /// session, and an empty queue behind it.
+  /// The reachable cases are a play that follows a pause during live
+  /// radio (pause lets the station go, which leaves no station, no
+  /// session, and an empty queue behind it) and a queue a station holds
+  /// back, which only the press that takes it back plays.
   Future<bool> play();
 
   /// Silences what is playing, for a pause raised outside a session's own

@@ -14,6 +14,22 @@ import 'wax_finders.dart';
 
 Widget _host(FakeRepository repo) => _hostOf(repo, const OrganizeScreen());
 
+/// A history whose first page is refused while [firstPageError] is set.
+class _HistoryDown extends FakeRepository {
+  WaxDeckApiException? firstPageError;
+
+  @override
+  Future<OrganizeHistoryPage> listOrganizeHistory({
+    String? cursor,
+    int? limit,
+  }) async {
+    if (cursor == null) {
+      if (firstPageError case final error?) throw error;
+    }
+    return super.listOrganizeHistory(cursor: cursor, limit: limit);
+  }
+}
+
 /// [child] under the same scope, so a test can leave the screen and come
 /// back to it with the providers it left behind.
 Widget _hostOf(FakeRepository repo, Widget child) => ProviderScope(
@@ -351,7 +367,7 @@ void main() {
     ];
     expect(sizes.length, greaterThan(1));
     expect(sizes.map((s) => s.height).toSet(), hasLength(1));
-    expect(sizes.every((s) => s.width <= WaxStatGrid.defaultTileWidth), isTrue);
+    expect(sizes.every((s) => s.width <= WaxStatGrid.tileWidth), isTrue);
   });
 
   testWidgets('a preview can be discarded', (tester) async {
@@ -1463,6 +1479,45 @@ void main() {
     expect(row('jb-3'), findsOneWidget);
     expect(more, findsNothing);
     expect(repo.organizeHistoryCursors, [null, '2']);
+  });
+
+  testWidgets('a history that fails to load says why and offers to ask '
+      'again, which lists it', (tester) async {
+    final repo = _HistoryDown()
+      ..organizeHistory = [
+        OrganizeBatch(
+          jobPid: 'jb-1',
+          kind: 'organize',
+          state: 'done',
+          startedAt: DateTime.utc(2026, 7, 1, 9),
+          committed: 1,
+          undoable: true,
+        ),
+      ]
+      ..firstPageError = const WaxDeckApiException(
+        code: 'forbidden',
+        message: 'not an administrator',
+        statusCode: 403,
+      );
+    await _pump(tester, _host(repo));
+    final retry = find.descendant(
+      of: find.bySemanticsIdentifier(SemanticsIds.organizeHistory),
+      matching: find.widgetWithText(WaxButton, 'Try again'),
+    );
+    await tester.ensureVisible(retry);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Your account is not allowed to do that.'),
+      findsOneWidget,
+    );
+
+    repo.firstPageError = null;
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizeHistoryRow('jb-1')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('older runs that fail to come say why, and asking again '

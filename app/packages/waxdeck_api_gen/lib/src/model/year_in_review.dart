@@ -20,7 +20,7 @@ part 'year_in_review.g.dart';
 /// * [totalMs] - Total milliseconds listened that year.
 /// * [sessions] - Listen sessions that year.
 /// * [distinctItems] - Distinct tracks, episodes, and books played that year.
-/// * [newInLibrary] - Items that joined the library that year.
+/// * [newInLibrary] - Tracks and books that joined the library that year, of the ones the caller may see, inside their library grants and content rules. 
 /// * [timeSavedMs] - Milliseconds saved by silence trimming and speed-up that year, as reported by clients. 
 /// * [longestStreakDays] - The year's longest run of consecutive listening days.
 /// * [byMonth] - Month-by-month listening, January first. All twelve months are present, zeros included, so clients chart the year's shape directly. 
@@ -51,7 +51,7 @@ abstract class YearInReview implements Built<YearInReview, YearInReviewBuilder> 
   @BuiltValueField(wireName: r'distinctItems')
   int get distinctItems;
 
-  /// Items that joined the library that year.
+  /// Tracks and books that joined the library that year, of the ones the caller may see, inside their library grants and content rules. 
   @BuiltValueField(wireName: r'newInLibrary')
   int get newInLibrary;
 

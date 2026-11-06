@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 import '../settings/settings_registry.dart';
 import 'metadata_form.dart';
@@ -78,6 +79,10 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
 
   @override
   Future<MetadataEditorState> build() async {
+    // Keyed on the account: the item and whether it may be edited are
+    // answered for the caller, and the repository moves only with the
+    // server.
+    ref.watch(signedInAccountProvider);
     final repository = ref.watch(repositoryProvider);
     final metadataFuture = repository.getItemMetadata(pid);
     // The eager read must not be left unheard while the vocabulary is

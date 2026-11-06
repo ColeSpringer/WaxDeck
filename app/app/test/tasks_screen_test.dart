@@ -18,6 +18,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'row_nodes.dart';
+import 'wax_finders.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [
@@ -50,6 +51,46 @@ String _heard(WidgetTester tester, Finder row) {
 final _retryAt = DateTime.now().toUtc().add(const Duration(hours: 2));
 
 Finder _job(String pid) => find.bySemanticsIdentifier(SemanticsIds.jobRow(pid));
+
+/// A finished task of [type].
+ToolTask _doneTask(String id, String type) => ToolTask(
+  id: id,
+  type: type,
+  state: 'done',
+  createdAt: DateTime.utc(2026, 7, 1),
+  finishedAt: DateTime.utc(2026, 7, 1, 1),
+);
+
+/// Pages the tasks fifty at a time, the second page holding one.
+class _PagedTasks extends FakeRepository {
+  final cursors = <String?>[];
+
+  @override
+  Future<ToolTaskPage> listToolTasks({String? cursor, int? limit}) async {
+    cursors.add(cursor);
+    return cursor == null
+        ? ToolTaskPage(
+            tasks: [for (var i = 0; i < 50; i++) _doneTask('tt-$i', 'acquire')],
+            nextCursor: 'c2',
+          )
+        : ToolTaskPage(tasks: [_doneTask('tt-50', 'acquire')]);
+  }
+}
+
+/// Holds every tool task sweep until [release] completes.
+class _HeldSweep extends FakeRepository {
+  _HeldSweep({super.sessionState});
+
+  final release = Completer<void>();
+
+  @override
+  Future<ToolTasksCleared> clearFinishedToolTasks({bool all = false}) async {
+    clearFinishedToolTaskCalls++;
+    await release.future;
+    clearFinishedToolTaskCalls--;
+    return super.clearFinishedToolTasks(all: all);
+  }
+}
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -1227,6 +1268,206 @@ void main() {
           .glyph;
       expect(glyph, WaxIcons.library);
       expect(glyph, isNot(WaxIcons.refresh));
+    });
+
+    // The glyphs the app draws on its controls: a row nothing presses that
+    // leads with one reads as a button.
+    const actions = <WaxGlyph>{
+      WaxIcons.refresh,
+      WaxIcons.delete,
+      WaxIcons.edit,
+      WaxIcons.upload,
+      WaxIcons.search,
+      WaxIcons.downloads,
+      WaxIcons.add,
+      WaxIcons.close,
+      WaxIcons.check,
+    };
+
+    WaxGlyph leading(WidgetTester tester, Finder row) => tester
+        .widget<WaxIcon>(
+          find.descendant(of: row, matching: find.byType(WaxIcon)).first,
+        )
+        .glyph;
+
+    void tall(WidgetTester tester) {
+      tester.view
+        ..physicalSize = const Size(1200, 6000)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    testWidgets('no job row leads with a glyph the app draws on a control', (
+      tester,
+    ) async {
+      tall(tester);
+      const kinds = [
+        'scan',
+        'enrich',
+        'analyze',
+        'organize',
+        'organize-undo',
+        'restore',
+        'empty-trash',
+        'purge-trash',
+        'delete',
+        'remove-root',
+        'import',
+        'set-kind',
+        'something-new',
+      ];
+      final repo =
+          FakeRepository(
+              sessionState: const SessionState(
+                authenticated: true,
+                user: _admin,
+              ),
+            )
+            ..jobs = [
+              for (final kind in kinds)
+                Job(
+                  pid: 'jb-$kind',
+                  kind: kind,
+                  state: 'done',
+                  startedAt: DateTime.utc(2026, 9, 29, 10),
+                  finishedAt: DateTime.utc(2026, 9, 29, 10, 5),
+                ),
+            ];
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      for (final kind in kinds) {
+        expect(
+          actions,
+          isNot(contains(leading(tester, _job('jb-$kind')))),
+          reason: kind,
+        );
+      }
+    });
+
+    testWidgets('no task row leads with a glyph the app draws on a control', (
+      tester,
+    ) async {
+      tall(tester);
+      const types = [
+        'book-merge',
+        'book-split',
+        'cue-split',
+        'acquire',
+        'playlist-sync',
+        'genre-normalize',
+        'catalog-repair',
+        'health-fix',
+        'import-navidrome',
+        'something-new',
+      ];
+      final repo = FakeRepository();
+      for (final type in types) {
+        repo.toolTasksById['tt-$type'] = _doneTask('tt-$type', type);
+      }
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      for (final type in types) {
+        expect(
+          actions,
+          isNot(contains(leading(tester, _row('tt-$type')))),
+          reason: type,
+        );
+      }
+    });
+  });
+
+  testWidgets('a first page that fits the window brings the next', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(1200, 8000)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = _PagedTasks();
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(repo.cursors, [null, 'c2']);
+    expect(_row('tt-50'), findsOneWidget);
+  });
+
+  group('a sweep in flight', () {
+    testWidgets('draws its control busy and takes no second press', (
+      tester,
+    ) async {
+      final repo = _HeldSweep();
+      repo.toolTasksById['tt-a'] = _doneTask('tt-a', 'book-merge');
+      repo.toolTasksById['tt-b'] = _doneTask('tt-b', 'cue-split');
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      final control = find.bySemanticsIdentifier(
+        SemanticsIds.tasksClearFinished,
+      );
+      await tester.tap(control);
+      await tester.pump();
+      expect(
+        tester
+            .widget<WaxIconButton>(
+              waxControl<WaxIconButton>(SemanticsIds.tasksClearFinished),
+            )
+            .busy,
+        isTrue,
+      );
+      await tester.tap(control, warnIfMissed: false);
+      await tester.pump();
+      expect(repo.clearFinishedToolTaskCalls, 1);
+
+      repo.release.complete();
+      await tester.pumpAndSettle();
+      expect(repo.clearFinishedToolTaskScopes, [false]);
+      expect(shellMessageText(raisedMessage(tester)), 'Cleared 2 tasks');
+    });
+
+    testWidgets("an administrator's menu gives way to a busy control", (
+      tester,
+    ) async {
+      final repo = _HeldSweep(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      );
+      repo.toolTasksById['tt-a'] = _doneTask('tt-a', 'book-merge');
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.tasksClearFinishedMine),
+      );
+      // Past the menu's way out; the busy control spins, so nothing settles.
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        tester
+            .widget<WaxIconButton>(
+              waxControl<WaxIconButton>(SemanticsIds.tasksClearFinished),
+            )
+            .busy,
+        isTrue,
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
+        warnIfMissed: false,
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.tasksClearFinishedMine),
+        findsNothing,
+      );
+
+      repo.release.complete();
+      await tester.pumpAndSettle();
+      expect(repo.clearFinishedToolTaskScopes, [false]);
+      expect(repo.clearFinishedJobCalls, 1);
+      expect(shellMessageText(raisedMessage(tester)), 'Cleared 1 task');
     });
   });
 

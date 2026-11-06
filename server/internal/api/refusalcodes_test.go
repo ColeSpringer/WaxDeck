@@ -80,6 +80,9 @@ func TestBothSeamsCarryRefusalCodes(t *testing.T) {
 	}{
 		{"recognized code rides through", connect.InvalidError{Msg: "no books here", Code: "feature-unavailable"}, http.StatusNotImplemented, "feature-unavailable", "no books here"},
 		{"conflict keeps its status", connect.InvalidError{Msg: "busy", Code: "conflict"}, http.StatusConflict, "conflict", "busy"},
+		// The server's own skip past the end of a device queue says it the
+		// way a client endpoint does.
+		{"the end of a queue is coded", connect.InvalidError{Msg: "already at the end of the queue", Code: "queue-end"}, http.StatusConflict, "queue-end", "already at the end of the queue"},
 		{"unknown code degrades", connect.InvalidError{Msg: "the client rejected the command", Code: "wat"}, http.StatusBadRequest, "invalid-request", "the client rejected the command"},
 		// A code that is real API vocabulary but describes the request
 		// or the transport rather than the refusal: the server says

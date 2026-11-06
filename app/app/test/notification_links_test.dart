@@ -37,7 +37,7 @@ void main() {
   /// Every path the server can build, against the route it must be.
   final expected = <String, String>{
     'review-ready': WaxRoute.review,
-    'signup-requested': WaxRoute.users,
+    'signup-requested': WaxRoute.userRequests,
     'backup-completed': WaxRoute.backups,
     'backup-failed': WaxRoute.backups,
     'catalog-reset': WaxRoute.libraries,

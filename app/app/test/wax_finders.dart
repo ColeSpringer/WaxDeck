@@ -72,6 +72,6 @@ bool hasOwnSemanticsNode(WidgetTester tester, Finder tip) {
   final node = tester.getSemantics(
     find.descendant(of: tip, matching: find.byType(Icon)),
   );
-  return node.label == (widget.label ?? widget.message) &&
+  return node.label == widget.message &&
       node.getSemanticsData().hasAction(SemanticsAction.tap);
 }

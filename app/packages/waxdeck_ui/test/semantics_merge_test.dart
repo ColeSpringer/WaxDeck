@@ -475,7 +475,7 @@ final List<_Scenario> _scenarios = <_Scenario>[
             WaxSegment(name: 'added', label: 'Added'),
           ],
         ),
-        const WaxProgressBar(value: 0.42, semanticsLabel: 'Scanning'),
+        const WaxProgressBar(value: 0.42),
       ],
     ),
   ),
@@ -667,12 +667,16 @@ final List<_Scenario> _scenarios = <_Scenario>[
     'an open disclosure with a control inside',
     () => WaxDisclosure(
       title: 'Edition',
-      initiallyExpanded: true,
       children: <Widget>[
         const MonoDetailRow(label: 'Publisher', value: 'Harbour Press'),
         WaxButton(label: 'Copy', onPressed: () {}),
       ],
     ),
+    reveal: (tester) async {
+      await tester.tap(find.text('Edition'));
+      await tester.pumpAndSettle();
+      expect(find.text('Harbour Press'), findsOne, reason: 'it is open');
+    },
   ),
   _scenario(
     'an ink tappable row',
@@ -730,7 +734,6 @@ final List<_Scenario> _scenarios = <_Scenario>[
     () => Column(
       children: <Widget>[
         WaxStatGrid(
-          tileWidth: 140,
           tiles: <StatTile>[
             StatTile(
               label: 'Health',

@@ -163,6 +163,10 @@
   "@uploadsFinishing": {
     "description": "Under an upload row once every byte has arrived and the server is sealing the session."
   },
+  "uploadsFinishingUnreachable": "Finishing, can't reach the server",
+  "@uploadsFinishingUnreachable": {
+    "description": "Under an upload row in place of uploadsFinishing while asking the server how its seal went fails on the network; the row keeps asking and goes back to Finishing at the first answer."
+  },
   "uploadsFormat": "Download format",
   "@uploadsFormat": {
     "description": "Accessible name of the picker choosing what a URL download is converted to."

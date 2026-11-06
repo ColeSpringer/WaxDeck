@@ -203,7 +203,7 @@
   },
   "bookPercent": "{percent} percent",
   "@bookPercent": {
-    "description": "How far through a book the listener is, in the line under its title.",
+    "description": "How far through a book the listener is, in the line under its title, and under the full player's seek bar once nothing is left.",
     "placeholders": {
       "percent": {
         "type": "int"

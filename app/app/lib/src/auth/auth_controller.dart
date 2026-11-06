@@ -7,10 +7,13 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../connect/remote_session.dart';
+import '../l10n/off_tree.dart';
 import '../providers.dart';
 import '../queue/queue_persistence.dart';
+import '../radio/radio_controller.dart';
 import '../search/search_controller.dart';
 import 'credential_store.dart';
+import 'oidc_flow.dart';
 
 /// The pre-auth server probe: first-run setup state and whether open
 /// signup is on. Probed only while unauthenticated;
@@ -74,9 +77,12 @@ class AuthController extends AsyncNotifier<SessionState> {
         // so racing in-flight requests is safe.
         unawaited(_rotateStoredToken(repo, store));
       } else {
-        // The stored token is dead (revoked or expired); drop it.
+        // The stored token is dead (revoked, expired, or its account
+        // disabled while the app was closed): it goes, and so does what
+        // that account left here.
         repo.authToken = null;
         await store.clearToken();
+        await _forgetAccount();
       }
     }
     return session;
@@ -117,6 +123,20 @@ class AuthController extends AsyncNotifier<SessionState> {
       // A sign-out or a new account can end this controller mid-read, or
       // land while it is out: either way the answer is not this account's.
       if (!ref.mounted || asked != _account) return;
+      if (!session.authenticated) {
+        // The server ended the session (the account was disabled, or this
+        // device revoked), which is a sign-out like any other.
+        await signOutLocally();
+        return;
+      }
+      if (session.user?.id != state.value?.user?.id) {
+        // Another account's session in this one's place: a tab that signed
+        // in over this browser's cookie. Its leftovers go before it shows.
+        final adopting = ++_account;
+        await _forgetAccount();
+        if (!ref.mounted || adopting != _account) return;
+        ref.read(playbackHeldProvider.notifier).release();
+      }
       state = AsyncData(session);
     } on WaxDeckApiException {
       // Nothing to show and nothing to unwind: the 401 path is the
@@ -127,6 +147,7 @@ class AuthController extends AsyncNotifier<SessionState> {
 
   Future<void> _adopt(LoginResult result) async {
     _account++;
+    ref.read(playbackHeldProvider.notifier).release();
     if (!kIsWeb) {
       await ref.read(credentialStoreProvider).writeToken(result.token);
     }
@@ -185,10 +206,17 @@ class AuthController extends AsyncNotifier<SessionState> {
       ),
       _ => await flow.loginWithLoopback(
         provider,
+        page: _loopbackPage(),
         deviceName: waxDeckDeviceName,
       ),
     };
     await _adopt(result);
+  }
+
+  /// The browser tab is drawn outside the element tree.
+  LoopbackPage _loopbackPage() {
+    final copy = ref.read(offTreeL10nProvider);
+    return (heading: copy.authLoopbackTitle, line: copy.authLoopbackMessage);
   }
 
   Future<void> logout() async {
@@ -208,18 +236,49 @@ class AuthController extends AsyncNotifier<SessionState> {
     if (!kIsWeb) {
       await ref.read(credentialStoreProvider).clearToken();
     }
+    await _forgetAccount();
+    state = const AsyncData(SessionState(authenticated: false));
+  }
+
+  /// What an account leaves on this client, dropped on every road out of
+  /// it: a sign-out, a session the server ended, another account's
+  /// session in its place, a stored one that died while the app was
+  /// closed. Never throws: none of it is a reason to keep a session.
+  Future<void> _forgetAccount() async {
+    // First, so nothing started from the screens still up can outlive
+    // what follows; the next account to arrive releases it.
+    ref.read(playbackHeldProvider.notifier).hold();
+    // Whose session this was, when the controller knows: a stored token
+    // found dead at launch names nobody.
+    final account = state.value?.user?.id;
     // The queue is the one piece of local state a signed-out install
     // would otherwise put back in front of whoever signs in next, since
     // the next launch offers to resume it by name.
     await forgetQueueOnSignOut(ref);
+    // A station goes too: the relay scrobbles it and counts its listening
+    // time for the account that tuned it, for as long as it plays. Only a
+    // controller that exists can hold one, and the account leaves even if
+    // the engine will not let go.
+    if (ref.exists(radioPlaybackProvider)) {
+      try {
+        await ref.read(radioPlaybackProvider.notifier).stop();
+      } on Object catch (error) {
+        debugPrint('sign-out: the station did not stop: $error');
+      }
+    }
     // Artwork is the other: cached covers and the pins beside the
     // downloads outlive the session that was allowed to see them.
-    await ref.read(artworkStoreProvider).forgetEverything();
+    try {
+      await ref.read(artworkStoreProvider).forgetEverything();
+    } on Object catch (error) {
+      debugPrint('sign-out: the artwork cache did not clear: $error');
+    }
     ref.read(paletteCacheProvider).clear();
-    // And the recent searches, which are the same kind of thing: strings
-    // the departing listener typed, naming things in their library, in a
-    // browser store the next account on this machine can read back.
-    await forgetSearchesOnSignOut(ref);
+    // And the account's recent searches, which are the same kind of
+    // thing: strings it typed, naming things in its library. Where the
+    // account is not known they stay filed under it, and no other
+    // account reads them.
+    if (account != null) await forgetSearchesOnSignOut(ref, account);
     // A session on another endpoint stays playing - stepping away from a
     // cast has never silenced the room and signing out is no different -
     // but this client stops controlling it, so the next account does not
@@ -230,7 +289,6 @@ class AuthController extends AsyncNotifier<SessionState> {
     // and wiping it would make signing out a factory reset of a shared
     // desktop. Which side of that line a preference falls on is a
     // question each one answers for itself.
-    state = const AsyncData(SessionState(authenticated: false));
   }
 }
 

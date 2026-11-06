@@ -71,14 +71,14 @@ class _Switches extends ConsumerWidget {
   Future<void> _save(
     BuildContext context,
     WidgetRef ref,
-    AdminSettings next,
+    AdminSettingsChange change,
   ) async {
     // Taken before the write: a refusal has to be sayable even when the
     // section has been left, and `ref` past its widget throws.
     final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
-      await ref.read(adminSettingsProvider.notifier).save(next);
+      await ref.read(adminSettingsProvider.notifier).edit(change);
     } on WaxDeckApiException catch (error) {
       messenger.show(explainError(l10n, error));
     }
@@ -100,7 +100,7 @@ class _Switches extends ConsumerWidget {
             value: settings.signupEnabled,
             semanticsId: SemanticsIds.settingSignupEnabled,
             onChanged: (value) =>
-                _save(context, ref, settings.copyWith(signupEnabled: value)),
+                _save(context, ref, AdminSettingsChange(signupEnabled: value)),
           ),
         ),
         WaxSettingRow(
@@ -111,7 +111,7 @@ class _Switches extends ConsumerWidget {
             value: settings.readOnly,
             semanticsId: SemanticsIds.settingReadOnly,
             onChanged: (value) =>
-                _save(context, ref, settings.copyWith(readOnly: value)),
+                _save(context, ref, AdminSettingsChange(readOnly: value)),
           ),
         ),
         SizedBox(height: sectionGap),
@@ -123,7 +123,7 @@ class _Switches extends ConsumerWidget {
             value: settings.sonicAnalysis,
             semanticsId: SemanticsIds.settingSonicAnalysis,
             onChanged: (value) =>
-                _save(context, ref, settings.copyWith(sonicAnalysis: value)),
+                _save(context, ref, AdminSettingsChange(sonicAnalysis: value)),
           ),
         ),
         SizedBox(height: sectionGap),
@@ -135,8 +135,11 @@ class _Switches extends ConsumerWidget {
             label: l10n.adminServerRadioArtTitle,
             value: settings.radioExternalArt,
             semanticsId: SemanticsIds.settingRadioExternalArt,
-            onChanged: (value) =>
-                _save(context, ref, settings.copyWith(radioExternalArt: value)),
+            onChanged: (value) => _save(
+              context,
+              ref,
+              AdminSettingsChange(radioExternalArt: value),
+            ),
           ),
         ),
       ],
@@ -207,8 +210,22 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final limits = ref.watch(transcodingLimitsProvider).value;
-    if (limits == null) return const SizedBox.shrink();
+    final read = ref.watch(transcodingLimitsProvider);
+    final limits = read.value;
+    if (limits == null) {
+      if (!read.hasError) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SectionHeader(title: l10n.adminServerTranscodingGroup),
+          AsyncFailureCard.from(
+            read,
+            title: l10n.adminServerTranscodingLoadError,
+            onRetry: () => ref.invalidate(transcodingLimitsProvider),
+          ),
+        ],
+      );
+    }
     _seed(limits);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,14 +348,50 @@ class _RetentionGroup extends ConsumerStatefulWidget {
 class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
   final TextEditingController _days = TextEditingController();
   final TextEditingController _taskDays = TextEditingController();
-  bool _seeded = false;
   bool _busy = false;
+
+  /// What is stored, as the boxes last took it: a save sends the windows
+  /// that differ from it, so it never rewrites one another administrator
+  /// changed, and a box still showing it follows when it moves.
+  int? _storedDays;
+  int? _storedTaskDays;
+
+  @override
+  void initState() {
+    super.initState();
+    _follow(widget.settings);
+  }
+
+  @override
+  void didUpdateWidget(_RetentionGroup oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _follow(widget.settings);
+  }
 
   @override
   void dispose() {
     _days.dispose();
     _taskDays.dispose();
     super.dispose();
+  }
+
+  void _follow(AdminSettings settings) {
+    _storedDays = _moved(_days, _storedDays, settings.trashRetentionDays);
+    _storedTaskDays = _moved(
+      _taskDays,
+      _storedTaskDays,
+      settings.taskRetentionDays,
+    );
+  }
+
+  /// Takes [now] as the stored value behind [box]: a box still showing
+  /// the previous one moves with it, one the admin typed in keeps that.
+  static int _moved(TextEditingController box, int? stored, int now) {
+    if (now != stored &&
+        (stored == null || int.tryParse(box.text.trim()) == stored)) {
+      box.text = '$now';
+    }
+    return now;
   }
 
   Future<void> _save() async {
@@ -362,15 +415,23 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
     try {
       await ref
           .read(adminSettingsProvider.notifier)
-          .save(
-            widget.settings.copyWith(
-              trashRetentionDays: parsed,
-              taskRetentionDays: parsedTasks,
+          .edit(
+            AdminSettingsChange(
+              trashRetentionDays: parsed == _storedDays ? null : parsed,
+              taskRetentionDays: parsedTasks == _storedTaskDays
+                  ? null
+                  : parsedTasks,
             ),
           );
-      // Reflect what was stored, so a padded "007" reads back as 7.
-      _days.text = '$parsed';
-      _taskDays.text = '$parsedTasks';
+      // Reflect what was stored, so a padded "007" reads back as 7 and a
+      // window not sent shows the one another administrator stored.
+      final stored = mounted ? ref.read(adminSettingsProvider).value : null;
+      if (stored != null) {
+        _storedDays = stored.trashRetentionDays;
+        _storedTaskDays = stored.taskRetentionDays;
+        _days.text = '$_storedDays';
+        _taskDays.text = '$_storedTaskDays';
+      }
       messenger.show(l10n.adminServerRetentionSaved);
     } on WaxDeckApiException catch (error) {
       messenger.show(explainRefusal(l10n, error));
@@ -382,11 +443,6 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    if (!_seeded) {
-      _seeded = true;
-      _days.text = '${widget.settings.trashRetentionDays}';
-      _taskDays.text = '${widget.settings.taskRetentionDays}';
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -396,11 +452,11 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              // Seeded from the settings on the first frame, like the
-              // transcoding three above, so both say what zero means
-              // under the box rather than inside it - two boxes reading
-              // 30 and 7 under one header is how the task window gets
-              // typed into the trash purge.
+              // Each box shows the stored number and follows it until the
+              // admin types, so both say what zero means under the box
+              // rather than inside it - two boxes reading 30 and 7 under
+              // one header is how the task window gets typed into the
+              // trash purge.
               WaxTextField(
                 label: l10n.adminServerTrashDaysLabel,
                 helperText: l10n.adminServerTrashDaysHelp,

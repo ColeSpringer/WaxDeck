@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../player/now_playing_slot.dart';
 import '../player/play_progress.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_state.dart';
+import 'item_menu.dart';
 
 /// Starts or resumes [item] where it stands, going nowhere: the one play
 /// verb behind every shelf's cover play, the Continue listening shelves'
@@ -30,6 +33,35 @@ void playOrResumeItem(
 /// through. A fresh track start goes to its head, so a track reads Play.
 bool playResumes(ItemSummary item, PlayProgress progress) =>
     item.mediaType != MediaType.music && progress.inProgress;
+
+/// The label a card's cover play carries: Resume for an [item] that
+/// [playResumes], nothing for one that starts afresh.
+String? resumeLabel(
+  AppLocalizations l10n,
+  ItemSummary item,
+  PlayProgress progress,
+) => playResumes(item, progress) ? l10n.libraryResumeItem(item.title) : null;
+
+/// Opens the menu behind a card's kebab: pin, and for a book its play,
+/// labelled Resume when [playResumes]. [withOpen] adds the item's own
+/// screen, for a shelf whose tap resumes instead of opening it.
+Future<void> showItemCardMenu(
+  BuildContext context,
+  WidgetRef ref,
+  ItemSummary item,
+  PlayProgress progress, {
+  bool withOpen = false,
+}) => showItemMenuForSummary(
+  context,
+  ref,
+  item,
+  withPin: true,
+  onPlay: item.mediaType == MediaType.audiobook
+      ? (ref) => playOrResumeItem(ref, item, progress)
+      : null,
+  inProgress: playResumes(item, progress),
+  withOpen: withOpen,
+);
 
 /// Carries [pid] on when it is what this app already holds, answering
 /// whether it did: the current entry plays on without a new start, live

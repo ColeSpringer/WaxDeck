@@ -316,8 +316,13 @@ func (h *Handler) updatePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 		expects := make([]string, 0, len(idxs))
 		for _, i := range idxs {
 			if entries[i].Position == nil {
-				// Only a static list carries positions, and only a static
-				// list can be removed from. Refuse rather than guess.
+				// Positions go only to the owner of a static list, the one
+				// caller that can remove by them. Refuse rather than guess,
+				// as not authorized where the list is somebody else's.
+				if pl, err := h.svc.PlaylistByPID(r.Context(), uc, id); err == nil && !pl.IsOwner {
+					h.fail(w, r, 50, "not authorized for this operation")
+					return
+				}
 				h.fail(w, r, 0, "this playlist's members cannot be removed by index")
 				return
 			}

@@ -125,6 +125,14 @@ Conventions:
   carry it out - a part it could not load, a start that did not
   take; the request was well formed and the endpoint is connected,
   so what failed is neither the caller nor the server),
+  `endpoint-idle` (a routed play or skip found nothing live on the
+  target player endpoint to act on: an empty queue, or one standing
+  with nothing playing from it),
+  `no-session` (a routed command named a session the target player
+  endpoint is no longer playing: it ended there, or another took its
+  place; refresh the session before sending it more), `queue-end`
+  and `queue-start` (a routed next or previous found no entry after,
+  or before, the one the target player endpoint is on),
   `quota-exceeded` (the upload would exceed the caller's storage
   quota, or it exceeds a fixed size limit this server puts on that
   kind of upload - an imported backup archive, a staged account
@@ -484,7 +492,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**pruneEnrichmentCache**](doc/AdminApi.md#pruneenrichmentcache) | **POST** /admin/enrichment-cache/prune | Prune the enrichment response cache
 [*AdminApi*](doc/AdminApi.md) | [**pruneThumbnailCache**](doc/AdminApi.md#prunethumbnailcache) | **POST** /admin/thumbnails/prune | Prune the generated thumbnail cache
 [*AdminApi*](doc/AdminApi.md) | [**purgeTrashEntry**](doc/AdminApi.md#purgetrashentry) | **DELETE** /admin/trash/{trashId} | Purge one trashed file
-[*AdminApi*](doc/AdminApi.md) | [**putAdminSettings**](doc/AdminApi.md#putadminsettings) | **PUT** /admin/settings | Replace the server&#39;s runtime settings
+[*AdminApi*](doc/AdminApi.md) | [**putAdminSettings**](doc/AdminApi.md#putadminsettings) | **PUT** /admin/settings | Write the server&#39;s runtime settings
 [*AdminApi*](doc/AdminApi.md) | [**putGenreTree**](doc/AdminApi.md#putgenretree) | **PUT** /admin/genre-tree | Replace the canonical genre vocabulary
 [*AdminApi*](doc/AdminApi.md) | [**putSchedule**](doc/AdminApi.md#putschedule) | **PUT** /admin/schedules/{kind} | Set a scheduled job&#39;s cron and enabled state
 [*AdminApi*](doc/AdminApi.md) | [**putScrobblingConfig**](doc/AdminApi.md#putscrobblingconfig) | **PUT** /admin/scrobbling | Set the server&#39;s Last.fm API credentials
@@ -767,6 +775,7 @@ Class | Method | HTTP request | Description
  - [AcquisitionFormat](doc/AcquisitionFormat.md)
  - [AcquisitionRequest](doc/AcquisitionRequest.md)
  - [AdminSettings](doc/AdminSettings.md)
+ - [AdminSettingsChange](doc/AdminSettingsChange.md)
  - [AlbumDetail](doc/AlbumDetail.md)
  - [AppPassword](doc/AppPassword.md)
  - [AppPasswordCreate](doc/AppPasswordCreate.md)

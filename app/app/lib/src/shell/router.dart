@@ -132,10 +132,11 @@ final routerProvider = Provider<GoRouter>((ref) {
   // a row on the notifications screen, a link, the sidebar, a search
   // result. Off a microtask, because a delegate notifies its listeners
   // in the middle of resolving a route and provider state may not
-  // change under a build.
+  // change under a build. The query rides along: a row can point at one
+  // view of a screen (the signup requests).
   void dismissArrivedNews() {
     if (router.routerDelegate.currentConfiguration.isEmpty) return;
-    final location = router.state.matchedLocation;
+    final location = router.state.uri.toString();
     scheduleMicrotask(
       () => ref.read(notificationsProvider.notifier).dismissUnder(location),
     );
@@ -834,7 +835,13 @@ List<RouteBase> shellRoutes() => <RouteBase>[
               ),
               GoRoute(
                 path: WaxRoute.users,
-                builder: (context, state) => const UsersScreen(),
+                // User input in a URL: a view it does not name opens the
+                // users.
+                builder: (context, state) => UsersScreen(
+                  view: UsersView.fromQuery(
+                    state.uri.queryParameters[WaxRoute.usersViewParam],
+                  ),
+                ),
                 routes: <RouteBase>[
                   GoRoute(
                     path: 'edit',

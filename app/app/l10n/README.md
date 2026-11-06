@@ -44,9 +44,10 @@ sorted, and run `make generate`.
   otherwise), machine-drafted until a native reader removes
   `@@x-machine-translated`.
 - The `hardcoded-copy` ratchet in `test/ui_conventions_test.dart` only
-  goes down. It reads copy by argument name and a few positional shapes,
-  so zero is a claim to check by reading, and a floor above zero
-  carries its reason at the site.
+  goes down. It reads copy by argument name, a few positional shapes and
+  any interpolated literal holding prose (logs, exceptions, `toString`,
+  header values and SQL aside), so zero is a claim to check by reading,
+  and a floor above zero carries its reason at the site.
 - e2e and the goldens read English by construction (pinned browser
   locale, blocked-out text), so a translation cannot red them and they
   do not gate one. Spanish draws in `test/settings_screen_test.dart`.
@@ -68,9 +69,9 @@ so the merge drops it.
 Explanatory text is the last resort; a layout, an icon or a label
 usually says it. The rule the app is written to:
 
-- An empty state is a title, at most one line of 8 words, and one
-  action; `EmptyState.message` is optional and dropped when the title
-  or the action already says it.
+- An empty state is a title, at most one action and at most one line of
+  8 words (`EmptyState.message`, optional, dropped when the title or the
+  action already says it).
 - A setting gets help only for a consequence its label hides, in at
   most 10 words.
 - A format or example hint lives in the field's hint, not under it. A

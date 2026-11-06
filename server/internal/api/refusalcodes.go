@@ -42,6 +42,12 @@ var refusalCodes = map[string]int{
 	// 409 like `endpoint-offline` and `timeout` beside it: the request
 	// was well formed and the state was not.
 	"endpoint-failed": http.StatusConflict,
+	// The endpoint found nothing to act on, which its controller words
+	// in its own language by these codes.
+	"endpoint-idle": http.StatusConflict,
+	"no-session":    http.StatusConflict,
+	"queue-end":     http.StatusConflict,
+	"queue-start":   http.StatusConflict,
 }
 
 // refusalStatus resolves a refusal's code onto the status it answers

@@ -102,10 +102,7 @@ class _Books extends ConsumerWidget {
     final l10n = context.l10n;
     final wax = context.waxL10n;
     final rows = <ItemSummary>[for (final entry in books) entry.book];
-    final states = <String, PlayProgress>{};
-    for (final key in playProgressKeys(rows)) {
-      states.addAll(ref.watch(playProgressProvider(key)).value ?? const {});
-    }
+    final progress = watchPlayProgress(ref, rows);
     return SliverPadding(
       padding: sizeClass.gutter,
       sliver: SliverList.builder(
@@ -120,7 +117,7 @@ class _Books extends ConsumerWidget {
               artwork: store.source(book.artUrl),
               domain: WaxDomain.audiobooks,
               shape: ArtworkShape.portrait,
-              progress: states[book.pid]?.fractionOf(book.durationMs),
+              progress: progress[book.pid].fractionOf(book.durationMs),
               trailingText: wax.formatSpan(
                 Duration(milliseconds: book.durationMs),
               ),

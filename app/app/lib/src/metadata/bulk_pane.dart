@@ -38,7 +38,7 @@ final _bulkSeedProvider = FutureProvider.autoDispose.family<BulkSeed, String>((
       fields.kinds.where((k) => k.kind == MediaType.music).firstOrNull ??
       const KindFields(kind: MediaType.music, fields: []);
   return (kindFields: kind, items: items);
-});
+}, retry: retryUnlessRefused);
 
 /// What a bulk edit does when a target field is already locked on a
 /// track. The server's three answers, offered as one choice because

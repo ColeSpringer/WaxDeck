@@ -117,6 +117,10 @@
   "@errorEndpointFailed": {
     "description": "Error sentence for the spec code `endpoint-failed`: the other device took the command and failed at it, unlike `endpoint-offline`, where it never got it."
   },
+  "errorEndpointIdle": "That device has nothing to play.",
+  "@errorEndpointIdle": {
+    "description": "Error sentence for the spec code `endpoint-idle`: a play or skip sent to another device found nothing live there to act on, with its queue empty or standing with nothing playing."
+  },
   "errorEndpointOffline": "That device is not connected. Refresh the list of devices.",
   "@errorEndpointOffline": {
     "description": "Error sentence for the spec code `endpoint-offline`."
@@ -193,6 +197,10 @@
   "@errorNetwork": {
     "description": "Error sentence for the client's own `transport` code: the request never reached a server that could answer it."
   },
+  "errorNoSession": "That device is no longer playing this session.",
+  "@errorNoSession": {
+    "description": "Error sentence for the spec code `no-session`: a command sent to another device named a session that has ended there or been replaced."
+  },
   "errorNotFound": "That is not here any more.",
   "@errorNotFound": {
     "description": "Error sentence for the spec code `not-found`."
@@ -200,6 +208,14 @@
   "errorPodcastsOff": "Podcasts are turned off on this server.",
   "@errorPodcastsOff": {
     "description": "Error sentence for `feature-unavailable` when the params name the feature as podcasts: a subscribe or an OPML import on a server run with its podcast directory turned off."
+  },
+  "errorQueueEnd": "That device is already at the end of its queue.",
+  "@errorQueueEnd": {
+    "description": "Error sentence for the spec code `queue-end`: a next sent to another device found nothing after what it plays."
+  },
+  "errorQueueStart": "That device is already at the start of its queue.",
+  "@errorQueueStart": {
+    "description": "Error sentence for the spec code `queue-start`: a previous sent to another device found nothing before what it plays."
   },
   "errorQuotaExceeded": "That is over a limit this server keeps.",
   "@errorQuotaExceeded": {

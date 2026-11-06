@@ -1,4 +1,6 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -10,6 +12,30 @@ class _Row {
   final String name;
   final String path;
   final int count;
+}
+
+/// A scaler shaped like Android 14's: sizes map along a table of sp to dp,
+/// interpolated between rows and from the origin below the first.
+class _TableTextScaler extends TextScaler {
+  const _TableTextScaler(this.from, this.to);
+
+  final List<double> from;
+  final List<double> to;
+
+  @override
+  double scale(double fontSize) {
+    if (fontSize <= from.first) return fontSize * to.first / from.first;
+    for (var i = 1; i < from.length; i++) {
+      if (fontSize <= from[i]) {
+        final at = (fontSize - from[i - 1]) / (from[i] - from[i - 1]);
+        return to[i - 1] + at * (to[i] - to[i - 1]);
+      }
+    }
+    return fontSize * to.last / from.last;
+  }
+
+  @override
+  double get textScaleFactor => scale(14) / 14;
 }
 
 const _rows = <_Row>[
@@ -55,8 +81,8 @@ Future<void> _pump(
   );
 }
 
-/// A tooltip with words, under [of]: a tappable tile holds one with
-/// nothing to say whether or not its room cuts anything.
+/// A tooltip with words, under [of]: a tile holds one with nothing to
+/// say whether or not its room cuts anything.
 Finder _tip(Finder of) => find.descendant(
   of: of,
   matching: find.byWidgetPredicate((w) => w is WaxTooltip && w.message != null),
@@ -501,7 +527,7 @@ void main() {
     expect(heights[2], heights[0]);
     expect(
       tester.getSize(find.byType(StatTile).first).width,
-      WaxStatGrid.defaultTileWidth,
+      WaxStatGrid.tileWidth,
     );
     expect(
       tester.getSemantics(find.bySemanticsIdentifier('tile-a')),
@@ -784,7 +810,7 @@ void main() {
             child: Align(
               alignment: Alignment.topLeft,
               child: SizedBox(
-                width: WaxStatGrid.defaultTileWidth,
+                width: WaxStatGrid.tileWidth,
                 child: StatTile(
                   label: 'Streaming',
                   value: value,
@@ -808,7 +834,12 @@ void main() {
       expect(tester.widget<WaxTooltip>(tip).message, 'Not configured');
       expect(
         tester.getSemantics(find.bySemanticsIdentifier('tile')),
-        matchesSemantics(label: 'Streaming, Not configured'),
+        // Cut, so a stop: focus shows the rest.
+        matchesSemantics(
+          label: 'Streaming, Not configured',
+          isFocusable: true,
+          hasFocusAction: true,
+        ),
       );
     });
 
@@ -836,7 +867,7 @@ void main() {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               SizedBox(
-                width: WaxStatGrid.defaultTileWidth,
+                width: WaxStatGrid.tileWidth,
                 child: StatTile(
                   label: 'Streaming',
                   value: value,
@@ -899,7 +930,7 @@ void main() {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               SizedBox(
-                width: WaxStatGrid.defaultTileWidth,
+                width: WaxStatGrid.tileWidth,
                 child: ValueListenableBuilder<String?>(
                   valueListenable: current,
                   builder: (context, now, _) => StatTile(
@@ -931,10 +962,61 @@ void main() {
       expect(find.text('ok'), findsOneWidget, reason: 'it fits: no tip');
     });
 
-    testWidgets('an untappable tile is no tab stop, and keeps hover', (
+    testWidgets('an untappable tile shows what its room cut on keyboard '
+        'focus, and is still no button', (tester) async {
+      await pumpTile(tester, tappable: false);
+      expect(find.textContaining(value), findsOneWidget, reason: 'the tile');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      for (var i = 0; i < 3; i++) {
+        await tester.pump();
+      }
+      expect(focusOnTile(), isTrue);
+      expect(find.textContaining(value), findsNWidgets(2));
+      expect(find.textContaining(caption), findsNWidgets(2));
+      final node = tester.getSemantics(find.byType(StatTile));
+      expect(node.flagsCollection.isButton, isFalse);
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<WaxButton>()
+            ?.label,
+        'After',
+      );
+      expect(find.textContaining(value), findsOneWidget);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.text(caption)));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(find.textContaining(caption), findsNWidgets(2));
+    });
+
+    testWidgets('an untappable tile its room does not cut is no tab stop', (
       tester,
     ) async {
-      await pumpTile(tester, tappable: false);
+      await _pump(
+        tester,
+        Align(
+          alignment: Alignment.topLeft,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const SizedBox(
+                width: WaxStatGrid.tileWidth,
+                child: StatTile(label: 'Pending', value: '12', caption: 'ok'),
+              ),
+              WaxButton(label: 'After', onPressed: () {}),
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
       expect(focusOnTile(), isFalse);
@@ -944,15 +1026,6 @@ void main() {
             ?.label,
         'After',
       );
-      expect(find.textContaining(caption), findsOneWidget);
-
-      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await mouse.addPointer(location: Offset.zero);
-      addTearDown(mouse.removePointer);
-      await mouse.moveTo(tester.getCenter(find.text(caption)));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump();
-      expect(find.textContaining(caption), findsNWidgets(2));
     });
   });
 
@@ -991,20 +1064,217 @@ void main() {
     }
   });
 
-  testWidgets('a tile that asks to reserve its caption keeps doing so in a '
-      'grid that never captions', (tester) async {
-    await _pump(
+  group('a stat grid\'s tile width follows the text scale', () {
+    // The tile's padding does not grow with the text, so only the text
+    // part of the width is scaled.
+    double tileAt(double ratio) =>
+        2 * WaxSpace.s16 + (WaxStatGrid.tileWidth - 2 * WaxSpace.s16) * ratio;
+
+    Future<void> pumpGrid(
+      WidgetTester tester, {
+      required double scale,
+      required double width,
+    }) => _pump(
       tester,
-      const WaxStatGrid(
-        tiles: <StatTile>[
-          StatTile(label: 'Asks', value: '1', reserveCaption: true),
-          StatTile(label: 'Plain', value: '2'),
-        ],
+      Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: WaxStatGrid(
+            tiles: <StatTile>[
+              for (var i = 0; i < 6; i++)
+                StatTile(
+                  label: 'Tile $i',
+                  value: '$i',
+                  caption: i.isEven ? 'albums waiting' : null,
+                ),
+            ],
+          ),
+        ),
+      ),
+      width: width,
+    );
+
+    /// The tiles' rects, one list per row, top to bottom.
+    List<List<Rect>> rows(WidgetTester tester) {
+      final byTop = <double, List<Rect>>{};
+      for (final tile in tester.widgetList<StatTile>(find.byType(StatTile))) {
+        final rect = tester.getRect(find.byWidget(tile));
+        byTop.putIfAbsent(rect.top, () => <Rect>[]).add(rect);
+      }
+      return <List<Rect>>[
+        for (final top in byTop.keys.toList()..sort()) byTop[top]!,
+      ];
+    }
+
+    testWidgets('large text lays out fewer columns in the same width', (
+      tester,
+    ) async {
+      await pumpGrid(tester, scale: 1, width: 1000);
+      final normal = rows(tester);
+      expect(normal.first, hasLength(4));
+
+      await pumpGrid(tester, scale: 2, width: 1000);
+      final large = rows(tester);
+      expect(large.first.length, lessThan(normal.first.length));
+      for (final row in large) {
+        for (final rect in row) {
+          expect(rect.width, tileAt(2));
+          expect(rect.height, row.first.height, reason: 'one height per row');
+        }
+      }
+    });
+
+    for (final (scale, width, tile) in <(double, double, double)>[
+      (2, 300, 300),
+      (2, 1000, 408),
+      (1, 180, 180),
+      (1, 1000, 220),
+    ]) {
+      testWidgets('at scale $scale in a $width grid a tile is $tile wide', (
+        tester,
+      ) async {
+        await pumpGrid(tester, scale: scale, width: width);
+        final drawn = rows(tester);
+        for (final rect in drawn.expand((row) => row)) {
+          expect(rect.width, tile);
+          expect(rect.width, lessThanOrEqualTo(width));
+        }
+        if (tile == width) {
+          expect(drawn.every((row) => row.length == 1), isTrue);
+        }
+      });
+    }
+  });
+
+  group('a stat grid under a nonlinear text scaler', () {
+    // Android 14's rows for sp 8, 10, 12, 14, 18, 20, 24, 30 and 100.
+    const sp = <double>[8, 10, 12, 14, 18, 20, 24, 30, 100];
+    final rows = <(double, _TableTextScaler)>[
+      (
+        1.5,
+        const _TableTextScaler(sp, <double>[
+          12,
+          15,
+          18,
+          22,
+          24,
+          26,
+          28,
+          30,
+          100,
+        ]),
+      ),
+      (
+        1.8,
+        const _TableTextScaler(sp, <double>[
+          14.4,
+          18,
+          21.6,
+          24.4,
+          27.6,
+          30.8,
+          32.8,
+          34.8,
+          100,
+        ]),
+      ),
+      (
+        2,
+        const _TableTextScaler(sp, <double>[
+          16,
+          20,
+          24,
+          26,
+          30,
+          34,
+          36,
+          38,
+          100,
+        ]),
+      ),
+    ];
+
+    // The longest captions and labels the dashboard draws in es.
+    const tiles = <StatTile>[
+      StatTile(
+        label: 'Salud de la biblioteca',
+        value: '123.456',
+        caption: '98.765 de 123.456 revisados',
+      ),
+      StatTile(
+        label: 'Pendiente de revisión',
+        value: '12.345',
+        caption: '1.234 todavía identificándose',
+      ),
+      StatTile(
+        label: 'Motor de transmisión',
+        value: '98.765',
+        caption: 'Suenan los originales tal cual',
+      ),
+      StatTile(
+        label: 'Cobertura de similitud',
+        value: '80%',
+        caption: '98.765 pistas analizadas',
+      ),
+    ];
+
+    Future<void> pumpGrid(WidgetTester tester, TextScaler scaler) => _pump(
+      tester,
+      Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: scaler),
+          child: const WaxStatGrid(tiles: tiles),
+        ),
       ),
     );
-    final asks = tester.getSize(find.byType(StatTile).first).height;
-    final plain = tester.getSize(find.byType(StatTile).last).height;
-    expect(asks, greaterThan(plain));
+
+    for (final (factor, scaler) in rows) {
+      testWidgets('at Android $factor a tile is as wide as the small type '
+          'grows, with its padding held', (tester) async {
+        await pumpGrid(tester, scaler);
+        const padding = 2 * WaxSpace.s16;
+        final expected = padding + (WaxStatGrid.tileWidth - padding) * factor;
+        for (final tile in tester.widgetList<StatTile>(find.byType(StatTile))) {
+          expect(
+            tester.getSize(find.byWidget(tile)).width,
+            closeTo(expected, 0.01),
+          );
+        }
+      });
+
+      testWidgets('at Android $factor no label, value or caption is cut', (
+        tester,
+      ) async {
+        await pumpGrid(tester, scaler);
+        final cut = <String>[
+          for (final line in tester.renderObjectList<RenderParagraph>(
+            find.descendant(
+              of: find.byType(StatTile),
+              matching: find.byType(RichText),
+            ),
+          ))
+            if (line.didExceedMaxLines) line.text.toPlainText(),
+        ];
+        expect(cut, isEmpty);
+      });
+    }
+
+    testWidgets('the width follows the small type, not the size 1 point', (
+      tester,
+    ) async {
+      // Size 1 grows three times here and the caption's size twice.
+      await pumpGrid(
+        tester,
+        const _TableTextScaler(<double>[1, 11.5, 100], <double>[3, 23, 200]),
+      );
+      const padding = 2 * WaxSpace.s16;
+      expect(
+        tester.getSize(find.byType(StatTile).first).width,
+        closeTo(padding + (WaxStatGrid.tileWidth - padding) * 2, 0.01),
+      );
+    });
   });
 
   testWidgets('typed confirmation stays disabled until the word matches', (

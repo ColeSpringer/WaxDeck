@@ -62,13 +62,15 @@ RadioStation _station([String pid = 'st-1']) => RadioStation(
 );
 
 ({ProviderContainer container, FakeRepository repo, FakeEngine engine})
-_harness({List<ItemSummary>? items, DateTime Function()? clock}) {
+_harness({
+  List<ItemSummary>? items,
+  DateTime Function()? clock,
+  FakeEngine? engine,
+}) {
   final repo = FakeRepository(
     items: items ?? [testItem(_a), testItem(_b), testItem(_c)],
   );
-  final engine = FakeEngine(
-    mediaDuration: const Duration(milliseconds: _trackMs),
-  );
+  engine ??= FakeEngine(mediaDuration: const Duration(milliseconds: _trackMs));
   final container = ProviderContainer(
     overrides: [
       repositoryProvider.overrideWithValue(repo),
@@ -78,6 +80,43 @@ _harness({List<ItemSummary>? items, DateTime Function()? clock}) {
   );
   addTearDown(container.dispose);
   return (container: container, repo: repo, engine: engine);
+}
+
+/// An engine whose preload clear lands late, which opens the window in
+/// which it crosses into an item the queue already let go of.
+class _SlowClear extends FakeEngine {
+  _SlowClear() : super(mediaDuration: const Duration(milliseconds: _trackMs));
+
+  Completer<void>? clearGate;
+
+  @override
+  Future<void> clearPreload() async {
+    await clearGate?.future;
+    return super.clearPreload();
+  }
+}
+
+/// Plays [_a] then [_b], lets [_b] go while the engine is committed to
+/// it, and runs [_a] out: the engine crosses into [_b], the queue stands
+/// at its end on [_a], and nothing drives it.
+Future<({ProviderContainer container, FakeRepository repo, FakeEngine engine})>
+_strayAtTheEnd() async {
+  final engine = _SlowClear();
+  final h = _harness(engine: engine);
+  h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+  await pumpEventQueue();
+  await _skipTo(engine, 190000);
+  expect(engine.preloadedUrl, contains(_b));
+  final gate = engine.clearGate = Completer<void>();
+  h.container.queue.removeAt(1);
+  await pumpEventQueue();
+  engine.advance(const Duration(milliseconds: _trackMs));
+  await pumpEventQueue();
+  gate.complete();
+  await pumpEventQueue();
+  expect(h.container.read(nowPlayingProvider).entry?.pid, _a);
+  expect(h.container.read(nowPlayingProvider).session, isNull);
+  return h;
 }
 
 class _Clock {
@@ -625,6 +664,40 @@ void main() {
         expect(h.engine.preloadedUrl, isNull);
       },
     );
+
+    test('a queue edit after a stray crossing at its end starts '
+        'nothing', () async {
+      final h = await _strayAtTheEnd();
+      final loads = h.engine.loadedUrls.length;
+
+      h.container.queue.setRepeat(QueueRepeat.all);
+      await pumpEventQueue();
+
+      expect(h.engine.loadedUrls, hasLength(loads));
+      expect(h.engine.playing, isFalse);
+    });
+
+    test('a station after a stray crossing at the end parks the entry '
+        'left standing', () async {
+      final h = await _strayAtTheEnd();
+      final radio = h.container.read(radioPlaybackProvider.notifier);
+
+      await radio.play(_station());
+      await pumpEventQueue();
+      expect(h.container.read(parkedEntryProvider)?.entry.pid, _a);
+      final loads = h.engine.loadedUrls.length;
+
+      // An edit under the station takes nothing from it.
+      h.container.queue.setRepeat(QueueRepeat.all);
+      await pumpEventQueue();
+      expect(h.container.read(radioPlaybackProvider).station, isNotNull);
+      expect(h.engine.loadedUrls, hasLength(loads));
+
+      await radio.stop();
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingSlotProvider), isA<ParkedSlot>());
+      expect(h.engine.playing, isFalse);
+    });
 
     test(
       'spoken word is not prepared on either side of the crossing',

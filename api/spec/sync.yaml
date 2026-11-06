@@ -23,7 +23,14 @@ paths:
         what the caller can see (its library visibility or content
         settings; a file re-homed under an ungranted root keeps its item
         PID; a tombstone for an item never
-        mirrored is a no-op); entries are coalesced within a page (an item may
+        mirrored is a no-op). A caller granted only some libraries gets a
+        tombstone for an item that sat inside them at the cursor or since,
+        and for one the server cannot place in any library; an item that
+        sat only in libraries outside them from the cursor on (changed,
+        moved between them, trashed, purged, deleted outright, or archived
+        with its library's removal) gets none, and an episode sits in the
+        podcast library, fetched or not. Entries are coalesced within a
+        page (an item may
         recur on later pages; application is idempotent, latest wins).
         The returned `nextSince` advances the cursor, and `more` signals
         another page should be fetched immediately. Snapshots contain
@@ -34,10 +41,12 @@ paths:
         longer serve contiguously: one behind its pruned change history,
         one past the end of its history, one from a history it has since
         rolled back (a full restore of the server), even once that history
-        has grown past the cursor again, one from a rebuilt catalog, and
+        has grown past the cursor again, one from a rebuilt catalog,
         one handed out before a catalog repair (`POST
         /admin/catalog/repair`) that got past its first step, since what
-        the repair rewrites reaches no delta: drop the mirror and
+        the repair rewrites reaches no delta, and, for a caller granted
+        only some libraries, one from before the server last rebuilt its
+        record of which library each item sat in: drop the mirror and
         snapshot again. Short of those, snapshot-minted
         cursors stay serviceable for at least the server's change
         retention horizon. A snapshot carries no tombstones, so a client

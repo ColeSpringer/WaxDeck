@@ -23,6 +23,7 @@ class SubscriptionsController extends AsyncNotifier<List<Subscription>> {
 
   @override
   Future<List<Subscription>> build() async {
+    ref.watch(signedInAccountProvider);
     final page = await ref
         .watch(repositoryProvider)
         .listSubscriptions(limit: pageSize);
@@ -164,8 +165,10 @@ class PodcastDetailController extends AsyncNotifier<PodcastDetail> {
   final String pid;
 
   @override
-  Future<PodcastDetail> build() =>
-      ref.watch(repositoryProvider).getPodcast(pid);
+  Future<PodcastDetail> build() {
+    ref.watch(signedInAccountProvider);
+    return ref.watch(repositoryProvider).getPodcast(pid);
+  }
 
   Future<void> subscribe() async {
     final detail = state.value;
@@ -257,6 +260,7 @@ class EpisodesController extends AsyncNotifier<EpisodeListState> {
   @override
   Future<EpisodeListState> build() async {
     _generation++;
+    ref.watch(signedInAccountProvider);
     final page = await ref
         .watch(repositoryProvider)
         .listEpisodes(showPid, limit: pageSize);

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/query"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -753,13 +754,36 @@ func (l *Library) UserYearInReview(ctx context.Context, uc *UserCtx, year int) (
 		return YearInReview{}, err
 	}
 	// New-in-library is catalog-structural (what joined the library that
-	// year), answered by the catalog's own recap. Its year boundary is
-	// UTC; a few hours' skew on additions is acceptable for a count of
-	// arrivals, unlike listening time.
-	if rev, err := l.lib.YearInReview(ctx, model.PID(uc.CatalogPID), year, 1); err == nil {
-		out.NewInLibrary = rev.NewInLibrary
+	// year), answered by the catalog's own recap, which counts every
+	// library: a caller not of full reach counts its own reach instead.
+	// The year boundary is UTC either way; a few hours' skew on additions
+	// is acceptable for a count of arrivals, unlike listening time.
+	if fullReach(uc) {
+		if rev, err := l.lib.YearInReview(ctx, model.PID(uc.CatalogPID), year, 1); err == nil {
+			out.NewInLibrary = rev.NewInLibrary
+		}
+	} else {
+		out.NewInLibrary = l.arrivalsInReach(ctx, uc, year)
 	}
 	return out, nil
+}
+
+// arrivalsInReach counts the tracks and books that entered the catalog
+// in a UTC year among those the caller may enumerate. A count that cannot
+// be taken is zero, as the catalog recap's failure is.
+func (l *Library) arrivalsInReach(ctx context.Context, uc *UserCtx, year int) int {
+	from, to := yearWindow(year, time.UTC)
+	q := l.facetScopeBuilder(ctx, uc).
+		WhereValues("kind", query.OpIn, string(model.KindTrack), string(model.KindBook)).
+		Where("added", query.OpGte, from.UnixNano()).
+		Where("added", query.OpLt, to.UnixNano()).
+		Build()
+	n, err := l.lib.Count(ctx, q, "")
+	if err != nil {
+		l.log.Warn("counting the year's arrivals", "year", year, "err", err)
+		return 0
+	}
+	return n
 }
 
 // longestRun answers the longest consecutive-day run in a day set.

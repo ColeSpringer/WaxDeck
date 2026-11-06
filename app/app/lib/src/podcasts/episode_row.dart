@@ -122,7 +122,7 @@ class EpisodeRow extends ConsumerWidget {
             label: l10n.podcastFetchEpisode(episode.title),
             size: 18,
             semanticsId: SemanticsIds.episodeFetch(episode.pid),
-            onPressed: () => unawaited(actions.fetch(context, episode.pid)),
+            onPressed: () => unawaited(actions.fetch(context, episode)),
           ),
           EpisodeFetchDone() => WaxIconButton(
             glyph: WaxIcons.offline,
@@ -130,7 +130,7 @@ class EpisodeRow extends ConsumerWidget {
             size: 18,
             semanticsId: SemanticsIds.episodeRemove(episode.pid),
             onPressed: () =>
-                unawaited(actions.removeDownload(context, episode.pid)),
+                unawaited(actions.removeDownload(context, episode)),
           ),
           EpisodeFetchQueued() => null,
         },

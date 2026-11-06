@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/notifications/notifications_binder.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
@@ -83,6 +86,8 @@ void main() {
         expect(entry.key.token, entry.value);
         expect(NotificationKind.forEvent(entry.value), entry.key);
       }
+      // A signup request is answered on the users screen's requests.
+      expect(NotificationKind.signupRequested.location, WaxRoute.userRequests);
       // The one kind this client mints for itself: it has a token so a
       // spec can address its row, and no event on the stream is called
       // that.
@@ -244,6 +249,32 @@ void main() {
       local.recordServerEvent(_marker('upload', pid: 'up-1'));
       expect(container.read(localNotificationsProvider), isEmpty);
       expect(local.unseen, 0);
+    });
+
+    test('news about the screen in front of you never lands, whatever query '
+        'it carries', () {
+      local.dismissUnder('${WaxRoute.uploads}?view=all');
+      local.recordServerEvent(_marker('upload', pid: 'up-1'));
+      expect(container.read(localNotificationsProvider), isEmpty);
+    });
+
+    // The router reports the query with the path, and a target that names
+    // one is a view of its screen rather than the screen.
+    test('a target naming a query is reached only where the location '
+        'carries it', () {
+      bool under(String location, String target) =>
+          LocalNotifications.under(location, target);
+      const requests = WaxRoute.userRequests;
+      expect(under(requests, requests), isTrue);
+      expect(under('$requests&from=bell', requests), isTrue);
+      expect(under(WaxRoute.users, requests), isFalse);
+      expect(under(WaxRoute.userInvites, requests), isFalse);
+      expect(under(WaxRoute.userEdit, requests), isFalse);
+      // A path-only target keeps its rule, whatever query the location
+      // carries.
+      expect(under(requests, WaxRoute.users), isTrue);
+      expect(under('${WaxRoute.review}/rv-1?x=1', WaxRoute.review), isTrue);
+      expect(under('${WaxRoute.review}er', WaxRoute.review), isFalse);
     });
 
     test("this device's own finished transfer is a row", () {
@@ -795,6 +826,63 @@ void main() {
       await puller.pull();
       expect(repo.sinceCalls.last, isNull);
     });
+  });
+
+  // Through the real router: it is what reports where the visitor is, and
+  // a location carrying a query is what a signup row points at.
+  testWidgets('arriving at the signup requests marks a signup row read, and '
+      'one that arrives while there', (tester) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _user),
+    );
+    final first = _inboxRow('signup-requested');
+    repo.inbox = <ServerNotification>[first];
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const WaxDeckApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final router = container.read(routerProvider);
+    // Held open, as the bell holds it.
+    final inbox = container.listen(notificationsProvider, (_, _) {});
+    addTearDown(inbox.close);
+    await tester.pumpAndSettle();
+    bool read(String id) => container
+        .read(notificationsProvider)
+        .value!
+        .rows
+        .singleWhere((row) => row.id == id)
+        .read;
+
+    // The users view is not the requests one.
+    router.go(WaxRoute.users);
+    await tester.pumpAndSettle();
+    expect(read(first.id), isFalse);
+    expect(repo.inboxReadCalls, isEmpty);
+
+    router.go(WaxRoute.userRequests);
+    await tester.pumpAndSettle();
+    expect(read(first.id), isTrue);
+    expect(repo.inboxReadCalls, <List<String>>[
+      <String>[first.id],
+    ]);
+
+    final next = _inboxRow('signup-requested');
+    repo.inbox = <ServerNotification>[next, ...repo.inbox];
+    container.invalidate(notificationsProvider);
+    await tester.pumpAndSettle();
+    expect(read(next.id), isTrue);
+    expect(repo.inboxReadCalls.last, <String>[next.id]);
+    expect(container.read(unseenNotificationsProvider), 0);
   });
 }
 

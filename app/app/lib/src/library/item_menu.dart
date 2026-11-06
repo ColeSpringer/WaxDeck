@@ -252,9 +252,10 @@ Future<void> showItemMenuSheet(
               if (mediaType == MediaType.audiobook &&
                   artistPid != null &&
                   leads(WaxRoute.bookBucket(BookDimension.authors, artistPid)))
+                // No subtitle: a book's credit names every author, and the
+                // door opens the first one alone.
                 WaxOptionRow(
                   title: l10n.libraryMenuGoToAuthor,
-                  subtitle: artist,
                   glyph: WaxIcons.artists,
                   semanticsId: SemanticsIds.itemMenuGoAuthor,
                   onTap: () => open(

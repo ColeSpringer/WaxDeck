@@ -326,9 +326,12 @@ class _DownloadedShelf extends ConsumerWidget {
               );
             },
             playLabelAt: (at) => switch (shown[at].item) {
-              final item? when playResumes(item, _resume(shown[at].progress)) =>
-                context.l10n.libraryResumeItem(item.title),
-              _ => null,
+              final item? => resumeLabel(
+                context.l10n,
+                item,
+                _resume(shown[at].progress),
+              ),
+              null => null,
             },
             onPlayItem: (tile) {
               final at = tiles.indexOf(tile);

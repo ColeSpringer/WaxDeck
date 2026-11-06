@@ -10,6 +10,7 @@ import 'package:waxdeck/src/connect/connect_providers.dart';
 import 'package:waxdeck/src/connect/device_picker.dart';
 import 'package:waxdeck/src/connect/remote_screen.dart';
 import 'package:waxdeck/src/connect/remote_session.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
@@ -45,10 +46,13 @@ const _offline = PlayerEndpoint(
   rateControl: false,
 );
 
-PlaybackSessionInfo _session({bool playing = true}) => PlaybackSessionInfo(
+PlaybackSessionInfo _session({
+  bool playing = true,
+  String? endpointName = 'Kitchen speaker',
+}) => PlaybackSessionInfo(
   id: 'ps-remote',
   endpointId: 'pe-speaker',
-  endpointName: 'Kitchen speaker',
+  endpointName: endpointName,
   mine: true,
   authority: 'remote',
   playing: playing,
@@ -59,6 +63,27 @@ PlaybackSessionInfo _session({bool playing = true}) => PlaybackSessionInfo(
   volume: 0.8,
   queueVersion: 1,
   entries: const [
+    PlaybackSessionEntry(pid: 'tr-x', title: 'Alpha', durationMs: 30000),
+  ],
+);
+
+/// Somebody else's paused session whose current entry is outside this
+/// account's grants, as the server sends it: the slot kept and emptied.
+PlaybackSessionInfo _hiddenSlot() => PlaybackSessionInfo(
+  id: 'ps-ana',
+  endpointId: 'pe-speaker',
+  endpointName: 'Kitchen speaker',
+  mine: false,
+  ownerName: 'ana',
+  authority: 'remote',
+  playing: false,
+  index: 0,
+  positionMs: 1000,
+  positionAt: DateTime.now().toUtc(),
+  rate: 1,
+  queueVersion: 1,
+  entries: const [
+    PlaybackSessionEntry(pid: '', title: ''),
     PlaybackSessionEntry(pid: 'tr-x', title: 'Alpha', durationMs: 30000),
   ],
 );
@@ -293,6 +318,57 @@ void main() {
     );
 
     container.read(remoteSessionProvider.notifier).release();
+  });
+
+  // Somebody else's session on a shared device can hold an item outside
+  // this account's library grants: the server keeps its slot and empties
+  // it, and a slot with nothing in it reads as playing, never as a blank.
+  testWidgets('a hidden slot playing elsewhere is listed as playing', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_endpoint]
+      ..playbackSessions = [_hiddenSlot()];
+    final container = _container(repo: repo);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final row = tester.widget<WaxOptionRow>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.session('ps-ana')),
+        matching: find.byType(WaxOptionRow),
+      ),
+    );
+    expect(row.title, 'Playing');
+  });
+
+  testWidgets('a hidden slot under remote control reads as playing', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-x')])
+      ..playerEndpoints = [_endpoint];
+    final container = _container(repo: repo);
+    container.read(remoteSessionProvider.notifier).adopt(_hiddenSlot());
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const RemoteControlScreen(), pushed: true),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Playing'), findsOneWidget);
+    expect(find.text(''), findsNothing);
+    container.read(remoteSessionProvider.notifier).release();
+    await tester.pump();
   });
 
   testWidgets('taking the room back from the picker asks with house buttons', (
@@ -722,6 +798,109 @@ void main() {
       endpointId: 'pe-me',
     ));
     expect(container.read(remoteSessionProvider), isNull);
+  });
+
+  group('the remote screen in the listener\'s language', () {
+    Future<({ProviderContainer container, List<Map<String, Object?>> sent})>
+    pumpRemote(WidgetTester tester, PlaybackSessionInfo session) async {
+      final repo = FakeRepository(items: [testItem('tr-x')])
+        ..playerEndpoints = [_endpoint];
+      final sent = <Map<String, Object?>>[];
+      final container = _container(
+        repo: repo,
+        extra: [
+          connectBusProvider.overrideWith((ref) {
+            final bus = ConnectBus(
+              send: (f) {
+                sent.add(Map.of(f));
+                return true;
+              },
+            );
+            ref.onDispose(bus.dispose);
+            return bus;
+          }),
+        ],
+      );
+      container.read(remoteSessionProvider.notifier).adopt(session);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: routedHost(
+            const RemoteControlScreen(),
+            pushed: true,
+            locale: const Locale('es'),
+          ),
+        ),
+      );
+      await tester.pump();
+      return (container: container, sent: sent);
+    }
+
+    testWidgets('names a device the server did not', (tester) async {
+      final remote = await pumpRemote(tester, _session(endpointName: null));
+
+      expect(find.text('otro dispositivo'), findsOneWidget);
+      expect(find.textContaining('another device'), findsNothing);
+      remote.container.read(remoteSessionProvider.notifier).release();
+      await tester.pump();
+    });
+
+    testWidgets('says a device queue the server drives has nothing after '
+        'its last entry', (tester) async {
+      // A cast device's session: the server refuses the skip itself.
+      final (:container, :sent) = await pumpRemote(tester, _session());
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.remoteNext));
+      await tester.pump();
+      final cmd = sent.lastWhere((f) => f['type'] == 'cmd');
+      expect(cmd['verb'], 'next');
+      container.read(connectBusProvider).handleFrame({
+        'type': 'error',
+        'id': cmd['id'],
+        'code': 'queue-end',
+        'message': 'already at the end of the queue',
+      });
+      await tester.pump();
+
+      final es = lookupAppLocalizations(const Locale('es'));
+      expect(
+        raisedMessage(tester)?.resolve(es),
+        'Ese dispositivo ya está al final de su cola.',
+      );
+      container.read(remoteSessionProvider.notifier).release();
+      await tester.pump();
+    });
+
+    for (final (code, sentence) in <(String, String)>[
+      ('endpoint-idle', 'Ese dispositivo no tiene nada que reproducir.'),
+      ('no-session', 'Ese dispositivo ya no está reproduciendo esta sesión.'),
+      ('queue-end', 'Ese dispositivo ya está al final de su cola.'),
+      ('queue-start', 'Ese dispositivo ya está al principio de su cola.'),
+    ]) {
+      testWidgets('says why a device refused, by its code ($code)', (
+        tester,
+      ) async {
+        final (:container, :sent) = await pumpRemote(tester, _session());
+
+        await tester.tap(find.bySemanticsIdentifier(SemanticsIds.remoteToggle));
+        await tester.pump();
+        final cmd = sent.lastWhere((f) => f['type'] == 'cmd');
+        // The device words its refusal for a log; the code is what this
+        // device reads.
+        container.read(connectBusProvider).handleFrame({
+          'type': 'error',
+          'id': cmd['id'],
+          'code': code,
+          'message': 'there is nothing to play on this device',
+        });
+        await tester.pump();
+
+        final es = lookupAppLocalizations(const Locale('es'));
+        expect(raisedMessage(tester)?.resolve(es), sentence);
+        container.read(remoteSessionProvider.notifier).release();
+        await tester.pump();
+      });
+    }
   });
 
   testWidgets('routed volume is paced leading and trailing', (tester) async {

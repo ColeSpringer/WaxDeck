@@ -450,9 +450,10 @@ paths:
         running. A finished targeted job is left out (read it by pid),
         except a kind change (`set-kind`), an organize undo
         (`organize-undo`) and a library removal (`remove-root`), which
-        list with their result. A finished job of a kind that runs once
-        per item (an upload's `import`, a `delete`, a `restore`, a
-        `purge-trash`) is left out too, and lists only while it runs.
+        list with their result. A finished job that answers its own
+        request (an upload's `import`, a `delete`, one for a whole
+        deletion request, a trash `restore` or `purge-trash`) is left out
+        too, and lists only while it runs.
         Jobs the caller cleared (`POST /jobs/clear-finished`) are left
         out. A job left out takes no place on the page: the server reads
         back through as many as the 800 newest jobs to fill it.
@@ -592,18 +593,19 @@ paths:
           $ref: "#/components/responses/Forbidden"
     put:
       operationId: putAdminSettings
-      summary: Replace the server's runtime settings
+      summary: Write the server's runtime settings
       description: >
-        Replaces the runtime settings with the given object and
-        returns the stored result. Settings apply immediately, no
-        restart. Administrators only.
+        Writes the settings in the body and keeps every setting it
+        leaves out as stored, so two administrators changing different
+        settings never undo each other. Returns the stored result.
+        Settings apply immediately, no restart. Administrators only.
       tags: [admin]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AdminSettings"
+              $ref: "#/components/schemas/AdminSettingsChange"
       responses:
         "200":
           description: The stored settings.
@@ -2040,16 +2042,14 @@ components:
             embeddings already computed. The boot default comes from
             `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it
             once saved. External workers are unaffected (their access
-            is the worker-token configuration). Optional on PUT so
-            settings writers predating this field never change it:
-            absent keeps the current value. Always present in
+            is the worker-token configuration). Always present in
             responses.
         enrichmentWriteTags:
           type: boolean
           description: >
             Whether enrichment writes what it filled into the files, off by
             default (turning it on catches earlier values up; a read-only
-            server writes nothing). Optional on PUT, always in responses.
+            server writes nothing). Always present in responses.
         radioExternalArt:
           type: boolean
           description: >
@@ -2077,9 +2077,8 @@ components:
             Each host is paced separately, at the etiquette it asks for
             (MusicBrainz allows one request per second, and wants an
             identifying agent), and answers are cached server-side, so
-            the rung costs no per-device traffic. Optional on PUT so settings writers predating this
-            field never change it: absent keeps the current value. Always
-            present in responses.
+            the rung costs no per-device traffic. Always present in
+            responses.
         backupKeepCount:
           type: integer
           minimum: 0
@@ -2099,9 +2098,8 @@ components:
           description: >
             Automatically purge trashed files older than this many days
             on a periodic sweep; 0 disables retention (the trash keeps
-            entries until an administrator empties it). Optional on PUT
-            so settings writers predating this field never change it:
-            absent keeps the current value. Always present in responses.
+            entries until an administrator empties it). Always present in
+            responses.
         taskRetentionDays:
           type: integer
           minimum: 0
@@ -2111,8 +2109,69 @@ components:
             Organizer's journal of runs older than this, after which a run
             can no longer be undone. 0 keeps both, and an unconfigured
             server answers 30 - so unlike `trashRetentionDays`, 0 here is
-            a choice rather than the default. Optional on PUT (absent keeps
-            the current value), always present in responses.
+            a choice rather than the default. Always present in responses.
+
+    AdminSettingsChange:
+      type: object
+      description: >
+        A write of runtime settings. Every field is optional, and a field
+        left out keeps its stored value.
+      properties:
+        signupEnabled:
+          type: boolean
+          description: >
+            Whether open self-serve signup is accepted (registrations
+            land pending). Invite links work regardless.
+        readOnly:
+          type: boolean
+          description: >
+            Server-wide read-only mode: every library behaves
+            read-only (uploads, organizing, write-back, deletion,
+            and the file tools are refused with code `read-only`).
+        sonicAnalysis:
+          type: boolean
+          description: >
+            Whether the server analyzes its own library for sonic
+            similarity in the background. Applies immediately; turning
+            it off mid-library keeps the embeddings already computed.
+        enrichmentWriteTags:
+          type: boolean
+          description: >
+            Whether enrichment writes what it filled into the files
+            (turning it on catches earlier values up; a read-only server
+            writes nothing).
+        radioExternalArt:
+          type: boolean
+          description: >
+            Whether radio may look a station's announced title up
+            externally when nothing in this library matches it. Turning
+            it off drops what it fetched and makes no outbound request.
+        backupKeepCount:
+          type: integer
+          minimum: 0
+          description: >
+            How many backup archives to keep; older ones are deleted
+            after each successful backup. 0 keeps every archive.
+        backupKeepBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Total archive bytes to keep, oldest deleted first when
+            exceeded. 0 is unlimited. Imported archives are exempt.
+        trashRetentionDays:
+          type: integer
+          minimum: 0
+          description: >
+            Automatically purge trashed files older than this many days
+            on a periodic sweep; 0 disables retention.
+        taskRetentionDays:
+          type: integer
+          minimum: 0
+          description: >
+            Clear finished tool tasks older than this many days on the
+            scheduled prune, and drop the Organizer's journal of runs
+            older than this; 0 keeps both.
 
     TranscodingLimits:
       type: object

@@ -1,7 +1,9 @@
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:waxdeck_api/waxdeck_api.dart' show ulidOf;
 
+import '../providers.dart';
 import 'queue_state.dart';
 
 /// What an [QueueController.advance] did, so the caller knows whether to
@@ -33,11 +35,6 @@ enum QueueRetreat {
   /// Nothing was queued.
   empty,
 }
-
-/// [pid] without its type prefix: the item's ULID, which a kind change
-/// keeps while the prefix follows the kind. Whatever matches items across
-/// a kind change keys them by this.
-String ulidOf(String pid) => pid.substring(pid.indexOf('-') + 1);
 
 /// The randomness shuffle draws on. Overridden with a seeded [Random] in
 /// tests, so a shuffled queue is an assertable order rather than a
@@ -84,6 +81,7 @@ class QueueController extends Notifier<QueueState> {
     bool shuffle = false,
     int replacedPositionMs = 0,
   }) {
+    if (_held) return;
     if (pids.isEmpty) {
       clear();
       return;
@@ -251,7 +249,7 @@ class QueueController extends Notifier<QueueState> {
       _insert(pids, at.clamp(0, state.length));
 
   void _insert(List<String> pids, int at) {
-    if (pids.isEmpty) return;
+    if (pids.isEmpty || _held) return;
     var nextId = state.nextQueueId;
     final added = [
       for (final pid in pids.take(kQueueCap))
@@ -574,6 +572,7 @@ class QueueController extends Notifier<QueueState> {
   /// back, for the surfaces that offer an undo. The restored queue's own
   /// undo is always dropped: it belongs to a session that ended.
   void restore(QueueState restored, {int? displacedPositionMs}) {
+    if (_held) return;
     final displaced = displacedPositionMs != null && state.isNotEmpty
         ? QueueUndo(
             queue: state.copyWith(clearUndo: true),
@@ -602,6 +601,12 @@ class QueueController extends Notifier<QueueState> {
   void reset() {
     state = QueueState.empty;
   }
+
+  /// Whether the signed-in account is leaving. Nothing new goes in
+  /// meanwhile: its cleanup emptied the queue, and an entry added since
+  /// would outlive it. A window or an undo needs a queue to land on, so
+  /// those stop at the empty one.
+  bool get _held => ref.read(playbackHeldProvider);
 
   /// Trims a queue back to [kQueueCap], evicting history first (the
   /// oldest played entries), then the far end. The entry playing is

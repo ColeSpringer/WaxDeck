@@ -119,10 +119,18 @@ class _ComponentsPageState extends State<ComponentsPage> {
                 onPressed: () {},
               ),
             ),
+            // States to read: lit, never the disabled tint.
             const WaxIconButton(
               glyph: WaxIcons.success,
               label: 'Downloaded',
               active: true,
+              status: true,
+              onPressed: null,
+            ),
+            const WaxIconButton(
+              glyph: WaxIcons.downloads,
+              label: 'Waiting for wifi',
+              status: true,
               onPressed: null,
             ),
             StarButton(
@@ -144,6 +152,24 @@ class _ComponentsPageState extends State<ComponentsPage> {
               color: colors.error,
               onPressed: () {},
             ),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        // Pills: selected, plain, busy while its work runs, and disabled.
+        Wrap(
+          spacing: WaxSpace.s8,
+          runSpacing: WaxSpace.s8,
+          children: <Widget>[
+            WaxPill(
+              label: 'Speed 1.4 times',
+              text: '1.4x',
+              mono: true,
+              selected: true,
+              onPressed: () {},
+            ),
+            WaxPill(label: 'Sleep timer', text: 'Sleep', onPressed: () {}),
+            WaxPill(label: 'Voice boost', busy: true, onPressed: () {}),
+            const WaxPill(label: 'Trim silence', onPressed: null),
           ],
         ),
         const SizedBox(height: WaxSpace.s24),
@@ -702,16 +728,16 @@ class _ComponentsPageState extends State<ComponentsPage> {
           children: <Widget>[
             WaxProgressBar(value: 0),
             SizedBox(height: WaxSpace.s12),
-            WaxProgressBar(value: 0.42, semanticsLabel: 'Scanning'),
+            WaxProgressBar(value: 0.42),
             SizedBox(height: WaxSpace.s12),
             WaxProgressBar(value: 1),
             SizedBox(height: WaxSpace.s12),
-            WaxProgressBar(semanticsLabel: 'Working'),
+            WaxProgressBar(),
           ],
         ),
         const SizedBox(height: WaxSpace.s12),
         // A quota at its cap, drawn in the verdict's colour.
-        WaxProgressBar(value: 1, tone: colors.error, semanticsLabel: 'Storage'),
+        WaxProgressBar(value: 1, tone: colors.error),
         const SizedBox(height: WaxSpace.s24),
 
         const SectionHeader(overline: 'Content', title: 'Stats'),

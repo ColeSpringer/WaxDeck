@@ -19,7 +19,7 @@ part 'ws_command_frame.g.dart';
 /// * [positionMs] - For `seek` and optionally `set-queue`.
 /// * [volume] - For `set-volume`, 0 to 1.
 /// * [rate] - For `set-rate`.
-/// * [itemPids] - For `set-queue`, the new queue in play order.
+/// * [itemPids] - For `set-queue`, the new queue in play order. A PID the sending account may not see answers an `error` frame with `not-found` and leaves the queue as it was. 
 /// * [index] - For `set-queue`, the entry to play.
 /// * [repeat] - For `set-repeat`: `off`, `all`, or `one`.
 /// * [shuffle] - For `set-shuffle`.
@@ -53,7 +53,7 @@ abstract class WsCommandFrame implements Built<WsCommandFrame, WsCommandFrameBui
   @BuiltValueField(wireName: r'rate')
   double? get rate;
 
-  /// For `set-queue`, the new queue in play order.
+  /// For `set-queue`, the new queue in play order. A PID the sending account may not see answers an `error` frame with `not-found` and leaves the queue as it was. 
   @BuiltValueField(wireName: r'itemPids')
   BuiltList<String>? get itemPids;
 

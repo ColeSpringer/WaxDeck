@@ -72,14 +72,17 @@ class JobRow extends StatelessWidget {
 
   final Job job;
 
+  /// A kind's mark, never a glyph a control draws: nothing presses a row.
   WaxGlyph get _glyph => switch (job.kind) {
-    'scan' => WaxIcons.library,
-    'enrich' => WaxIcons.search,
+    'scan' ||
+    'empty-trash' ||
+    'purge-trash' ||
+    'delete' ||
+    'remove-root' ||
+    'import' => WaxIcons.library,
+    'enrich' => WaxIcons.fingerprint,
     'analyze' => WaxIcons.waveform,
     'organize' || 'organize-undo' || 'restore' => WaxIcons.archive,
-    'empty-trash' || 'purge-trash' || 'delete' => WaxIcons.delete,
-    'remove-root' => WaxIcons.delete,
-    'import' => WaxIcons.upload,
     'set-kind' => WaxIcons.audiobooks,
     _ => WaxIcons.hourglass,
   };

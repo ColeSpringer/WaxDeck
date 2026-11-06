@@ -41,7 +41,6 @@ class SectionHeader extends StatelessWidget {
     this.onAction,
     this.semanticsId,
     this.info,
-    this.infoSemanticsId,
     super.key,
   });
 
@@ -50,9 +49,6 @@ class SectionHeader extends StatelessWidget {
   /// A sentence the header holds without printing it, behind a
   /// [WaxInfoTip] right after the title, on the title's line.
   final String? info;
-
-  /// The info tip's handle; [semanticsId] is the action's.
-  final String? infoSemanticsId;
 
   /// The kicker above the title. Rendered in caps by this component, so
   /// the string itself stays sentence case and screen readers hear
@@ -100,7 +96,6 @@ class SectionHeader extends StatelessWidget {
                     style: WaxType.headline.copyWith(color: colors.textPrimary),
                   ),
                   info,
-                  semanticsId: infoSemanticsId,
                 ),
               ],
             ),

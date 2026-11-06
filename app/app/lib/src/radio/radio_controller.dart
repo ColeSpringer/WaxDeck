@@ -427,6 +427,9 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   }
 
   Future<void> play(RadioStation station) async {
+    // Nothing tunes while the signed-in account is leaving: its cleanup
+    // already stopped the station, and one tuned since would outlive it.
+    if (ref.read(playbackHeldProvider)) return;
     // Claimed and published before anything here can suspend, which is
     // the whole point of the counter: a generation taken after an await
     // is handed out in completion order rather than in tap order, so the

@@ -34,12 +34,12 @@ func fileTag(t *testing.T, path string, key tag.Key) string {
 
 // writeUnsyncedIssues lists the items the rule for tags out of sync
 // holds, after a sweep.
-func writeUnsyncedIssues(t *testing.T, ctx context.Context, svc *Library) []string {
+func writeUnsyncedIssues(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) []string {
 	t.Helper()
 	if err := svc.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	issues, _, err := svc.ListHealthIssuesFor(ctx, ruleWriteUnsynced, "", 10)
+	issues, _, err := svc.ListHealthIssuesFor(ctx, uc, ruleWriteUnsynced, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestAWriteUnsyncedFixPaysWhatAnEditLeftOwed(t *testing.T) {
 	if _, err := svc.SetItemTag(ctx, uc, pid, "MOOD", []string{"calm"}, MetadataEditParams{Lock: true}); err != nil {
 		t.Fatal(err)
 	}
-	if got := writeUnsyncedIssues(t, ctx, svc); len(got) != 1 || got[0] != pid {
+	if got := writeUnsyncedIssues(t, ctx, svc, uc); len(got) != 1 || got[0] != pid {
 		t.Fatalf("listed = %v, want the edited track", got)
 	}
 	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
@@ -78,7 +78,7 @@ func TestAWriteUnsyncedFixPaysWhatAnEditLeftOwed(t *testing.T) {
 		t.Fatalf("file = genre %q, comment %q, mood %q; want the edits written",
 			fileTag(t, path, tag.Genre), fileTag(t, path, tag.Comment), fileTag(t, path, tag.Key("MOOD")))
 	}
-	if got := writeUnsyncedIssues(t, ctx, svc); len(got) != 0 {
+	if got := writeUnsyncedIssues(t, ctx, svc, uc); len(got) != 0 {
 		t.Fatalf("still listed = %v, want none", got)
 	}
 }
@@ -103,13 +103,13 @@ func TestAWriteUnsyncedFixOnAnItemInSyncIsNotAFill(t *testing.T) {
 // every item it touched.
 func TestANormalizedValueIsNotOwedToTheRule(t *testing.T) {
 	t.Parallel()
-	ctx, svc, _, _, pid := managedTrackFixture(t)
+	ctx, svc, uc, _, pid := managedTrackFixture(t)
 	_, bare, _ := parseAPIPID(pid)
 	if _, err := svc.lib.EditManyFields(ctx, []model.PID{bare}, map[string]string{"genre": "Rock"},
 		waxbin.EditOptions{Lock: model.LockUnchanged, Source: model.SourceNormalize}); err != nil {
 		t.Fatal(err)
 	}
-	if got := writeUnsyncedIssues(t, ctx, svc); len(got) != 0 {
+	if got := writeUnsyncedIssues(t, ctx, svc, uc); len(got) != 0 {
 		t.Fatalf("listed = %v, want a normalized value left to the file", got)
 	}
 }
@@ -244,7 +244,7 @@ func TestAReadOnlyCopyDoesNotHoldAWriteDriftFixBack(t *testing.T) {
 	if sum := fixSummary(t, ctx, svc, uc, start.TaskID); sum.Filled != 1 {
 		t.Fatalf("summary %+v, want the track filled", sum)
 	}
-	if got := writeUnsyncedIssues(t, ctx, svc); len(got) != 0 {
+	if got := writeUnsyncedIssues(t, ctx, svc, uc); len(got) != 0 {
 		t.Fatalf("still listed = %v, want none", got)
 	}
 }

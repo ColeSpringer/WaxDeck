@@ -68,6 +68,7 @@ Future<ProviderContainer> _pump(
   FakeRepository? repository,
   ClientSettingsStore? settings,
   Size size = const Size(500, 900),
+  Locale locale = const Locale('en'),
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -86,7 +87,7 @@ Future<ProviderContainer> _pump(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: routedHost(const QueueScreen()),
+      child: routedHost(const QueueScreen(), locale: locale),
     ),
   );
   await tester.pumpAndSettle();
@@ -383,6 +384,61 @@ void main() {
       expect(queue.pids, ['tr-9', 'tr-8']);
       expect(queue.currentPid, 'tr-8');
       await endEditedPlayback(tester, container);
+    });
+
+    testWidgets('the queue and its earlier sessions read in the listener\'s '
+        'language', (tester) async {
+      // A session whose current entry is unknown is named by its count,
+      // and its caption says how many and where.
+      final repository = FakeRepository(items: _tracks)
+        ..sessionHistory = <PlaybackSessionHistoryEntry>[
+          _session(
+            'ps-1',
+            pids: ['tr-7', 'tr-8', 'tr-9'],
+            index: -1,
+            endpointName: 'Cocina',
+          ),
+        ];
+      final container = await _pump(
+        tester,
+        repository: repository,
+        locale: const Locale('es'),
+      );
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cola'), findsOneWidget);
+      expect(find.text('3 elementos en cola'), findsOneWidget);
+      expect(find.text('3 elementos · en Cocina'), findsOneWidget);
+      expect(find.textContaining('items'), findsNothing);
+
+      final raised = <ShellMessage>[];
+      container.listen(shellMessengerProvider, (_, next) {
+        if (next != null) raised.add(next);
+      });
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueRestoreSession('ps-1')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 750));
+      expect(
+        raised.map(shellMessageText),
+        contains('Se ha restaurado 3 elementos en cola'),
+      );
+      await endEditedPlayback(tester, container);
+    });
+
+    testWidgets('a lone entry on a device says only where', (tester) async {
+      final repository = FakeRepository(items: _tracks)
+        ..sessionHistory = <PlaybackSessionHistoryEntry>[
+          _session('ps-1', pids: ['tr-9'], endpointName: 'Cocina'),
+        ];
+      await _pump(tester, repository: repository, locale: const Locale('es'));
+
+      expect(find.text('en Cocina'), findsOneWidget);
     });
 
     testWidgets('putting a session back offers the live queue back', (

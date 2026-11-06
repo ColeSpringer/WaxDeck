@@ -11,10 +11,11 @@ import (
 // bulk fixes, duplicates, and quality upgrades.
 
 func (s *Server) GetLibraryHealth(ctx context.Context, _ GetLibraryHealthRequestObject) (GetLibraryHealthResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
 		return nil, err
 	}
-	sum, err := s.svc.HealthSummaryFor(ctx)
+	sum, err := s.svc.HealthSummaryFor(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -44,14 +45,15 @@ func (s *Server) GetLibraryHealth(ctx context.Context, _ GetLibraryHealthRequest
 }
 
 func (s *Server) ListHealthIssues(ctx context.Context, req ListHealthIssuesRequestObject) (ListHealthIssuesResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
 		return nil, err
 	}
 	limit, ok := pageLimit(req.Params.Limit, 100, 500)
 	if !ok {
 		return ListHealthIssues400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit out of range"))}, nil
 	}
-	items, next, err := s.svc.ListHealthIssuesFor(ctx, deref(req.Params.Rule), deref(req.Params.Cursor), limit)
+	items, next, err := s.svc.ListHealthIssuesFor(ctx, uc, deref(req.Params.Rule), deref(req.Params.Cursor), limit)
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
 			return ListHealthIssues400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil

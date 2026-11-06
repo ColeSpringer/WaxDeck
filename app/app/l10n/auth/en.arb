@@ -63,6 +63,14 @@
   "@authLogIn": {
     "description": "The sign-in screen's confirming button."
   },
+  "authLoopbackMessage": "Close this tab and return to WaxDeck.",
+  "@authLoopbackMessage": {
+    "description": "Under the heading of the page the system browser shows once a desktop sign-in is done: the tab has nothing left to do."
+  },
+  "authLoopbackTitle": "Signed in",
+  "@authLoopbackTitle": {
+    "description": "Heading of the page the system browser shows once a desktop sign-in has handed its code back to the app."
+  },
   "authOr": "or",
   "@authOr": {
     "description": "Between the password form and the single-sign-on buttons. Lower case: it is a divider, not a heading."

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 
 /// Ranges the stats surfaces can aggregate over, in display order.
@@ -38,6 +39,8 @@ final statsBucketProvider = NotifierProvider<StatsBucketController, String>(
 
 /// Aggregated listening for the selected range and bucket.
 final listeningStatsProvider = FutureProvider<ListeningStats>((ref) {
+  // Keyed on the account: the repository moves only with the server.
+  ref.watch(signedInAccountProvider);
   final range = ref.watch(statsRangeProvider);
   final bucket = ref.watch(statsBucketProvider);
   return ref
@@ -46,9 +49,10 @@ final listeningStatsProvider = FutureProvider<ListeningStats>((ref) {
 });
 
 /// The current year's per-day listening plus streaks.
-final listeningHeatmapProvider = FutureProvider<ListeningHeatmap>(
-  (ref) => ref.watch(repositoryProvider).getListeningHeatmap(),
-);
+final listeningHeatmapProvider = FutureProvider<ListeningHeatmap>((ref) {
+  ref.watch(signedInAccountProvider);
+  return ref.watch(repositoryProvider).getListeningHeatmap();
+});
 
 /// Which top list is showing.
 class TopKindController extends Notifier<String> {
@@ -64,6 +68,7 @@ final topKindProvider = NotifierProvider<TopKindController, String>(
 
 /// The selected top list over the selected range.
 final topListProvider = FutureProvider<TopList>((ref) {
+  ref.watch(signedInAccountProvider);
   final kind = ref.watch(topKindProvider);
   final range = ref.watch(statsRangeProvider);
   return ref
@@ -72,18 +77,21 @@ final topListProvider = FutureProvider<TopList>((ref) {
 });
 
 /// One user's recap for one calendar year.
-final yearInReviewProvider = FutureProvider.family<YearInReview, int>(
-  (ref, year) => ref.watch(repositoryProvider).getYearInReview(year: year),
-  retry: retryUnlessRefused,
-);
+final yearInReviewProvider = FutureProvider.family<YearInReview, int>((
+  ref,
+  year,
+) {
+  ref.watch(signedInAccountProvider);
+  return ref.watch(repositoryProvider).getYearInReview(year: year);
+}, retry: retryUnlessRefused);
 
-/// The server-wide recap for one calendar year.
+/// The server-wide recap for one calendar year, less what the caller's
+/// library grants and tag rules hide.
 final serverYearInReviewProvider =
-    FutureProvider.family<ServerYearInReview, int>(
-      (ref, year) =>
-          ref.watch(repositoryProvider).getServerYearInReview(year: year),
-      retry: retryUnlessRefused,
-    );
+    FutureProvider.family<ServerYearInReview, int>((ref, year) {
+      ref.watch(signedInAccountProvider);
+      return ref.watch(repositoryProvider).getServerYearInReview(year: year);
+    }, retry: retryUnlessRefused);
 
 /// The reporting-client filter on the listen log; null shows every
 /// client.
@@ -133,6 +141,7 @@ class ListenLogController extends AsyncNotifier<ListenLogState> {
   @override
   Future<ListenLogState> build() async {
     _generation++;
+    ref.watch(signedInAccountProvider);
     final client = ref.watch(listenLogClientProvider);
     final page = await ref
         .watch(repositoryProvider)

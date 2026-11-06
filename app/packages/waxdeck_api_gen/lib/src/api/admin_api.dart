@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 import 'dart:typed_data';
 import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/admin_settings.dart';
+import 'package:waxdeck_api_gen/src/model/admin_settings_change.dart';
 import 'package:waxdeck_api_gen/src/model/audit_event_page.dart';
 import 'package:waxdeck_api_gen/src/model/backup.dart';
 import 'package:waxdeck_api_gen/src/model/backup_list.dart';
@@ -2193,7 +2194,7 @@ class AdminApi {
   }
 
   /// List recent catalog jobs
-  /// Recent catalog jobs, newest first: &#x60;limit&#x60; of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (&#x60;set-kind&#x60;), an organize undo (&#x60;organize-undo&#x60;) and a library removal (&#x60;remove-root&#x60;), which list with their result. A finished job of a kind that runs once per item (an upload&#39;s &#x60;import&#x60;, a &#x60;delete&#x60;, a &#x60;restore&#x60;, a &#x60;purge-trash&#x60;) is left out too, and lists only while it runs. Jobs the caller cleared (&#x60;POST /jobs/clear-finished&#x60;) are left out. A job left out takes no place on the page: the server reads back through as many as the 800 newest jobs to fill it. The &#x60;job&#x60; sync marker says when to read again. Administrators only. 
+  /// Recent catalog jobs, newest first: &#x60;limit&#x60; of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (&#x60;set-kind&#x60;), an organize undo (&#x60;organize-undo&#x60;) and a library removal (&#x60;remove-root&#x60;), which list with their result. A finished job that answers its own request (an upload&#39;s &#x60;import&#x60;, a &#x60;delete&#x60;, one for a whole deletion request, a trash &#x60;restore&#x60; or &#x60;purge-trash&#x60;) is left out too, and lists only while it runs. Jobs the caller cleared (&#x60;POST /jobs/clear-finished&#x60;) are left out. A job left out takes no place on the page: the server reads back through as many as the 800 newest jobs to fill it. The &#x60;job&#x60; sync marker says when to read again. Administrators only. 
   ///
   /// Parameters:
   /// * [limit] - Maximum jobs returned.
@@ -2850,11 +2851,11 @@ class AdminApi {
     );
   }
 
-  /// Replace the server&#39;s runtime settings
-  /// Replaces the runtime settings with the given object and returns the stored result. Settings apply immediately, no restart. Administrators only. 
+  /// Write the server&#39;s runtime settings
+  /// Writes the settings in the body and keeps every setting it leaves out as stored, so two administrators changing different settings never undo each other. Returns the stored result. Settings apply immediately, no restart. Administrators only. 
   ///
   /// Parameters:
-  /// * [adminSettings] 
+  /// * [adminSettingsChange] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -2865,7 +2866,7 @@ class AdminApi {
   /// Returns a [Future] containing a [Response] with a [AdminSettings] as data
   /// Throws [DioException] if API call or serialization fails
   Future<Response<AdminSettings>> putAdminSettings({ 
-    required AdminSettings adminSettings,
+    required AdminSettingsChange adminSettingsChange,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -2901,8 +2902,8 @@ class AdminApi {
     dynamic _bodyData;
 
     try {
-      const _type = FullType(AdminSettings);
-      _bodyData = _serializers.serialize(adminSettings, specifiedType: _type);
+      const _type = FullType(AdminSettingsChange);
+      _bodyData = _serializers.serialize(adminSettingsChange, specifiedType: _type);
 
     } catch(error, stackTrace) {
       throw DioException(

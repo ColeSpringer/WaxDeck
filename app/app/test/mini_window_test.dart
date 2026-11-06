@@ -121,9 +121,8 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('offers no stepping through a queue radio parked', (
-      tester,
-    ) async {
+    testWidgets('offers no stepping and no play through a queue radio '
+        'parked', (tester) async {
       final window = _FakeWindow(
         const MiniWindowCapabilities(
           available: true,
@@ -158,6 +157,7 @@ void main() {
           tester.widget<MiniPlayer>(find.byType(MiniPlayer)).actions;
       expect(actions().onNext, isNotNull);
       expect(actions().onPrevious, isNotNull);
+      expect(actions().onPlayPause, isNotNull);
 
       final radio = container.read(radioPlaybackProvider.notifier);
       await radio.play(
@@ -169,12 +169,16 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(actions().onPlayPause, isNotNull, reason: 'it stops the station');
       await radio.stop();
       await tester.pumpAndSettle();
 
       expect(find.text('Nothing is playing'), findsOneWidget);
       expect(actions().onNext, isNull);
       expect(actions().onPrevious, isNull);
+      // As the keyboard has it: the way back is the deck's offer, and a
+      // live Play here would answer a press with nothing.
+      expect(actions().onPlayPause, isNull);
       container.read(queueControllerProvider.notifier).clear();
       await tester.pumpAndSettle();
     });

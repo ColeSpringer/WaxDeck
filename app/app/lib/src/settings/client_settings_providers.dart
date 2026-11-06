@@ -32,7 +32,12 @@ final clientSettingsStoreProvider = Provider<ClientSettingsStore>(
 /// than trusted, which also covers a [decode] a later setting writes.
 mixin StoredSetting<T> on Notifier<T> {
   /// The key this preference is filed under; see [ClientSettingKeys].
-  String get settingKey;
+  ///
+  /// One filed per account names the account, and has no key while
+  /// nobody is signed in: it then reads as its default and a change lasts
+  /// the session. When the key moves the preference starts over under the
+  /// new one, rather than carrying the last key's value across.
+  String? get settingKey;
 
   /// What the preference reads as before anything is stored.
   T get defaultValue;
@@ -69,14 +74,25 @@ mixin StoredSetting<T> on Notifier<T> {
   bool _known = false;
   late T _value;
 
-  /// Which read is still the current one. A read in flight when the
-  /// preference is cleared must not land afterwards and put it back.
+  /// The key [_value] belongs to.
+  String? _keyed;
+
+  /// Which read is still the current one. A read in flight when the key
+  /// moves must not land afterwards under the new one.
   int _generation = 0;
 
   /// Called from [build].
   @protected
   T hydrate() {
+    final key = settingKey;
+    if (key != _keyed) {
+      _keyed = key;
+      _known = false;
+      _touched = false;
+      _generation++;
+    }
     if (_known) return _value;
+    if (key == null) return defaultValue;
     // Read, not watch. Which store this is cannot meaningfully change
     // under a running app - it is chosen by the platform at startup -
     // and watching it would make every preference vulnerable to the
@@ -85,7 +101,7 @@ mixin StoredSetting<T> on Notifier<T> {
     // A store that can answer now spares a first read the default, which
     // a one-off read (a play started after a reload) would otherwise act on.
     try {
-      if (store.peek(settingKey) case (:final value)) {
+      if (store.peek(key) case (:final value)) {
         final stored = value == null ? null : decode(value);
         if (stored == null) return defaultValue;
         _known = true;
@@ -93,16 +109,20 @@ mixin StoredSetting<T> on Notifier<T> {
         return stored;
       }
     } catch (error) {
-      _failed('reading', error);
+      _failed(key, 'reading', error);
       return defaultValue;
     }
-    unawaited(_load(store, ++_generation));
+    unawaited(_load(store, key, ++_generation));
     return defaultValue;
   }
 
-  Future<void> _load(ClientSettingsStore store, int generation) async {
+  Future<void> _load(
+    ClientSettingsStore store,
+    String key,
+    int generation,
+  ) async {
     try {
-      final raw = await store.read(settingKey);
+      final raw = await store.read(key);
       if (raw == null || !ref.mounted || generation != _generation) return;
       final stored = decode(raw);
       if (stored == null) return;
@@ -115,9 +135,9 @@ mixin StoredSetting<T> on Notifier<T> {
       // disk is the half of it this session already persisted.
       final merged = merge(_value, stored);
       _remember(merged);
-      await _persist(store, encode(merged));
+      await _persist(store, key, encode(merged));
     } catch (error) {
-      _failed('reading', error);
+      _failed(key, 'reading', error);
     }
   }
 
@@ -137,17 +157,19 @@ mixin StoredSetting<T> on Notifier<T> {
   void put(T value) {
     _touched = true;
     _remember(value);
+    final key = settingKey;
+    if (key == null) return;
     final store = ref.read(clientSettingsStoreProvider);
-    unawaited(_persist(store, encode(value)));
+    unawaited(_persist(store, key, encode(value)));
   }
 
   /// Drops the preference from the store and from memory, so it reads as
   /// its default again.
   ///
-  /// For a key that turns out to be an account's content rather than a
-  /// device's - the recent searches on sign-out. Public where [put] is
-  /// protected, because the caller is the session ending rather than the
-  /// setting's own screen.
+  /// For a key that is an account's content rather than a device's - the
+  /// recent searches on sign-out. Public where [put] is protected, because
+  /// the caller is the session ending rather than the setting's own
+  /// screen.
   ///
   /// Retires any read still in flight: invalidating the provider does
   /// not help, since Riverpod keeps the notifier across a rebuild, and a
@@ -158,26 +180,33 @@ mixin StoredSetting<T> on Notifier<T> {
     _touched = false;
     _known = false;
     state = defaultValue;
+    final key = settingKey;
+    if (key == null) return;
     try {
-      await ref.read(clientSettingsStoreProvider).remove(settingKey);
+      await ref.read(clientSettingsStoreProvider).remove(key);
     } catch (error) {
-      _failed('clearing', error);
+      _failed(key, 'clearing', error);
     }
   }
 
-  Future<void> _persist(ClientSettingsStore store, String encoded) async {
+  Future<void> _persist(
+    ClientSettingsStore store,
+    String key,
+    String encoded,
+  ) async {
     try {
-      await store.write(settingKey, encoded);
+      await store.write(key, encoded);
     } catch (error) {
-      _failed('writing', error);
+      _failed(key, 'writing', error);
     }
   }
 
   /// A preference that cannot be read or written has no symptom of its
   /// own - it simply reads as the default next launch - so the console
   /// gets the reason rather than nothing. Same treatment, and the same
-  /// reasoning, as a queue that will not write.
-  void _failed(String verb, Object error) {
-    debugPrint('client setting $settingKey: $verb failed: $error');
+  /// reasoning, as a queue that will not write. Under the key the failed
+  /// call used, which is not the current one once a moving key has moved.
+  void _failed(String key, String verb, Object error) {
+    debugPrint('client setting $key: $verb failed: $error');
   }
 }

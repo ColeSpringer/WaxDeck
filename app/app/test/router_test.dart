@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
@@ -5,6 +7,7 @@ import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/auth/signup_screen.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
+import 'package:waxdeck/src/player/now_playing_slot.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
@@ -13,9 +16,11 @@ import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
@@ -360,5 +365,109 @@ void main() {
       'Ashley McBryde - What if We Don\'t',
     );
     await container.read(radioPlaybackProvider.notifier).stop();
+  });
+
+  group('signing out over a station', () {
+    final station = RadioStation(
+      pid: 'rs-01JZX5N8QW3F4V9T2B7KDSTATN1',
+      name: 'Coastal FM',
+      streamUrl: 'https://stream.example/coastal',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+
+    ProviderContainer radioContainer(FakeRepository repo, FakeEngine engine) {
+      final container = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+          audioEngineProvider.overrideWithValue(engine),
+          clientSettingsStoreProvider.overrideWithValue(
+            MemoryClientSettingsStore(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    // Pumped rather than settled while a station may be on: its face
+    // turns for as long as it plays.
+    Future<void> frames(WidgetTester tester) async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    testWidgets('stops it, and the next account finds nothing tuned', (
+      tester,
+    ) async {
+      final engine = FakeEngine();
+      final container = radioContainer(_signedIn(), engine);
+      await tester.pumpWidget(_app(container));
+      await tester.pumpAndSettle();
+
+      await container.read(radioPlaybackProvider.notifier).play(station);
+      await frames(tester);
+      expect(engine.playing, isTrue);
+      expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsOneWidget);
+
+      await container.read(authControllerProvider.notifier).logout();
+      await frames(tester);
+
+      // The relay scrobbles and counts listening time for the account
+      // that tuned it, for as long as it plays.
+      expect(container.read(radioPlaybackProvider).station, isNull);
+      expect(engine.playing, isFalse);
+      expect(engine.processingState, EngineProcessingState.idle);
+
+      await container
+          .read(authControllerProvider.notifier)
+          .login(username: 'admin', password: 'wax-setup-pass');
+      await frames(tester);
+
+      expect(container.read(nowPlayingSlotProvider), isNot(isA<StationSlot>()));
+      expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsNothing);
+    });
+
+    testWidgets('an engine that will not let go keeps nobody signed in', (
+      tester,
+    ) async {
+      final engine = FakeEngine();
+      final container = radioContainer(_signedIn(), engine);
+      await tester.pumpWidget(_app(container));
+      await tester.pumpAndSettle();
+      await container.read(radioPlaybackProvider.notifier).play(station);
+      await frames(tester);
+
+      engine.failNextStop = true;
+      final printed = await captureDebugPrints(
+        () => container.read(authControllerProvider.notifier).logout(),
+      );
+      await frames(tester);
+
+      expect(_location(container), WaxRoute.login);
+      expect(container.read(radioPlaybackProvider).station, isNull);
+      expect(printed, hasLength(1));
+    });
+
+    testWidgets('a tune still on its way is let go too', (tester) async {
+      final repo = _signedIn();
+      final gate = repo.radioPlayInfoGates[station.pid] = Completer<void>();
+      final engine = FakeEngine();
+      final container = radioContainer(repo, engine);
+      await tester.pumpWidget(_app(container));
+      await tester.pumpAndSettle();
+
+      final tune = container.read(radioPlaybackProvider.notifier).play(station);
+      await tester.pump();
+      await container.read(authControllerProvider.notifier).logout();
+      gate.complete();
+      await tune;
+      await frames(tester);
+
+      expect(container.read(radioPlaybackProvider).station, isNull);
+      expect(engine.loadedUrls, isEmpty);
+      expect(engine.playing, isFalse);
+    });
   });
 }

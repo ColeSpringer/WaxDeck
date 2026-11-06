@@ -110,6 +110,8 @@ class DefectLogController extends Notifier<List<DefectRecord>> {
 
   /// The whole log as one pasteable block, for a bug report.
   String report() {
+    // Not copy, and the copy ratchet's one allowance here: the header of a
+    // report pasted to whoever triages it, in the English of the log below.
     final buffer = StringBuffer('WaxDeck defect log, app $kAppVersion\n');
     if (state.isEmpty) {
       buffer.writeln('(empty)');

@@ -87,11 +87,7 @@ class _BookBucketScreenState extends ConsumerState<BookBucketScreen>
     final l10n = context.l10n;
     final state = ref.watch(musicItemsProvider(_listing));
     final books = state.value?.items ?? const <ItemSummary>[];
-    final states = <String, PlayProgress>{};
-    for (final key in playProgressKeys(books)) {
-      states.addAll(ref.watch(playProgressProvider(key)).value ?? const {});
-    }
-    final progress = PlayProgressView(states);
+    final progress = watchPlayProgress(ref, books);
     fillViewportWhile(
       (state.value?.hasMore ?? false) && !(state.value?.loadingMore ?? true),
       at: state.value?.items,

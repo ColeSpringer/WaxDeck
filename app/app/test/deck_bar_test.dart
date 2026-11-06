@@ -1621,6 +1621,43 @@ void main() {
       expect(find.byType(DeckBar), findsNothing);
     });
 
+    testWidgets('a slot hidden from this account reads as playing', (
+      tester,
+    ) async {
+      // Somebody else's queue on a shared device, its current item
+      // outside this account's grants: the server empties the slot.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+
+      harness.container
+          .read(remoteSessionProvider.notifier)
+          .adopt(
+            PlaybackSessionInfo(
+              id: 'ps-kitchen',
+              endpointId: 'pe-kitchen',
+              endpointName: 'Kitchen speaker',
+              mine: false,
+              ownerName: 'ana',
+              authority: 'remote',
+              playing: false,
+              index: 0,
+              positionMs: 0,
+              positionAt: DateTime.now().toUtc(),
+              rate: 1,
+              queueVersion: 1,
+              entries: const [PlaybackSessionEntry(pid: '', title: '')],
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DeckBar), findsOneWidget);
+      expect(find.text('Playing'), findsOneWidget);
+
+      harness.container.read(remoteSessionProvider.notifier).release();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('offers no seek over an entry with no length', (tester) async {
       // A frame may carry no duration per entry, and every position the
       // seek bar computes is a fraction of it: at zero a scrub would seek

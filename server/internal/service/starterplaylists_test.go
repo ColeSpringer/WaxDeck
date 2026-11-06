@@ -178,7 +178,7 @@ func TestStarterPlaylistFollowsApproval(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{SignupEnabled: true})); err != nil {
 		t.Fatal(err)
 	}
 	pending, _, err := svc.Signup(ctx, "sam", "password123", "Sam", "")

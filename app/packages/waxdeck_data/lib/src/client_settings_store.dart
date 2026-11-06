@@ -59,8 +59,15 @@ abstract final class ClientSettingKeys {
   /// for the same reason [reviewListWidth] is.
   static const metadataListWidth = 'waxdeck.metadata.listWidth';
 
-  /// The recent search queries, newest first, as a JSON string list.
-  static const recentSearches = 'waxdeck.search.recent';
+  /// One account's recent search queries, newest first, as a JSON string
+  /// list. Filed per account, so another account on this browser or
+  /// device never reads them, however the last session ended.
+  static String recentSearchesOf(String account) =>
+      'waxdeck.search.recent.$account';
+
+  /// Where older builds kept one list for every account. Dropped when
+  /// met, never adopted: whose searches it held is not known.
+  static const unkeyedRecentSearches = 'waxdeck.search.recent';
 
   /// When the most recently declined resume offer stopped, as an ISO
   /// instant. A watermark rather than an id: the history is newest

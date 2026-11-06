@@ -1,10 +1,77 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/admin/admin_providers.dart';
+import 'package:waxdeck/src/admin/users_screen.dart';
+import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'fakes.dart';
+
+/// Every administrator's list refused, as for an account whose role was
+/// taken away mid-session, counting the asks.
+class _ListsRefused extends FakeRepository {
+  final asked = <String, int>{};
+
+  static const _refused = WaxDeckApiException(
+    code: 'forbidden',
+    message: 'not an administrator',
+    statusCode: 403,
+  );
+
+  Never _refuse(String list) {
+    asked[list] = (asked[list] ?? 0) + 1;
+    throw _refused;
+  }
+
+  @override
+  Future<List<Backup>> listBackups() async => _refuse('backups');
+
+  @override
+  Future<UserPage> listSignupRequests({String? cursor, int? limit}) async =>
+      _refuse('signups');
+
+  @override
+  Future<List<Invite>> listInvites() async => _refuse('invites');
+
+  @override
+  Future<UserPage> listUsers({String? cursor, int? limit}) async =>
+      _refuse('users');
+
+  @override
+  Future<OrganizeProfiles> listOrganizeProfiles() async => _refuse('profiles');
+}
+
 /// The one retry policy the app's server-backed providers share.
 void main() {
+  testWidgets("the administrators' lists take a refusal as final", (
+    tester,
+  ) async {
+    final repo = _ListsRefused();
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    container
+      ..listen(backupsProvider, (_, _) {})
+      ..listen(signupRequestsProvider, (_, _) {})
+      ..listen(invitesProvider, (_, _) {})
+      ..listen(adminUsersProvider, (_, _) {})
+      ..listen(organizeProfilesProvider, (_, _) {});
+    await tester.pumpWidget(const SizedBox());
+    // Well past the default ladder's first few retries.
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(repo.asked, {
+      'backups': 1,
+      'signups': 1,
+      'invites': 1,
+      'users': 1,
+      'profiles': 1,
+    });
+  });
+
   test('a refusal is final', () {
     for (final status in <int>[400, 401, 404, 409, 429]) {
       expect(

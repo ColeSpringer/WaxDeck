@@ -229,7 +229,6 @@ void main() {
                 title: 'Could not load',
                 onRetry: () {},
                 retrySemanticsId: 'retry',
-                detail: 'On port 4420',
               ),
             ),
           ),
@@ -248,7 +247,6 @@ void main() {
       );
       expect(retry(tester)!.busy, isFalse);
       expect(retry(tester)!.semanticsId, 'retry');
-      expect(find.text('On port 4420'), findsOneWidget);
     });
 
     testWidgets('draws it busy while the read is asking again', (tester) async {

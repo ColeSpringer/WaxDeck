@@ -74,6 +74,9 @@
   "lib/src/connect/remote_session.dart": {
     "hardcoded-copy": 1
   },
+  "lib/src/diagnostics/defect_log.dart": {
+    "hardcoded-copy": 1
+  },
   "lib/src/diagnostics/defect_log_screen.dart": {
     "hardcoded-copy": 3
   },
@@ -129,6 +132,7 @@
     "prose-slot-args": 3
   },
   "lib/src/player/player_screen.dart": {
+    "error-state-home": 1,
     "prose-slot-args": 1
   },
   "lib/src/player/visualizer_screen.dart": {
@@ -162,7 +166,8 @@
     "prose-slot-args": 2
   },
   "lib/src/search/search_screen.dart": {
-    "prose-slot-args": 4
+    "prose-slot-args": 4,
+    "unexplained-failure": 2
   },
   "lib/src/settings/account_sections.dart": {
     "hardcoded-copy": 1,
@@ -182,6 +187,12 @@
   },
   "lib/src/sharing/shares_screen.dart": {
     "prose-slot-args": 1
+  },
+  "lib/src/shell/async_box_face.dart": {
+    "error-state-home": 1
+  },
+  "lib/src/shell/async_sliver_face.dart": {
+    "error-state-home": 1
   },
   "lib/src/shell/forbidden_page.dart": {
     "prose-slot-args": 1

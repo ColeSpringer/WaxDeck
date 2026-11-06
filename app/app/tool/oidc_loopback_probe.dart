@@ -42,6 +42,11 @@ Future<void> main(List<String> args) async {
     );
     final result = await flow.loginWithLoopback(
       providers.first,
+      // A harness has no locale table; the tab says what the app's en does.
+      page: (
+        heading: 'Signed in',
+        line: 'Close this tab and return to WaxDeck.',
+      ),
       deviceName: 'Loopback Probe',
       timeout: const Duration(seconds: 90),
     );

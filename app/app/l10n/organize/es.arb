@@ -18,6 +18,7 @@
   "organizeHeldBack": "{count, plural, =1{1 archivo retenido} other{{count} archivos retenidos}}",
   "organizeHeldTile": "Retenidos",
   "organizeHint": "Previsualiza primero. No se mueve nada hasta que apliques.",
+  "organizeHistoryLoadError": "No se han podido cargar las ejecuciones anteriores",
   "organizeHistoryMore": "Mostrar ejecuciones anteriores",
   "organizeHistoryRow": "Organizar - {moved, plural, =1{1 movido} other{{moved} movidos}} - {when}",
   "organizeHistoryTitle": "Historial",

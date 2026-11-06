@@ -80,8 +80,11 @@ final scrobblingAdminConfigProvider =
 /// The caller's app passwords for the compatibility APIs.
 class AppPasswordsController extends AsyncNotifier<List<AppPassword>> {
   @override
-  Future<List<AppPassword>> build() =>
-      ref.watch(repositoryProvider).listAppPasswords();
+  Future<List<AppPassword>> build() {
+    // Keyed on the account: the repository moves only with the server.
+    ref.watch(signedInAccountProvider);
+    return ref.watch(repositoryProvider).listAppPasswords();
+  }
 
   /// Creates one and returns the secret, shown exactly once.
   Future<AppPasswordCreated> create(String label) async {
@@ -255,8 +258,11 @@ class MyNotificationTargetsController
     extends AsyncNotifier<List<NotificationTarget>>
     implements NotificationTargetActions {
   @override
-  Future<List<NotificationTarget>> build() =>
-      ref.watch(repositoryProvider).listMyNotificationTargets();
+  Future<List<NotificationTarget>> build() {
+    // Keyed on the account: the repository moves only with the server.
+    ref.watch(signedInAccountProvider);
+    return ref.watch(repositoryProvider).listMyNotificationTargets();
+  }
 
   @override
   Future<void> save({

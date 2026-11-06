@@ -77,7 +77,16 @@ Future<HomeShelfItems> readShelf(
           if (withProgress || item.mediaType != MediaType.music) item.pid,
       ];
       if (pids.isEmpty) return page;
-      final read = await repository.listPlayStates(pids);
+      final List<PlayState> read;
+      try {
+        read = await repository.listPlayStates(pids);
+      } on WaxDeckApiException {
+        // Without rings the positions only word a cover's Resume, and a
+        // session resumes from its own checkpoint anyway: the shelf keeps
+        // its covers.
+        if (withProgress) rethrow;
+        return page;
+      }
       for (final state in read) {
         states[state.pid] = PlayProgress.of(state);
       }

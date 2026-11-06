@@ -144,6 +144,7 @@ final entityArtLockProvider = FutureProvider.autoDispose
     .family<bool, ({String type, String pid})>(
       (ref, key) =>
           ref.watch(repositoryProvider).getEntityArtworkLock(key.type, key.pid),
+      retry: retryUnlessRefused,
     );
 
 /// What a slot's request in flight is doing, so the control that

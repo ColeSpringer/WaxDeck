@@ -44,6 +44,7 @@ class SessionHistorySection extends ConsumerWidget {
         if (session.entries.isNotEmpty) session,
     ];
     if (restorable.isEmpty) return const SizedBox.shrink();
+    final l10n = context.l10n;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -56,7 +57,7 @@ class SessionHistorySection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text(
-            context.l10n.queueEarlier,
+            l10n.queueEarlier,
             style: WaxType.overline.copyWith(color: colors.textTertiary),
           ),
           const SizedBox(height: WaxSpace.s8),
@@ -65,7 +66,7 @@ class SessionHistorySection extends ConsumerWidget {
               key: ValueKey(SemanticsIds.queueRestoreSession(session.id)),
               padding: const EdgeInsets.only(bottom: WaxSpace.s8),
               child: WaxInkTappable(
-                label: context.l10n.queueRestoreSession(_title(session)),
+                label: l10n.queueRestoreSession(_title(l10n, session)),
                 // Per session: the list holds several, and one
                 // identifier across all of them is ambiguous to a
                 // screen reader walking it and unusable to a test.
@@ -86,16 +87,16 @@ class SessionHistorySection extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              _title(session),
+                              _title(l10n, session),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: WaxType.bodySmall.copyWith(
                                 color: colors.textPrimary,
                               ),
                             ),
-                            if (_caption(session).isNotEmpty)
+                            if (_caption(l10n, session).isNotEmpty)
                               Text(
-                                _caption(session),
+                                _caption(l10n, session),
                                 style: WaxType.caption.copyWith(
                                   color: colors.textTertiary,
                                 ),
@@ -136,7 +137,7 @@ class SessionHistorySection extends ConsumerWidget {
         .show(
           // "Restored", because restore's contract is put-it-back,
           // paused: nothing is playing when this shows.
-          l10n.queueRestored(_title(session)),
+          l10n.queueRestored(_title(l10n, session)),
           actionLabel: l10n.queueUndo,
           onAction: () => playback.undoReplace(undo),
           channel: ShellChannel.queueRestore,
@@ -146,14 +147,17 @@ class SessionHistorySection extends ConsumerWidget {
 
   /// What the session was on when it stopped. The entry it stopped on,
   /// because that is what putting it back would play.
-  String _title(PlaybackSessionHistoryEntry session) =>
-      session.currentEntry?.title ?? '${session.entries.length} queued items';
+  String _title(AppLocalizations l10n, PlaybackSessionHistoryEntry session) =>
+      session.currentEntry?.title ??
+      l10n.queueSessionQueued(session.entries.length);
 
   /// Empty for a lone entry from an endpoint that has since gone away,
   /// where there is nothing left to say and a blank line under the title
   /// would be a gap rather than a caption.
-  String _caption(PlaybackSessionHistoryEntry session) => <String>[
-    if (session.entries.length > 1) '${session.entries.length} items',
-    if (session.endpointName != null) 'on ${session.endpointName}',
-  ].join(' · ');
+  String _caption(AppLocalizations l10n, PlaybackSessionHistoryEntry session) {
+    final count = session.entries.length;
+    final endpoint = session.endpointName;
+    if (endpoint != null) return l10n.queueSessionItemsOn(count, endpoint);
+    return count > 1 ? l10n.queueSessionItems(count) : '';
+  }
 }

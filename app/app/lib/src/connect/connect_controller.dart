@@ -382,37 +382,32 @@ class ConnectEndpointController {
     }
   }
 
-  /// Why a skip moved nothing, in the sender's words. A refused skip
-  /// has two quite different causes and the message is rendered
-  /// verbatim on whoever asked: an end of the queue is one thing, and
-  /// no local playback at all (an empty queue, or live radio holding
-  /// the engine) is another.
   /// A play with nothing behind it, which is what a play after a pause
   /// during live radio is: the pause let the station go, and there is
   /// no session and no queue to fall back on. Refused rather than
   /// answered `ok`, so the sender sees a button that did nothing as a
   /// button that did nothing.
+  ///
+  /// These go out over the socket to whoever sent the command, which
+  /// words them in its own language by code; the message is for a log.
   _Refused _nothingToPlay() => const _Refused(
-    'invalid-request',
+    'endpoint-idle',
     'there is nothing to play on this device',
   );
 
+  /// Why a skip moved nothing: no local playback at all (an empty queue,
+  /// or live radio holding the engine) is one thing, and an end of the
+  /// queue is another.
   _Refused _nowhereToGo({required bool forward}) {
     if (queue.snapshot() == null) {
-      // These go out over the socket to whoever sent the command, so
-      // the message is the wire's own and the receiving client is what
-      // translates it - by code, the way every other refusal is read.
       return const _Refused(
-        'invalid-request',
+        'endpoint-idle',
         'nothing is playing on this device',
       );
     }
-    return _Refused(
-      'invalid-request',
-      forward
-          ? 'already at the end of the queue'
-          : 'already at the start of the queue',
-    );
+    return forward
+        ? const _Refused('queue-end', 'already at the end of the queue')
+        : const _Refused('queue-start', 'already at the start of the queue');
   }
 
   /// Sets the speed through the session where there is one, so a book

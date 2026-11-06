@@ -44,10 +44,6 @@
       }
     }
   },
-  "aboutServerUnreachable": "unreachable",
-  "@aboutServerUnreachable": {
-    "description": "Stands in for the server's version when it did not answer. Lower case: it sits where a version number would."
-  },
   "aboutTitle": "About",
   "@aboutTitle": {
     "description": "Title of the About page."
@@ -261,6 +257,10 @@
   "adminBackupsEmpty": "No backups yet",
   "@adminBackupsEmpty": {
     "description": "Drawn where the backup list would be when the server has made none."
+  },
+  "adminBackupsLoadError": "Could not load the backups",
+  "@adminBackupsLoadError": {
+    "description": "Title of the error state when the backup archive list could not be read."
   },
   "adminBackupsRetention": "Retention",
   "@adminBackupsRetention": {
@@ -2040,6 +2040,10 @@
   "@adminServerTranscodingGroup": {
     "description": "Heading over the limits on how much audio the server re-encodes at once."
   },
+  "adminServerTranscodingLoadError": "Could not load the transcoding limits",
+  "@adminServerTranscodingLoadError": {
+    "description": "Title of the error state in place of the transcoding group when its limits could not be read."
+  },
   "adminServerTranscodingSaved": "Transcoding limits saved",
   "@adminServerTranscodingSaved": {
     "description": "Message after the transcoding limits were written."
@@ -2076,7 +2080,7 @@
   "@adminStreamingConnected": {
     "description": "Streaming engine tile value: the engine answers."
   },
-  "adminStreamingDirect": "Originals play directly meanwhile",
+  "adminStreamingDirect": "Originals play directly",
   "@adminStreamingDirect": {
     "description": "Caption under the streaming engine tile while the engine is unreachable: playback goes on with the original files."
   },
@@ -2213,6 +2217,10 @@
         "example": "1500"
       }
     }
+  },
+  "adminTileCouldNotRead": "Could not read",
+  "@adminTileCouldNotRead": {
+    "description": "Caption of a dashboard tile whose number could not be read from the server, drawn under a dash in the error colour, so a failure never reads as zero or as still loading."
   },
   "adminTileFirstSweep": "First sweep still running",
   "@adminTileFirstSweep": {
@@ -2814,15 +2822,15 @@
   },
   "adminUsersTabInvites": "Invites",
   "@adminUsersTabInvites": {
-    "description": "Tab holding invite tokens."
+    "description": "Segment showing the invite tokens."
   },
   "adminUsersTabRequests": "Requests",
   "@adminUsersTabRequests": {
-    "description": "Tab holding signup requests waiting for a decision."
+    "description": "Segment showing the signup requests waiting for a decision."
   },
   "adminUsersTabUsers": "Users",
   "@adminUsersTabUsers": {
-    "description": "Tab holding the list of accounts."
+    "description": "Segment showing the list of accounts."
   },
   "adminUsersTitle": "Users",
   "@adminUsersTitle": {
@@ -2849,6 +2857,10 @@
   "adminUsersUploadsUnlimited": "unlimited",
   "@adminUsersUploadsUnlimited": {
     "description": "Upload allowance of an account with no cap on what may await review. Lower case: it sits in a table cell, not at the start of a sentence."
+  },
+  "adminUsersViewLabel": "Show",
+  "@adminUsersViewLabel": {
+    "description": "Segmented control on the users screen choosing which list it shows: the accounts, the signup requests or the invites."
   },
   "adminWarmingBlurb": "Files appear as indexed; artwork and matching follow.",
   "@adminWarmingBlurb": {
@@ -3323,6 +3335,14 @@
   "authLogIn": "Log in",
   "@authLogIn": {
     "description": "The sign-in screen's confirming button."
+  },
+  "authLoopbackMessage": "Close this tab and return to WaxDeck.",
+  "@authLoopbackMessage": {
+    "description": "Under the heading of the page the system browser shows once a desktop sign-in is done: the tab has nothing left to do."
+  },
+  "authLoopbackTitle": "Signed in",
+  "@authLoopbackTitle": {
+    "description": "Heading of the page the system browser shows once a desktop sign-in has handed its code back to the app."
   },
   "authOr": "or",
   "@authOr": {
@@ -3850,7 +3870,7 @@
   },
   "bookPercent": "{percent} percent",
   "@bookPercent": {
-    "description": "How far through a book the listener is, in the line under its title.",
+    "description": "How far through a book the listener is, in the line under its title, and under the full player's seek bar once nothing is left.",
     "placeholders": {
       "percent": {
         "type": "int"
@@ -4297,10 +4317,6 @@
   "@commonDone": {
     "description": "Button that closes a dialog once its work is read. A true synonym everywhere it appears."
   },
-  "commonLoading": "Loading",
-  "@commonLoading": {
-    "description": "A control's own label while it is fetching what it was pressed for."
-  },
   "commonLoadingTitle": "Loading…",
   "@commonLoadingTitle": {
     "description": "Stands in for a track's name while the row it sits in is still resolving. The trailing character is a single-glyph ellipsis."
@@ -4372,6 +4388,10 @@
   "desktopTrayShow": "Show WaxDeck",
   "@desktopTrayShow": {
     "description": "Tray menu row that brings the WaxDeck window forward."
+  },
+  "devicesAnotherDevice": "another device",
+  "@devicesAnotherDevice": {
+    "description": "Names a device a session plays on when the server knows no name for it: the remote screen's title, and inside the device sentences. Lower case: it is read inside them."
   },
   "devicesBaseConfigured": "Configured address",
   "@devicesBaseConfigured": {
@@ -5123,6 +5143,10 @@
   "@errorEndpointFailed": {
     "description": "Error sentence for the spec code `endpoint-failed`: the other device took the command and failed at it, unlike `endpoint-offline`, where it never got it."
   },
+  "errorEndpointIdle": "That device has nothing to play.",
+  "@errorEndpointIdle": {
+    "description": "Error sentence for the spec code `endpoint-idle`: a play or skip sent to another device found nothing live there to act on, with its queue empty or standing with nothing playing."
+  },
   "errorEndpointOffline": "That device is not connected. Refresh the list of devices.",
   "@errorEndpointOffline": {
     "description": "Error sentence for the spec code `endpoint-offline`."
@@ -5199,6 +5223,10 @@
   "@errorNetwork": {
     "description": "Error sentence for the client's own `transport` code: the request never reached a server that could answer it."
   },
+  "errorNoSession": "That device is no longer playing this session.",
+  "@errorNoSession": {
+    "description": "Error sentence for the spec code `no-session`: a command sent to another device named a session that has ended there or been replaced."
+  },
   "errorNotFound": "That is not here any more.",
   "@errorNotFound": {
     "description": "Error sentence for the spec code `not-found`."
@@ -5206,6 +5234,14 @@
   "errorPodcastsOff": "Podcasts are turned off on this server.",
   "@errorPodcastsOff": {
     "description": "Error sentence for `feature-unavailable` when the params name the feature as podcasts: a subscribe or an OPML import on a server run with its podcast directory turned off."
+  },
+  "errorQueueEnd": "That device is already at the end of its queue.",
+  "@errorQueueEnd": {
+    "description": "Error sentence for the spec code `queue-end`: a next sent to another device found nothing after what it plays."
+  },
+  "errorQueueStart": "That device is already at the start of its queue.",
+  "@errorQueueStart": {
+    "description": "Error sentence for the spec code `queue-start`: a previous sent to another device found nothing before what it plays."
   },
   "errorQuotaExceeded": "That is over a limit this server keeps.",
   "@errorQuotaExceeded": {
@@ -8318,6 +8354,10 @@
   "@organizeHint": {
     "description": "Drawn where the plan or the report goes, before either exists."
   },
+  "organizeHistoryLoadError": "Could not load past runs",
+  "@organizeHistoryLoadError": {
+    "description": "Title of the error state when the list of past organize runs could not be read."
+  },
   "organizeHistoryMore": "Show older runs",
   "@organizeHistoryMore": {
     "description": "Button under the organize history that lists the next, older page of runs. Shown while the server holds older ones."
@@ -8722,6 +8762,19 @@
       }
     }
   },
+  "playerBookProgress": "{percent} percent, {left} left",
+  "@playerBookProgress": {
+    "description": "Under the full player's seek bar for a book: how far through the whole book the listener is, and how much of it is left. {left} is an already-worded span.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "left": {
+        "type": "String",
+        "example": "6 hr 12 min"
+      }
+    }
+  },
   "playerBookmarkAdd": "Mark {time}",
   "@playerBookmarkAdd": {
     "description": "Button that bookmarks the position it names. {time} is a timecode.",
@@ -8952,7 +9005,7 @@
   },
   "playerLyrics": "Lyrics",
   "@playerLyrics": {
-    "description": "Opens the lyrics of what is playing."
+    "description": "Opens the lyrics of what is playing, and titles the panel and sheet that show them."
   },
   "playerLyricsError": "Could not load the lyrics",
   "@playerLyricsError": {
@@ -9050,7 +9103,7 @@
   },
   "playerQueue": "Queue",
   "@playerQueue": {
-    "description": "Opens the queue of what plays next."
+    "description": "Opens the queue of what plays next, and titles the panel and screen that show it."
   },
   "playerRatingFailed": "Could not save that change",
   "@playerRatingFailed": {
@@ -9300,11 +9353,20 @@
   "@playerTranscriptError": {
     "description": "Drawn in the transcript panel when the read failed for a reason the error table has no sentence for."
   },
+  "playerTrimSavedSeconds": "{seconds} sec",
+  "@playerTrimSavedSeconds": {
+    "description": "What the trim control has saved while it is under a minute, abbreviated as the minutes beside it are; it fills {saved} in playerTrimSilenceSaved.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
   "playerTrimSilence": "Trim silence",
   "@playerTrimSilence": {
     "description": "Control that skips the quiet parts of a spoken recording."
   },
-  "playerTrimSilenceSaved": "Trim silence ({saved})",
+  "playerTrimSilenceSaved": "Trim silence ({saved} saved)",
   "@playerTrimSilenceSaved": {
     "description": "The trim control once it has saved some listening time. {saved} is an already-worded duration.",
     "placeholders": {
@@ -11356,10 +11418,6 @@
   "@playlistsLoadError": {
     "description": "Title of the error state when the playlists could not be read."
   },
-  "playlistsLoadErrorSentence": "Could not load your playlists.",
-  "@playlistsLoadErrorSentence": {
-    "description": "The same failure as a sentence in the add-to-playlist sheet, which has no room for an error state and says it in a line."
-  },
   "playlistsNew": "New playlist",
   "@playlistsNew": {
     "description": "Action that makes a playlist: the toolbar button, the empty state's button, and the row at the foot of the add-to-playlist sheet."
@@ -12395,6 +12453,40 @@
       "count": {
         "type": "int",
         "example": "3"
+      }
+    }
+  },
+  "queueSessionItems": "{count, plural, =1{1 item} other{{count} items}}",
+  "@queueSessionItems": {
+    "description": "The line under an earlier session that played on no named device: how many items its queue holds.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "queueSessionItemsOn": "{count, plural, =1{on {endpoint}} other{{count} items · on {endpoint}}}",
+  "@queueSessionItemsOn": {
+    "description": "The line under an earlier session: how many items its queue holds, left out for one, and the device it played on. Lower case: it continues the title above it.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      },
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "queueSessionQueued": "{count, plural, =1{1 queued item} other{{count} queued items}}",
+  "@queueSessionQueued": {
+    "description": "Names an earlier session by its size when its current entry is unknown: in its row, in the restore control's name and in the message after restoring it.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
       }
     }
   },
@@ -13675,6 +13767,24 @@
       }
     }
   },
+  "settingsAppPasswordRevokeAction": "Revoke",
+  "@settingsAppPasswordRevokeAction": {
+    "description": "The confirming button of the dialog that revokes one app password."
+  },
+  "settingsAppPasswordRevokeBody": "Apps that sign in with \"{label}\" lose access immediately.",
+  "@settingsAppPasswordRevokeBody": {
+    "description": "Body of the dialog confirming that an app password is revoked. {label} is what that password is called.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Feishin"
+      }
+    }
+  },
+  "settingsAppPasswordRevokeTitle": "Revoke app password?",
+  "@settingsAppPasswordRevokeTitle": {
+    "description": "Title of the dialog confirming that an app password is revoked."
+  },
   "settingsAppPasswordUnlabeled": "Unlabeled",
   "@settingsAppPasswordUnlabeled": {
     "description": "What an app password with no label of its own is called."
@@ -13937,10 +14047,6 @@
       }
     }
   },
-  "settingsDevicesErrorMessage": "The server did not answer.",
-  "@settingsDevicesErrorMessage": {
-    "description": "Second line of the session list error state."
-  },
   "settingsDevicesErrorTitle": "Could not load devices",
   "@settingsDevicesErrorTitle": {
     "description": "Error state where the session list would be."
@@ -14165,10 +14271,6 @@
   "@settingsLastfmCredentialsClear": {
     "description": "Button that removes the stored Last.fm credentials, falling back to the server environment's own."
   },
-  "settingsLastfmCredentialsError": "Could not load the credential state",
-  "@settingsLastfmCredentialsError": {
-    "description": "Shown in the Last.fm credentials dialog when the read failed."
-  },
   "settingsLastfmCredentialsTitle": "Last.fm API credentials",
   "@settingsLastfmCredentialsTitle": {
     "description": "Title of the administrator dialog holding the server's Last.fm credentials."
@@ -14269,10 +14371,6 @@
   "settingsNotifyAppriseTargetsHint": "Apprise URLs",
   "@settingsNotifyAppriseTargetsHint": {
     "description": "The hint inside the Apprise targets field: what goes in it."
-  },
-  "settingsNotifyCatalogError": "Could not load the event catalog",
-  "@settingsNotifyCatalogError": {
-    "description": "Shown where the event checklist would be when the read failed."
   },
   "settingsNotifyDeliverVia": "Deliver via",
   "@settingsNotifyDeliverVia": {
@@ -14453,6 +14551,20 @@
   "settingsNotifyTargetRemove": "Remove",
   "@settingsNotifyTargetRemove": {
     "description": "The button that deletes one notification target."
+  },
+  "settingsNotifyTargetRemoveBody": "\"{name}\" stops receiving notifications.",
+  "@settingsNotifyTargetRemoveBody": {
+    "description": "Body of the dialog confirming that a notification target is removed. {name} is the target's label, or its kind where it has none.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tablet"
+      }
+    }
+  },
+  "settingsNotifyTargetRemoveTitle": "Remove notification target?",
+  "@settingsNotifyTargetRemoveTitle": {
+    "description": "Title of the dialog confirming that a notification target is removed."
   },
   "settingsNotifyTargetsEmpty": "No notification targets yet",
   "@settingsNotifyTargetsEmpty": {
@@ -16857,6 +16969,10 @@
   "uploadsFinishing": "Finishing",
   "@uploadsFinishing": {
     "description": "Under an upload row once every byte has arrived and the server is sealing the session."
+  },
+  "uploadsFinishingUnreachable": "Finishing, can't reach the server",
+  "@uploadsFinishingUnreachable": {
+    "description": "Under an upload row in place of uploadsFinishing while asking the server how its seal went fails on the network; the row keeps asking and goes back to Finishing at the first answer."
   },
   "uploadsFormat": "Download format",
   "@uploadsFormat": {

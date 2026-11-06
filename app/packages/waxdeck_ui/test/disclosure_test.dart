@@ -24,19 +24,16 @@ Future<void> _pump(
   ),
 );
 
-WaxDisclosure _edition({
-  bool initiallyExpanded = false,
-  ValueChanged<bool>? onExpansionChanged,
-}) => WaxDisclosure(
-  title: 'Edition',
-  semanticsId: 'edition',
-  initiallyExpanded: initiallyExpanded,
-  onExpansionChanged: onExpansionChanged,
-  children: const <Widget>[
-    MonoDetailRow(label: 'Publisher', value: 'Harbour Press'),
-    MonoDetailRow(label: 'Narrator', value: 'Ora Lune'),
-  ],
-);
+WaxDisclosure _edition({ValueChanged<bool>? onExpansionChanged}) =>
+    WaxDisclosure(
+      title: 'Edition',
+      semanticsId: 'edition',
+      onExpansionChanged: onExpansionChanged,
+      children: const <Widget>[
+        MonoDetailRow(label: 'Publisher', value: 'Harbour Press'),
+        MonoDetailRow(label: 'Narrator', value: 'Ora Lune'),
+      ],
+    );
 
 SemanticsData _header(WidgetTester tester) => tester
     .getSemantics(find.bySemanticsIdentifier('edition'))
@@ -95,14 +92,19 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('it opens already open when asked to', (tester) async {
-    await _pump(tester, _edition(initiallyExpanded: true));
-    expect(find.text('Harbour Press'), findsOneWidget);
-  });
+  /// Its height once opened and settled.
+  Future<double> openHeight(
+    WidgetTester tester, {
+    bool reducedMotion = false,
+  }) async {
+    await _pump(tester, _edition(), reducedMotion: reducedMotion);
+    await tester.tap(find.text('Edition'));
+    await tester.pumpAndSettle();
+    return tester.getSize(find.byType(WaxDisclosure)).height;
+  }
 
   testWidgets('with motion it grows into its room', (tester) async {
-    await _pump(tester, _edition(initiallyExpanded: true));
-    final open = tester.getSize(find.byType(WaxDisclosure)).height;
+    final open = await openHeight(tester);
     // A fresh one: the open one would keep its state through a pump.
     await tester.pumpWidget(const SizedBox());
     await _pump(tester, _edition());
@@ -120,8 +122,7 @@ void main() {
 
   testWidgets('under reduced motion nothing moves: it fades in at its '
       'full size', (tester) async {
-    await _pump(tester, _edition(initiallyExpanded: true), reducedMotion: true);
-    final open = tester.getSize(find.byType(WaxDisclosure)).height;
+    final open = await openHeight(tester, reducedMotion: true);
     await tester.pumpWidget(const SizedBox());
     await _pump(tester, _edition(), reducedMotion: true);
     expect(find.text('Harbour Press'), findsNothing);

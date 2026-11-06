@@ -988,6 +988,59 @@ void main() {
     );
   });
 
+  testWidgets('Follow draws busy while it is sent, and takes one press', (
+    tester,
+  ) async {
+    final follow = Completer<void>();
+    final repo = FakeRepository()
+      ..shows[showPid] = testShow(showPid)
+      ..episodesByShow[showPid] = <EpisodeSummary>[]
+      ..subscribeGate = follow;
+    await _pump(tester, repo);
+    bool busy(String id) =>
+        tester.widget<WaxButton>(waxControl<WaxButton>(id)).busy;
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastSubscribe));
+    await tester.pump();
+    expect(busy(SemanticsIds.podcastSubscribe), isTrue);
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastSubscribe));
+    await tester.pump();
+    expect(repo.subscribeCalls, hasLength(1));
+
+    follow.complete();
+    await tester.pumpAndSettle();
+    expect(busy(SemanticsIds.podcastUnsubscribe), isFalse);
+  });
+
+  testWidgets('Following draws busy for its request, not for its question', (
+    tester,
+  ) async {
+    final repo = _repo();
+    final unfollow = repo.unsubscribeGate = Completer<void>();
+    await _pump(tester, repo);
+    bool busy(String id) =>
+        tester.widget<WaxButton>(waxControl<WaxButton>(id)).busy;
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastUnsubscribe),
+    );
+    await tester.pumpAndSettle();
+    // Asking about the files is the listener's turn, not work in flight.
+    expect(busy(SemanticsIds.podcastUnsubscribe), isFalse);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.unsubscribeKeepFiles),
+    );
+    // Pumped rather than settled: a busy pill spins.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(busy(SemanticsIds.podcastUnsubscribe), isTrue);
+
+    unfollow.complete();
+    await tester.pumpAndSettle();
+    expect(busy(SemanticsIds.podcastSubscribe), isFalse);
+    expect(repo.unsubscribeCalls, <String>[showPid]);
+  });
+
   testWidgets('following a private show says to follow it by its own '
       'address', (tester) async {
     // The server gives a private show's address to its followers alone,

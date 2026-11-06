@@ -39,6 +39,7 @@ export 'package:waxdeck_api_gen/src/api/users_api.dart';
 export 'package:waxdeck_api_gen/src/model/acquisition_format.dart';
 export 'package:waxdeck_api_gen/src/model/acquisition_request.dart';
 export 'package:waxdeck_api_gen/src/model/admin_settings.dart';
+export 'package:waxdeck_api_gen/src/model/admin_settings_change.dart';
 export 'package:waxdeck_api_gen/src/model/album_detail.dart';
 export 'package:waxdeck_api_gen/src/model/app_password.dart';
 export 'package:waxdeck_api_gen/src/model/app_password_create.dart';

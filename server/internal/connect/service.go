@@ -110,8 +110,13 @@ type Config struct {
 	// (cast targets, DLNA renderers, the jukebox) per user; nil allows
 	// everyone. A caller's own client endpoints are never gated.
 	SharedOutputsAllowed func(userID string) bool
-	Logger               logger
-	Now                  func() time.Time
+	// EntriesVisible answers which of a queue's pids a user may see. A
+	// session's owner reads its whole queue; anyone else watching it on
+	// a shared endpoint reads every other entry as an empty slot (see
+	// receiverView). Nil shows every receiver every entry.
+	EntriesVisible func(userID string, pids []string) map[string]bool
+	Logger         logger
+	Now            func() time.Time
 }
 
 type logger interface {
@@ -352,6 +357,30 @@ func (s *Service) visibleSessionLocked(userID string, sess *session) bool {
 	return ok && ep.Shared
 }
 
+// receiverView is a snapshot as one receiver may read it: on a session
+// somebody else owns, an entry for an item the receiver cannot see keeps
+// its slot, so the index still lines up, and loses all that names it.
+// It reads the catalog, so never under s.mu.
+func (s *Service) receiverView(snap Session, userID string) Session {
+	if snap.OwnerUserID == userID || s.cfg.EntriesVisible == nil || len(snap.Entries) == 0 {
+		return snap
+	}
+	pids := make([]string, len(snap.Entries))
+	for i, e := range snap.Entries {
+		pids[i] = e.PID
+	}
+	visible := s.cfg.EntriesVisible(userID, pids)
+	// A copy: the snapshot shares its entries with the live session.
+	entries := make([]QueueEntry, len(snap.Entries))
+	for i, e := range snap.Entries {
+		if visible[e.PID] {
+			entries[i] = e
+		}
+	}
+	snap.Entries = entries
+	return snap
+}
+
 // snapshotLocked builds a public snapshot with the position
 // extrapolated to now.
 func (s *Service) snapshotLocked(sess *session) Session {
@@ -404,20 +433,23 @@ func (s *Service) ActiveSessionID(userID, endpointID string) string {
 }
 
 // Sessions lists the sessions visible to the user, most recent
-// activity first.
+// activity first, each as the user may read it (receiverView).
 func (s *Service) Sessions(userID string) []Session {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	var out []Session
 	for _, sess := range s.sessions {
 		if s.visibleSessionLocked(userID, sess) {
 			out = append(out, s.snapshotLocked(sess))
 		}
 	}
+	s.mu.Unlock()
 	for i := 1; i < len(out); i++ {
 		for j := i; j > 0 && out[j].UpdatedAt.After(out[j-1].UpdatedAt); j-- {
 			out[j], out[j-1] = out[j-1], out[j]
 		}
+	}
+	for i := range out {
+		out[i] = s.receiverView(out[i], userID)
 	}
 	return out
 }
@@ -474,15 +506,17 @@ func (s *Service) SessionHistory(ctx context.Context, userID string) ([]EndedSes
 	return out, nil
 }
 
-// Session returns one visible session.
+// Session returns one visible session as the user may read it.
 func (s *Service) Session(userID, sessionID string) (Session, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	sess, ok := s.sessions[sessionID]
 	if !ok || !s.visibleSessionLocked(userID, sess) {
+		s.mu.Unlock()
 		return Session{}, ErrNotFound
 	}
-	return s.snapshotLocked(sess), nil
+	snap := s.snapshotLocked(sess)
+	s.mu.Unlock()
+	return s.receiverView(snap, userID), nil
 }
 
 // The rate range the contract states, shared by the create path and
@@ -1080,7 +1114,7 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 	if target.ID == sess.endpointID {
 		snap := s.snapshotLocked(sess)
 		s.mu.Unlock()
-		return snap, nil
+		return s.receiverView(snap, userID), nil
 	}
 	now := s.cfg.Now()
 	index := sess.q.Index
@@ -1191,7 +1225,7 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 	s.persist(ctx, sess, true)
 	s.notifyWatchers(sess.id)
 	s.cfg.InvalidatePlayer()
-	return snap, nil
+	return s.receiverView(snap, userID), nil
 }
 
 // releaseTransferTarget lets go of the target a transfer loaded for a

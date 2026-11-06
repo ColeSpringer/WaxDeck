@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/in_flight.dart';
 import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
@@ -38,15 +39,20 @@ class ScrobblingSection extends ConsumerWidget {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     if (slot.service == 'lastfm') {
-      try {
-        final authUrl = await ref
-            .read(scrobblersProvider.notifier)
-            .startLastfmConnect();
-        await ref.read(urlOpenerProvider).open(authUrl);
-        messenger.show(l10n.settingsScrobblerApprove);
-      } on WaxDeckApiException catch (e) {
-        messenger.show(explainError(l10n, e));
-      }
+      final scrobblers = ref.read(scrobblersProvider.notifier);
+      final opener = ref.read(urlOpenerProvider);
+      await ref.read(pendingActionsProvider.notifier).run(
+        PendingAction.scrobbler(slot.service),
+        () async {
+          try {
+            final authUrl = await scrobblers.startLastfmConnect();
+            await opener.open(authUrl);
+            messenger.show(l10n.settingsScrobblerApprove);
+          } on WaxDeckApiException catch (e) {
+            messenger.show(explainError(l10n, e));
+          }
+        },
+      );
       return;
     }
     if (!context.mounted) return;
@@ -63,11 +69,17 @@ class ScrobblingSection extends ConsumerWidget {
   ) async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    try {
-      await ref.read(scrobblersProvider.notifier).disconnect(slot.service);
-    } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
-    }
+    final scrobblers = ref.read(scrobblersProvider.notifier);
+    await ref.read(pendingActionsProvider.notifier).run(
+      PendingAction.scrobbler(slot.service),
+      () async {
+        try {
+          await scrobblers.disconnect(slot.service);
+        } on WaxDeckApiException catch (e) {
+          messenger.show(explainError(l10n, e));
+        }
+      },
+    );
   }
 
   Future<void> _openLastfmSetup(BuildContext context) => showDialog<void>(
@@ -95,17 +107,22 @@ class ScrobblingSection extends ConsumerWidget {
         onPressed: () => _openLastfmSetup(context),
       );
     }
+    final working = ref
+        .watch(pendingActionsProvider)
+        .contains(PendingAction.scrobbler(slot.service));
     final action = slot.connected
         ? WaxButton(
             semanticsId: SemanticsIds.scrobblerDisconnect(slot.service),
             label: l10n.settingsScrobblerDisconnect,
             kind: WaxButtonKind.text,
+            busy: working,
             onPressed: () => _disconnect(context, ref, slot),
           )
         : WaxButton(
             semanticsId: SemanticsIds.scrobblerConnect(slot.service),
             label: l10n.settingsScrobblerConnect,
             kind: WaxButtonKind.text,
+            busy: working,
             onPressed: slot.available
                 ? () => _connect(context, ref, slot)
                 : null,
@@ -184,7 +201,11 @@ class ScrobblingSection extends ConsumerWidget {
                 ),
             ],
           ),
-          AsyncValue(hasError: true) => Text(l10n.settingsScrobblingError),
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            scrobblers,
+            title: l10n.settingsScrobblingError,
+            onRetry: () => ref.invalidate(scrobblersProvider),
+          ),
           _ => SkeletonShapes(shape: SkeletonShape.list, count: 2),
         },
       ],
@@ -374,9 +395,14 @@ class _LastfmCredentialsDialogState
             },
           ),
           // Any state that carries it: while a retry runs the read is
-          // loading with the last error still on it.
-          AsyncValue(hasError: true) => WaxProse(
-            l10n.settingsLastfmCredentialsError,
+          // loading with the last error still on it. A line rather than
+          // the card, which a dialog has no room for.
+          AsyncValue(:final error?) => WaxBanner(
+            message: context.explain(error),
+            tone: WaxBannerTone.caution,
+            actionLabel: l10n.commonRetry,
+            actionBusy: config.isLoading,
+            onAction: () => ref.invalidate(scrobblingAdminConfigProvider),
           ),
           _ => SkeletonShapes(shape: SkeletonShape.list, count: 2),
         },
@@ -524,32 +550,10 @@ class AppPasswordsSection extends ConsumerWidget {
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final controller = TextEditingController();
     final messenger = ref.read(shellMessengerProvider.notifier);
     final label = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.settingsAppPasswordNewSpoken),
-        content: WaxTextField(
-          key: const Key('app-password-label-field'),
-          controller: controller,
-          label: l10n.settingsAppPasswordLabel,
-          hint: l10n.settingsAppPasswordLabelHint,
-          autofocus: true,
-        ),
-        actions: [
-          WaxButton(
-            label: l10n.commonCancel,
-            kind: WaxButtonKind.text,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          WaxButton(
-            key: const Key('app-password-create-confirm'),
-            label: l10n.settingsAppPasswordCreate,
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-          ),
-        ],
-      ),
+      builder: (context) => const _AppPasswordLabelDialog(),
     );
     if (label == null || label.isEmpty || !context.mounted) return;
     try {
@@ -595,10 +599,60 @@ class AppPasswordsSection extends ConsumerWidget {
     }
   }
 
+  /// What [ap] is called on its row, its button and its revoke: an
+  /// unlabelled one would otherwise give two identical "Revoke" buttons
+  /// with no subject.
+  static String _nameOf(AppLocalizations l10n, AppPassword ap) =>
+      ap.label.isEmpty ? l10n.settingsAppPasswordUnlabeled : ap.label;
+
+  /// Revokes [ap] once confirmed, as every destructive row here asks
+  /// first, the button busy meanwhile and a failure said, not dropped.
+  Future<void> _revoke(
+    BuildContext context,
+    WidgetRef ref,
+    AppPassword ap,
+  ) async {
+    final l10n = context.l10n;
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final pending = ref.read(pendingActionsProvider.notifier);
+    final revoking = ref.read(appPasswordsProvider.notifier);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.settingsAppPasswordRevokeTitle),
+        content: WaxProse(
+          l10n.settingsAppPasswordRevokeBody(_nameOf(l10n, ap)),
+        ),
+        actions: <Widget>[
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          WaxButton(
+            label: l10n.settingsAppPasswordRevokeAction,
+            kind: WaxButtonKind.destructive,
+            key: const Key('app-password-revoke-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await pending.run(PendingAction.appPasswordRevoke(ap.id), () async {
+      try {
+        await revoking.revoke(ap.id);
+      } on WaxDeckApiException catch (e) {
+        messenger.show(explainError(l10n, e));
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final passwords = ref.watch(appPasswordsProvider);
+    final pending = ref.watch(pendingActionsProvider);
     final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -628,34 +682,78 @@ class AppPasswordsSection extends ConsumerWidget {
                         WaxOptionRow(
                           key: ValueKey('app-password-${ap.id}'),
                           glyph: WaxIcons.key,
-                          title: ap.label.isEmpty
-                              ? l10n.settingsAppPasswordUnlabeled
-                              : ap.label,
+                          title: _nameOf(l10n, ap),
                           trailing: WaxIconButton(
                             key: ValueKey(
                               SemanticsIds.appPasswordRevoke(ap.id),
                             ),
                             glyph: WaxIcons.delete,
-                            // The same fallback the title takes: an
-                            // unlabelled password would otherwise give
-                            // two identical "Revoke" buttons with no
-                            // subject.
                             label: l10n.settingsAppPasswordRevoke(
-                              ap.label.isEmpty
-                                  ? l10n.settingsAppPasswordUnlabeled
-                                  : ap.label,
+                              _nameOf(l10n, ap),
                             ),
                             semanticsId: SemanticsIds.appPasswordRevoke(ap.id),
-                            onPressed: () => ref
-                                .read(appPasswordsProvider.notifier)
-                                .revoke(ap.id),
+                            busy: pending.contains(
+                              PendingAction.appPasswordRevoke(ap.id),
+                            ),
+                            onPressed: () => _revoke(context, ref, ap),
                           ),
                         ),
                     ],
                   ),
-          AsyncValue(hasError: true) => Text(l10n.settingsAppPasswordsError),
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            passwords,
+            title: l10n.settingsAppPasswordsError,
+            onRetry: () => ref.invalidate(appPasswordsProvider),
+          ),
           _ => SkeletonShapes(shape: SkeletonShape.list, count: 2),
         },
+      ],
+    );
+  }
+}
+
+/// Asks what a new app password is for; owns its field's controller, so
+/// the field is disposed with the dialog.
+class _AppPasswordLabelDialog extends StatefulWidget {
+  const _AppPasswordLabelDialog();
+
+  @override
+  State<_AppPasswordLabelDialog> createState() =>
+      _AppPasswordLabelDialogState();
+}
+
+class _AppPasswordLabelDialogState extends State<_AppPasswordLabelDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return AlertDialog(
+      title: Text(l10n.settingsAppPasswordNewSpoken),
+      content: WaxTextField(
+        key: const Key('app-password-label-field'),
+        controller: _controller,
+        label: l10n.settingsAppPasswordLabel,
+        hint: l10n.settingsAppPasswordLabelHint,
+        autofocus: true,
+      ),
+      actions: [
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        WaxButton(
+          key: const Key('app-password-create-confirm'),
+          label: l10n.settingsAppPasswordCreate,
+          onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
+        ),
       ],
     );
   }
@@ -888,7 +986,14 @@ class _EventChecklist extends ConsumerWidget {
           );
         },
       ),
-      AsyncValue(hasError: true) => Text(l10n.settingsNotifyCatalogError),
+      // A line rather than the card, which the editor has no room for.
+      AsyncValue(:final error?) => WaxBanner(
+        message: context.explain(error),
+        tone: WaxBannerTone.caution,
+        actionLabel: l10n.commonRetry,
+        actionBusy: catalog.isLoading,
+        onAction: () => ref.invalidate(notifyEventCatalogProvider),
+      ),
       _ => SkeletonShapes(shape: SkeletonShape.list, count: 3),
     };
   }
@@ -1158,9 +1263,7 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
                   child: WaxProse(
                     _error!,
                     key: const Key('notify-target-error'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                    style: TextStyle(color: WaxColors.of(context).error),
                   ),
                 ),
             ],
@@ -1191,6 +1294,7 @@ class _TargetList extends ConsumerWidget {
     required this.serverScope,
     required this.ownerIsAdmin,
     required this.targets,
+    required this.onRetry,
     required this.controller,
     required this.addKey,
   });
@@ -1199,6 +1303,9 @@ class _TargetList extends ConsumerWidget {
   final bool serverScope;
   final bool ownerIsAdmin;
   final AsyncValue<List<NotificationTarget>> targets;
+
+  /// Reads [targets] again, for its failure card.
+  final VoidCallback onRetry;
   final NotificationTargetActions controller;
   final String addKey;
 
@@ -1245,6 +1352,52 @@ class _TargetList extends ConsumerWidget {
         }
       },
     );
+  }
+
+  /// What [target] is called: its label, else its kind.
+  static String _nameOf(NotificationTarget target) =>
+      target.label?.isNotEmpty ?? false
+      ? target.label!
+      : _kindLabel(target.kind);
+
+  /// Removes [target] once confirmed, as every destructive row here asks
+  /// first, the button busy meanwhile and a failure said, not dropped.
+  Future<void> _remove(
+    BuildContext context,
+    WidgetRef ref,
+    NotificationTarget target,
+  ) async {
+    final l10n = context.l10n;
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final pending = ref.read(pendingActionsProvider.notifier);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.settingsNotifyTargetRemoveTitle),
+        content: WaxProse(l10n.settingsNotifyTargetRemoveBody(_nameOf(target))),
+        actions: <Widget>[
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          WaxButton(
+            label: l10n.settingsNotifyTargetRemove,
+            kind: WaxButtonKind.destructive,
+            key: const Key('notify-target-remove-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await pending.run(PendingAction.notifyTargetRemove(target.pid), () async {
+      try {
+        await controller.remove(target.pid);
+      } on WaxDeckApiException catch (e) {
+        messenger.show(explainError(l10n, e));
+      }
+    });
   }
 
   /// The delivery line under a target, or null where it has neither
@@ -1295,9 +1448,7 @@ class _TargetList extends ConsumerWidget {
                           glyph: target.lastError != null
                               ? WaxIcons.warning
                               : _kindIcon(target.kind),
-                          title: target.label?.isNotEmpty ?? false
-                              ? target.label!
-                              : _kindLabel(target.kind),
+                          title: _nameOf(target),
                           subtitle: [
                             target.muted
                                 ? '${_kindLabel(target.kind)} - '
@@ -1335,14 +1486,25 @@ class _TargetList extends ConsumerWidget {
                                 ),
                                 glyph: WaxIcons.delete,
                                 label: l10n.settingsNotifyTargetRemove,
-                                onPressed: () => controller.remove(target.pid),
+                                busy: ref
+                                    .watch(pendingActionsProvider)
+                                    .contains(
+                                      PendingAction.notifyTargetRemove(
+                                        target.pid,
+                                      ),
+                                    ),
+                                onPressed: () => _remove(context, ref, target),
                               ),
                             ],
                           ),
                         ),
                     ],
                   ),
-          AsyncValue(hasError: true) => Text(l10n.settingsNotifyTargetsError),
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            targets,
+            title: l10n.settingsNotifyTargetsError,
+            onRetry: onRetry,
+          ),
           _ => SkeletonShapes(shape: SkeletonShape.list, count: 2),
         },
       ],
@@ -1364,6 +1526,7 @@ class PersonalNotificationTargetsSection extends ConsumerWidget {
       serverScope: false,
       ownerIsAdmin: user?.roles.contains('admin') ?? false,
       targets: ref.watch(myNotificationTargetsProvider),
+      onRetry: () => ref.invalidate(myNotificationTargetsProvider),
       controller: ref.read(myNotificationTargetsProvider.notifier),
       addKey: SemanticsIds.notifyTargetAdd,
     );
@@ -1384,6 +1547,7 @@ class ServerNotificationTargetsSection extends ConsumerWidget {
       // shapes the personal checklist, which server scope never shows.
       ownerIsAdmin: true,
       targets: ref.watch(serverNotificationTargetsProvider),
+      onRetry: () => ref.invalidate(serverNotificationTargetsProvider),
       controller: ref.read(serverNotificationTargetsProvider.notifier),
       addKey: SemanticsIds.notifyServerTargetAdd,
     );

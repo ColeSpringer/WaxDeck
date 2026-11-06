@@ -32,7 +32,11 @@ final class UploadStarting extends UploadPhase {
 
 /// Every byte arrived and the session is being sealed.
 final class UploadSealing extends UploadPhase {
-  const UploadSealing();
+  const UploadSealing({this.unreachable = false});
+
+  /// Asking how the seal went fails on the wire: the server cannot be
+  /// reached, and the row waits until it answers.
+  final bool unreachable;
 }
 
 /// The transfer here gave up; the source is still held, so Retry can
@@ -63,12 +67,13 @@ final class UploadInterrupted extends UploadPhase {
 /// How long the server can go without taking a byte for a session still
 /// receiving while some client is still sending it. A sender gives up a
 /// try of a chunk once 30 s pass without progress (none of it sent yet, a
-/// send stuck, or no answer after the last of it), and the read that
-/// resyncs before each retry within 40 s (a 10 s connect, then 30 s for
-/// the answer); a chunk is tried four times with 1, 2 and 4 s of backoff
-/// between, so a sender that has not stopped gets a byte to the server at
-/// least every 287 s (4 x 40 + 3 x 40 + 7, a try counted at 40 s); six
-/// minutes is past that. Judged on the server's own measure of the gap
+/// send stuck, or no answer after the last of it, which first asks the
+/// server for up to 10 s whether it is still reading the body), and the
+/// read that resyncs before each retry within 40 s (a 10 s connect, then
+/// 30 s for the answer); a chunk is tried four times with 1, 2 and 4 s of
+/// backoff between, so a sender that has not stopped gets a byte to the
+/// server at least every 287 s (4 x 40 + 3 x 40 + 7, a try counted at
+/// 40 s); six minutes is past that. Judged on the server's own measure of the gap
 /// ([UploadSession.idle]) and this device's monotonic clock, so no two
 /// clocks are compared.
 const uploadIdleWindow = Duration(minutes: 6);
@@ -96,6 +101,9 @@ final class LiveTransfer {
 
   final TransferStatus status;
   final int sent;
+
+  /// The wire failed and the transfer asks again after a wait: a chunk
+  /// while running, how the seal went while sealing.
   final bool retrying;
 
   /// Why a stopped transfer stopped.
@@ -131,6 +139,11 @@ final class ChunkRetrying extends TransferEvent {
 
 final class Sealing extends TransferEvent {
   const Sealing();
+}
+
+/// Asking how the seal went failed on the wire.
+final class SealUnreachable extends TransferEvent {
+  const SealUnreachable();
 }
 
 final class Stopped extends TransferEvent {
@@ -177,6 +190,11 @@ LiveTransfer? reduceTransfer(
     retrying: true,
   ),
   Sealing() => LiveTransfer(status: TransferStatus.sealing, sent: current.sent),
+  SealUnreachable() => LiveTransfer(
+    status: TransferStatus.sealing,
+    sent: current.sent,
+    retrying: true,
+  ),
   Stopped(:final error) => LiveTransfer(
     status: TransferStatus.stopped,
     sent: current.sent,
@@ -202,7 +220,8 @@ UploadPhase uploadPhaseOf(
 }) => switch (live) {
   LiveTransfer(status: TransferStatus.running, :final sent, :final retrying) =>
     UploadSending(sent: sent, total: session.sizeBytes, retrying: retrying),
-  LiveTransfer(status: TransferStatus.sealing) => const UploadSealing(),
+  LiveTransfer(status: TransferStatus.sealing, :final retrying) =>
+    UploadSealing(unreachable: retrying),
   LiveTransfer(status: TransferStatus.sealed)
       when session.state == 'receiving' =>
     const UploadSealing(),

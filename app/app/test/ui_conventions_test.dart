@@ -339,6 +339,103 @@ void main() {
       // The block takes a child, whose own Text is what gets counted.
       expect(found("WaxProse.block(child: Text('Empty')),"), hasLength(1));
     });
+
+    test('prose built in code counts wherever it stands', () {
+      expect(found(r"String f(int n) { return '$n queued items'; }"), [
+        "'queued items'",
+      ]);
+      expect(found(r"final saved = 'saved ${m}m ${s}s';"), hasLength(1));
+      expect(found(r"x.add('${d.count} items');"), hasLength(1));
+      // Once, where a named slot reads it too.
+      expect(found(r"label: '$n queued items',"), hasLength(1));
+    });
+
+    test('built text with no prose in it is formatting', () {
+      expect(found(r"final key = 'sort:${choice.name}';"), isEmpty);
+      expect(found(r"final at = '${d.at} [${d.source}]';"), isEmpty);
+      expect(found(r"final n = ' x${d.count}';"), isEmpty);
+      expect(found(r"final v = 'v$apiVersion';"), isEmpty);
+      // Plain prose with nothing built into it is the named slots' to see.
+      expect(found("final s = 'Nothing here yet';"), isEmpty);
+    });
+
+    test('a log line is not copy', () {
+      expect(found(r"debugPrint('preload skipped: $error');"), isEmpty);
+      expect(found(r"print('mint failed for $pid');"), isEmpty);
+    });
+
+    test('an exception or an assertion is not copy', () {
+      expect(found(r"throw StateError('no session for $pid');"), isEmpty);
+      expect(found(r"throw 'bad state in $where';"), isEmpty);
+      expect(
+        found(r"throw ArgumentError.value(x, 'x', 'not a pid: $x');"),
+        isEmpty,
+      );
+      expect(found(r"assert(ok, 'never twice for $pid');"), isEmpty);
+    });
+
+    test('a name exempts a call\'s arguments only, and only a log\'s, an '
+        'assertion\'s or an SDK error\'s', () {
+      // Each of these draws copy, and each read as a log or an exception
+      // when any bracket after a name ending in Error counted.
+      expect(
+        found(
+          r"try { save(); } on WaxDeckApiException { "
+          r"final text = 'Could not save $name'; }",
+        ),
+        hasLength(1),
+      );
+      expect(
+        found(
+          r"class SaveError { String get line => 'Could not save $name'; }",
+        ),
+        hasLength(1),
+      );
+      expect(
+        found(r"showError(context, 'Could not save $name');"),
+        hasLength(1),
+      );
+      expect(found(r"_LoadError(line: 'Could not load $year');"), hasLength(1));
+    });
+
+    test('an exception\'s message is not copy, wherever it is thrown or '
+        'failed with', () {
+      expect(
+        found(r"if (bad) throw FooException('no route to $host');"),
+        isEmpty,
+      );
+      expect(
+        found(r"String f() => throw FooException('no route to $host');"),
+        isEmpty,
+      );
+      expect(
+        found(r"return Future.error(SocketException('no route to $host'));"),
+        isEmpty,
+      );
+      expect(
+        found(r"done.completeError(FooException('no route to $host'));"),
+        isEmpty,
+      );
+    });
+
+    test('a toString is not copy', () {
+      expect(found(r"String toString() => 'Foo of $bar';"), isEmpty);
+      expect(
+        found(r"String toString() { return 'Foo of $bar at $baz'; }"),
+        isEmpty,
+      );
+    });
+
+    test('a header value is not copy', () {
+      expect(found(r"headers: {'Authorization': 'Bearer $token'},"), isEmpty);
+    });
+
+    test('SQL is not copy', () {
+      expect(
+        found(r"db.customSelect('SELECT pid FROM items WHERE kind = $k');"),
+        isEmpty,
+      );
+    });
   });
 
   // The raw-widget rules, pinned directly: each must see its widget and
@@ -441,6 +538,10 @@ void main() {
         'Card.outlined(child: c)',
         'Slider.adaptive(value: 0)',
         'DropdownMenuItem<int>.of(value: 1)',
+        'TabBar(tabs: t)',
+        'TabBar.secondary(tabs: t)',
+        'TabBarView(children: c)',
+        'DefaultTabController(length: 3, child: c)',
       ]) {
         expect(count('material-misc', code), 1, reason: code);
       }
@@ -542,6 +643,67 @@ void main() {
         "ErrorState(message: m, detail: Foo(onRetry: retry))",
       ]) {
         expect(count('error-state-retrying', code), 0, reason: code);
+      }
+    });
+
+    test('an error state is built only by the house faces', () {
+      final rule = _rules.firstWhere((r) => r.name == 'error-state-home');
+      expect(count('error-state-home', 'ErrorState(title: t, message: m)'), 1);
+      expect(count('error-state-home', 'AsyncFailureCard.from(s)'), 0);
+      expect(rule.appliesTo('lib/src/settings/account_sections.dart'), isTrue);
+      // The homes are counted too, each held by the allowlist at the one
+      // it builds, so a second one there is caught like anywhere else.
+      for (final home in [
+        'lib/src/shell/async_box_face.dart',
+        'lib/src/shell/async_sliver_face.dart',
+        'lib/src/player/player_screen.dart',
+      ]) {
+        expect(rule.appliesTo(home), isTrue, reason: home);
+      }
+      expect(
+        rule.appliesTo('$_designSystem/src/components/states.dart'),
+        isFalse,
+      );
+    });
+
+    test('a failed read is drawn explained', () {
+      for (final code in [
+        'AsyncValue(hasError: true) => Text(l10n.failed),',
+        'AsyncValue(:final error?) => ErrorState(title: t),',
+        'AsyncValue(hasError: true) => const SizedBox.shrink(),',
+        'AsyncValue(hasError: true) when ready => Padding(\n'
+            '  padding: p,\n  child: Text(l10n.failed),\n),',
+        'AsyncValue(hasError: true) => <Widget>[Text(l10n.failed)],',
+        'AsyncValue(error: final e?) => Text(l10n.failed),',
+        'AsyncValue(hasError: true) when a == b => Text(l10n.failed),',
+        'AsyncValue(hasError: true) => WaxBanner(message: l10n.down),',
+        // A fixed sentence with a Retry is still a fixed sentence.
+        'AsyncValue(hasError: true) => <Widget>[...local, WaxBanner(\n'
+            '  message: l10n.degraded,\n  onAction: () => ref.invalidate(p),\n)],',
+      ]) {
+        expect(count('unexplained-failure', code), 1, reason: code);
+      }
+      for (final code in [
+        'AsyncValue(hasError: true) => AsyncFailureCard.from(s, onRetry: r),',
+        'AsyncValue(:final error?) => Text(context.explain(error)),',
+        'AsyncValue(:final error?) => Text(explainError(l10n, error)),',
+        'AsyncValue(hasError: true) => Padding(\n'
+            '  padding: p,\n  child: AsyncFailureCard.from(s, onRetry: r),\n),',
+        // A status word in a value, not a face drawn for a read.
+        'AsyncValue(hasError: true) => l10n.unknown,',
+        // A statement takes its own branch, not an arm's.
+        'case AsyncValue(hasError: true):',
+        'if (s case AsyncValue(hasError: true)) {}',
+        // The arm ends at its own comma: the next arm is not its body.
+        'AsyncValue(hasError: true) => Text(context.explain(e)), '
+            '_ => Text(l10n.waiting),',
+        // A value's arm, not the error's.
+        'AsyncValue(:final value?) => Column(children: c),',
+        // An explained line, asking again.
+        'AsyncValue(:final error?) => WaxBanner(\n'
+            '  message: context.explain(error),\n  onAction: retry,\n),',
+      ]) {
+        expect(count('unexplained-failure', code), 0, reason: code);
       }
     });
 
@@ -1005,6 +1167,102 @@ class _CopyRule extends _Rule {
         yield _Hit(read.start, _preview(words));
       }
     }
+    yield* _builtProse(code, seen);
+  }
+
+  /// A word beside a space: what separates a sentence from a key, a path
+  /// or a formatted number.
+  static final _prose = RegExp(r'[A-Za-z]{2,} | [A-Za-z]{2,}');
+
+  /// Calls whose arguments a reader never sees: logs, assertions, the
+  /// SDK's errors and exceptions, whatever a `throw` constructs, a failed
+  /// future, diagnostics. Read against what stands before a call's own
+  /// parenthesis, never a block's brace: a handler, a class or a helper
+  /// the app names for an error still draws copy.
+  static final _unread = RegExp(
+    r'(?:\b(?:debugPrint|debugPrintStack|print|printOnFailure|log|assert)'
+    r'|\b(?:Error|Exception|StateError|ArgumentError|RangeError'
+    r'|UnsupportedError|UnimplementedError|FormatException|TimeoutException'
+    r'|AssertionError|FlutterError|ErrorDescription|ErrorSummary|ErrorHint)'
+    r'(?:\.\w+)?'
+    r'|\bthrow\s+[\w$.]+(?:<[^>]*>)?|\bFuture\.error|\bcompleteError'
+    r'|\b(?:Diagnostics|String|Flag|Enum|Int|Double|Iterable|ObjectFlag'
+    r'|Percent|Message)Property(?:<[^>]*>)?)\s*$',
+  );
+
+  static final _sql = RegExp(
+    r'^\s*(?:SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|DROP|ALTER|PRAGMA)\b',
+  );
+
+  /// A statement that throws, or the literal a `throw` stands before.
+  static final _thrown = RegExp(r'^\s*throw\b|\bthrow\s*$');
+
+  /// A `toString` body: the arrow's statement, or the block it opens.
+  static final _toStringBody = RegExp(r'\btoString\(\)\s*(?:=>|$)');
+
+  /// Prose put together in code: an interpolated literal holding a word
+  /// beside a space, wherever it stands. A helper's return reaches a
+  /// screen as surely as a `label:` does, and no name above it says so.
+  ///
+  /// What is not copy has a shape of its own and is left alone: a log
+  /// line, an exception or assertion, a `toString`, a literal matched
+  /// against, a header value (`Bearer `) and SQL.
+  static Iterable<_Hit> _builtProse(String code, Set<int> seen) sync* {
+    // Each open bracket and what stands before it, innermost last.
+    final before = <({String bracket, String head})>[];
+    var statement = 0;
+    var i = 0;
+    while (i < code.length) {
+      final read = _readLiteral(code, i);
+      if (read == null) {
+        final c = code[i];
+        if (c == '(' || c == '[' || c == '{') {
+          before.add((
+            bracket: c,
+            head: code.substring(i < 80 ? 0 : i - 80, i),
+          ));
+        } else if ((c == ')' || c == ']' || c == '}') && before.isNotEmpty) {
+          before.removeLast();
+        }
+        if (c == ';' || c == '{' || c == '}') statement = i + 1;
+        i++;
+        continue;
+      }
+      final end = _skipContinuations(code, read.end, code.length);
+      i = end;
+      if (code[read.start] == 'r' || !seen.add(read.start)) continue;
+      final body = StringBuffer();
+      for (var at = read.start; at < end;) {
+        final segment = _readLiteral(code, at);
+        if (segment == null) {
+          at++;
+          continue;
+        }
+        body.write(segment.body);
+        at = segment.end;
+      }
+      final text = body.toString();
+      if (!_interpolation.hasMatch(text)) continue;
+      final words = text
+          .replaceAll(_interpolation, '')
+          .replaceAll(_escape, '')
+          .replaceAll(_placeholder, '');
+      if (!_prose.hasMatch(words)) continue;
+      if (words.startsWith('Bearer ') || _sql.hasMatch(words)) continue;
+      if (_isMatchedAgainst(code, read.start, read.end)) continue;
+      final head = code.substring(statement, read.start);
+      if (_thrown.hasMatch(head) || _toStringBody.hasMatch(head)) continue;
+      if (before.any(
+        (b) => switch (b.bracket) {
+          '(' => _unread.hasMatch(b.head),
+          '{' => _toStringBody.hasMatch(b.head),
+          _ => false,
+        },
+      )) {
+        continue;
+      }
+      yield _Hit(read.start, _preview(words));
+    }
   }
 
   /// Where the value ends: the comma or closing bracket at the depth it
@@ -1205,7 +1463,8 @@ final _rules = <_Rule>[
     name: 'material-misc',
     pattern: _built(
       'Card|Divider|Slider|Tooltip|DropdownButton|DropdownButtonFormField'
-      '|DropdownMenu|DropdownMenuItem|DropdownMenuEntry|VerticalDivider',
+      '|DropdownMenu|DropdownMenuItem|DropdownMenuEntry|VerticalDivider'
+      '|TabBar|TabBarView|DefaultTabController',
     ),
     fix:
         'use the Wax counterpart: WaxHairline for a divider, the band the '
@@ -1216,7 +1475,8 @@ final _rules = <_Rule>[
         '(a plain surface is surface1, hairline and WaxRadius.card), '
         'WaxSlider, WaxTooltip, and for the dropdown family WaxChoice (a '
         'select that shows its value), WaxSegmented (two or three readings) '
-        'or WaxMenuButton (an icon-triggered overflow)',
+        'or WaxMenuButton (an icon-triggered overflow), and WaxSegmented '
+        'switching the view for a tab bar',
   ),
   _Rule(
     name: 'raw-spacing',
@@ -1229,6 +1489,8 @@ final _rules = <_Rule>[
   ),
   _ErrorOnlyFaceRule(),
   _ErrorStateRetryingRule(),
+  _ErrorStateHomeRule(),
+  _UnexplainedFailureRule(),
   _ProseSlotRule(),
   _CopyRule(),
 ];
@@ -1301,6 +1563,96 @@ class _ErrorStateRetryingRule extends _Rule {
         yield _Hit(match.start);
       }
     }
+  }
+}
+
+/// The home rule: an `ErrorState` built anywhere but the faces that own
+/// it. A read's failure goes through `AsyncFailureCard`, which explains
+/// the error, drops Try again for a gone entity and draws it busy while
+/// the read asks again; a hand-built one did none of that. The homes,
+/// the two house faces and the player's start failure (no read, retried
+/// by its own press), are counted like any file and held by the
+/// allowlist at the one each builds.
+class _ErrorStateHomeRule extends _Rule {
+  _ErrorStateHomeRule()
+    : super(
+        name: 'error-state-home',
+        pattern: RegExp(r'\bErrorState\('),
+        fix:
+            'draw a read failure with AsyncFailureCard.from(state, title: '
+            '..., onRetry: () => ref.invalidate(provider))',
+      );
+
+  @override
+  bool appliesTo(String path) => path.startsWith('lib/');
+}
+
+/// The unexplained-failure rule: a switch arm for a failed read that
+/// draws something, and neither `AsyncFailureCard` nor a sentence from
+/// the error table, so every cause reads alike and nothing asks again.
+///
+/// The arm's body runs to its own comma at its own depth, so the arm
+/// after it is not read as its body. An arm that answers a value rather
+/// than drawing (a status word for a line built elsewhere) is not a face.
+class _UnexplainedFailureRule extends _Rule {
+  _UnexplainedFailureRule()
+    : super(
+        name: 'unexplained-failure',
+        pattern: RegExp(
+          r'\bAsyncValue\(\s*(?:hasError\s*:\s*true|:final\s+error\?'
+          r'|error\s*:\s*final\s+\w+\?)\s*\)(?:\s+when\b(?:(?!=>)[\s\S])*)?\s*=>',
+        ),
+        fix:
+            'draw it with AsyncFailureCard.from(state, title: ..., onRetry: '
+            '...), or where no card fits a line that explains the error '
+            '(context.explain) with a way to ask again',
+      );
+
+  static final _explained = RegExp(
+    r'\bAsyncFailureCard\b|\bexplain(?:Error|Refusal|StationDirectory)?\(',
+  );
+  static final _draws = RegExp(r'\b[A-Z]\w*(?:<[^>]*>)?(?:\.\w+)?\(|\[');
+
+  @override
+  bool appliesTo(String path) => path.startsWith('lib/');
+
+  @override
+  Iterable<_Hit> find(String code) sync* {
+    for (final match in pattern.allMatches(code)) {
+      final body = _armBody(code, match.end);
+      if (_draws.hasMatch(body) && !_explained.hasMatch(body)) {
+        yield _Hit(match.start);
+      }
+    }
+  }
+
+  /// The arm's expression from [start]: up to the first comma at its own
+  /// depth, or the bracket that closes the switch around it.
+  static String _armBody(String code, int start) {
+    var depth = 0;
+    String? quote;
+    for (var i = start; i < code.length; i++) {
+      final char = code[i];
+      if (quote != null) {
+        if (char == r'\') {
+          i++;
+        } else if (char == quote) {
+          quote = null;
+        }
+        continue;
+      }
+      if (char == "'" || char == '"') {
+        quote = char;
+      } else if ('([{'.contains(char)) {
+        depth++;
+      } else if (')]}'.contains(char)) {
+        if (depth == 0) return code.substring(start, i);
+        depth--;
+      } else if (char == ',' && depth == 0) {
+        return code.substring(start, i);
+      }
+    }
+    return code.substring(start);
   }
 }
 

@@ -300,6 +300,19 @@ abstract final class WaxRoute {
   static const organizePreviewParam = 'preview';
   static const organizeOwnProfiles = 'own';
   static const users = '$admin/users';
+
+  /// [users] opened on its signup requests, where a signup notification
+  /// sends an administrator, and on its invites: each view a location of
+  /// its own, so a reload or a copied link opens the view on screen. A
+  /// query rather than a path segment, so the one route answers all three
+  /// and `edit` keeps its place under it.
+  static const userRequests = '$users?$usersViewParam=$usersRequestsView';
+  static const userInvites = '$users?$usersViewParam=$usersInvitesView';
+
+  /// The query parameter the views ride in, and its values.
+  static const usersViewParam = 'view';
+  static const usersRequestsView = 'requests';
+  static const usersInvitesView = 'invites';
   static const userEdit = '$users/edit';
   static const audit = '$admin/audit';
 

@@ -13,6 +13,19 @@ import 'fakes.dart';
 import 'localized_host.dart';
 import 'wax_finders.dart';
 
+/// Holds each restore until [release], counting them.
+class _HeldRestore extends FakeRepository {
+  final release = Completer<void>();
+  var asked = 0;
+
+  @override
+  Future<void> restoreTrashEntry(String trashId) async {
+    asked++;
+    await release.future;
+    return super.restoreTrashEntry(trashId);
+  }
+}
+
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
     overrides: [repositoryProvider.overrideWithValue(repo)],
@@ -121,6 +134,28 @@ void main() {
       shellMessageText(container.read(shellMessengerProvider)),
       startsWith('Restored Music/'),
     );
+  });
+
+  testWidgets('a restore takes one press while it runs, drawn busy', (
+    tester,
+  ) async {
+    final repo = _HeldRestore()..trashEntries.add(_entry('ts-1'));
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+    final id = SemanticsIds.trashRestore('ts-1');
+    WaxIconButton button() =>
+        tester.widget<WaxIconButton>(waxControl<WaxIconButton>(id));
+
+    await tester.tap(find.bySemanticsIdentifier(id));
+    await tester.pump();
+    expect(button().busy, isTrue);
+    await tester.tap(find.bySemanticsIdentifier(id), warnIfMissed: false);
+    await tester.pump();
+    expect(repo.asked, 1);
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+    expect(repo.restoreTrashCalls, ['ts-1']);
   });
 
   testWidgets('purging one entry confirms and drops it from the view', (

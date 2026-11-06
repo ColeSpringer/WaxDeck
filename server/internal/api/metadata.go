@@ -707,7 +707,7 @@ func (s *Server) GetEntityArtworkLock(ctx context.Context, req GetEntityArtworkL
 	if !entityArtworkPermitted(uc, string(req.EntityType)) {
 		return GetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
 	}
-	locked, err := s.svc.EntityArtworkLock(ctx, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role))
+	locked, err := s.svc.EntityArtworkLock(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role))
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
@@ -734,7 +734,7 @@ func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkL
 	if req.Body == nil {
 		return SetEntityArtworkLock400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a locked body is required"))}, nil
 	}
-	locked, err := s.svc.SetEntityArtworkLock(ctx, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), req.Body.Locked)
+	locked, err := s.svc.SetEntityArtworkLock(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), req.Body.Locked)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
@@ -992,10 +992,11 @@ func (s *Server) RenameEntity(ctx context.Context, req RenameEntityRequestObject
 }
 
 func (s *Server) GetEntityCuration(ctx context.Context, req GetEntityCurationRequestObject) (GetEntityCurationResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
 		return nil, err
 	}
-	rows, err := s.svc.EntityCurationFor(ctx, string(req.EntityType), req.EntityPid)
+	rows, err := s.svc.EntityCurationFor(ctx, uc, string(req.EntityType), req.EntityPid)
 	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return GetEntityCuration404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil

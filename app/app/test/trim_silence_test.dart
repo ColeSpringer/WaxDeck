@@ -1,9 +1,11 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
 
 const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
@@ -51,11 +53,35 @@ void main() {
 
     expect(engine.position, const Duration(seconds: 15));
     // 10 seconds of silence were skipped; the chip shows the savings.
-    expect(find.textContaining('saved 10s'), findsOneWidget);
+    expect(find.text('Trim silence (10 sec saved)'), findsOneWidget);
 
     // The jump happened once; playback continues normally afterwards.
     await _listen(tester, engine, 2);
     expect(engine.position, const Duration(seconds: 17));
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('the savings read in the listener\'s language', (tester) async {
+    final repo = _repo();
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testEpisode(episodePid),
+      host: (player) => localizedHost(player, locale: const Locale('es')),
+    );
+
+    await _listen(tester, engine, 5);
+    await tester.pump();
+
+    expect(
+      find.text('Recortar los silencios (10 s ahorrados)'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('saved'), findsNothing);
     await harness.endPlayback(tester);
   });
 

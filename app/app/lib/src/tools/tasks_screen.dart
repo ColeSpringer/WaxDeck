@@ -14,6 +14,8 @@ import '../player/play_progress.dart';
 import '../providers.dart';
 import '../settings/settings_registry.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/in_flight.dart';
+import '../shell/paged_scroll.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -63,13 +65,29 @@ String _typeLabel(
 /// each produced. The merge and split actions live on the media screens
 /// they act on; this list is where their outcomes are followed,
 /// dismissed one by one, or swept once they are done.
-class TasksScreen extends ConsumerWidget {
+class TasksScreen extends ConsumerStatefulWidget {
   const TasksScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TasksScreen> createState() => _TasksScreenState();
+}
+
+/// The sweep, the one piece of work the toolbar runs.
+const _sweep = 'clear-finished';
+
+class _TasksScreenState extends ConsumerState<TasksScreen>
+    with PagedScroll, InFlight<TasksScreen, String> {
+  @override
+  void loadMore() => ref.read(toolTasksProvider.notifier).loadMore();
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = context.l10n;
     final tasks = ref.watch(toolTasksProvider);
+    fillViewportWhile(
+      (tasks.value?.hasMore ?? false) && !(tasks.value?.loadingMore ?? true),
+      at: tasks.value?.tasks,
+    );
     // Catalog jobs are an administrator's: nobody else may list them.
     final jobs = ref.watch(isAdminProvider)
         ? visibleJobs(ref.watch(adminJobsProvider).value ?? const <Job>[])
@@ -82,114 +100,110 @@ class TasksScreen extends ConsumerWidget {
     final anyFinished =
         (tasks.value?.tasks.any(_finished) ?? false) ||
         jobs.any((job) => job.ended);
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        final metrics = notification.metrics;
-        if (metrics.pixels >= metrics.maxScrollExtent - 400) {
-          unawaited(ref.read(toolTasksProvider.notifier).loadMore());
-        }
-        return false;
-      },
-      child: WaxScaffold(
-        title: l10n.toolsTitle,
-        semanticsId: SemanticsIds.tasksScreen,
-        actions: <Widget>[
-          if (anyFinished)
-            // An administrator's list holds everyone's tasks, so the
-            // sweep asks whose. A member has the one.
-            if (ref.watch(isAdminProvider))
-              WaxMenuButton<bool>(
-                glyph: WaxIcons.delete,
-                label: l10n.toolsClearFinished,
-                semanticsId: SemanticsIds.tasksClearFinished,
-                items: <WaxMenuItem<bool>>[
-                  WaxMenuItem<bool>(
-                    value: false,
-                    label: l10n.toolsClearFinishedMine,
-                    semanticsId: SemanticsIds.tasksClearFinishedMine,
-                  ),
-                  WaxMenuItem<bool>(
-                    value: true,
-                    label: l10n.toolsClearFinishedAll,
-                    semanticsId: SemanticsIds.tasksClearFinishedAll,
-                  ),
-                ],
-                onSelected: (all) =>
-                    unawaited(_clearFinished(context, ref, all: all)),
-              )
-            else
-              WaxIconButton(
-                glyph: WaxIcons.delete,
-                label: l10n.toolsClearFinished,
-                semanticsId: SemanticsIds.tasksClearFinished,
-                onPressed: () => unawaited(_clearFinished(context, ref)),
-              ),
-        ],
-        slivers: <Widget>[
-          if (jobs.isNotEmpty) ...<Widget>[
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
-                child: SectionHeader(title: l10n.toolsJobsTitle),
-              ),
+    // A sweep under way keeps its control, drawn busy, until it answers:
+    // the refetch it starts can empty the list first.
+    final sweeping = busyBy(_sweep);
+    return WaxScaffold(
+      title: l10n.toolsTitle,
+      controller: pagedScroll,
+      semanticsId: SemanticsIds.tasksScreen,
+      actions: <Widget>[
+        if (anyFinished || busy)
+          // An administrator's list holds everyone's tasks, so the
+          // sweep asks whose. A member has the one.
+          if (ref.watch(isAdminProvider) && !sweeping)
+            WaxMenuButton<bool>(
+              glyph: WaxIcons.delete,
+              label: l10n.toolsClearFinished,
+              semanticsId: SemanticsIds.tasksClearFinished,
+              items: <WaxMenuItem<bool>>[
+                WaxMenuItem<bool>(
+                  value: false,
+                  label: l10n.toolsClearFinishedMine,
+                  semanticsId: SemanticsIds.tasksClearFinishedMine,
+                ),
+                WaxMenuItem<bool>(
+                  value: true,
+                  label: l10n.toolsClearFinishedAll,
+                  semanticsId: SemanticsIds.tasksClearFinishedAll,
+                ),
+              ],
+              onSelected: (all) => unawaited(_clearFinished(all: all)),
+            )
+          else
+            WaxIconButton(
+              glyph: WaxIcons.delete,
+              label: l10n.toolsClearFinished,
+              semanticsId: SemanticsIds.tasksClearFinished,
+              busy: sweeping,
+              onPressed: () => unawaited(_clearFinished()),
             ),
-            SliverList.builder(
-              itemCount: jobs.length,
-              findChildIndexCallback: indexByKey(jobs, jobKey),
-              itemBuilder: (context, index) =>
-                  JobRow(key: jobKey(jobs[index]), job: jobs[index]),
+      ],
+      slivers: <Widget>[
+        if (jobs.isNotEmpty) ...<Widget>[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+              child: SectionHeader(title: l10n.toolsJobsTitle),
             ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
-                child: SectionHeader(title: l10n.toolsTasksSection),
-              ),
-            ),
-          ],
-          AsyncSliverFace<ToolTasksState>(
-            state: tasks,
-            errorTitle: l10n.toolsLoadError,
-            onRetry: () => ref.invalidate(toolTasksProvider),
-            isEmpty: (value) => value.tasks.isEmpty,
-            // Under the jobs it keeps its own height; alone, it centres in
-            // the screen.
-            empty: (context, _) {
-              final empty = EmptyState(
-                title: l10n.toolsEmptyTitle,
-                glyph: WaxIcons.check,
-              );
-              return jobs.isEmpty
-                  ? SliverFillRemaining(hasScrollBody: false, child: empty)
-                  : SliverToBoxAdapter(child: empty);
-            },
-            builder: (context, value) => SliverPadding(
-              padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
-              sliver: SliverList.builder(
-                itemCount: value.tasks.length + (value.loadingMore ? 1 : 0),
-                findChildIndexCallback: indexByKey(value.tasks, _taskKey),
-                itemBuilder: (context, index) {
-                  if (index >= value.tasks.length) {
-                    return const SkeletonShapes(
-                      shape: SkeletonShape.list,
-                      count: 1,
-                    );
-                  }
-                  final task = value.tasks[index];
-                  return _TaskRow(key: _taskKey(task), task: task);
-                },
-              ),
+          ),
+          SliverList.builder(
+            itemCount: jobs.length,
+            findChildIndexCallback: indexByKey(jobs, jobKey),
+            itemBuilder: (context, index) =>
+                JobRow(key: jobKey(jobs[index]), job: jobs[index]),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+              child: SectionHeader(title: l10n.toolsTasksSection),
             ),
           ),
         ],
-      ),
+        AsyncSliverFace<ToolTasksState>(
+          state: tasks,
+          errorTitle: l10n.toolsLoadError,
+          onRetry: () => ref.invalidate(toolTasksProvider),
+          isEmpty: (value) => value.tasks.isEmpty,
+          // Under the jobs it keeps its own height; alone, it centres in
+          // the screen.
+          empty: (context, _) {
+            final empty = EmptyState(
+              title: l10n.toolsEmptyTitle,
+              glyph: WaxIcons.check,
+            );
+            return jobs.isEmpty
+                ? SliverFillRemaining(hasScrollBody: false, child: empty)
+                : SliverToBoxAdapter(child: empty);
+          },
+          builder: (context, value) => SliverPadding(
+            padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
+            sliver: SliverList.builder(
+              itemCount: value.tasks.length + (value.loadingMore ? 1 : 0),
+              findChildIndexCallback: indexByKey(value.tasks, _taskKey),
+              itemBuilder: (context, index) {
+                if (index >= value.tasks.length) {
+                  return const SkeletonShapes(
+                    shape: SkeletonShape.list,
+                    count: 1,
+                  );
+                }
+                final task = value.tasks[index];
+                return _TaskRow(key: _taskKey(task), task: task);
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Future<void> _clearFinished(
-    BuildContext context,
-    WidgetRef ref, {
-    bool all = false,
-  }) async {
+  /// One sweep at a time: a second press or pick while one runs is
+  /// dropped, so its count cannot replace the first's.
+  Future<void> _clearFinished({bool all = false}) =>
+      runAs(_sweep, () => _sweepFinished(all: all));
+
+  Future<void> _sweepFinished({required bool all}) async {
     // Read before the dialog: this runs unawaited, so `ref` may be dead
     // by the time the answer comes back.
     final messenger = ref.read(shellMessengerProvider.notifier);
@@ -202,23 +216,25 @@ class TasksScreen extends ConsumerWidget {
         : null;
     final l10n = context.l10n;
     if (all) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(l10n.toolsClearAllTitle),
-          content: WaxProse(l10n.toolsClearAllBody),
-          actions: <Widget>[
-            WaxButton(
-              label: l10n.commonCancel,
-              kind: WaxButtonKind.text,
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-            ),
-            WaxButton(
-              label: l10n.toolsClearAllAction,
-              semanticsId: SemanticsIds.tasksClearFinishedConfirm,
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-            ),
-          ],
+      final confirmed = await whileAsking(
+        () => showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(l10n.toolsClearAllTitle),
+            content: WaxProse(l10n.toolsClearAllBody),
+            actions: <Widget>[
+              WaxButton(
+                label: l10n.commonCancel,
+                kind: WaxButtonKind.text,
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+              ),
+              WaxButton(
+                label: l10n.toolsClearAllAction,
+                semanticsId: SemanticsIds.tasksClearFinishedConfirm,
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+              ),
+            ],
+          ),
         ),
       );
       if (confirmed != true) return;
@@ -259,14 +275,13 @@ class _TaskRow extends ConsumerWidget {
 
   final ToolTask task;
 
+  /// A kind's mark, never a glyph a control draws: the row's own control
+  /// is its trailing one. A check mark would read as an outcome beside a
+  /// row that failed.
   WaxGlyph get _glyph => switch (task.type) {
     'book-merge' || 'book-split' => WaxIcons.audiobooks,
     'cue-split' => WaxIcons.music,
-    'playlist-sync' => WaxIcons.library,
-    // Fixes, which rewrite what the catalog holds. A check mark would read
-    // as an outcome beside a row that failed.
-    'catalog-repair' || 'health-fix' || 'genre-normalize' => WaxIcons.edit,
-    _ => WaxIcons.downloads,
+    _ => WaxIcons.library,
   };
 
   /// A running task that is waiting out a passing failure, to try again

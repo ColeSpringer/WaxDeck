@@ -499,7 +499,7 @@ components:
       description: >
         The command could not be completed on the target player
         endpoint. Read `code` rather than the status: this answer
-        carries five, and they call for different things.
+        carries several, and they call for different things.
         `endpoint-offline` means the endpoint is not connected - refresh
         the endpoint list; the device may have left the network or the
         client may have disconnected. `timeout` means it is connected
@@ -515,6 +515,14 @@ components:
         a start that did not take - so nothing about the request or the
         endpoint list needs changing and retrying is reasonable; the
         message carries whatever the endpoint could say about it.
+        `endpoint-idle`, `no-session`, `queue-end` and `queue-start` are
+        the endpoint finding nothing to act on: nothing live there, a
+        session it is no longer playing, or no entry in that direction.
+        Retrying repeats each until something changes there:
+        `endpoint-idle` clears once something is loaded, `no-session`
+        once the session is refreshed, and `queue-end` and `queue-start`
+        once the queue has an entry in that direction (one added, or
+        repeat all).
       content:
         application/json:
           schema:
@@ -585,16 +593,21 @@ components:
 
     PlaybackSessionEntry:
       type: object
-      description: One queue entry of a playback session, hydrated for display.
+      description: >
+        One queue entry of a playback session, hydrated for display. On
+        a session the caller does not own, an entry for an item the
+        caller may not see, outside their library grants or content
+        rules, keeps its place with an empty `pid` and `title` and no
+        `artist` or `durationMs`, so `index` still lines up.
       required: [pid, title]
       properties:
         pid:
           type: string
-          description: The item's PID.
+          description: The item's PID; empty in a slot the caller may not see.
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         title:
           type: string
-          description: Display title.
+          description: Display title; empty in a slot the caller may not see.
         artist:
           type: string
           description: Display artist, when the item has one.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +16,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 Widget _host(FakeRepository repo, String entryId) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
@@ -82,6 +85,28 @@ FakeRepository _repoWith(ReviewEntryDetail detail) {
   ];
   repo.reviewEntryDetails[detail.id] = detail;
   return repo;
+}
+
+/// Decides at once, then holds the answer until [release] completes; the
+/// entry reads decided from then on.
+class _HeldDecisions extends FakeRepository {
+  final release = Completer<void>();
+
+  @override
+  Future<ReviewDecideResult> decideReviewEntry(
+    String entryId, {
+    required String action,
+    String? candidateMbid,
+  }) async {
+    final decided = await super.decideReviewEntry(
+      entryId,
+      action: action,
+      candidateMbid: candidateMbid,
+    );
+    await release.future;
+    reviewEntryDetails.remove(entryId);
+    return decided;
+  }
 }
 
 /// Tall enough for the diff to be laid out below the candidate list
@@ -351,6 +376,41 @@ void main() {
     expect(repo.decideReviewCalls, hasLength(1));
     expect(repo.decideReviewCalls.single.action, 'approve');
     expect(repo.decideReviewCalls.single.candidateMbid, 'mb-2');
+  });
+
+  testWidgets('a decision in flight draws busy and takes no second press', (
+    tester,
+  ) async {
+    final repo = _HeldDecisions();
+    final detail = _detail();
+    repo.reviewEntries = [
+      testReviewEntry(detail.id, status: detail.status, origin: detail.origin),
+    ];
+    repo.reviewEntryDetails[detail.id] = detail;
+    await _pump(tester, _host(repo, 'rv-1'));
+
+    WaxButton button(String id) =>
+        tester.widget<WaxButton>(waxControl<WaxButton>(id));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewApprove));
+    await tester.pump();
+    expect(button(SemanticsIds.reviewApprove).busy, isTrue);
+    expect(button(SemanticsIds.reviewSkip).onPressed, isNull);
+    expect(button(SemanticsIds.reviewDiscard).onPressed, isNull);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+      warnIfMissed: false,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewSkip),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    expect(repo.decideReviewCalls, hasLength(1));
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.single.action, 'approve');
+    expect(find.text('Decided: Applied'), findsOneWidget);
   });
 
   testWidgets('a decision refused for a reason keeps the server\'s words', (
@@ -665,6 +725,37 @@ void main() {
     expect(scroll.offset, offset);
   });
 
+  testWidgets('a cursor j moved off the open entry follows the next entry '
+      'opened', (tester) async {
+    final repo = FakeRepository()
+      ..reviewEntries = [
+        testReviewEntry('rv-1'),
+        testReviewEntry('rv-2', title: 'Second Album'),
+        testReviewEntry('rv-3', title: 'Third Album'),
+      ];
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+        child: routedHost(const Scaffold()),
+      ),
+    );
+    final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
+    router.go(WaxRoute.reviewEntry('rv-1'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pumpAndSettle();
+
+    router.go(WaxRoute.reviewEntry('rv-3'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+
+    expect(repo.decideReviewCalls.map((c) => c.entryId), ['rv-3']);
+  });
+
   testWidgets('the queue key approves the candidate the pane shows', (
     tester,
   ) async {
@@ -693,6 +784,45 @@ void main() {
 
     expect(repo.decideReviewCalls.single.action, 'approve');
     expect(repo.decideReviewCalls.single.candidateMbid, 'mb-2');
+  });
+
+  testWidgets('the queue key and the pane decide an entry once between '
+      'them', (tester) async {
+    final repo = _HeldDecisions();
+    final detail = _detail();
+    repo.reviewEntries = [
+      testReviewEntry(detail.id, status: detail.status, origin: detail.origin),
+    ];
+    repo.reviewEntryDetails[detail.id] = detail;
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+        child: routedHost(const ReviewSurface(openEntryId: 'rv-1')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.pump();
+    WaxButton button(String id) =>
+        tester.widget<WaxButton>(waxControl<WaxButton>(id));
+    expect(button(SemanticsIds.reviewApprove).busy, isTrue);
+    expect(button(SemanticsIds.reviewSkip).onPressed, isNull);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    expect(repo.decideReviewCalls, hasLength(1));
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.single.action, 'approve');
   });
 
   testWidgets('a narrow surface gives the entry the whole page', (

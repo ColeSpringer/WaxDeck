@@ -90,7 +90,111 @@ Backup _backup(String id, {String state = 'done'}) => Backup(
   finishedAt: state == 'done' ? DateTime.utc(2026, 7, 18, 3, 5) : null,
 );
 
+/// Records the body of every settings write.
+class _RecordedWrites extends FakeRepository {
+  final bodies = <AdminSettingsChange>[];
+
+  @override
+  Future<AdminSettings> putAdminSettings(AdminSettingsChange change) {
+    bodies.add(change);
+    return super.putAdminSettings(change);
+  }
+}
+
+String _boxText(WidgetTester tester, String key) =>
+    tester.widget<WaxTextField>(find.byKey(Key(key))).controller!.text;
+
 void main() {
+  testWidgets('a retention save sends only the box the admin changed', (
+    tester,
+  ) async {
+    final repo = _RecordedWrites();
+    await _pump(tester, repo);
+    Future<void> save(String count) async {
+      await tester.enterText(find.byKey(const Key('backup-keep-count')), count);
+      await tester.tap(find.byKey(const Key('backup-retention-save')));
+      await tester.pumpAndSettle();
+    }
+
+    await save('8');
+    expect(repo.bodies.single.backupKeepCount, 8);
+    expect(repo.bodies.single.backupKeepBytes, isNull);
+
+    // Another administrator sets the size while this one edits the count:
+    // the save must not put the stale size back.
+    repo.adminSettings = repo.adminSettings.copyWith(
+      backupKeepBytes: 50 * 1024 * 1024,
+    );
+    await save('9');
+    expect(repo.bodies.last.backupKeepCount, 9);
+    expect(repo.bodies.last.backupKeepBytes, isNull);
+    expect(repo.adminSettings.backupKeepBytes, 50 * 1024 * 1024);
+
+    // Back to the value the box first showed still counts as a change.
+    await save('5');
+    expect(repo.bodies.last.backupKeepCount, 5);
+  });
+
+  testWidgets('an untouched retention box takes what the server stored, and '
+      'a typed one keeps the typing', (tester) async {
+    final repo = _RecordedWrites();
+    await _pump(tester, repo);
+
+    // Another administrator changes both while this one types in the
+    // count, and the settings are read again.
+    repo.adminSettings = repo.adminSettings.copyWith(
+      backupKeepCount: 7,
+      backupKeepBytes: 50 * 1024 * 1024,
+    );
+    await tester.enterText(find.byKey(const Key('backup-keep-count')), '9');
+    ProviderScope.containerOf(
+      tester.element(find.byType(BackupsScreen)),
+    ).invalidate(adminSettingsProvider);
+    await tester.pumpAndSettle();
+
+    expect(_boxText(tester, 'backup-keep-mb'), '50');
+    expect(_boxText(tester, 'backup-keep-count'), '9');
+  });
+
+  testWidgets('a retention save compares each box with what is stored', (
+    tester,
+  ) async {
+    final repo = _RecordedWrites();
+    await _pump(tester, repo);
+    Future<void> save({String? count, String? mb}) async {
+      if (count != null) {
+        await tester.enterText(
+          find.byKey(const Key('backup-keep-count')),
+          count,
+        );
+      }
+      if (mb != null) {
+        await tester.enterText(find.byKey(const Key('backup-keep-mb')), mb);
+      }
+      await tester.tap(find.byKey(const Key('backup-retention-save')));
+      await tester.pumpAndSettle();
+    }
+
+    // Another administrator sets the size while this one saves the count:
+    // the answer brings it, and the untouched box shows it.
+    repo.adminSettings = repo.adminSettings.copyWith(
+      backupKeepBytes: 50 * 1024 * 1024,
+    );
+    await save(count: '8');
+    expect(repo.bodies.last.backupKeepBytes, isNull);
+    expect(_boxText(tester, 'backup-keep-mb'), '50');
+
+    // The stored value typed back is no change and sends nothing.
+    await save(mb: '50');
+    expect(repo.bodies.last.backupKeepBytes, isNull);
+
+    // The value the box showed first is stale now, so it is sent over the
+    // newer one.
+    await save(mb: '0');
+    expect(repo.bodies.last.backupKeepBytes, 0);
+    expect(repo.adminSettings.backupKeepBytes, 0);
+  });
+
   testWidgets('lists archives', (tester) async {
     final repo = FakeRepository();
     repo.backupsById['ba-1'] = _backup('ba-1');
@@ -141,6 +245,11 @@ void main() {
         of: dialog,
         matching: find.textContaining('applies at the next server restart'),
       ),
+      findsOneWidget,
+    );
+    // The house notice, not a box in some kind's hue.
+    expect(
+      find.descendant(of: dialog, matching: find.byType(WaxBanner)),
       findsOneWidget,
     );
     expect(find.textContaining('lastfm: barliman'), findsOneWidget);
@@ -424,6 +533,31 @@ void main() {
       expect(retry, findsNothing);
     },
   );
+
+  testWidgets('a list refused for good says why at once and offers to ask '
+      'again, which reads it', (tester) async {
+    final repo = FakeRepository()
+      ..listError = const WaxDeckApiException(
+        code: 'forbidden',
+        message: 'not an administrator',
+        statusCode: 403,
+      );
+    await _pumpWith(tester, repo, const []);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    // A refusal is final: asked once, and the card's retry is live.
+    expect(repo.backupReads, 1);
+    final retry = find.widgetWithText(WaxButton, 'Try again');
+    expect(retry, findsOneWidget);
+    expect(tester.widget<WaxButton>(retry).busy, isFalse);
+
+    repo.listError = null;
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+    expect(repo.backupReads, 2);
+    expect(find.text('No backups yet'), findsOneWidget);
+  });
 
   // With the app's own retry on: while an attempt runs a failing read is
   // AsyncLoading carrying the last error.

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,6 +49,214 @@ class _SlowList extends FakeRepository {
 _SlowList _heldAt(int chunk) => _SlowList()
   ..putUploadDataGate = Completer<void>()
   ..putUploadDataGateAt = chunk;
+
+/// [u] with the fields a server read moves.
+UploadSession _with(UploadSession u, {String? state, Duration? idle}) =>
+    UploadSession(
+      id: u.id,
+      fileName: u.fileName,
+      sizeBytes: u.sizeBytes,
+      receivedBytes: u.receivedBytes,
+      idle: idle ?? u.idle,
+      mediaType: u.mediaType,
+      libraryPid: u.libraryPid,
+      batchId: u.batchId,
+      state: state ?? u.state,
+      reviewEntryId: u.reviewEntryId,
+      duplicate: u.duplicate,
+      uploadedBy: u.uploadedBy,
+      createdAt: u.createdAt,
+      expiresAt: u.expiresAt,
+    );
+
+const _lost = WaxDeckApiException(code: 'transport', message: 'closed');
+
+/// Seals the session, then loses the answer on the wire.
+class _SealsThenDrops extends FakeRepository {
+  int completeCalls = 0;
+
+  @override
+  Future<UploadSession> completeUpload(String uploadId) async {
+    completeCalls++;
+    await super.completeUpload(uploadId);
+    throw _lost;
+  }
+}
+
+/// Loses the seal's answer while the server is still sealing: reads say
+/// receiving with idle zero until the [stagedAt]th, then staged, and the
+/// [gateAt]th waits on [gate]; [onRead] runs at each, and the first
+/// [wireDownFor] fail on the wire. A complete meanwhile is the server's
+/// "still being completed" conflict.
+class _SealStillRunning extends FakeRepository {
+  _SealStillRunning({
+    this.gateAt = 2,
+    this.stagedAt = 3,
+    this.wireDownFor = 0,
+    this.onRead,
+  });
+
+  final int gateAt;
+  final int stagedAt;
+  final int wireDownFor;
+  final void Function()? onRead;
+  int completeCalls = 0;
+  int reads = 0;
+  bool running = false;
+  final gate = Completer<void>();
+  final waiting = Completer<void>();
+
+  @override
+  Future<UploadSession> completeUpload(String uploadId) async {
+    completeCalls++;
+    if (running) {
+      throw const WaxDeckApiException(
+        code: 'conflict',
+        message: 'the upload is still being completed; ask again shortly',
+        statusCode: 409,
+      );
+    }
+    running = true;
+    uploadsById[uploadId] = _with(uploadsById[uploadId]!, idle: Duration.zero);
+    throw _lost;
+  }
+
+  @override
+  Future<UploadSession> getUpload(String uploadId) async {
+    if (!running) return super.getUpload(uploadId);
+    reads++;
+    onRead?.call();
+    if (reads == gateAt) {
+      waiting.complete();
+      await gate.future;
+    }
+    if (reads <= wireDownFor) throw _lost;
+    if (reads >= stagedAt) {
+      running = false;
+      uploadsById[uploadId] = _with(uploadsById[uploadId]!, state: 'staged');
+    }
+    return uploadsById[uploadId]!;
+  }
+}
+
+/// The seal never reached the server: the session waits, idle, for one.
+class _SealNeverArrived extends FakeRepository {
+  int completeCalls = 0;
+  bool fail = true;
+
+  @override
+  Future<UploadSession> completeUpload(String uploadId) async {
+    completeCalls++;
+    if (!fail) return super.completeUpload(uploadId);
+    uploadsById[uploadId] = _with(
+      uploadsById[uploadId]!,
+      idle: const Duration(seconds: 5),
+    );
+    throw _lost;
+  }
+}
+
+/// The seal lands and its answer is lost; the first [failing] reads after
+/// it fail on the wire too (every one, when null), [onRead] running at
+/// each.
+class _SealAndReadLost extends _SealsThenDrops {
+  _SealAndReadLost({this.failing, this.onRead});
+
+  final int? failing;
+  final void Function()? onRead;
+
+  @override
+  Future<UploadSession> getUpload(String uploadId) async {
+    getUploadCalls++;
+    onRead?.call();
+    if (failing case final n? when getUploadCalls > n) {
+      return uploadsById[uploadId]!;
+    }
+    throw _lost;
+  }
+}
+
+/// A link that cannot move a chunk over [fits] bytes inside the stall:
+/// the client cuts such a send as `transport-timeout`. Records every PUT's
+/// size, cut or taken, and runs [onTaken] after each one taken.
+class _NarrowLink extends FakeRepository {
+  _NarrowLink(this.fits);
+
+  int fits;
+  void Function()? onTaken;
+  final sizes = <int>[];
+
+  @override
+  Future<UploadSession> putUploadData(
+    String uploadId, {
+    required int offset,
+    required Uint8List bytes,
+  }) async {
+    sizes.add(bytes.length);
+    if (bytes.length > fits) {
+      throw const WaxDeckApiException(
+        code: 'transport-timeout',
+        message: 'the chunk stopped moving',
+      );
+    }
+    final session = await super.putUploadData(
+      uploadId,
+      offset: offset,
+      bytes: bytes,
+    );
+    onTaken?.call();
+    return session;
+  }
+}
+
+/// Takes the [at]th chunk, then holds its answer until [release] opens:
+/// an append that committed before a discard, answered after it.
+class _AnswerHeldAt extends FakeRepository {
+  _AnswerHeldAt(this.at);
+
+  final int at;
+  final reached = Completer<void>();
+  final release = Completer<void>();
+  var _puts = 0;
+
+  @override
+  Future<UploadSession> putUploadData(
+    String uploadId, {
+    required int offset,
+    required Uint8List bytes,
+  }) async {
+    final session = await super.putUploadData(
+      uploadId,
+      offset: offset,
+      bytes: bytes,
+    );
+    if (++_puts == at) {
+      reached.complete();
+      await release.future;
+    }
+    return session;
+  }
+}
+
+/// [_heldAt] whose delete either takes the session and then holds its
+/// answer until [deleted] opens, or, with [deleteFails], refuses on the
+/// wire and keeps it.
+class _HeldDelete extends _SlowList {
+  _HeldDelete({this.deleteFails = false}) {
+    putUploadDataGate = Completer<void>();
+    putUploadDataGateAt = 2;
+  }
+
+  final bool deleteFails;
+  final deleted = Completer<void>();
+
+  @override
+  Future<void> deleteUpload(String uploadId) async {
+    if (deleteFails) throw _lost;
+    await super.deleteUpload(uploadId);
+    await deleted.future;
+  }
+}
 
 UploadSession _session(String id) => UploadSession(
   id: id,
@@ -644,6 +853,70 @@ void main() {
     });
   });
 
+  group('a link too slow to move a whole chunk inside the stall', () {
+    const kib = 1024;
+
+    Future<void> upload(ProviderContainer container, int size) {
+      final file = File('${dir.path}/slow.flac')
+        ..writeAsBytesSync(List.filled(size, 5));
+      return container
+          .read(uploadsProvider.notifier)
+          .uploadFromPath(
+            fileName: 'slow.flac',
+            path: file.path,
+            mediaType: 'music',
+          );
+    }
+
+    test(
+      'sends it again in halves, and keeps to the size that moved',
+      () async {
+        final repo = _NarrowLink(256 * kib);
+        final container = host(repo);
+        await container.read(uploadsProvider.future);
+
+        await upload(container, UploadsController.chunkBytes + 512 * kib);
+
+        expect(repo.sizes, [
+          1024 * kib,
+          512 * kib,
+          for (var i = 0; i < 6; i++) 256 * kib,
+        ]);
+        expect(repo.uploadsById.values.single.state, 'staged');
+      },
+    );
+
+    test('never under 64 KiB, and stops once its tries are spent', () async {
+      final repo = _NarrowLink(128 * kib);
+      // The link narrows to nothing once the first piece is through.
+      repo.onTaken = () => repo.fits = 0;
+      final container = host(repo);
+      await container.read(uploadsProvider.future);
+
+      await expectLater(
+        upload(container, UploadsController.chunkBytes),
+        throwsA(
+          isA<WaxDeckApiException>().having(
+            (e) => e.code,
+            'code',
+            'transport-timeout',
+          ),
+        ),
+      );
+
+      expect(repo.sizes, [
+        1024 * kib,
+        512 * kib,
+        256 * kib,
+        128 * kib,
+        128 * kib,
+        64 * kib,
+        64 * kib,
+        64 * kib,
+      ]);
+    });
+  });
+
   test("a later page's rows are judged by when that page was read, and a "
       'row read again leaves the rest', () async {
     var now = Duration.zero;
@@ -693,6 +966,339 @@ void main() {
     await container.read(uploadsProvider.notifier).readAgain(['up-2']);
     state = container.read(uploadsProvider).value!;
     expect(state.uploads.map((u) => u.id), ['up-1', 'up-3']);
+  });
+
+  group('a seal whose answer is lost', () {
+    late File file;
+
+    setUp(() {
+      file = File('${dir.path}/a.flac')..writeAsBytesSync(List.filled(64, 1));
+    });
+
+    UploadPhase phase(ProviderContainer c) {
+      final row = c.read(uploadsProvider).value!.uploads.single;
+      return uploadPhaseOf(row, c.read(liveTransfersProvider)[row.id]);
+    }
+
+    Future<void> upload(ProviderContainer c) => c
+        .read(uploadsProvider.notifier)
+        .uploadFromPath(
+          fileName: 'a.flac',
+          path: file.path,
+          mediaType: 'music',
+        );
+
+    test('settles when the seal landed', () async {
+      final repo = _SealsThenDrops();
+      final c = host(repo);
+      await c.read(uploadsProvider.future);
+
+      await upload(c);
+
+      expect(
+        phase(c),
+        isA<UploadSettled>().having((p) => p.state, 'state', 'staged'),
+      );
+      final id = c.read(uploadsProvider).value!.uploads.single.id;
+      expect(c.read(liveTransfersProvider)[id]!.status, TransferStatus.sealed);
+      await c.read(uploadsProvider.notifier).retry(id);
+      expect(repo.completeCalls, 1);
+      expect(repo.getUploadCalls, 1);
+    });
+
+    test('reads Finishing while the server still seals it, refuses Retry, '
+        'then settles', () async {
+      final repo = _SealStillRunning();
+      final c = host(repo);
+      await c.read(uploadsProvider.future);
+
+      Object? thrown;
+      final run = upload(
+        c,
+      ).then<void>((_) {}, onError: (Object e) => thrown = e);
+      await Future.any([repo.waiting.future, run]);
+      expect(thrown, isNull, reason: 'the lost answer stopped the transfer');
+      expect(phase(c), isA<UploadSealing>());
+      final id = c.read(uploadsProvider).value!.uploads.single.id;
+      await c.read(uploadsProvider.notifier).retry(id);
+      expect(repo.completeCalls, 1, reason: 'a Retry meanwhile is refused');
+      repo.gate.complete();
+      await run;
+
+      expect(thrown, isNull);
+      expect(
+        phase(c),
+        isA<UploadSettled>().having((p) => p.state, 'state', 'staged'),
+      );
+      expect(repo.completeCalls, 1);
+    });
+
+    test('stops for Retry when it never reached the server', () async {
+      final repo = _SealNeverArrived();
+      final c = host(repo);
+      await c.read(uploadsProvider.future);
+
+      await expectLater(upload(c), throwsA(isA<WaxDeckApiException>()));
+      expect(phase(c), isA<UploadStalled>());
+      expect(repo.getUploadCalls, 1, reason: 'one read, no wait');
+
+      repo.fail = false;
+      final id = c.read(uploadsProvider).value!.uploads.single.id;
+      await c.read(uploadsProvider.notifier).retry(id);
+      expect(
+        phase(c),
+        isA<UploadSettled>().having((p) => p.state, 'state', 'staged'),
+      );
+    });
+
+    test('keeps reading past where thirty reads used to stop, and settles '
+        'once the seal lands', () async {
+      final repo = _SealStillRunning(gateAt: 35, stagedAt: 45);
+      final c = host(repo);
+      await c.read(uploadsProvider.future);
+
+      Object? thrown;
+      final run = upload(
+        c,
+      ).then<void>((_) {}, onError: (Object e) => thrown = e);
+      await Future.any([repo.waiting.future, run]);
+      expect(thrown, isNull, reason: 'the reads stopped short of the seal');
+      expect(phase(c), isA<UploadSealing>());
+      repo.gate.complete();
+      await run;
+
+      expect(thrown, isNull);
+      expect(
+        phase(c),
+        isA<UploadSettled>().having((p) => p.state, 'state', 'staged'),
+      );
+      expect(repo.completeCalls, 1);
+    });
+
+    test('asks again after a read the wire fails, and settles', () async {
+      final repo = _SealAndReadLost(failing: 2);
+      final c = host(repo);
+      await c.read(uploadsProvider.future);
+
+      await upload(c);
+
+      expect(
+        phase(c),
+        isA<UploadSettled>().having((p) => p.state, 'state', 'staged'),
+      );
+      expect(repo.getUploadCalls, 3);
+    });
+
+    test('says it cannot reach the server while reads fail on the wire, '
+        'until one answers', () async {
+      final repo = _SealStillRunning(gateAt: 0, stagedAt: 4, wireDownFor: 2);
+      final c = host(repo);
+      await c.read(uploadsProvider.future);
+      final seen = <UploadPhase>[];
+      c.listen(liveTransfersProvider, (_, live) {
+        for (final row in c.read(uploadsProvider).value?.uploads ?? []) {
+          seen.add(uploadPhaseOf(row, live[row.id]));
+        }
+      });
+
+      await upload(c);
+
+      // Sealing, two reads lost (said once), one answering still sealing,
+      // then the seal landed.
+      expect(
+        [
+          for (final p in seen)
+            if (p is UploadSealing) p.unreachable,
+        ],
+        [false, true, false],
+      );
+      expect(
+        seen.last,
+        isA<UploadSettled>().having((p) => p.state, 'state', 'staged'),
+      );
+      expect(repo.reads, 4);
+    });
+
+    test('stops for Retry once the seal\'s budget runs out unread', () async {
+      var now = Duration.zero;
+      final repo = _SealAndReadLost(
+        onRead: () => now += const Duration(minutes: 10),
+      );
+      final c = host(repo, monotonic: () => now);
+      await c.read(uploadsProvider.future);
+
+      await expectLater(upload(c), throwsA(isA<WaxDeckApiException>()));
+      expect(phase(c), isA<UploadStalled>());
+      expect(now, lessThan(const Duration(minutes: 40)));
+    });
+
+    test('stops for Retry once the seal\'s budget runs out with the server '
+        'still sealing', () async {
+      var now = Duration.zero;
+      final repo = _SealStillRunning(
+        gateAt: 0,
+        stagedAt: 1000,
+        onRead: () => now += const Duration(minutes: 10),
+      );
+      final c = host(repo, monotonic: () => now);
+      await c.read(uploadsProvider.future);
+
+      await expectLater(upload(c), throwsA(isA<WaxDeckApiException>()));
+      expect(phase(c), isA<UploadStalled>());
+      expect(repo.reads, inInclusiveRange(3, 4));
+    });
+  });
+
+  group('a discard while the transfer runs', () {
+    late File file;
+
+    setUp(() {
+      // Three chunks, so a held second one has one after it.
+      file = File(
+        '${dir.path}/long.flac',
+      )..writeAsBytesSync(List.filled(UploadsController.chunkBytes * 2 + 7, 3));
+    });
+
+    Future<bool> start(ProviderContainer container) => container
+        .read(uploadsProvider.notifier)
+        .uploadFromPath(
+          fileName: 'long.flac',
+          path: file.path,
+          mediaType: 'music',
+        );
+
+    test('ends the send quietly, with nothing sent after it', () async {
+      final repo = _heldAt(2);
+      final container = host(repo);
+      await container.read(uploadsProvider.future);
+      Object? thrown;
+      bool? sent;
+      final run = start(
+        container,
+      ).then<void>((value) => sent = value, onError: (Object e) => thrown = e);
+      await repo.putUploadDataReached.future;
+      final id = repo.uploadsById.keys.single;
+
+      await container.read(uploadsProvider.notifier).discard(id);
+      repo.putUploadDataGate!.complete();
+      await run;
+
+      expect(thrown, isNull, reason: 'a discard is no failure to report');
+      expect(sent, isFalse, reason: 'nothing was sent to be counted');
+      expect(repo.putUploadDataCalls, hasLength(2));
+      expect(container.read(liveTransfersProvider), isEmpty);
+      final listed = await container.read(uploadsProvider.future);
+      expect(listed.uploads.map((u) => u.id), isNot(contains(id)));
+    });
+
+    test('a chunk failing while the delete is out is no failure', () async {
+      final repo = _HeldDelete();
+      final container = host(repo);
+      await container.read(uploadsProvider.future);
+      Object? thrown;
+      bool? sent;
+      final run = start(
+        container,
+      ).then<void>((value) => sent = value, onError: (Object e) => thrown = e);
+      await repo.putUploadDataReached.future;
+      final id = repo.uploadsById.keys.single;
+
+      final discarding = container.read(uploadsProvider.notifier).discard(id);
+      // The server has the delete; its answer is still on the way when
+      // the chunk meets the session gone.
+      repo.putUploadDataGate!.complete();
+      await run;
+      expect(thrown, isNull, reason: 'a discard is no failure to report');
+      expect(sent, isFalse);
+
+      repo.deleted.complete();
+      await discarding;
+      expect(repo.putUploadDataCalls, hasLength(2));
+      expect(container.read(liveTransfersProvider), isEmpty);
+    });
+
+    test('a delete that fails leaves the send stopped, for Retry', () async {
+      final repo = _HeldDelete(deleteFails: true);
+      final container = host(repo);
+      await container.read(uploadsProvider.future);
+      bool? sent;
+      final run = start(container).then<void>((value) => sent = value);
+      await repo.putUploadDataReached.future;
+      final id = repo.uploadsById.keys.single;
+
+      await expectLater(
+        container.read(uploadsProvider.notifier).discard(id),
+        throwsA(isA<WaxDeckApiException>()),
+      );
+      repo.putUploadDataGate!.complete();
+      await run;
+      expect(sent, isFalse, reason: 'the send stopped at the discard');
+      expect(repo.putUploadDataCalls, hasLength(2));
+      final row = container.read(uploadsProvider).value!.uploads.single;
+      expect(
+        uploadPhaseOf(row, container.read(liveTransfersProvider)[id]),
+        isA<UploadStalled>(),
+      );
+
+      await container.read(uploadsProvider.notifier).retry(id);
+      expect(repo.putUploadDataCalls, hasLength(3));
+      expect(repo.uploadsById[id]!.state, 'staged');
+    });
+
+    test('a send a failed delete stopped stays stopped when its chunk then '
+        'fails on the wire', () async {
+      final repo = _HeldDelete(deleteFails: true);
+      final container = host(repo);
+      await container.read(uploadsProvider.future);
+      bool? sent;
+      final run = start(container).then<void>((value) => sent = value);
+      await repo.putUploadDataReached.future;
+      final id = repo.uploadsById.keys.single;
+
+      await expectLater(
+        container.read(uploadsProvider.notifier).discard(id),
+        throwsA(isA<WaxDeckApiException>()),
+      );
+      // The wire that failed the delete fails the chunk out meanwhile too.
+      repo.uploadError = _lost;
+      repo.putUploadDataGate!.complete();
+      await run;
+      expect(sent, isFalse);
+      final row = container.read(uploadsProvider).value!.uploads.single;
+      expect(
+        uploadPhaseOf(row, container.read(liveTransfersProvider)[id]),
+        isA<UploadStalled>(),
+      );
+
+      repo.uploadError = null;
+      await container.read(uploadsProvider.notifier).retry(id);
+      expect(repo.uploadsById[id]!.state, 'staged');
+    });
+
+    test('a chunk answered after it does not bring the row back', () async {
+      final repo = _AnswerHeldAt(2);
+      final container = host(repo);
+      await container.read(uploadsProvider.future);
+      Object? thrown;
+      final run = start(
+        container,
+      ).then<void>((_) {}, onError: (Object e) => thrown = e);
+      await repo.reached.future;
+      final id = repo.uploadsById.keys.single;
+
+      await container.read(uploadsProvider.notifier).discard(id);
+      await container.read(uploadsProvider.future);
+      repo.release.complete();
+      await run;
+
+      expect(thrown, isNull);
+      expect(repo.putUploadDataCalls, hasLength(2));
+      expect(
+        container.read(uploadsProvider).value!.uploads.map((u) => u.id),
+        isNot(contains(id)),
+      );
+      expect(container.read(liveTransfersProvider), isEmpty);
+    });
   });
 
   group('a transfer that stopped', () {

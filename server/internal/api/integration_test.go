@@ -230,6 +230,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), engine harnessEn
 		Sink:             &ConnectSink{Svc: svc},
 		Bases:            connect.Bases{LAN: h.lanBase, Loopback: h.lanBase},
 		InvalidatePlayer: hub.MarkPlayerAll,
+		EntriesVisible:   svc.QueueEntriesVisible,
 	})
 	if err != nil {
 		t.Fatal(err)

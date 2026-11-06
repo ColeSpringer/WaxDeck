@@ -364,11 +364,12 @@ void main() {
     expect(h.container.queue.currentIndex, 1);
     expect(_ofType(h.sent, 'session-report').last['index'], 1);
 
-    // Past the end is a refusal the controller can render.
+    // Past the end is a refusal the controller can render, by its code.
     await _cmd(h, 'next', id: 'e2');
     final refusal = _ofType(h.sent, 'cmd-result').last;
     expect(refusal['id'], 'e2');
     expect(refusal['ok'], isFalse);
+    expect(refusal['code'], 'queue-end');
     expect(refusal['message'], 'already at the end of the queue');
 
     await _cmd(h, 'previous', id: 'e3');
@@ -736,7 +737,7 @@ void main() {
       final result = _ofType(h.sent, 'cmd-result').last;
       expect(result['id'], 'e3');
       expect(result['ok'], isFalse);
-      expect(result['code'], 'invalid-request');
+      expect(result['code'], 'endpoint-idle');
     },
   );
 
@@ -793,6 +794,7 @@ void main() {
     final result = _ofType(h.sent, 'cmd-result').last;
     expect(result['id'], 'e2');
     expect(result['ok'], isFalse);
+    expect(result['code'], 'endpoint-idle');
     expect(result['message'], 'nothing is playing on this device');
   });
 

@@ -775,6 +775,100 @@ void main() {
       final row = tester.widget<MediaListRow>(find.byType(MediaListRow).first);
       expect(row.data.progress, closeTo(0.4, 0.001));
     });
+
+    testWidgets('a pause from an earlier run, resumed with the gate shut, '
+        'reads held', (tester) async {
+      final gate = WifiOnlyGate(connectivity: _Net(), wifiOnly: () => true);
+      addTearDown(gate.dispose);
+      await pump(
+        tester,
+        stored: <DownloadedItem>[
+          // What the manager recovers a pause as: paused, and not active.
+          const DownloadedItem(
+            pid: _book,
+            sizeBytes: 4194304,
+            files: 3,
+            complete: false,
+            paused: true,
+          ),
+        ],
+        gate: gate,
+      );
+      MediaTileData row() =>
+          tester.widget<MediaListRow>(find.byType(MediaListRow).first).data;
+      expect(row().trailingDetail, isNull);
+
+      await _tap(tester, SemanticsIds.downloadResume(_book));
+
+      expect(downloads.resumed, [_book]);
+      expect(_byId(SemanticsIds.downloadPause(_book)), findsOneWidget);
+      expect(row().trailingDetail, 'Waiting for wifi');
+    });
+
+    testWidgets('a pause from an earlier visit, resumed with the gate shut, '
+        'reads held', (tester) async {
+      final gate = WifiOnlyGate(connectivity: _Net(), wifiOnly: () => true);
+      addTearDown(gate.dispose);
+      downloads.setStored(<DownloadedItem>[
+        const DownloadedItem(
+          pid: _book,
+          sizeBytes: 4194304,
+          files: 3,
+          complete: false,
+          active: true,
+        ),
+      ]);
+      final db = await _mirror();
+      final repo = FakeRepository();
+      final visible = ValueNotifier<bool>(true);
+      addTearDown(visible.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            repositoryProvider.overrideWithValue(repo),
+            audioEngineProvider.overrideWithValue(FakeEngine()),
+            credentialStoreProvider.overrideWithValue(
+              InMemoryCredentialStore(),
+            ),
+            mirrorDatabaseProvider.overrideWithValue(db),
+            downloadManagerProvider.overrideWithValue(downloads),
+            artworkStoreProvider.overrideWithValue(artwork),
+            transferGateProvider.overrideWithValue(gate),
+            syncEngineProvider.overrideWithValue(
+              SyncEngine(
+                db: db,
+                repository: repo,
+                channelFactory: deadChannelFactory(),
+              ),
+            ),
+          ],
+          child: routedHost(
+            ValueListenableBuilder<bool>(
+              valueListenable: visible,
+              builder: (context, shown, _) =>
+                  shown ? const DownloadsScreen() : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      MediaTileData row() =>
+          tester.widget<MediaListRow>(find.byType(MediaListRow).first).data;
+      await _tap(tester, SemanticsIds.downloadPause(_book));
+      expect(row().trailingDetail, isNull);
+
+      // Leaving the screen takes the progress fold with it; the list of
+      // what is held outlives it.
+      visible.value = false;
+      await tester.pumpAndSettle();
+      visible.value = true;
+      await tester.pumpAndSettle();
+      await _tap(tester, SemanticsIds.downloadResume(_book));
+
+      expect(downloads.resumed, [_book]);
+      expect(_byId(SemanticsIds.downloadPause(_book)), findsOneWidget);
+      expect(row().trailingDetail, 'Waiting for wifi');
+    });
   });
 }
 

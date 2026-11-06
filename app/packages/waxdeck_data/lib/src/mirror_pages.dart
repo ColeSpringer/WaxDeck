@@ -95,12 +95,11 @@ Future<List<String>> mirrorInProgressPids(
 /// names the old pid. Null when the mirror holds [pid] itself, or
 /// nothing under its ULID.
 Future<String?> mirrorRenamedPid(MirrorDatabase db, String pid) async {
-  final dash = pid.indexOf('-');
   final t = db.mirrorItems;
   final row =
       await (db.selectOnly(t)
             ..addColumns([t.pid])
-            ..where(t.ulid.equals(dash < 0 ? pid : pid.substring(dash + 1))))
+            ..where(t.ulid.equals(ulidOf(pid))))
           .getSingleOrNull();
   final now = row?.read(t.pid);
   return now == pid ? null : now;

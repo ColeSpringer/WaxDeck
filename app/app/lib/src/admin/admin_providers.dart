@@ -10,17 +10,35 @@ import '../providers.dart';
 /// the server settings section and the backups screen's retention
 /// fields, so both see one stored value.
 class AdminSettingsController extends AsyncNotifier<AdminSettings> {
+  /// The write in flight, so a second change queues behind it and the
+  /// answers land in order.
+  Future<void>? _pending;
+
   @override
   Future<AdminSettings> build() =>
       ref.watch(repositoryProvider).getAdminSettings();
 
-  /// Replaces the stored settings; rethrows the structured error so
-  /// callers can surface it next to the control that changed.
-  Future<void> save(AdminSettings settings) async {
-    final stored = await ref
-        .read(repositoryProvider)
-        .putAdminSettings(settings);
-    state = AsyncData(stored);
+  /// Stores the settings [change] names and nothing else, so another
+  /// administrator's edits to the rest stand; rethrows the structured
+  /// error so callers can surface it next to the control that changed.
+  /// The answer is the whole stored document.
+  Future<void> edit(AdminSettingsChange change) {
+    final ahead = _pending;
+    final run = () async {
+      if (ahead != null) {
+        try {
+          await ahead;
+        } on Object {
+          // A failure ahead in the queue is that caller's to report.
+        }
+      }
+      final stored = await ref
+          .read(repositoryProvider)
+          .putAdminSettings(change);
+      if (ref.mounted) state = AsyncData(stored);
+    }();
+    _pending = run;
+    return run;
   }
 }
 
@@ -47,6 +65,7 @@ class TranscodingLimitsController extends AsyncNotifier<TranscodingLimits> {
 final transcodingLimitsProvider =
     AsyncNotifierProvider<TranscodingLimitsController, TranscodingLimits>(
       TranscodingLimitsController.new,
+      retry: retryUnlessRefused,
     );
 
 /// What the transcoder is doing right now, read once when the settings
@@ -130,6 +149,7 @@ class BackupsController extends AsyncNotifier<List<Backup>> {
 
 final backupsProvider = AsyncNotifierProvider<BackupsController, List<Backup>>(
   BackupsController.new,
+  retry: retryUnlessRefused,
 );
 
 /// Recent catalog jobs, newest first, after any still running that newer
@@ -337,11 +357,13 @@ final thumbnailCacheProvider =
 final signupRequestsProvider = FutureProvider<List<UserAccount>>(
   (ref) async =>
       (await ref.watch(repositoryProvider).listSignupRequests()).users,
+  retry: retryUnlessRefused,
 );
 
 /// Every invite, live and spent.
 final invitesProvider = FutureProvider<List<Invite>>(
   (ref) => ref.watch(repositoryProvider).listInvites(),
+  retry: retryUnlessRefused,
 );
 
 /// How often a running pass is asked after: no event says it ended.

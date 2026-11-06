@@ -1979,10 +1979,6 @@
   "@playlistsLoadError": {
     "description": "Title of the error state when the playlists could not be read."
   },
-  "playlistsLoadErrorSentence": "Could not load your playlists.",
-  "@playlistsLoadErrorSentence": {
-    "description": "The same failure as a sentence in the add-to-playlist sheet, which has no room for an error state and says it in a line."
-  },
   "playlistsNew": "New playlist",
   "@playlistsNew": {
     "description": "Action that makes a playlist: the toolbar button, the empty state's button, and the row at the foot of the add-to-playlist sheet."

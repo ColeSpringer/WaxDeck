@@ -59,6 +59,14 @@ func (uc *UserCtx) ContentUnrestricted() bool {
 	return uc.Explicit && len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0
 }
 
+// seesEverything reports whether every item read answers this caller:
+// every library, explicit content, and no tag rules, which every
+// administrator holds. Not fullReach, which leaves the explicit toggle
+// out: a surface that can hold episodes asks this.
+func seesEverything(uc *UserCtx) bool {
+	return uc.AllLibraries && uc.ContentUnrestricted()
+}
+
 // ScopeKey fingerprints everything that narrows what the caller sees -
 // role, library grants, the explicit toggle, tag rules - so a cache of
 // caller-scoped answers misses the moment any of it changes.
@@ -402,6 +410,23 @@ func (l *Library) podcastLibrary(ctx context.Context) (pid string, read bool) {
 		return pid, false
 	}
 	return fresh, true
+}
+
+// podcastLibraryMayHaveLanded drops a library table that does not hold
+// the podcast library at the configured directory, so the next lookup
+// reloads it at once: the catalog creates that library on the first
+// download, and a miss holds the table's next reload off for a second,
+// which would tell every request meanwhile there is none.
+func (l *Library) podcastLibraryMayHaveLanded() {
+	if l.podcastDir == "" {
+		return
+	}
+	l.libDirs.mu.Lock()
+	known := l.libDirs.podcastAtRoot
+	l.libDirs.mu.Unlock()
+	if !known {
+		l.invalidateAttribution()
+	}
 }
 
 // getVisibleItem is getItem plus the visibility check: an item outside

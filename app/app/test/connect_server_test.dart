@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
+import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/connect_server_screen.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/auth/server_address.dart';
@@ -202,6 +203,14 @@ void main() {
         child: routedHost(const ConnectServerScreen()),
       ),
     );
+    // The app has read the session by the time this screen is reachable,
+    // and the stored token is dead: its account's covers went then.
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ConnectServerScreen)),
+    );
+    await tester.runAsync(() => container.read(authControllerProvider.future));
+    final forgottenAtLaunch = artwork.forgotten;
+    expect(forgottenAtLaunch, 1);
 
     await tester.tap(find.byKey(const Key(SemanticsIds.connectServerForget)));
     await tester.pumpAndSettle();
@@ -223,7 +232,7 @@ void main() {
       reason: 'its bytes go before its record',
     );
     expect(artwork.unpinned, ['tr-A']);
-    expect(artwork.forgotten, 1);
+    expect(artwork.forgotten, forgottenAtLaunch + 1);
     expect(await db.select(db.mirrorItems).get(), isEmpty);
     expect(store.serverAddress, isNull);
     expect(store.token, isNull);

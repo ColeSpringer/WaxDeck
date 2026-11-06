@@ -157,11 +157,11 @@ export class Books extends Surface {
   /// Mark a book finished, which the server derives from a position
   /// write at the book's own end.
   ///
-  /// The one in this file where the gesture matters most: marking
-  /// finished cannot be undone (docs/bugs.md - the snack's Undo gives
-  /// the position back and leaves the flag set), so a click that lands
-  /// one row off does something permanent to the account and nothing
-  /// says so. `chooseFromMenu` is what holds the row still first.
+  /// The one in this file where the gesture matters most: the rows either
+  /// side of it in the menu pin the book or start it over, so a click
+  /// that lands one row off changes the account's state for the book and
+  /// the spec fails later, somewhere else. `chooseFromMenu` is what holds
+  /// the row still first.
   async markFinished(): Promise<void> {
     const page = this.ctx.page;
     await chooseFromMenu(

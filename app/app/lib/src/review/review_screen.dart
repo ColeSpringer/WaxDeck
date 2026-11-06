@@ -11,6 +11,8 @@ import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../settings/client_prefs.dart';
 import '../shell/async_box_face.dart';
+import '../shell/in_flight.dart';
+import '../shell/pending_actions.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -108,7 +110,11 @@ class ReviewScreen extends ConsumerStatefulWidget {
   ConsumerState<ReviewScreen> createState() => _ReviewScreenState();
 }
 
-class _ReviewScreenState extends ConsumerState<ReviewScreen> {
+/// Every decision holds its entries' locks in [pendingActionsProvider],
+/// shared with the pane: an entry's own (its keys) and a bulk one, which
+/// also runs here, one at a time, keyed by [_bulkWork].
+class _ReviewScreenState extends ConsumerState<ReviewScreen>
+    with InFlight<ReviewScreen, String> {
   /// Fixed row height so keyboard selection can scroll by arithmetic
   /// instead of hunting for offscreen render objects.
   static const _rowExtent = 76.0;
@@ -235,29 +241,35 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     String entryId,
     String action, {
     String? candidateMbid,
-  }) async {
-    final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    try {
-      final warnings = await ref
-          .read(reviewQueueProvider.notifier)
-          .decide(entryId, action, candidateMbid: candidateMbid);
-      // The server's own words: a warning names the file or the field it
-      // is about, which no table sentence can.
-      if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
-    } on WaxDeckApiException catch (e) {
-      // A `conflict` names the file the library cannot take, which the
-      // table's "something changed first" would hide.
-      showRefusal(
-        messenger,
-        l10n,
-        explainRefusal(l10n, e),
-        refused: {entryId: e.code},
-        mounted: () => mounted,
-        retry: (_) => _decide(entryId, action, candidateMbid: candidateMbid),
-      );
-    }
-  }
+  }) => ref.read(pendingActionsProvider.notifier).runAll(
+    [
+      PendingAction.reviewEntry(entryId),
+      PendingAction.reviewAction(entryId, action),
+    ],
+    () async {
+      final l10n = context.l10n;
+      final messenger = ref.read(shellMessengerProvider.notifier);
+      try {
+        final warnings = await ref
+            .read(reviewQueueProvider.notifier)
+            .decide(entryId, action, candidateMbid: candidateMbid);
+        // The server's own words: a warning names the file or the field it
+        // is about, which no table sentence can.
+        if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
+      } on WaxDeckApiException catch (e) {
+        // A `conflict` names the file the library cannot take, which the
+        // table's "something changed first" would hide.
+        showRefusal(
+          messenger,
+          l10n,
+          explainRefusal(l10n, e),
+          refused: {entryId: e.code},
+          mounted: () => mounted,
+          retry: (_) => _decide(entryId, action, candidateMbid: candidateMbid),
+        );
+      }
+    },
+  );
 
   /// Whether the list leaves [action] on [entry] to its pane: the pane
   /// holds approving and marking unofficial back from a unit whose files
@@ -270,11 +282,20 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   /// How many of the server's warnings one bulk snackbar spells out.
   static const _bulkWarningLines = 3;
 
-  Future<void> _decideBulk(String action, [List<String>? only]) async {
+  /// The in-flight key of a bulk [action], apart from every entry id.
+  static String _bulkWork(String action) => 'bulk-$action';
+
+  Future<void> _decideBulk(String action, [List<String>? only]) {
     final chosen = only ?? _checked.toList();
-    if (chosen.isEmpty) return;
-    final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    if (chosen.isEmpty) return Future.value();
+    return runAs(_bulkWork(action), () => _sendBulk(action, chosen, only));
+  }
+
+  Future<void> _sendBulk(
+    String action,
+    List<String> chosen,
+    List<String>? only,
+  ) {
     // What the a and u keys open rather than decide stays undecided
     // here, and is counted: each is for its own pane.
     final held = {
@@ -285,7 +306,23 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       for (final id in chosen)
         if (!held.contains(id)) id,
     ];
-    final left = chosen.length - ids.length;
+    // Every entry it sends, or none: one whose own decision is out holds
+    // the whole bulk back rather than going twice.
+    return ref.read(pendingActionsProvider.notifier).runAll([
+      for (final id in ids) PendingAction.reviewEntry(id),
+    ], () => _sendClaimed(action, ids, chosen.length - ids.length, only));
+  }
+
+  /// Sends [ids] and says how it went, [left] being the entries held back
+  /// for their panes.
+  Future<void> _sendClaimed(
+    String action,
+    List<String> ids,
+    int left,
+    List<String>? only,
+  ) async {
+    final l10n = context.l10n;
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final outcomes = ids.isEmpty
           ? const <ReviewBulkOutcome>[]
@@ -370,21 +407,25 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     });
   }
 
-  /// Keeps the cursor on a row that exists, and on the entry the pane
-  /// is showing. Deciding the last row shortens the queue under it, and
-  /// a tap has to move it or the next j resumes from somewhere else.
+  /// The entry the pane opened that the cursor last moved to.
+  String? _followed;
+
+  /// Keeps the cursor on a row that exists, and brings it to each entry
+  /// the pane opens, once: j and k move it on from there. Deciding the
+  /// last row shortens the queue under it, and a tap has to move it or
+  /// the next j resumes from somewhere else.
   void _syncSelection(List<ReviewEntry> entries) {
     final open = widget.openEntryId;
-    if (open != null) {
-      if (_selected >= 0 &&
-          _selected < entries.length &&
-          entries[_selected].id == open) {
-        return;
-      }
+    if (open == null) {
+      _followed = null;
+    } else if (open != _followed) {
       final index = entries.indexWhere((entry) => entry.id == open);
-      if (index >= 0 && index != _selected) {
-        _later(() => _selected = index);
-        return;
+      if (index >= 0) {
+        _followed = open;
+        if (index != _selected) {
+          _later(() => _selected = index);
+          return;
+        }
       }
     }
     if (_selected >= entries.length) {
@@ -407,6 +448,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     final sizeClass = WaxSizeClass.of(context);
     final queue = ref.watch(reviewQueueProvider);
     final seamAt = ref.watch(reviewListWidthProvider);
+    final pending = ref.watch(pendingActionsProvider);
     final l10n = context.l10n;
     _syncSelection(queue.value?.entries ?? const []);
     // Surface a failed "load more": the queue keeps its rows, so the
@@ -512,7 +554,19 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                   ),
                 ),
                 if (_selecting)
-                  _BulkBar(count: _checked.length, onDecide: _decideBulk),
+                  _BulkBar(
+                    count: _checked.length,
+                    // Held while any entry it would send has a decision
+                    // out, its own included.
+                    busy:
+                        busy ||
+                        _checked.any(
+                          (id) =>
+                              pending.contains(PendingAction.reviewEntry(id)),
+                        ),
+                    busyBy: (action) => busyBy(_bulkWork(action)),
+                    onDecide: _decideBulk,
+                  ),
               ],
             ),
           ),
@@ -610,9 +664,19 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
 /// page: the pane beside it keeps its own decision bar, and two bars
 /// across the bottom of one screen read as one control with four verbs.
 class _BulkBar extends StatelessWidget {
-  const _BulkBar({required this.count, required this.onDecide});
+  const _BulkBar({
+    required this.count,
+    required this.busy,
+    required this.busyBy,
+    required this.onDecide,
+  });
 
   final int count;
+
+  /// Whether a decision holds the selection (none takes a press), and
+  /// whether it is this bar's [action], which draws busy.
+  final bool busy;
+  final bool Function(String action) busyBy;
   final void Function(String action) onDecide;
 
   @override
@@ -635,19 +699,22 @@ class _BulkBar extends StatelessWidget {
             label: context.l10n.reviewActionApprove,
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.reviewBulkApprove,
-            onPressed: () => onDecide('approve'),
+            busy: busyBy('approve'),
+            onPressed: busy ? null : () => onDecide('approve'),
           ),
           WaxButton(
             label: context.l10n.reviewActionAsIs,
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.reviewBulkAsIs,
-            onPressed: () => onDecide('as-is'),
+            busy: busyBy('as-is'),
+            onPressed: busy ? null : () => onDecide('as-is'),
           ),
           WaxButton(
             label: context.l10n.reviewActionSkip,
             kind: WaxButtonKind.text,
             semanticsId: SemanticsIds.reviewBulkSkip,
-            onPressed: () => onDecide('skip'),
+            busy: busyBy('skip'),
+            onPressed: busy ? null : () => onDecide('skip'),
           ),
         ],
       ),

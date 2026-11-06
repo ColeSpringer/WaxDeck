@@ -219,13 +219,13 @@ func TestHealthSweepRequestClears(t *testing.T) {
 	if err := svc.QueueHealthSweep(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	if sum, err := svc.HealthSummaryFor(ctx); err != nil || !sum.Sweeping || !svc.HealthSweepDue(ctx) {
+	if sum, err := svc.HealthSummaryFor(ctx, a); err != nil || !sum.Sweeping || !svc.HealthSweepDue(ctx) {
 		t.Fatalf("after the request: sweeping %v, due %v (%v); want both", sum.Sweeping, svc.HealthSweepDue(ctx), err)
 	}
 	if err := svc.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if sum, err := svc.HealthSummaryFor(ctx); err != nil || sum.Sweeping || svc.HealthSweepDue(ctx) {
+	if sum, err := svc.HealthSummaryFor(ctx, a); err != nil || sum.Sweeping || svc.HealthSweepDue(ctx) {
 		t.Fatalf("after the sweep: sweeping %v, due %v (%v); want neither", sum.Sweeping, svc.HealthSweepDue(ctx), err)
 	}
 }
@@ -284,7 +284,7 @@ func TestAFailedSweepAnswersItsRequestAndSaysSo(t *testing.T) {
 	req := svc.sweepRequest(ctx)
 	svc.sweeping.Store(true)
 	svc.sweepEnded(ctx, req, errors.New("the disk went away"))
-	sum, err := svc.HealthSummaryFor(ctx)
+	sum, err := svc.HealthSummaryFor(ctx, a)
 	if err != nil || sum.Sweeping || !sum.SweepFailed || svc.HealthSweepDue(ctx) {
 		t.Fatalf("after a failed sweep: sweeping %v, failed %v, due %v (%v); want failed alone",
 			sum.Sweeping, sum.SweepFailed, svc.HealthSweepDue(ctx), err)
@@ -311,7 +311,7 @@ func TestAFailedSweepAnswersItsRequestAndSaysSo(t *testing.T) {
 	if err := svc.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if sum, err := svc.HealthSummaryFor(ctx); err != nil || sum.SweepFailed {
+	if sum, err := svc.HealthSummaryFor(ctx, a); err != nil || sum.SweepFailed {
 		t.Fatalf("after a sweep that landed: failed %v (%v), want cleared", sum.SweepFailed, err)
 	}
 	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {

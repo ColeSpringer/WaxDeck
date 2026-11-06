@@ -29,6 +29,7 @@
   "uploadsFileTypeAudio": "Audio",
   "uploadsFileUnreadable": "No se ha podido leer el archivo",
   "uploadsFinishing": "Terminando",
+  "uploadsFinishingUnreachable": "Terminando, no se puede contactar con el servidor",
   "uploadsFormat": "Formato de descarga",
   "uploadsFormatBest": "La mejor calidad (recomendado)",
   "uploadsFromUrl": "Añadir desde una URL",

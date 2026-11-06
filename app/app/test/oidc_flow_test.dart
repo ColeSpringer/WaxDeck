@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/loopback/loopback_io.dart';
 import 'package:waxdeck/src/auth/oidc_flow.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
@@ -14,6 +16,8 @@ const _provider = OidcProvider(
   displayName: 'Corp SSO',
   startUrl: 'http://host:4420/api/v1/auth/oidc/start?provider=corp',
 );
+
+const LoopbackPage _page = (heading: 'Signed in', line: 'Close this tab.');
 
 class _FakeOpener implements UrlOpenerPort {
   final List<String> opened = [];
@@ -143,13 +147,21 @@ void main() {
         final repo = FakeRepository();
         final opener = _FakeOpener();
         final receiver = _FakeReceiver();
+        LoopbackPage? served;
         final flow = OidcLoginFlow(
           repository: repo,
           urlOpener: opener,
-          bindLoopbackReceiver: () async => receiver,
+          bindLoopbackReceiver: (page) async {
+            served = page;
+            return receiver;
+          },
         );
 
-        final login = flow.loginWithLoopback(_provider, deviceName: 'Study');
+        final login = flow.loginWithLoopback(
+          _provider,
+          page: _page,
+          deviceName: 'Study',
+        );
         await pumpEventQueue();
         expect(opener.opened, hasLength(1));
         receiver.codeController.complete('one-time-code');
@@ -168,6 +180,8 @@ void main() {
           OidcLoginFlow.deriveChallenge(call.verifier!),
         );
         expect(receiver.closed, isTrue);
+        // The tab's words are the caller's, in the listener's language.
+        expect(served, _page);
       },
     );
 
@@ -176,11 +190,12 @@ void main() {
       final flow = OidcLoginFlow(
         repository: FakeRepository(),
         urlOpener: _FakeOpener(),
-        bindLoopbackReceiver: () async => receiver,
+        bindLoopbackReceiver: (_) async => receiver,
       );
       await expectLater(
         flow.loginWithLoopback(
           _provider,
+          page: _page,
           timeout: const Duration(milliseconds: 10),
         ),
         throwsA(isA<TimeoutException>()),
@@ -190,10 +205,15 @@ void main() {
   });
 
   group('io loopback receiver', () {
+    LoopbackPage pageIn(String locale) {
+      final l10n = lookupAppLocalizations(Locale(locale));
+      return (heading: l10n.authLoopbackTitle, line: l10n.authLoopbackMessage);
+    }
+
     test(
       'serves the close page on /callback and hands over the code',
       () async {
-        final receiver = await IoLoopbackReceiver.bind();
+        final receiver = await IoLoopbackReceiver.bind(pageIn('en'));
         final client = HttpClient();
         addTearDown(() => client.close(force: true));
 
@@ -212,11 +232,29 @@ void main() {
         final hit = await hitReq.close();
         expect(hit.statusCode, HttpStatus.ok);
         final body = await utf8.decodeStream(hit);
-        expect(body, contains('close this tab'));
+        expect(body, contains('<h1>Signed in</h1>'));
+        expect(body, contains('Close this tab and return to WaxDeck.'));
 
         expect(await receiver.code, 'one-time-code');
         await receiver.close();
       },
     );
+
+    test('words the page in the listener\'s language', () async {
+      final receiver = await IoLoopbackReceiver.bind(pageIn('es'));
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      final request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${receiver.port}/callback?code=c'),
+      );
+      final response = await request.close();
+      final body = await utf8.decodeStream(response);
+
+      expect(body, contains('<h1>Sesión iniciada</h1>'));
+      expect(body, contains('Cierra esta pestaña y vuelve a WaxDeck.'));
+      expect(body, isNot(contains('Signed in')));
+      await receiver.close();
+    });
   });
 }

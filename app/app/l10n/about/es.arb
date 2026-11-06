@@ -9,7 +9,6 @@
   "aboutRowTitle": "Acerca de WaxDeck",
   "aboutRowVersion": "Versión {app}",
   "aboutRowVersions": "App {app}, servidor {server}",
-  "aboutServerUnreachable": "no disponible",
   "aboutTitle": "Acerca de",
   "aboutVersionApi": "API",
   "aboutVersionApp": "App",

@@ -565,11 +565,18 @@ class _UploadRow extends StatelessWidget {
                 }, style: caption),
               ),
             ],
-            if (phase is UploadSealing) ...<Widget>[
+            if (phase case UploadSealing(:final unreachable)) ...<Widget>[
               const SizedBox(height: WaxSpace.s8),
               const WaxProgressBar(value: 1),
               const SizedBox(height: WaxSpace.s4),
-              status(Text(l10n.uploadsFinishing, style: caption)),
+              status(
+                Text(
+                  unreachable
+                      ? l10n.uploadsFinishingUnreachable
+                      : l10n.uploadsFinishing,
+                  style: caption,
+                ),
+              ),
             ],
             if (phase is UploadInterrupted) ...<Widget>[
               const SizedBox(height: WaxSpace.s4),

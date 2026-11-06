@@ -30,7 +30,7 @@ func TestTheWriteProbeWakesNoScan(t *testing.T) {
 		t.Skipf("no fsnotify facility: %v", err)
 	}
 	defer w.Close()
-	if armed, failed := watchTree(w, root); armed != 1 || failed != 0 {
+	if armed, failed, _ := walkWatch(w, root, nil); armed != 1 || failed != 0 {
 		t.Fatalf("(armed, failed) = (%d, %d), want the root alone", armed, failed)
 	}
 	if err := probeWritable(root); err != nil {

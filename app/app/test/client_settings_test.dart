@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
@@ -13,6 +15,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'debug_prints.dart';
 import 'fakes.dart';
 
 /// A browser's storage, as far as this store is concerned. The knobs are
@@ -121,6 +124,63 @@ class ExplodingSetting extends Notifier<String> with StoredSetting<String> {
 final explodingSettingProvider = NotifierProvider<ExplodingSetting, String>(
   ExplodingSetting.new,
 );
+
+const _ann = WaxDeckUser(
+  id: 'us-01JZX5N8QW3F4V9T2B7KDACCANN',
+  username: 'ann',
+  roles: ['user'],
+);
+const _ben = WaxDeckUser(
+  id: 'us-01JZX5N8QW3F4V9T2B7KDACCBEN',
+  username: 'ben',
+  roles: ['user'],
+);
+
+/// Who is signed in, moved by hand.
+class _Who extends Notifier<String?> {
+  @override
+  String? build() => _ann.id;
+
+  void signIn(String? account) => state = account;
+}
+
+final _whoProvider = NotifierProvider<_Who, String?>(_Who.new);
+
+/// A store whose writes wait on [gate] and then fail.
+class _LateFailingWrites implements ClientSettingsStore {
+  final gate = Completer<void>();
+  final MemoryClientSettingsStore _kept = MemoryClientSettingsStore();
+
+  @override
+  Future<String?> read(String key) => _kept.read(key);
+
+  @override
+  ({String? value})? peek(String key) => _kept.peek(key);
+
+  @override
+  Future<void> write(String key, String value) async {
+    await gate.future;
+    throw StateError('disk full');
+  }
+
+  @override
+  Future<void> remove(String key) => _kept.remove(key);
+}
+
+/// A server whose sign-ins answer whoever [next] names.
+class _Accounts extends FakeRepository {
+  WaxDeckUser next = _ann;
+
+  @override
+  Future<LoginResult> login({
+    required String username,
+    required String password,
+    String? deviceName,
+  }) async {
+    sessionState = SessionState(authenticated: true, user: next);
+    return LoginResult(user: next, token: 'token-${next.username}');
+  }
+}
 
 void main() {
   group('BrowserClientSettingsStore', () {
@@ -255,7 +315,11 @@ void main() {
   group('stored preferences', () {
     ProviderContainer containerOver(ClientSettingsStore store) {
       final container = ProviderContainer(
-        overrides: [clientSettingsStoreProvider.overrideWithValue(store)],
+        overrides: [
+          clientSettingsStoreProvider.overrideWithValue(store),
+          // The recent searches are filed under whoever is signed in.
+          signedInAccountProvider.overrideWithValue(_ann.id),
+        ],
       );
       addTearDown(container.dispose);
       return container;
@@ -304,7 +368,10 @@ void main() {
         'stored', () async {
       final store = MemoryClientSettingsStore();
       await store.write(ClientSettingKeys.sidebarCollapsed, 'perhaps');
-      await store.write(ClientSettingKeys.recentSearches, 'not json');
+      await store.write(
+        ClientSettingKeys.recentSearchesOf(_ann.id),
+        'not json',
+      );
       final container = containerOver(store);
 
       expect(container.read(sidebarCollapsedProvider), isFalse);
@@ -347,7 +414,7 @@ void main() {
       // An older build with a larger limit, or a hand-edited value.
       final store = MemoryClientSettingsStore();
       await store.write(
-        ClientSettingKeys.recentSearches,
+        ClientSettingKeys.recentSearchesOf(_ann.id),
         '["a","b","c","d","e","f","g","h","i","j","k","l"]',
       );
       final container = containerOver(store);
@@ -433,7 +500,7 @@ void main() {
       // searches merge instead.
       final store = MemoryClientSettingsStore();
       await store.write(
-        ClientSettingKeys.recentSearches,
+        ClientSettingKeys.recentSearchesOf(_ann.id),
         '["kind of blue","nightjar"]',
       );
       final container = containerOver(store);
@@ -452,7 +519,7 @@ void main() {
       // And the merged list is what the next launch reads, not the
       // one-entry list the racing write left behind.
       expect(
-        await store.read(ClientSettingKeys.recentSearches),
+        await store.read(ClientSettingKeys.recentSearchesOf(_ann.id)),
         '["mogwai","kind of blue","nightjar"]',
       );
     });
@@ -464,7 +531,7 @@ void main() {
       // a value out of storage obeys it as surely as one just typed.
       final store = MemoryClientSettingsStore();
       await store.write(
-        ClientSettingKeys.recentSearches,
+        ClientSettingKeys.recentSearchesOf(_ann.id),
         '["Nightjar","nightjar","mogwai"]',
       );
       final container = containerOver(store);
@@ -659,12 +726,157 @@ void main() {
     });
   });
 
+  group('recent searches belong to an account', () {
+    /// A launch on [store] with [account] signed in.
+    ProviderContainer launchAs(ClientSettingsStore store, String account) {
+      final container = ProviderContainer(
+        overrides: [
+          clientSettingsStoreProvider.overrideWithValue(store),
+          signedInAccountProvider.overrideWithValue(account),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    Future<List<String>> searchesIn(ProviderContainer container) async {
+      container.read(recentSearchesProvider);
+      await pumpEventQueue();
+      return container.read(recentSearchesProvider);
+    }
+
+    /// A client whose sign-ins answer whoever its server's `next` names,
+    /// over [store].
+    (ProviderContainer, _Accounts) client(ClientSettingsStore store) {
+      final server = _Accounts();
+      final container = ProviderContainer(
+        overrides: [
+          clientSettingsStoreProvider.overrideWithValue(store),
+          repositoryProvider.overrideWithValue(server),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+        ],
+      );
+      addTearDown(container.dispose);
+      return (container, server);
+    }
+
+    Future<void> signIn(
+      ProviderContainer container,
+      _Accounts server,
+      WaxDeckUser who,
+    ) async {
+      await container.read(authControllerProvider.future);
+      server.next = who;
+      await container
+          .read(authControllerProvider.notifier)
+          .login(username: who.username, password: 'pw');
+      await pumpEventQueue();
+    }
+
+    test(
+      'a sign-out forgets them: the account signs back in to none',
+      () async {
+        final store = MemoryClientSettingsStore();
+        final (container, server) = client(store);
+        await signIn(container, server, _ann);
+        container.read(recentSearchesProvider.notifier).remember('nightjar');
+        await pumpEventQueue();
+
+        await container.read(authControllerProvider.notifier).logout();
+        await signIn(container, server, _ann);
+
+        expect(await searchesIn(container), isEmpty);
+      },
+    );
+
+    test('another account never sees them after a sign-out', () async {
+      final store = MemoryClientSettingsStore();
+      final (container, server) = client(store);
+      await signIn(container, server, _ann);
+      container.read(recentSearchesProvider.notifier).remember('nightjar');
+      await pumpEventQueue();
+
+      await container.read(authControllerProvider.notifier).logout();
+      await signIn(container, server, _ben);
+
+      expect(await searchesIn(container), isEmpty);
+    });
+
+    test('a session that ended without a sign-out leaves them to nobody '
+        'else either', () async {
+      // A cookie that died with no tab open, an account disabled while
+      // the app was closed: the next launch is somebody else's, and
+      // nothing ran in between. The list stays filed under Ann.
+      final store = MemoryClientSettingsStore();
+      launchAs(
+        store,
+        _ann.id,
+      ).read(recentSearchesProvider.notifier).remember('nightjar');
+      await pumpEventQueue();
+
+      expect(await searchesIn(launchAs(store, _ben.id)), isEmpty);
+      expect(await searchesIn(launchAs(store, _ann.id)), ['nightjar']);
+    });
+
+    test('a failure is reported under the slot it happened to', () async {
+      // A write still on its way for Ann's list fails after the list has
+      // moved to Ben: the console has to name Ann's slot.
+      final store = _LateFailingWrites();
+      final container = ProviderContainer(
+        overrides: [
+          clientSettingsStoreProvider.overrideWithValue(store),
+          signedInAccountProvider.overrideWith(
+            (ref) => ref.watch(_whoProvider),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final held = container.listen(recentSearchesProvider, (_, _) {});
+      addTearDown(held.close);
+
+      final printed = await captureDebugPrints(() async {
+        container.read(recentSearchesProvider.notifier).remember('nightjar');
+        container.read(_whoProvider.notifier).signIn(_ben.id);
+        container.read(recentSearchesProvider);
+        store.gate.complete();
+        await pumpEventQueue();
+      });
+
+      expect(
+        printed,
+        anyElement(contains(ClientSettingKeys.recentSearchesOf(_ann.id))),
+      );
+      expect(
+        printed,
+        isNot(
+          anyElement(contains(ClientSettingKeys.recentSearchesOf(_ben.id))),
+        ),
+      );
+    });
+
+    test('the one list older builds kept for every account is dropped, not '
+        'adopted', () async {
+      // Whose searches it held is not known.
+      const unkeyed = 'waxdeck.search.recent';
+      final store = MemoryClientSettingsStore();
+      await store.write(unkeyed, '["nightjar"]');
+
+      expect(await searchesIn(launchAs(store, _ben.id)), isEmpty);
+      expect(await store.read(unkeyed), isNull);
+    });
+  });
+
   group('signing out', () {
     ProviderContainer signedIn(ClientSettingsStore store) {
       final container = ProviderContainer(
         overrides: [
           clientSettingsStoreProvider.overrideWithValue(store),
-          repositoryProvider.overrideWithValue(FakeRepository()),
+          repositoryProvider.overrideWithValue(
+            FakeRepository(
+              sessionState: const SessionState(authenticated: true, user: _ann),
+            ),
+          ),
           credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
           audioEngineProvider.overrideWithValue(FakeEngine()),
         ],
@@ -673,24 +885,27 @@ void main() {
       return container;
     }
 
-    test('forgets the recent searches and keeps the rest', () async {
+    test('forgets the account\'s recent searches and keeps the rest', () async {
       // The one key in this store that is the departing account's
       // content rather than the machine's: the strings name things in
-      // their library, and on web they sit in origin-scoped storage that
-      // the next account on this browser reads back.
+      // its library.
       final store = MemoryClientSettingsStore();
       await store.write(ClientSettingKeys.sidebarCollapsed, 'true');
       final container = signedIn(store);
+      await container.read(authControllerProvider.future);
       container.read(recentSearchesProvider.notifier).remember('nightjar');
-      await Future<void>.delayed(Duration.zero);
+      await pumpEventQueue();
       expect(
-        store.read(ClientSettingKeys.recentSearches),
-        completion('["nightjar"]'),
+        await store.read(ClientSettingKeys.recentSearchesOf(_ann.id)),
+        '["nightjar"]',
       );
 
       await container.read(authControllerProvider.notifier).signOutLocally();
 
-      expect(await store.read(ClientSettingKeys.recentSearches), isNull);
+      expect(
+        await store.read(ClientSettingKeys.recentSearchesOf(_ann.id)),
+        isNull,
+      );
       expect(container.read(recentSearchesProvider), isEmpty);
       // The rail describes this machine, and stands.
       expect(await store.read(ClientSettingKeys.sidebarCollapsed), 'true');
@@ -700,12 +915,21 @@ void main() {
       // Same rule the queue follows: a session left standing is a dead
       // credential the UI keeps using, which is worse than a stale key.
       final container = signedIn(ThrowingClientSettingsStore());
+      await container.read(authControllerProvider.future);
+      container.read(recentSearchesProvider);
 
-      await container.read(authControllerProvider.notifier).signOutLocally();
+      final printed = await captureDebugPrints(
+        () => container.read(authControllerProvider.notifier).signOutLocally(),
+      );
 
       expect(
         container.read(authControllerProvider).value!.authenticated,
         isFalse,
+      );
+      // Said rather than swallowed, for the list in memory and the slot.
+      expect(
+        printed,
+        containsAll([contains('clearing failed'), contains('did not clear')]),
       );
     });
   });

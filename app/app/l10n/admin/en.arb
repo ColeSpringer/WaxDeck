@@ -195,6 +195,10 @@
   "@adminBackupsEmpty": {
     "description": "Drawn where the backup list would be when the server has made none."
   },
+  "adminBackupsLoadError": "Could not load the backups",
+  "@adminBackupsLoadError": {
+    "description": "Title of the error state when the backup archive list could not be read."
+  },
   "adminBackupsRetention": "Retention",
   "@adminBackupsRetention": {
     "description": "Heading over the fields saying how many backups the server keeps."
@@ -1973,6 +1977,10 @@
   "@adminServerTranscodingGroup": {
     "description": "Heading over the limits on how much audio the server re-encodes at once."
   },
+  "adminServerTranscodingLoadError": "Could not load the transcoding limits",
+  "@adminServerTranscodingLoadError": {
+    "description": "Title of the error state in place of the transcoding group when its limits could not be read."
+  },
   "adminServerTranscodingSaved": "Transcoding limits saved",
   "@adminServerTranscodingSaved": {
     "description": "Message after the transcoding limits were written."
@@ -2009,7 +2017,7 @@
   "@adminStreamingConnected": {
     "description": "Streaming engine tile value: the engine answers."
   },
-  "adminStreamingDirect": "Originals play directly meanwhile",
+  "adminStreamingDirect": "Originals play directly",
   "@adminStreamingDirect": {
     "description": "Caption under the streaming engine tile while the engine is unreachable: playback goes on with the original files."
   },
@@ -2146,6 +2154,10 @@
         "example": "1500"
       }
     }
+  },
+  "adminTileCouldNotRead": "Could not read",
+  "@adminTileCouldNotRead": {
+    "description": "Caption of a dashboard tile whose number could not be read from the server, drawn under a dash in the error colour, so a failure never reads as zero or as still loading."
   },
   "adminTileFirstSweep": "First sweep still running",
   "@adminTileFirstSweep": {
@@ -2747,15 +2759,15 @@
   },
   "adminUsersTabInvites": "Invites",
   "@adminUsersTabInvites": {
-    "description": "Tab holding invite tokens."
+    "description": "Segment showing the invite tokens."
   },
   "adminUsersTabRequests": "Requests",
   "@adminUsersTabRequests": {
-    "description": "Tab holding signup requests waiting for a decision."
+    "description": "Segment showing the signup requests waiting for a decision."
   },
   "adminUsersTabUsers": "Users",
   "@adminUsersTabUsers": {
-    "description": "Tab holding the list of accounts."
+    "description": "Segment showing the list of accounts."
   },
   "adminUsersTitle": "Users",
   "@adminUsersTitle": {
@@ -2782,6 +2794,10 @@
   "adminUsersUploadsUnlimited": "unlimited",
   "@adminUsersUploadsUnlimited": {
     "description": "Upload allowance of an account with no cap on what may await review. Lower case: it sits in a table cell, not at the start of a sentence."
+  },
+  "adminUsersViewLabel": "Show",
+  "@adminUsersViewLabel": {
+    "description": "Segmented control on the users screen choosing which list it shows: the accounts, the signup requests or the invites."
   },
   "adminWarmingBlurb": "Files appear as indexed; artwork and matching follow.",
   "@adminWarmingBlurb": {

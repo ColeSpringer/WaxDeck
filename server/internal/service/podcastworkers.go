@@ -577,6 +577,7 @@ func (l *Library) downloadHeld(ctx context.Context, showPID, episodePID model.PI
 	defer hold.Unlock()
 	res, err := l.lib.Podcasts().Download(ctx, episodePID)
 	if err == nil {
+		l.podcastLibraryMayHaveLanded()
 		landed()
 	}
 	return res, err

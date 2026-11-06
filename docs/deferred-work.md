@@ -217,15 +217,6 @@ Every entry carries a gate tag saying what actually blocks it:
   caller's transcode limits. Held by the owner's call of 2026-09-27,
   which named it a deferred feature rather than part of the slice that
   found it; it is built when the owner schedules it.
-- `[third-party]` **On Android a swipe that starts on selectable text
-  selects it rather than changing tab.** Flutter's `SelectionArea` takes
-  a horizontal touch drag as its own on Android (it waits for other
-  gestures only on iOS) and exposes no way to change that, so on the
-  admin users screen, the one swipeable `TabBarView`, a swipe begun on
-  an empty state's words stays put. The tab bar still switches, and so
-  does a swipe begun off the text. Fixing it means forwarding the drag
-  to the enclosing scrollable from inside `WaxProse`, or a framework
-  option to make the area wait.
 - `[third-party]` **Every selectable area on desktop web mounts a
   context-menu view nothing uses.** Flutter's `SelectableRegion` puts a
   platform view over its text for the browser's own menu whenever that
@@ -336,6 +327,20 @@ Every entry carries a gate tag saying what actually blocks it:
 
 ## Infrastructure
 
+- `[upstream]` **An item moved through a library between two of the
+  library journal's reads is not tombstoned to an account granted that
+  library but neither the one it left nor the one it reached.** The catalog delta sends an account granted some
+  libraries a tombstone only for an item that sat in its libraries at
+  the cursor or since, from a journal that places each item, at each
+  change it reads, in the library it sits in then (a file re-homed
+  between libraries is one placement, however many change rows the scan
+  writes for it; a journal that fell behind is caught up the same way, a
+  batch at a time). An item moved twice between two of those reads, A to
+  B to C, is placed in C, so an account granted B but not A or C that was
+  handed it in B meanwhile is sent no tombstone and keeps the row until
+  it next mirrors. Blocked on WaxBin: "A change does not say where its
+  item sat" in upstream-requests.md.
+
 - `[in-repo]` **A live catalog restore leaves server rows naming the old
   catalog's pids.** Podcast subscriptions and feed state keep shows the
   restored catalog may lack, so the feed refresh keeps asking the
@@ -352,8 +357,9 @@ Every entry carries a gate tag saying what actually blocks it:
   walk's `Add` blocks the loop's table calls (`WatchList`, `Remove`) and
   fsnotify's own event reader until the mount answers. The window is the
   walk of a root taken up (a new or returning root, a lost watch, a
-  mount change, an overflow), not each recheck. Isolating it means one
-  kernel watcher per root, which spends the per-user
+  mount change, an overflow) and the arm of each directory created under
+  a root (an album folder copied in), not each recheck. Isolating it
+  means one kernel watcher per root, which spends the per-user
   `fs.inotify.max_user_instances` budget (128 by default, shared with
   every other process of that user). Blocked on the owner's call on
   that trade-off.

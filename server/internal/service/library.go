@@ -6,6 +6,7 @@ package service
 import (
 	"cmp"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"log/slog"
 	"net"
@@ -99,6 +100,11 @@ type Config struct {
 	// at rest; the catalog binds each secret's key as AAD. Removing an
 	// adopted cipher bricks sealed rows, so this is wired once and kept.
 	SecretCipher *auth.AADSealer
+	// CursorSealer seals a listing cursor that stands on a row the caller
+	// may not see, so the position travels and the row's fields do not.
+	// Nil seals under a key minted for the process, whose cursors stop
+	// opening at a restart.
+	CursorSealer *auth.Sealer
 	// PodcastDir is the episode download directory: its own catalog
 	// library, never inside a user root (the catalog refuses overlap),
 	// and mounted for the streaming sidecar under PodcastRootName.
@@ -390,6 +396,10 @@ type Library struct {
 	// lossy nudge to the follower when a job row changes.
 	jobs    jobWatch
 	jobWake chan struct{}
+	// libJournal records which library each item sat in, followed off the
+	// change log; journalWake is the feed's lossy nudge when an item moves.
+	libJournal  libraryJournal
+	journalWake chan struct{}
 	// sweeping is a health sweep in progress.
 	sweeping atomic.Bool
 	// sweepFailed is the last sweep having failed, until one lands.
@@ -398,9 +408,11 @@ type Library struct {
 	// fans out as invalidation frames.
 	catalogWake chan struct{}
 	userWake    chan string
-	// sealer and appSecrets back the app-password credential store.
-	sealer     *auth.Sealer
-	appSecrets appSecretCache
+	// sealer and appSecrets back the app-password credential store;
+	// cursorSealer seals listing cursors (Config.CursorSealer).
+	sealer       *auth.Sealer
+	appSecrets   appSecretCache
+	cursorSealer *auth.Sealer
 	// trackFacts caches the compatibility surface's track sweep.
 	trackFacts trackFactsCache
 	// genres holds the built genre vocabulary; facets caches the
@@ -440,6 +452,9 @@ type Library struct {
 	// so concurrent readers of one shared list do not each composite it.
 	coverSyncing map[model.PID]bool
 	coverSyncMu  sync.Mutex
+	// readerCovers keeps the member cover a reader is shown in place of a
+	// shared playlist's stored one (readerMemberCover).
+	readerCovers readerCoverCache
 	// playedLocks serializes the played decide-act per (user, item);
 	// see lockPlayed.
 	playedLocks [playedStripes]sync.Mutex
@@ -490,6 +505,15 @@ type Library struct {
 	// handoverHook fails a step of handing a deleted account's playlist
 	// over in a test; nothing in the server sets it.
 	handoverHook func(stage string, pl *model.Playlist) error
+	// memberReadHook runs as a playlist's members are read, in a test;
+	// nothing in the server sets it.
+	memberReadHook func(pl *model.Playlist)
+	// journalWalkHook runs before each page of the library journal's walk
+	// and coverRecordHook before a generated cover's provenance is
+	// recorded, in a test, either failing what follows; nothing in the
+	// server sets them.
+	journalWalkHook func() error
+	coverRecordHook func() error
 	// accountDisabledHook runs in a test the moment DeleteAccount has
 	// disabled the account; nothing in the server sets it.
 	accountDisabledHook func(context.Context)
@@ -657,6 +681,9 @@ type Library struct {
 	// toggles is the hot-path settings cache (the server's read-only flag,
 	// transcode limits), swapped whole on every write.
 	toggles atomic.Value
+	// adminSettingsMu keeps one write to the runtime settings at a time,
+	// so no two reloads of the toggles cache race.
+	adminSettingsMu sync.Mutex
 	// gate is the single transcode session gate, built on first use.
 	gate     *transcodeGate
 	gateOnce sync.Once
@@ -735,7 +762,10 @@ type Library struct {
 	// sets it. Atomic, since a test sets it while the watcher runs.
 	watchArmHook atomic.Pointer[func(armed bool)]
 	// watchLookHook runs at each stage of a look at a root, before its
-	// stat ("stat"), its walk ("walk") and each create it arms ("arm");
+	// stat ("stat"), its walk ("walk"), each watch a rewalk prunes
+	// ("prune") and each create it arms ("arm"), and on the loop as a
+	// renamed directory's watch drops ("drop") and as a create is queued
+	// for a root's look ("queue");
 	// watchMountsHook stands in for the mount-table read; watchCheckHook
 	// runs once the watcher has acted on a look's answer;
 	// watchLookWait stands in for how long a pass waits for its looks;
@@ -778,6 +808,17 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	if socketDir != "" {
 		log.Info("the waxbin CLI's socket is outside the data directory, whose path is too long for one",
 			"socket", socket)
+	}
+	cursorSealer := cfg.CursorSealer
+	if cursorSealer == nil {
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, fmt.Errorf("service: minting the cursor key: %w", err)
+		}
+		var err error
+		if cursorSealer, err = auth.NewSealer(key, "waxdeck-cursor-v1"); err != nil {
+			return nil, err
+		}
 	}
 	sources := newEnrichSources(namedEnrichProviders(cfg.EnrichmentProviders, log))
 	profiles, err := savedProfileDefs(ctx, store, log)
@@ -888,11 +929,13 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		catalogWake:              make(chan struct{}, 1),
 		userWake:                 make(chan string, 64),
 		jobWake:                  make(chan struct{}, 1),
+		journalWake:              make(chan struct{}, 1),
 		openedAtNS:               time.Now().UnixNano(),
 		startupScan:              cfg.ScanOnStart,
 		matchWake:                make(chan struct{}, 1),
 		radioWrites:              make(chan radioWrite, radioWriteQueue),
 		sealer:                   cfg.Sealer,
+		cursorSealer:             cursorSealer,
 		podcastDir:               cfg.PodcastDir,
 		podcastRootName:          cfg.PodcastRootName,
 		defaultRetentionKeep:     cfg.DefaultRetentionKeep,
@@ -1023,6 +1066,9 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 
 	// The catalog's jobs, announced as they move and settled as they end.
 	group.Go(ctx, "job-follow", l.runJobFollower)
+
+	// Which library each item sat in, for the catalog delta's tombstones.
+	group.Go(ctx, "library-journal", l.runLibraryJournal)
 
 	// The radio bookkeeping writer. Started here rather than on the
 	// first segment a listener produces: spawning it from a request
@@ -1317,10 +1363,11 @@ func (l *Library) mayReadEndedItemJob(ctx context.Context, uc *UserCtx, job Job)
 // someone's deliberate act whose result is worth a row, not a burst.
 var listedOnceEnded = map[string]bool{"set-kind": true, "organize-undo": true, "remove-root": true}
 
-// perItemJobKinds run once per item: an upload's imports, a delete, a
-// restore, one purge. Ended, a burst of them would bury the passes, so the
-// list keeps them only while they run.
-var perItemJobKinds = map[string]bool{"import": true, "delete": true, "restore": true, "purge-trash": true}
+// requestJobKinds are the jobs each answered to the request that started
+// it: an upload's import, a delete (one for a whole request, up to 500
+// items), a trash restore or purge. Ended, a burst of them would bury the
+// passes, so the list keeps them only while they run.
+var requestJobKinds = map[string]bool{"import": true, "delete": true, "restore": true, "purge-trash": true}
 
 // listableJobs reads the newest fetch catalog jobs and keeps those the list
 // shows the caller (listedJob). It answers too how many the catalog read
@@ -1342,12 +1389,12 @@ func (l *Library) listableJobs(ctx context.Context, uc *UserCtx, fetch int) ([]*
 
 // listedJob reports whether the list shows j to a caller who cleared what
 // ended by clearedAt: every running job, and an ended one unless it is
-// targeted (listedOnceEnded aside), of a per-item kind, or cleared.
+// targeted (listedOnceEnded aside), of a request kind, or cleared.
 func listedJob(j *model.Job, clearedAt int64) bool {
 	if j.State == model.JobRunning {
 		return true
 	}
-	if perItemJobKinds[j.Kind] || (j.TargetType != "" && !listedOnceEnded[j.Kind]) {
+	if requestJobKinds[j.Kind] || (j.TargetType != "" && !listedOnceEnded[j.Kind]) {
 		return false
 	}
 	return jobEndedAt(j) > clearedAt

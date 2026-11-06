@@ -75,6 +75,14 @@ func (s *Service) HandleCommand(ctx context.Context, link *ClientLink, sessionID
 			return nil, InvalidError{Msg: "this endpoint has no rate control"}
 		}
 	}
+	if verb == "set-queue" && link.UserID != owner {
+		// The sender's own reach first: the queue resolves for the owner,
+		// which would put on the device, and name in the ack, a track the
+		// sender cannot see.
+		if _, err := s.cfg.Resolver.Entries(ctx, link.UserID, args.ItemPids); err != nil {
+			return nil, err
+		}
+	}
 
 	if authority == AuthorityMirror || driver == nil {
 		if target, ok := s.reg.link(endpointID); ok && target == link {
@@ -330,7 +338,9 @@ func (s *Service) remoteSkip(ctx context.Context, sess *session, driver Driver, 
 			index = 0
 		} else {
 			s.mu.Unlock()
-			return InvalidError{Msg: "already at the end of the queue"}
+			// The code a client endpoint answers the same refusal with, so
+			// a controller words it in its own language either way.
+			return InvalidError{Msg: "already at the end of the queue", Code: "queue-end"}
 		}
 	}
 	s.mu.Unlock()
@@ -610,6 +620,7 @@ func (s *Service) HandleWatch(link *ClientLink, sessionID string) (*Session, boo
 	s.watchers[link] = &watchState{sessionID: sessionID, sentQV: sess.q.QueueVersion, sentAny: true}
 	snap := s.snapshotLocked(sess)
 	s.mu.Unlock()
+	snap = s.receiverView(snap, link.UserID)
 	return &snap, true
 }
 
@@ -658,7 +669,11 @@ func (s *Service) notifyWatchers(sessionID string) {
 	}
 	s.mu.Unlock()
 	for _, p := range pushes {
-		p.link.Send(WireSessionFrame(snap, p.link.UserID, p.withEntries))
+		view := snap
+		if p.withEntries {
+			view = s.receiverView(snap, p.link.UserID)
+		}
+		p.link.Send(WireSessionFrame(view, p.link.UserID, p.withEntries))
 	}
 }
 
@@ -700,7 +715,11 @@ func (s *Service) pushPlayingToWatchers() {
 	}
 	s.mu.Unlock()
 	for _, p := range pushes {
-		p.link.Send(WireSessionFrame(p.snap, p.link.UserID, p.withEntries))
+		view := p.snap
+		if p.withEntries {
+			view = s.receiverView(p.snap, p.link.UserID)
+		}
+		p.link.Send(WireSessionFrame(view, p.link.UserID, p.withEntries))
 	}
 }
 

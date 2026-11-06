@@ -24,7 +24,7 @@ class QueuePanel extends ConsumerWidget {
     );
     return QueueCommands(
       child: WaxSidePanel(
-        title: WaxPanel.queue.title,
+        title: WaxPanel.queue.titleOf(context.l10n),
         semanticsId: SemanticsIds.panel,
         closeSemanticsId: SemanticsIds.panelClose,
         onClose: ref.read(sidePanelProvider.notifier).close,

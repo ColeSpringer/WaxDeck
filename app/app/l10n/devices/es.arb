@@ -2,6 +2,7 @@
   "@@locale": "es",
   "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
   "@@x-template": "en.arb",
+  "devicesAnotherDevice": "otro dispositivo",
   "devicesBaseConfigured": "Dirección configurada",
   "devicesBaseDetected": "Detectada en esta red",
   "devicesBaseLine": "{source}, {state}",

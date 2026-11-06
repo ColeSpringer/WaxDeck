@@ -1,4 +1,5 @@
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -208,6 +209,60 @@ void main() {
     expect(paragraph().textAlign, TextAlign.center);
     await _pump(tester, header, width: 1200);
     expect(paragraph().textAlign, TextAlign.start);
+  });
+
+  group('a row coming or going above the bar leaves focus on its pill', () {
+    EntityHeader header({String? row}) => EntityHeader(
+      title: 'Salt Harbour',
+      subtitle: row == 'subtitle' ? 'Nightjar' : null,
+      links: <EntityHeaderLink>[
+        if (row == 'link')
+          const EntityHeaderLink(
+            label: 'By Ora Lune',
+            semanticsId: 'author',
+            onPressed: _noop,
+          ),
+      ],
+      metadata: row == 'metadata' ? '2024' : null,
+      description: row == 'description' ? 'Recorded live' : null,
+      actions: const <WaxAction>[
+        WaxAction(
+          label: 'Play',
+          semanticsId: 'play',
+          emphasis: WaxActionEmphasis.primary,
+          onPressed: _noop,
+        ),
+        WaxAction(label: 'Shuffle', semanticsId: 'shuffle', onPressed: _noop),
+      ],
+    );
+
+    String? focusedPill() => FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<WaxButton>()
+        ?.semanticsId;
+
+    for (final row in const <String>[
+      'subtitle',
+      'link',
+      'metadata',
+      'description',
+    ]) {
+      for (final arriving in const <bool>[true, false]) {
+        testWidgets('${arriving ? 'arriving' : 'leaving'}: the $row', (
+          tester,
+        ) async {
+          await _pump(tester, header(row: arriving ? null : row));
+          for (var i = 0; i < 6 && focusedPill() != 'shuffle'; i++) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.pump();
+          }
+          expect(focusedPill(), 'shuffle');
+
+          await _pump(tester, header(row: arriving ? row : null));
+          await tester.pump();
+          expect(focusedPill(), 'shuffle');
+        });
+      }
+    }
   });
 }
 

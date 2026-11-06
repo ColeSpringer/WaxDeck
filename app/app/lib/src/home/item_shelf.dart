@@ -7,7 +7,6 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
-import '../library/item_menu.dart';
 import '../library/item_play.dart';
 import '../media_view.dart';
 import '../player/play_progress.dart';
@@ -202,9 +201,7 @@ class ItemShelf extends ConsumerWidget {
               playOrResumeItem(ref, items[at], positionOf(items[at].pid));
             },
             playLabelAt: (at) =>
-                playResumes(items[at], positionOf(items[at].pid))
-                ? l10n.libraryResumeItem(items[at].title)
-                : null,
+                resumeLabel(l10n, items[at], positionOf(items[at].pid)),
             onMoreItem: (tile) {
               final at = tiles.indexOf(tile);
               if (at < 0) return;
@@ -213,15 +210,11 @@ class ItemShelf extends ConsumerWidget {
               // Home is where the pinned shelf lives, so its cards pin
               // from here the way a listing row does.
               unawaited(
-                showItemMenuForSummary(
+                showItemCardMenu(
                   context,
                   ref,
                   item,
-                  withPin: true,
-                  onPlay: item.mediaType == MediaType.audiobook
-                      ? (ref) => playOrResumeItem(ref, item, progress)
-                      : null,
-                  inProgress: playResumes(item, progress),
+                  progress,
                   // Where the tap resumes, the menu is the way in.
                   withOpen: tapResumes,
                 ),

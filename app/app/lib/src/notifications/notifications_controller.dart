@@ -28,7 +28,7 @@ enum NotificationKind {
   upload('upload', WaxIcons.add, WaxRoute.uploads),
   task('task', WaxIcons.refresh, WaxRoute.tasks),
   download('download', WaxIcons.downloads, WaxRoute.downloads),
-  signupRequested('signup-requested', WaxIcons.add, WaxRoute.users),
+  signupRequested('signup-requested', WaxIcons.add, WaxRoute.userRequests),
   backupCompleted('backup-completed', WaxIcons.success, WaxRoute.backups),
   backupFailed('backup-failed', WaxIcons.warning, WaxRoute.backups),
   catalogReset('catalog-reset', WaxIcons.warning, WaxRoute.libraries),
@@ -320,15 +320,26 @@ class LocalNotifications extends Notifier<List<WaxNotification>> {
   String? _here;
 
   /// Whether standing at [location] deals with news pointing at
-  /// [target]: the same place, or somewhere inside it.
+  /// [target]: the same place, or somewhere inside it, carrying every
+  /// query parameter [target] names.
   ///
   /// The prefix half is what makes one rule cover every kind. Review
   /// news points at the queue and is dealt with by opening an entry in
   /// it; a show's news is dealt with by opening one of its episodes.
   /// Neither is the row's own location, and both are unmistakably "I
-  /// went and looked".
-  static bool under(String location, String target) =>
-      location == target || location.startsWith('$target/');
+  /// went and looked". A query names a view of a screen (the signup
+  /// requests), which the screen's other views do not deal with.
+  static bool under(String location, String target) {
+    final at = Uri.parse(location);
+    final to = Uri.parse(target);
+    return (at.path == to.path || at.path.startsWith('${to.path}/')) &&
+        _carries(at, to);
+  }
+
+  /// Whether [at] carries every query parameter [target] names, each with
+  /// the same value.
+  static bool _carries(Uri at, Uri target) => target.queryParameters.entries
+      .every((p) => at.queryParameters[p.key] == p.value);
 
   /// Whether the visitor is already looking at exactly what [target]
   /// names.
@@ -341,7 +352,13 @@ class LocalNotifications extends Notifier<List<WaxNotification>> {
   /// reader was looking at a different one, since a row with no pid
   /// points at the bare surface those all sit under - and swallowed is
   /// worse than a badge, because nothing brings it back.
-  bool _dealtWith(String target) => _here == target;
+  bool _dealtWith(String target) {
+    final here = _here;
+    if (here == null) return false;
+    final at = Uri.parse(here);
+    final to = Uri.parse(target);
+    return at.path == to.path && _carries(at, to);
+  }
 
   /// Where the visitor is, for the inbox half's own dismissal rule.
   String? get here => _here;

@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'about_screen.dart';
@@ -169,7 +170,8 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
     if (_busy) return;
     final navigator = Navigator.of(context);
     final messenger = ref.read(shellMessengerProvider.notifier);
-    final changed = context.l10n.settingsPasswordChanged;
+    final l10n = context.l10n;
+    final changed = l10n.settingsPasswordChanged;
     setState(() {
       _busy = true;
       _currentError = null;
@@ -195,12 +197,14 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
       if (!mounted) return;
       setState(() {
         if (e.code == 'forbidden') {
+          // The server's wrong-current-password sentence: the table's
+          // `forbidden` would say the account may not do this at all.
           _currentError = e.message;
         } else {
           // `invalid-request` is the password policy, which the server
-          // owns; showing its sentence beats guessing the rule here and
-          // drifting from it.
-          _nextError = e.message;
+          // owns, so a refusal keeps its sentence; a dropped connection
+          // or a 500 reads from the table instead.
+          _nextError = explainRefusal(l10n, e);
         }
       });
     } finally {
@@ -374,9 +378,10 @@ class _DeviceSessions extends ConsumerWidget {
                 ),
             ],
           ),
-          AsyncValue(hasError: true) => ErrorState(
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            sessions,
             title: l10n.settingsDevicesErrorTitle,
-            message: l10n.settingsDevicesErrorMessage,
+            onRetry: () => ref.invalidate(sessionsControllerProvider),
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
         },
@@ -423,15 +428,17 @@ class _DeviceRenameDialogState extends ConsumerState<_DeviceRenameDialog> {
       _error = null;
     });
     final navigator = Navigator.of(context);
+    final l10n = context.l10n;
     try {
       await ref
           .read(sessionsControllerProvider.notifier)
           .rename(widget.session.id, name);
       navigator.pop();
     } on WaxDeckApiException catch (e) {
-      // The server's own sentence: what a device name may be is its
-      // rule, and this lands under the field that broke it.
-      setState(() => _error = e.message);
+      // A refusal keeps the server's sentence (what a device name may be
+      // is its rule) under the field that broke it; anything else reads
+      // from the table.
+      setState(() => _error = explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

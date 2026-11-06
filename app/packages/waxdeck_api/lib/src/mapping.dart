@@ -2627,8 +2627,6 @@ AdminSettings adminSettingsFromGen(gen.AdminSettings settings) {
   return AdminSettings(
     signupEnabled: settings.signupEnabled,
     readOnly: settings.readOnly,
-    // Optional on the wire only so PUT writers can omit it (absent
-    // keeps the current value); responses always carry it.
     sonicAnalysis: settings.sonicAnalysis ?? true,
     backupKeepCount: settings.backupKeepCount,
     backupKeepBytes: settings.backupKeepBytes,
@@ -2641,17 +2639,17 @@ AdminSettings adminSettingsFromGen(gen.AdminSettings settings) {
   );
 }
 
-gen.AdminSettings adminSettingsToGen(AdminSettings settings) {
-  return gen.AdminSettings(
+gen.AdminSettingsChange adminSettingsChangeToGen(AdminSettingsChange change) {
+  return gen.AdminSettingsChange(
     (b) => b
-      ..signupEnabled = settings.signupEnabled
-      ..readOnly = settings.readOnly
-      ..sonicAnalysis = settings.sonicAnalysis
-      ..backupKeepCount = settings.backupKeepCount
-      ..backupKeepBytes = settings.backupKeepBytes
-      ..trashRetentionDays = settings.trashRetentionDays
-      ..taskRetentionDays = settings.taskRetentionDays
-      ..radioExternalArt = settings.radioExternalArt,
+      ..signupEnabled = change.signupEnabled
+      ..readOnly = change.readOnly
+      ..sonicAnalysis = change.sonicAnalysis
+      ..backupKeepCount = change.backupKeepCount
+      ..backupKeepBytes = change.backupKeepBytes
+      ..trashRetentionDays = change.trashRetentionDays
+      ..taskRetentionDays = change.taskRetentionDays
+      ..radioExternalArt = change.radioExternalArt,
   );
 }
 

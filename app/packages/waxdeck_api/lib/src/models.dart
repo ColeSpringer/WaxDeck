@@ -794,11 +794,12 @@ class ItemResolution {
   final List<ItemSummary> items;
 
   /// The requested pids gone for everyone: no item answers to it any more
-  /// (a kind change folded it into another) or ever did, or its item lost
-  /// its files for good (purged from the trash, deleted permanently, its
-  /// library removed). One in the trash is answered, and a miss merely out
-  /// of this caller's sight is not here, because either can come back:
-  /// this is the set a held list drops.
+  /// (a kind change folded it into another) or ever did: this is the set a
+  /// held list drops. An archived one (trashed, purged, deleted, or its
+  /// library removed) is answered, since the server cannot yet tell a
+  /// removed library's archive, which adding the folder again undoes, from
+  /// a delete's. A miss merely out of this caller's sight is not here
+  /// either, because it can come back.
   final List<String> departed;
 }
 
@@ -2932,6 +2933,11 @@ class PlaybackSessionEntry {
   final String? artist;
   final int? durationMs;
 
+  /// A slot the caller may not see: on somebody else's session, an item
+  /// outside this account's library grants keeps its place in the queue
+  /// with nothing in it, so `index` still lines up.
+  bool get withheld => pid.isEmpty;
+
   factory PlaybackSessionEntry.fromWire(Map<String, dynamic> json) {
     return PlaybackSessionEntry(
       pid: json['pid'] as String? ?? '',
@@ -3022,9 +3028,12 @@ class PlaybackSessionInfo {
     );
   }
 
-  /// The current entry, when the queue is known.
+  /// The current entry, when the queue is known and the entry is one the
+  /// caller may see.
   PlaybackSessionEntry? get currentEntry =>
-      index >= 0 && index < entries.length ? entries[index] : null;
+      index >= 0 && index < entries.length && !entries[index].withheld
+      ? entries[index]
+      : null;
 }
 
 /// One session that has stopped, as the state it stopped in.
@@ -5597,6 +5606,29 @@ class AdminSettings {
     taskRetentionDays: taskRetentionDays ?? this.taskRetentionDays,
     radioExternalArt: radioExternalArt ?? this.radioExternalArt,
   );
+}
+
+/// A write of some [AdminSettings]: a null field keeps its stored value.
+class AdminSettingsChange {
+  const AdminSettingsChange({
+    this.signupEnabled,
+    this.readOnly,
+    this.sonicAnalysis,
+    this.backupKeepCount,
+    this.backupKeepBytes,
+    this.trashRetentionDays,
+    this.taskRetentionDays,
+    this.radioExternalArt,
+  });
+
+  final bool? signupEnabled;
+  final bool? readOnly;
+  final bool? sonicAnalysis;
+  final int? backupKeepCount;
+  final int? backupKeepBytes;
+  final int? trashRetentionDays;
+  final int? taskRetentionDays;
+  final bool? radioExternalArt;
 }
 
 /// Server-wide transcoding concurrency and bitrate ceilings.

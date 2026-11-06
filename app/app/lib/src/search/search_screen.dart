@@ -415,7 +415,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               kind: WaxButtonKind.tonal,
               icon: WaxIcons.add,
               semanticsId: SemanticsIds.radioSearchAdd(index),
-              onPressed: () => unawaited(_addStation(value[index])),
+              busy: busyBy(value[index].streamUrl),
+              onPressed: busy
+                  ? null
+                  : () => unawaited(_addStation(value[index])),
             ),
           ),
         ),
@@ -463,12 +466,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// Adds a directory match, reporting a refusal where there is no modal to
-  /// hide a snackbar behind.
-  Future<void> _addStation(RadioDirectoryEntry entry) async {
+  /// hide a snackbar behind. Keyed by its stream, as a podcast row is by
+  /// its feed.
+  Future<void> _addStation(RadioDirectoryEntry entry) {
     final messenger = ref.read(shellMessengerProvider.notifier);
-    final refusal = await addDirectoryStation(context, ref, entry);
-    if (refusal == null || !mounted) return;
-    messenger.show(refusal, channel: ShellChannel.radio);
+    return runAs(entry.streamUrl, () async {
+      final refusal = await addDirectoryStation(context, ref, entry);
+      if (refusal == null || !mounted) return;
+      messenger.show(refusal, channel: ShellChannel.radio);
+    });
   }
 
   List<Widget> _recents() {

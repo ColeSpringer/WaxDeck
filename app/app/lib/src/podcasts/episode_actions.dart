@@ -7,6 +7,7 @@ import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
+import '../shell/pending_actions.dart';
 import '../shell/shell_messages.dart';
 import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
@@ -93,12 +94,12 @@ class EpisodeActions {
   }
 
   /// Queues a server-side fetch.
-  Future<void> fetch(BuildContext context, String pid) async {
+  Future<void> fetch(BuildContext context, EpisodeSummary episode) async {
     // Read before the await, like every other table this class needs:
     // the request outlives the frame that asked for it.
     final l10n = context.l10n;
     try {
-      await _fetch(pid);
+      await _fetch(episode);
       if (context.mounted) _report(l10n.podcastFetchingToServer);
     } on WaxDeckApiException catch (e) {
       if (context.mounted) _report(explainError(l10n, e));
@@ -115,7 +116,7 @@ class EpisodeActions {
   ) async {
     final l10n = context.l10n;
     try {
-      await _fetch(episode.pid);
+      await _fetch(episode);
       if (context.mounted) {
         _report(l10n.podcastFetchingBeforePlay);
       }
@@ -124,8 +125,12 @@ class EpisodeActions {
     }
   }
 
-  Future<void> removeDownload(BuildContext context, String pid) async {
+  Future<void> removeDownload(
+    BuildContext context,
+    EpisodeSummary episode,
+  ) async {
     final l10n = context.l10n;
+    final pid = episode.pid;
     try {
       if (showPid != null) {
         await ref
@@ -134,8 +139,7 @@ class EpisodeActions {
       } else {
         await ref.read(repositoryProvider).removeEpisodeDownload(pid);
       }
-      _refreshShelves();
-      ref.invalidate(episodeDetailProvider(pid));
+      _refreshOthers(episode);
       if (context.mounted) {
         _report(l10n.podcastRemovedFromServer);
       }
@@ -147,19 +151,29 @@ class EpisodeActions {
   /// Records the episode as played by checkpointing at its full
   /// duration, which is the only way to say it: played is derived
   /// server-side from the position reached.
+  ///
+  /// Pending under [PendingAction.markPlayed] while the write is out, so
+  /// its control draws busy and a second press is dropped.
   Future<void> markPlayed(
     BuildContext context,
     EpisodeSummary episode,
     String progressKey,
   ) async {
     final l10n = context.l10n;
+    bool? done;
     try {
-      final done = await ref
-          .read(playProgressProvider(progressKey).notifier)
-          .markPlayed(episode.pid, episode.durationMs);
-      if (!context.mounted) return;
+      await ref.read(pendingActionsProvider.notifier).run(
+        PendingAction.markPlayed(episode.pid),
+        () async {
+          done = await ref
+              .read(playProgressProvider(progressKey).notifier)
+              .markPlayed(episode.pid, episode.durationMs);
+        },
+      );
+      final marked = done;
+      if (marked == null || !context.mounted) return;
       _report(
-        done ? l10n.podcastMarkedAsPlayed : l10n.podcastNoDurationToFinish,
+        marked ? l10n.podcastMarkedAsPlayed : l10n.podcastNoDurationToFinish,
       );
     } on WaxDeckApiException catch (e) {
       if (context.mounted) _report(explainError(l10n, e));
@@ -170,23 +184,25 @@ class EpisodeActions {
   /// so the row behind the surface on top flips to queued with it, and
   /// straight through the repository when it is not. An episode opened
   /// by a bare link has no listing to keep in step.
-  Future<void> _fetch(String pid) async {
+  Future<void> _fetch(EpisodeSummary episode) async {
     final show = showPid;
     if (show != null) {
-      await ref.read(episodesProvider(show).notifier).fetchEpisode(pid);
+      await ref.read(episodesProvider(show).notifier).fetchEpisode(episode.pid);
     } else {
-      await ref.read(repositoryProvider).fetchEpisode(pid);
+      await ref.read(repositoryProvider).fetchEpisode(episode.pid);
     }
-    _refreshShelves();
-    ref.invalidate(episodeDetailProvider(pid));
+    _refreshOthers(episode);
   }
 
-  /// Re-reads the hub's shelves when there is no listing to keep in
-  /// step, so their rows flip with the fetch or removal.
-  void _refreshShelves() {
-    if (showPid != null) return;
+  /// Re-reads the other surfaces that list the episode, since queuing a
+  /// fetch sends no catalog event: the hub's shelves and the episode's
+  /// detail always, and the show's listing when this acted outside it.
+  /// An invalidation builds nothing that was never read.
+  void _refreshOthers(EpisodeSummary episode) {
     ref
       ..invalidate(latestEpisodesProvider)
-      ..invalidate(upNextEpisodesProvider);
+      ..invalidate(upNextEpisodesProvider)
+      ..invalidate(episodeDetailProvider(episode.pid));
+    if (showPid == null) ref.invalidate(episodesProvider(episode.showPid));
   }
 }

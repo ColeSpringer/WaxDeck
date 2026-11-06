@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colespringer/waxdeck/fixtures"
 )
@@ -138,11 +139,11 @@ func TestResolveItemsRefusesWhatIsNotAnItemLookup(t *testing.T) {
 }
 
 // What the catalog did to an item decides what the lookup says: one a kind
-// change folded into another is departed, and so is one deleted for good
-// (purged from the trash, or deleted permanently), though its own read
-// still answers it; one in the trash, which a restore brings back,
-// resolves; and to a caller it is out of sight for, it is left out
-// unnamed.
+// change folded into another is departed, while one in the trash, one
+// purged from it and one deleted permanently are each answered as the
+// item's own read answers them, since the catalog keeps no word on which
+// archive a re-added folder undoes; and to a caller they are out of sight
+// for, they are left out unnamed.
 func TestResolveItemsAfterAFoldATrashAndAPurge(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixtureWith(t, catalogFixtureOptions{extra: func(t *testing.T, dir string) {
@@ -186,13 +187,13 @@ func TestResolveItemsAfterAFoldATrashAndAPurge(t *testing.T) {
 		t.Fatal(err)
 	}
 	book := PrefixBook + "-" + one[strings.IndexByte(one, '-')+1:]
-	if got, want := summaryPIDs(items), []string{book, trashed}; !slices.Equal(got, want) {
+	if got, want := summaryPIDs(items), []string{book, trashed, purged, deleted}; !slices.Equal(got, want) {
 		t.Fatalf("answered %v, want %v", got, want)
 	}
-	if want := []string{two, purged, deleted}; !slices.Equal(departed, want) {
+	if want := []string{two}; !slices.Equal(departed, want) {
 		t.Fatalf("departed = %v, want %v", departed, want)
 	}
-	// The item's own read is unchanged: it still answers all three.
+	// The item's own read answers all three as the lookup does.
 	for _, pid := range []string{trashed, purged, deleted} {
 		if _, err := svc.Item(ctx, uc, pid); err != nil {
 			t.Fatalf("%s reads as %v, want it answered as before", pid, err)
@@ -211,7 +212,76 @@ func TestResolveItemsAfterAFoldATrashAndAPurge(t *testing.T) {
 	if len(items) != 0 {
 		t.Fatalf("out of the grant answered %v, want nothing", summaryPIDs(items))
 	}
-	if want := []string{two, purged, deleted}; !slices.Equal(departed, want) {
-		t.Fatalf("out of the grant departed = %v, want %v and the trashed one unnamed", departed, want)
+	if want := []string{two}; !slices.Equal(departed, want) {
+		t.Fatalf("out of the grant departed = %v, want %v and the archived ones unnamed", departed, want)
 	}
+}
+
+// A removed library's items are archived until its folder is added again,
+// so the lookup never names them departed: a re-add and its scan bring
+// each back under the pid a queue held.
+func TestResolveItemsKeepsARemovedLibrarysItems(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
+	dir := t.TempDir()
+	if _, err := fixtures.Generate(dir, fixtures.Spec{
+		Name: "round-trip", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second,
+		Tags: map[string]string{"TITLE": "Round Trip", "ARTIST": "Remover"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	scanEnded := func(what string) {
+		t.Helper()
+		waitFor(t, func() bool {
+			running, err := svc.catalogJobRunning(ctx)
+			return err == nil && !running
+		}, what)
+	}
+	listed := func() string {
+		page, err := svc.Items(ctx, uc, ItemFilter{}, "", 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, it := range page.Items {
+			if it.Title == "Round Trip" {
+				return it.PID
+			}
+		}
+		return ""
+	}
+	resolves := func(pid, when string) {
+		t.Helper()
+		items, departed, err := svc.ResolveItems(ctx, uc, []string{pid})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(summaryPIDs(items), []string{pid}) || len(departed) != 0 {
+			t.Fatalf("%s: answered %v, departed %v; want %s answered", when, summaryPIDs(items), departed, pid)
+		}
+	}
+
+	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "music", Path: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanEnded("the create's scan to end")
+	var pid string
+	waitFor(t, func() bool { pid = listed(); return pid != "" }, "the track cataloged")
+
+	if _, err := svc.RemoveLibrary(ctx, uc, lib.PID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return removalAudit(t, ctx, svc, lib.PID) != nil }, "the removal audited")
+	resolves(pid, "after the removal")
+
+	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "music", Path: dir}); err != nil {
+		t.Fatal(err)
+	}
+	scanEnded("the re-add's scan to end")
+	var back string
+	waitFor(t, func() bool { back = listed(); return back != "" }, "the track cataloged again")
+	if back != pid {
+		t.Fatalf("the re-add listed the track as %s, want it back under %s", back, pid)
+	}
+	resolves(pid, "after the re-add")
 }

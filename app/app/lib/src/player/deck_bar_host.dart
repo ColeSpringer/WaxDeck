@@ -410,8 +410,8 @@ class _RadioDeckBar extends ConsumerWidget {
               ? (_) => unawaited(saveNowPlayingSong(context, ref))
               : null,
           // The player, like every other face of this bar: expanding
-          // means "show me what is playing", and since P19 that is a
-          // station's own face rather than the hub it was tuned from.
+          // means "show me what is playing", which for a station is its
+          // own face rather than the hub it was tuned from.
           // The hub is still one row away, in the face's overflow.
           onExpand: () => context.pushOnce(WaxRoute.nowPlaying),
         ),
@@ -465,7 +465,7 @@ class _RemoteDeckBar extends ConsumerWidget {
       now: NowPlayingData(
         title: entry?.title ?? context.l10n.devicesPlaying,
         subtitle: entry?.artist,
-        remoteEndpoint: remote.endpointName,
+        remoteEndpoint: remote.endpointNameIn(context.l10n),
         position: controller.position.value,
         duration: remote.duration,
         playing: session.playing,

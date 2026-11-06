@@ -18,6 +18,7 @@ Serializers _$serializers =
           ..add(AcquisitionFormat.serializer)
           ..add(AcquisitionRequest.serializer)
           ..add(AdminSettings.serializer)
+          ..add(AdminSettingsChange.serializer)
           ..add(AlbumDetail.serializer)
           ..add(AppPasswordCreate.serializer)
           ..add(AppPasswordCreated.serializer)

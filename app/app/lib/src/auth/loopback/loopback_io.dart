@@ -1,27 +1,35 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import '../oidc_flow.dart';
 
+/// The page around the words the caller gives it.
+const _frame =
+    '<!doctype html><meta charset="utf-8"><title>WaxDeck</title>'
+    '<body style="font-family: sans-serif; text-align: center; '
+    'padding-top: 4em;">';
+
 /// Binds a real localhost listener on an ephemeral port for the desktop
 /// OIDC flow.
-Future<LoopbackReceiverPort> bindLoopbackReceiver() =>
-    IoLoopbackReceiver.bind();
+Future<LoopbackReceiverPort> bindLoopbackReceiver(LoopbackPage page) =>
+    IoLoopbackReceiver.bind(page);
 
 /// dart:io implementation of [LoopbackReceiverPort]: serves the tiny
 /// "you can close this tab" page on /callback and hands over the code.
 class IoLoopbackReceiver implements LoopbackReceiverPort {
-  IoLoopbackReceiver._(this._server) {
+  IoLoopbackReceiver._(this._server, this._page) {
     _sub = _server.listen(_handle);
   }
 
-  static Future<IoLoopbackReceiver> bind() async {
+  static Future<IoLoopbackReceiver> bind(LoopbackPage page) async {
     // Loopback only: the code must never be reachable off this machine.
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    return IoLoopbackReceiver._(server);
+    return IoLoopbackReceiver._(server, page);
   }
 
   final HttpServer _server;
+  final LoopbackPage _page;
   late final StreamSubscription<HttpRequest> _sub;
   final _code = Completer<String>();
 
@@ -37,13 +45,11 @@ class IoLoopbackReceiver implements LoopbackReceiverPort {
     if (request.uri.path == '/callback' && delivered != null) {
       response.statusCode = HttpStatus.ok;
       response.headers.contentType = ContentType.html;
-      response.write(
-        '<!doctype html><meta charset="utf-8"><title>WaxDeck</title>'
-        '<body style="font-family: sans-serif; text-align: center; '
-        'padding-top: 4em;">'
-        '<h1>Signed in</h1>'
-        '<p>You can close this tab and return to WaxDeck.</p></body>',
-      );
+      const html = HtmlEscape();
+      response
+        ..write(_frame)
+        ..write('<h1>${html.convert(_page.heading)}</h1>')
+        ..write('<p>${html.convert(_page.line)}</p></body>');
       if (!_code.isCompleted) _code.complete(delivered);
     } else {
       response.statusCode = HttpStatus.notFound;

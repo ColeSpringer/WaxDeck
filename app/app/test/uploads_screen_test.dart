@@ -159,6 +159,60 @@ class _HeldCreates extends FakeRepository {
   }
 }
 
+/// Loses the answer of the last file's seal while the server still seals
+/// it: reads say so (every byte in, idle zero) until the [stagedAt]th finds
+/// it staged, the [heldAt]th waiting on [release], and the first
+/// [wireDownFor] fail on the wire. Records each batch member's state as the
+/// batch closes.
+class _LastSealAnswerLost extends FakeRepository {
+  _LastSealAnswerLost({this.stagedAt = 3, this.heldAt, this.wireDownFor = 0})
+    : super(sessionState: testUploaderSession());
+
+  final int stagedAt;
+  final int? heldAt;
+  final int wireDownFor;
+  final held = Completer<void>();
+  final release = Completer<void>();
+  String? sealing;
+  var reads = 0;
+  final membersAtClose = <String>[];
+
+  @override
+  Future<UploadSession> completeUpload(String uploadId) async {
+    if (uploadsById[uploadId]!.fileName != 'a2.flac') {
+      return super.completeUpload(uploadId);
+    }
+    sealing = uploadId;
+    throw const WaxDeckApiException(code: 'transport', message: 'closed');
+  }
+
+  @override
+  Future<UploadSession> getUpload(String uploadId) async {
+    if (uploadId != sealing) return super.getUpload(uploadId);
+    if (++reads == heldAt) {
+      held.complete();
+      await release.future;
+    }
+    if (reads <= wireDownFor) {
+      throw const WaxDeckApiException(code: 'transport', message: 'closed');
+    }
+    if (reads >= stagedAt) {
+      sealing = null;
+      return super.completeUpload(uploadId);
+    }
+    return super.getUpload(uploadId);
+  }
+
+  @override
+  Future<UploadBatch> completeUploadBatch(String batchId) async {
+    membersAtClose.addAll([
+      for (final u in uploadsById.values)
+        if (u.batchId == batchId) u.state,
+    ]);
+    return super.completeUploadBatch(batchId);
+  }
+}
+
 /// A monotonic clock the test moves by hand.
 class _Monotonic {
   Duration now = Duration.zero;
@@ -1101,6 +1155,161 @@ void main() {
     expect(repo.batchJoins, hasLength(2));
     expect(repo.batchJoins[0].batchPath, 'Long Form');
     expect(repo.completedBatchIds, [batch.id]);
+  });
+
+  testWidgets('a batch waits out a member whose seal answer was lost, so '
+      'the book stays one review entry', (tester) async {
+    final repo = _LastSealAnswerLost();
+    final picker = _FakePicker([
+      readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
+      readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.completedBatchIds, hasLength(1));
+    expect(repo.membersAtClose, ['staged', 'staged']);
+    expect(_message(tester), 'Uploaded 2 files; identifying them');
+  });
+
+  testWidgets('a member still sealing past where thirty rereads used to '
+      'stop reads Finishing and holds its batch open', (tester) async {
+    final repo = _LastSealAnswerLost(stagedAt: 45, heldAt: 35);
+    final picker = _FakePicker([
+      readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
+      readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.held.isCompleted, isTrue, reason: 'the rereads stopped');
+    final id = repo.uploadsById.values
+        .singleWhere((u) => u.fileName == 'a2.flac')
+        .id;
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadPhase(id)),
+        matching: find.text('Finishing'),
+      ),
+      findsOneWidget,
+    );
+    expect(repo.completedBatchIds, isEmpty);
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+    expect(repo.completedBatchIds, hasLength(1));
+    expect(repo.membersAtClose, ['staged', 'staged']);
+    expect(_message(tester), 'Uploaded 2 files; identifying them');
+  });
+
+  testWidgets('a member whose seal cannot be asked about says the server '
+      'cannot be reached, until it answers', (tester) async {
+    final repo = _LastSealAnswerLost(heldAt: 2, wireDownFor: 2);
+    final picker = _FakePicker([
+      readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
+      readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.held.isCompleted, isTrue);
+    final id = repo.uploadsById.values
+        .singleWhere((u) => u.fileName == 'a2.flac')
+        .id;
+    const unreachable = "Finishing, can't reach the server";
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadPhase(id)),
+        matching: find.text(unreachable),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRetry(id)),
+      findsNothing,
+    );
+    expect(repo.completedBatchIds, isEmpty);
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+    expect(find.text(unreachable), findsNothing);
+    expect(repo.completedBatchIds, hasLength(1));
+    expect(repo.membersAtClose, ['staged', 'staged']);
+  });
+
+  testWidgets('discarding a file while it uploads tells no failure and '
+      'counts it nowhere', (tester) async {
+    final repo = FakeRepository(sessionState: testUploaderSession())
+      ..putUploadDataGate = Completer<void>()
+      ..putUploadDataGateAt = 2;
+    // 2.5 MiB: the held chunk is the second of three. The second file
+    // goes once the first is let go.
+    final picker = _FakePicker([
+      readerFile('long-take.flac', Uint8List(2621440)),
+      readerFile('short.flac', Uint8List(64)),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+    final shown = <String?>[];
+    ProviderScope.containerOf(
+      tester.element(find.byType(UploadsScreen)),
+    ).listen(
+      shellMessengerProvider,
+      (_, next) => shown.add(shellMessageText(next)),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.putUploadDataReached.isCompleted, isTrue);
+    final id = repo.uploadsById.keys.single;
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadDelete(id)));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'discard',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
+    await tester.pumpAndSettle();
+    repo.putUploadDataGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(repo.uploadsById.containsKey(id), isFalse);
+    expect(
+      repo.putUploadDataCalls.where((c) => c.uploadId == id),
+      hasLength(2),
+    );
+    expect(
+      shown.where((m) => m?.startsWith('long-take.flac') ?? false),
+      isEmpty,
+    );
+    expect(_message(tester), 'Uploaded 1 file; identifying it');
   });
 
   testWidgets('a picked Audible file is refused before the media-type '

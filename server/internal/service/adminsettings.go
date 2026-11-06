@@ -35,6 +35,20 @@ type AdminSettings struct {
 	RadioExternalArt bool
 }
 
+// AdminSettingsChange is a write of some settings: a nil field keeps its
+// stored value.
+type AdminSettingsChange struct {
+	SignupEnabled       *bool
+	ReadOnly            *bool
+	SonicAnalysis       *bool
+	BackupKeepCount     *int
+	BackupKeepBytes     *int64
+	TrashRetentionDays  *int
+	TaskRetentionDays   *int
+	EnrichmentWriteTags *bool
+	RadioExternalArt    *bool
+}
+
 // TranscodingLimits cap transcode sessions at the media proxy; zero
 // values mean unlimited.
 type TranscodingLimits struct {
@@ -184,33 +198,63 @@ func (l *Library) TaskRetentionDays(ctx context.Context) int {
 	return days
 }
 
-// AdminSettingsPut replaces the runtime settings; they apply
-// immediately.
-func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminSettings) (AdminSettings, error) {
-	if s.BackupKeepCount < 0 || s.BackupKeepBytes < 0 {
+// AdminSettingsPut stores the settings c names and keeps the rest as
+// stored; they apply immediately. A refused field stores none of them.
+func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, c AdminSettingsChange) (AdminSettings, error) {
+	if c.BackupKeepCount != nil && *c.BackupKeepCount < 0 || c.BackupKeepBytes != nil && *c.BackupKeepBytes < 0 {
 		return AdminSettings{}, errInvalid("backup retention must not be negative")
 	}
 	// Cap well under the point where days*24h overflows time.Duration's
 	// int64 nanoseconds (~106752 days): a wrapped negative would silently
 	// disable the sweep and a wrapped-positive-small could over-purge.
-	if s.TrashRetentionDays < 0 || s.TrashRetentionDays > maxRetentionDays {
+	if d := c.TrashRetentionDays; d != nil && (*d < 0 || *d > maxRetentionDays) {
 		return AdminSettings{}, errInvalid("trash retention must be between 0 and 36500 days")
 	}
-	if s.TaskRetentionDays < 0 || s.TaskRetentionDays > maxRetentionDays {
+	if d := c.TaskRetentionDays; d != nil && (*d < 0 || *d > maxRetentionDays) {
 		return AdminSettings{}, errInvalid("task retention must be between 0 and 36500 days")
 	}
-	now := time.Now().UnixNano()
-	writes := map[string]string{
-		settingSignupEnabled:    strconv.FormatBool(s.SignupEnabled),
-		settingReadOnly:         strconv.FormatBool(s.ReadOnly),
-		settingSonicAnalysis:    strconv.FormatBool(s.SonicAnalysis),
-		settingBackupKeep:       strconv.Itoa(s.BackupKeepCount),
-		settingBackupKeepBytes:  strconv.FormatInt(s.BackupKeepBytes, 10),
-		settingTrashRetention:   strconv.Itoa(s.TrashRetentionDays),
-		settingTaskRetention:    strconv.Itoa(s.TaskRetentionDays),
-		settingEnrichWriteTags:  strconv.FormatBool(s.EnrichmentWriteTags),
-		settingRadioExternalArt: strconv.FormatBool(s.RadioExternalArt),
+	writes := map[string]string{}
+	detail := map[string]any{}
+	set := func(key, field, value string, shown any) {
+		writes[key] = value
+		detail[field] = shown
 	}
+	if v := c.SignupEnabled; v != nil {
+		set(settingSignupEnabled, "signupEnabled", strconv.FormatBool(*v), *v)
+	}
+	if v := c.ReadOnly; v != nil {
+		set(settingReadOnly, "readOnly", strconv.FormatBool(*v), *v)
+	}
+	if v := c.SonicAnalysis; v != nil {
+		set(settingSonicAnalysis, "sonicAnalysis", strconv.FormatBool(*v), *v)
+	}
+	if v := c.BackupKeepCount; v != nil {
+		set(settingBackupKeep, "backupKeepCount", strconv.Itoa(*v), *v)
+	}
+	if v := c.BackupKeepBytes; v != nil {
+		set(settingBackupKeepBytes, "backupKeepBytes", strconv.FormatInt(*v, 10), *v)
+	}
+	if v := c.TrashRetentionDays; v != nil {
+		set(settingTrashRetention, "trashRetentionDays", strconv.Itoa(*v), *v)
+	}
+	if v := c.TaskRetentionDays; v != nil {
+		set(settingTaskRetention, "taskRetentionDays", strconv.Itoa(*v), *v)
+	}
+	if v := c.EnrichmentWriteTags; v != nil {
+		set(settingEnrichWriteTags, "enrichmentWriteTags", strconv.FormatBool(*v), *v)
+	}
+	if v := c.RadioExternalArt; v != nil {
+		set(settingRadioExternalArt, "radioExternalArt", strconv.FormatBool(*v), *v)
+	}
+	if len(writes) == 0 {
+		return l.AdminSettingsGet(ctx)
+	}
+
+	// One write at a time, so the toggles cache reloaded after one cannot
+	// land over the reload of the next.
+	l.adminSettingsMu.Lock()
+	defer l.adminSettingsMu.Unlock()
+	now := time.Now().UnixNano()
 	wasRadioArt := l.RadioExternalArtEnabled()
 	wasReadOnly := l.ServerReadOnly()
 	for k, v := range writes {
@@ -219,30 +263,23 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 		}
 	}
 	l.loadRuntimeToggles(ctx)
-	if wasReadOnly != s.ReadOnly {
+	if isReadOnly := l.ServerReadOnly(); wasReadOnly != isReadOnly {
 		// The session carries the flag, and the account marker is what
 		// makes an open client read it again.
 		l.emitEveryoneEvent(ctx, eventAccount)
+		if wasReadOnly {
+			// No managed root was probed while the server was read-only.
+			l.probeRoots()
+		}
 	}
-	if wasReadOnly && !s.ReadOnly {
-		// No managed root was probed while the server was read-only.
-		l.probeRoots()
-	}
-	if wasRadioArt && !s.RadioExternalArt {
+	if wasRadioArt && !l.RadioExternalArtEnabled() {
 		// Switching the rung off drops what it fetched. The read path
 		// refuses while it is off regardless, so this is about not
 		// holding a third party's bytes after the decision to stop
 		// asking for them rather than about correctness.
 		l.forgetRadioArt()
 	}
-	l.Audit(ctx, actor, "settings.update", AuditTarget{Kind: "settings"},
-		map[string]any{"signupEnabled": s.SignupEnabled, "readOnly": s.ReadOnly,
-			"sonicAnalysis":   s.SonicAnalysis,
-			"backupKeepCount": s.BackupKeepCount, "backupKeepBytes": s.BackupKeepBytes,
-			"trashRetentionDays":  s.TrashRetentionDays,
-			"taskRetentionDays":   s.TaskRetentionDays,
-			"enrichmentWriteTags": s.EnrichmentWriteTags,
-			"radioExternalArt":    s.RadioExternalArt})
+	l.Audit(ctx, actor, "settings.update", AuditTarget{Kind: "settings"}, detail)
 	return l.AdminSettingsGet(ctx)
 }
 
@@ -252,13 +289,6 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 // round trip.
 func (l *Library) RadioExternalArtEnabled() bool {
 	return l.currentToggles().radioExternalArt
-}
-
-// EnrichmentWriteTagsEnabled reports the saved write-back setting, which
-// a settings PUT omitting it keeps; whether a pass writes is
-// enrichWritesTags. Cached, so the PUT reads it without a round trip.
-func (l *Library) EnrichmentWriteTagsEnabled() bool {
-	return l.currentToggles().enrichWriteTags
 }
 
 // SonicAnalysisEnabled reports whether the embedded analyzer should
@@ -285,6 +315,9 @@ func (l *Library) TranscodingLimitsPut(ctx context.Context, actor *UserCtx, lim 
 	if err != nil {
 		return TranscodingLimits{}, &Error{Kind: KindInternal, Err: err}
 	}
+	// The reload below rebuilds the cache a settings write reloads too.
+	l.adminSettingsMu.Lock()
+	defer l.adminSettingsMu.Unlock()
 	if err := l.db.SettingSet(ctx, settingTranscodeLimits, string(raw), time.Now().UnixNano()); err != nil {
 		return TranscodingLimits{}, &Error{Kind: KindInternal, Err: err}
 	}

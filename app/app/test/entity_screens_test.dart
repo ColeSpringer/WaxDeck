@@ -1369,6 +1369,40 @@ void main() {
       expect((page.dimension, page.segment), (BookDimension.authors, 'ar-1'));
     });
 
+    testWidgets('a cover on the books shelf resumes its book in place, and '
+        'its menu carries the book\'s verbs', (tester) async {
+      const authored = ItemSummary(
+        pid: 'bk-1',
+        mediaType: MediaType.audiobook,
+        title: 'A long book 1',
+        artist: 'Nightjar',
+        artistPid: 'ar-1',
+        durationMs: 43200000,
+      );
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One'), authored]
+        ..playPositions['bk-1'] = 600000;
+      final container = await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1'),
+        repository,
+      );
+
+      await semanticsPlay(
+        tester,
+        _byId(SemanticsIds.book('bk-1')),
+        playId: SemanticsIds.bookPlay('bk-1'),
+        label: 'Resume A long book 1',
+      );
+      expect(container.read(queueControllerProvider).pids, ['bk-1']);
+      expect(find.byType(ArtistScreen), findsOneWidget);
+      await _stop(tester, container);
+
+      await rightClick(tester, _byId(SemanticsIds.book('bk-1')));
+      expect(_byId(SemanticsIds.itemMenuPlay), findsOneWidget);
+      expect(_byId(SemanticsIds.itemMenuGoAuthor), findsOneWidget);
+    });
+
     testWidgets('an author with no tracks draws the books shelf alone', (
       tester,
     ) async {

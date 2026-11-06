@@ -8,8 +8,11 @@ paths:
         Coverage of the sonic-similarity surface: whether a worker
         token is configured, which embedding model the stored vectors
         carry, how much of the library is embedded, and the analysis
-        backlog. Clients use `coveragePct` to decide whether to show
-        sonic affordances (the adventurousness knob, sonic paths).
+        backlog. The counts are taken over the tracks the caller may
+        see, inside their library grants and content rules;
+        administrators read the whole library's. Clients use
+        `coveragePct` to decide whether to show sonic affordances (the
+        adventurousness knob, sonic paths).
       tags: [similarity]
       responses:
         "200":

@@ -345,7 +345,6 @@
   "playlistSyncUrlLabel": "URL de la lista de origen",
   "playlistsEmptyTitle": "Todavía no hay listas de reproducción",
   "playlistsLoadError": "No se han podido cargar tus listas de reproducción",
-  "playlistsLoadErrorSentence": "No se han podido cargar tus listas de reproducción.",
   "playlistsNew": "Nueva lista de reproducción",
   "playlistsSectionShared": "Compartidas con el servidor",
   "playlistsSectionYours": "Tuyas",

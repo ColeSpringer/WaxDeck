@@ -262,7 +262,7 @@ func TestRemovingALibraryNeedsAnAdministratorAndAWritableServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, st); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.RemoveLibrary(ctx, uc, lib.PID); KindOf(err) != KindReadOnly {

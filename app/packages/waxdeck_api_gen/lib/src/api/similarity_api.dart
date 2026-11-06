@@ -24,7 +24,7 @@ class SimilarityApi {
   const SimilarityApi(this._dio, this._serializers);
 
   /// Similarity analysis status
-  /// Coverage of the sonic-similarity surface: whether a worker token is configured, which embedding model the stored vectors carry, how much of the library is embedded, and the analysis backlog. Clients use &#x60;coveragePct&#x60; to decide whether to show sonic affordances (the adventurousness knob, sonic paths). 
+  /// Coverage of the sonic-similarity surface: whether a worker token is configured, which embedding model the stored vectors carry, how much of the library is embedded, and the analysis backlog. The counts are taken over the tracks the caller may see, inside their library grants and content rules; administrators read the whole library&#39;s. Clients use &#x60;coveragePct&#x60; to decide whether to show sonic affordances (the adventurousness knob, sonic paths). 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation

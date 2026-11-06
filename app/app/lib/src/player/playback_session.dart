@@ -1133,6 +1133,9 @@ class PlaybackSession {
       at.inMilliseconds,
       resume: resume,
       load: () async {
+        // Let go while the mint was out: loading now would put this item
+        // over whatever took the engine.
+        if (_disposed) return;
         await _loadTimelineMedia(slot, at);
         if (_disposed) return;
         _moveTimeline(durationMs: slot.durationMs);

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -75,8 +76,17 @@ const (
 	syncReasonHidden = "hidden"
 )
 
+// trashPlaces is where an archived item's restorable trash rows say its
+// files were trashed from: the libraries they name, and whether a row
+// names none the server can place.
+type trashPlaces struct {
+	libs     []string
+	unplaced bool
+}
+
 // restorableItems answers which of this page's archived items the trash
-// journal can still put back, which is what makes an archive undoable.
+// journal can still put back, which is what makes an archive undoable,
+// each with where its files were trashed from.
 //
 // Keyed to the page rather than the journal. It used to read the whole
 // journal with no limit and build a map of it, expensive in exactly the
@@ -95,21 +105,39 @@ const (
 // nil return means there is nothing to ask about; a read failure answers
 // a nil map, which reads as recoverable rather than as unrecoverable
 // (see tombstoneReason).
-func (l *Library) restorableItems(ctx context.Context, pids []model.PID) func() map[string]bool {
+func (l *Library) restorableItems(ctx context.Context, pids []model.PID) func() map[string]trashPlaces {
 	if len(pids) == 0 {
 		return nil
 	}
-	return sync.OnceValue(func() map[string]bool {
+	return sync.OnceValue(func() map[string]trashPlaces {
 		entries, err := l.lib.RestorableTrash(ctx, pids)
 		if err != nil {
 			l.log.Warn("reading the trash journal for sync tombstones", "err", err)
 			return nil
 		}
-		out := make(map[string]bool, len(entries))
+		out := make(map[string]trashPlaces, len(entries))
 		for pid, rows := range entries {
-			if len(rows) > 0 {
-				out[string(pid)] = true
+			if len(rows) == 0 {
+				continue
 			}
+			// Every row, not the newest alone: an item with copies in
+			// several libraries leaves one per file, and the last to go
+			// need not be from the library a caller held it in.
+			var places trashPlaces
+			for _, row := range rows {
+				lib := string(row.LibraryPID)
+				if lib == "" {
+					if found, err := l.libraryForPath(ctx, row.OrigDisplay); err == nil {
+						lib = found
+					}
+				}
+				if lib == "" {
+					places.unplaced = true
+					continue
+				}
+				places.libs = append(places.libs, lib)
+			}
+			out[string(pid)] = places
 		}
 		return out
 	})
@@ -121,15 +149,37 @@ func (l *Library) restorableItems(ctx context.Context, pids []model.PID) func() 
 // which drops its tombstones anyway) and a nil map means the read
 // failed; both answer hidden. Keeping bytes that could have gone is
 // cheaper than deleting bytes that should have stayed.
-func tombstoneReason(restorable func() map[string]bool, pid model.PID) string {
+func tombstoneReason(restorable func() map[string]trashPlaces, pid model.PID) string {
 	if restorable == nil {
 		return syncReasonHidden
 	}
 	live := restorable()
-	if live == nil || live[string(pid)] {
+	if _, held := live[string(pid)]; live == nil || held {
 		return syncReasonHidden
 	}
 	return syncReasonRemoved
+}
+
+// archivedInReach reports whether an archived item's tombstone may go to
+// the caller: an episode while the podcast library is in its grants
+// (viewVisible's rule), anything else when one of the trash rows it left
+// names a library the caller is granted or one the server cannot place,
+// or when the library journal says the caller may hold it.
+func (l *Library) archivedInReach(ctx context.Context, uc *UserCtx, reach *deltaReach, restorable func() map[string]trashPlaces, it *model.ItemView, created bool) bool {
+	switch {
+	case uc.AllLibraries:
+		return true
+	case it.Kind == model.KindEpisode:
+		return l.podcastsVisible(ctx, uc)
+	}
+	if restorable != nil {
+		if places, ok := restorable()[string(it.PID)]; ok {
+			if places.unplaced || slices.ContainsFunc(places.libs, func(lib string) bool { return uc.Libraries[lib] }) {
+				return true
+			}
+		}
+	}
+	return reach.mayHold(it.PID, created)
 }
 
 // archivedTombstone is the entry an item in the trash mirrors as.
@@ -140,7 +190,7 @@ func tombstoneReason(restorable func() map[string]bool, pid model.PID) string {
 // downloads on the pid it stored gets a hit either way only if it
 // matches on the ULID, so saying the honest thing here costs nothing and
 // removes one reason to have to.
-func (l *Library) archivedTombstone(it *model.ItemView, restorable func() map[string]bool) CatalogSyncEntry {
+func (l *Library) archivedTombstone(it *model.ItemView, restorable func() map[string]trashPlaces) CatalogSyncEntry {
 	return CatalogSyncEntry{
 		Op:     syncOpDelete,
 		PID:    itemAPIPID(it),
@@ -389,17 +439,19 @@ func (l *Library) initSync(ctx context.Context) error {
 			}
 		}
 	}
+	var floor int64
+	if minSurviving > 0 {
+		floor = minSurviving - 1
+	}
 	l.feed.mu.Lock()
 	l.feed.gen = gen
 	l.feed.mints = mints
 	l.feed.bootTS = bootTS
 	l.feed.tail = seq
 	l.feed.tailTS = ts
-	if minSurviving > 0 {
-		l.feed.floor = minSurviving - 1
-	}
+	l.feed.floor = floor
 	l.feed.mu.Unlock()
-	return nil
+	return l.openLibraryJournal(ctx, continuous, floor)
 }
 
 // mintCatalogGeneration retires every catalog cursor handed out so far,
@@ -537,6 +589,7 @@ func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 	l.feed.mu.Unlock()
 	if ch.EntityType == model.ChangeCatalog && !history {
 		l.catalogReplaced(ctx, ch.Seq, ch.TS)
+		l.wakeLibraryJournal()
 		return
 	}
 	l.feed.mu.Lock()
@@ -548,10 +601,16 @@ func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 	if ch.EntityType == "job" {
 		l.followJob(ch.EntityPID)
 	}
+	if ch.EntityType == "item" {
+		l.wakeLibraryJournal()
+	}
 	// A root added or re-flagged elsewhere (the CLI, a restore) reaches
-	// the root table here; mid-hand-off the reopen hook rebuilds it.
+	// the root table here; mid-hand-off the reopen hook rebuilds it. The
+	// podcast library is left out of that table, so its creation is
+	// caught here too.
 	if ch.EntityType == "library" && !l.Maintenance() {
 		l.refreshLibraryState(ctx)
+		l.podcastLibraryMayHaveLanded()
 	}
 	// Items feed summary mirrors; podcast rows feed show lists. Both
 	// travel the catalog stream (a show is not per-user state).
@@ -817,6 +876,17 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		l.feed.mu.Lock()
 		gen, tail, tailTS := l.feed.gen, l.feed.tail, l.feed.tailTS
 		l.feed.mu.Unlock()
+		// For a caller whose deltas the library journal decides tombstones
+		// for, the cursor stands where the journal does once it has read
+		// to the head: every change up to it seen where its item sat. A
+		// journal that cannot read on fails the page, to be asked again.
+		if !uc.AllLibraries {
+			place, err := l.journalLibraries(ctx, journalToHead)
+			if err != nil {
+				return CatalogSnapshotPage{}, err
+			}
+			tail, tailTS = place.through, place.throughTS
+		}
 		since = encodeCatalogCursor(gen, epoch, tail, tailTS)
 	} else {
 		var ok bool
@@ -845,6 +915,14 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		}
 	}
 
+	// The library journal up to the log's head before the read, for a
+	// caller whose deltas it decides tombstones for: whatever a page
+	// sends, it has seen where it sat.
+	if !uc.AllLibraries {
+		if _, err := l.journalLibraries(ctx, journalToHead); err != nil {
+			return CatalogSnapshotPage{}, err
+		}
+	}
 	// Content rules narrow the query itself: a tag rule per row would be
 	// one tag read for every item of a restricted caller's first sync.
 	b := visibleItems()
@@ -945,7 +1023,7 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 // delta would tombstone correctly for a running client and still hand a
 // fresh mirror every trashed item on first sync, shedding them only if
 // some later change happened to touch that pid.
-func (l *Library) itemSyncEntry(ctx context.Context, subs *subscriptionFilter, restorable func() map[string]bool, eps episodeBatch, it *model.ItemView) (CatalogSyncEntry, bool) {
+func (l *Library) itemSyncEntry(ctx context.Context, subs *subscriptionFilter, restorable func() map[string]trashPlaces, eps episodeBatch, it *model.ItemView) (CatalogSyncEntry, bool) {
 	if archived(it) {
 		// Archiving emits OpUpdate, not OpDelete (the item survives so a
 		// restore can find it), so a mirror following the change log would
@@ -983,6 +1061,10 @@ func syncEpisodeViews(views []*model.ItemView) []*model.ItemView {
 // per item within the page, hydrated fresh. True deletions and changes
 // that carry an item out of the caller's visibility both become
 // tombstones; a tombstone for an item never mirrored is a client no-op.
+// A caller who does not see every library is sent one only for an item
+// that sat, at the cursor or since, in a library its grants cover, by the
+// library journal or, archived, by a trash row it left; where neither can
+// say, it goes.
 func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since string, limit int) (CatalogDelta, error) {
 	c, ok := decodeCatalogCursor(since)
 	if !ok {
@@ -1019,6 +1101,9 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 		pid  model.PID
 	}
 	ops := make(map[deltaKey]string)
+	// created marks the entities this page saw made, which no client can
+	// have held before its cursor.
+	created := make(map[deltaKey]bool)
 	order := make([]deltaKey, 0, limit)
 	budgetHit := false
 	for !budgetHit {
@@ -1055,6 +1140,9 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 				order = append(order, key)
 			}
 			ops[key] = string(ch.Op)
+			if ch.Op == model.OpCreate {
+				created[key] = true
+			}
 			seq, ts = ch.Seq, ch.TS
 		}
 	}
@@ -1063,6 +1151,24 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 		Entries:   make([]CatalogSyncEntry, 0, len(order)),
 		NextSince: encodeCatalogCursor(curGen, curEpoch, seq, ts),
 		More:      budgetHit,
+	}
+	// The library journal through the page before its items are read, so
+	// what it says of them holds, and so the cursor handed back stands on
+	// rows it has seen; a journal that cannot read on fails the page, to be
+	// asked again, rather than decide blind. A caller who sees every
+	// library is decided nothing. A cursor from before the journal last
+	// started over stands where it placed nothing, so its caller mirrors
+	// again.
+	var reach *deltaReach
+	if !uc.AllLibraries {
+		place, err := l.journalLibraries(ctx, seq)
+		if err != nil {
+			return CatalogDelta{}, err
+		}
+		if c.seq < place.start {
+			return CatalogDelta{}, ErrSyncReset
+		}
+		reach = &deltaReach{uc: uc, podcasts: l.podcastsVisible(ctx, uc)}
 	}
 	if len(order) == 0 {
 		return out, nil
@@ -1117,6 +1223,19 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	if err != nil {
 		return CatalogDelta{}, err
 	}
+	// Where the libraries of the items this page would tombstone sat, read
+	// once for the page.
+	if reach != nil {
+		var asked []string
+		for _, key := range order {
+			if v := byPID[key.pid]; key.kind == "item" && (v == nil || ops[key] == string(model.OpDelete) || archived(v) || !sent[key.pid]) {
+				asked = append(asked, string(key.pid))
+			}
+		}
+		if reach.history, err = l.db.ItemLibrariesAround(ctx, asked, c.seq); err != nil {
+			return CatalogDelta{}, &Error{Kind: KindInternal, Err: err}
+		}
+	}
 	for _, key := range order {
 		if key.kind == "podcast" {
 			if !showsVisible {
@@ -1163,7 +1282,11 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			// The kind is unknowable once the item is gone; tombstones
 			// carry the track prefix and mirrors match on the ULID. This
 			// is the one delete the catalog cannot take back, so it is
-			// the one that lets a client reclaim what it downloaded.
+			// the one that lets a client reclaim what it downloaded, and
+			// it goes where the caller's grants covered the item.
+			if !reach.mayHold(pid, created[key]) {
+				continue
+			}
 			out.Entries = append(out.Entries, CatalogSyncEntry{
 				Op:     syncOpDelete,
 				PID:    apiPID(PrefixTrack, pid),
@@ -1177,9 +1300,14 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 		// false for any caller without AllLibraries the moment the path
 		// is empty. Checked the other way round, every restricted caller
 		// took the visibility branch below and the reclaim worked for
-		// administrators only.
+		// administrators only. Which libraries it left are the trash
+		// journal's and the library journal's to say, and an item only
+		// ever outside the caller's grants sends nothing: no client of
+		// the caller's holds it.
 		if archived(it) {
-			out.Entries = append(out.Entries, l.archivedTombstone(it, restorable))
+			if l.archivedInReach(ctx, uc, reach, restorable, it, created[key]) {
+				out.Entries = append(out.Entries, l.archivedTombstone(it, restorable))
+			}
 			continue
 		}
 		if !sent[pid] {
@@ -1191,6 +1319,14 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			// transition tombstones instead. Hidden, not removed: a
 			// regrant, a move back or a retag puts it in sight again, and
 			// the bytes would otherwise have to come down a second time.
+			// An item only ever in libraries outside the caller's grants
+			// gets none: no mirror of the caller's held it, and a tombstone
+			// would only name it. One made since the cursor inside them and
+			// moved out before this page keeps its tombstone: a later
+			// snapshot page may have carried it.
+			if !reach.mayHold(pid, created[key], viewLibrary(it)) {
+				continue
+			}
 			out.Entries = append(out.Entries, CatalogSyncEntry{
 				Op:     syncOpDelete,
 				PID:    apiPID(PrefixTrack, pid),
@@ -1286,9 +1422,15 @@ func (l *Library) PruneCatalogChanges(ctx context.Context, keep int) (int, error
 		return n, classify(err)
 	}
 	if len(rows) > 0 {
+		floor := rows[0].Seq - 1
 		l.feed.mu.Lock()
-		l.feed.floor = rows[0].Seq - 1
+		l.feed.floor = floor
 		l.feed.mu.Unlock()
+		// The library journal's rows below the floor go too, but for each
+		// item's place at it, which the cursors left read.
+		if _, err := l.db.PruneItemLibraries(ctx, floor); err != nil {
+			l.log.Warn("pruning the library journal", "err", err)
+		}
 	}
 	return n, nil
 }

@@ -813,6 +813,64 @@ void main() {
       );
     });
 
+    test('a failed position read keeps the shelf, unmarked, where the '
+        'positions are only its decoration', () async {
+      final repo =
+          FakeRepository(
+              items: <ItemSummary>[
+                ItemSummary(
+                  pid: _book,
+                  mediaType: MediaType.audiobook,
+                  title: 'There And Back Again',
+                  durationMs: 3600000,
+                ),
+              ],
+            )
+            ..browseLists[DiscoveryList.recentlyAdded] = <ItemSummary>[
+              ItemSummary(
+                pid: _book,
+                mediaType: MediaType.audiobook,
+                title: 'There And Back Again',
+                durationMs: 3600000,
+              ),
+            ]
+            ..playStatesError = const WaxDeckApiException(
+              code: 'transport',
+              message: 'dropped',
+            );
+      final recent = FutureProvider.autoDispose<HomeShelfItems>(
+        (ref) => readShelf(ref, DiscoveryList.recentlyAdded),
+        retry: (_, _) => null,
+      );
+      final continuing = FutureProvider.autoDispose<HomeShelfItems>(
+        (ref) =>
+            readShelf(ref, DiscoveryList.recentlyAdded, withProgress: true),
+        retry: (_, _) => null,
+      );
+      final container = ProviderContainer(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+      final held = <ProviderSubscription<Object?>>[
+        container.listen(recent, (_, _) {}),
+        container.listen(continuing, (_, _) {}),
+      ];
+      addTearDown(() {
+        for (final h in held) {
+          h.close();
+        }
+      });
+
+      final read = await container.read(recent.future);
+      expect(read.items.map((i) => i.pid), [_book]);
+      expect(read.progress[_book].positionMs, 0);
+      // Where positions are the content, a failed read still fails.
+      await expectLater(
+        container.read(continuing.future),
+        throwsA(isA<WaxDeckApiException>()),
+      );
+    });
+
     test('a random list carries its seed to the next page', () async {
       // A shuffle read on with a fresh seed is a different shuffle, so
       // the second page would repeat or skip rows of the first.

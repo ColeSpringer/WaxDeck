@@ -179,7 +179,9 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
 
-    final retry = find.widgetWithText(WaxButton, 'Retry');
+    // The house failure card, titled for the recap.
+    expect(find.text('Could not load the recap'), findsOneWidget);
+    final retry = find.widgetWithText(WaxButton, 'Try again');
     expect(retry, findsOneWidget);
     expect(tester.widget<WaxButton>(retry).busy, isTrue);
     await tester.pumpWidget(const SizedBox());

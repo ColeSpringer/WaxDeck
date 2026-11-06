@@ -89,6 +89,10 @@
   "@organizeHint": {
     "description": "Drawn where the plan or the report goes, before either exists."
   },
+  "organizeHistoryLoadError": "Could not load past runs",
+  "@organizeHistoryLoadError": {
+    "description": "Title of the error state when the list of past organize runs could not be read."
+  },
   "organizeHistoryMore": "Show older runs",
   "@organizeHistoryMore": {
     "description": "Button under the organize history that lists the next, older page of runs. Shown while the server holds older ones."

@@ -29,15 +29,9 @@ Widget titleWithInfo(Widget title, String? info, {String? semanticsId}) => Row(
 /// mark as far as the host's own box allows: kept inside it, all of the
 /// target takes a press.
 class InfoOverRoom extends StatefulWidget {
-  const InfoOverRoom({
-    required this.info,
-    required this.builder,
-    this.semanticsId,
-    super.key,
-  });
+  const InfoOverRoom({required this.info, required this.builder, super.key});
 
   final String? info;
-  final String? semanticsId;
 
   /// The host, with [mark] (null without an info) right after its title,
   /// on the title's line.
@@ -63,8 +57,7 @@ class _InfoOverRoomState extends State<InfoOverRoom> {
               ? null
               : SizedBox(key: _mark, width: WaxSpace.touchTarget),
         ),
-        if (info != null)
-          WaxInfoTip(message: info, semanticsId: widget.semanticsId),
+        if (info != null) WaxInfoTip(message: info),
       ],
     );
   }

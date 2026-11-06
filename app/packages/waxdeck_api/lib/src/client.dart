@@ -1792,9 +1792,9 @@ abstract interface class WaxDeckRepository {
   /// `GET /admin/settings`: the server-wide switches (administrators).
   Future<AdminSettings> getAdminSettings();
 
-  /// `PUT /admin/settings`: replaces the server-wide switches
-  /// (administrators).
-  Future<AdminSettings> putAdminSettings(AdminSettings settings);
+  /// `PUT /admin/settings`: writes the server-wide switches [change] names
+  /// and keeps the rest as stored (administrators).
+  Future<AdminSettings> putAdminSettings(AdminSettingsChange change);
 
   /// `GET /admin/transcoding`: the transcoding limits (administrators).
   Future<TranscodingLimits> getTranscodingLimits();
@@ -2086,6 +2086,9 @@ class WaxDeckClient implements WaxDeckRepository {
   /// operation dead. Set through the generated methods' `extra` map.
   static const String _longOperation = 'waxdeck-long-operation';
 
+  /// How long such a call may take to answer; an upload's seal is one.
+  static const longOperationBudget = Duration(minutes: 30);
+
   /// Marks an upload chunk's send on a transport that would cut the whole
   /// request ([_wholeRequestCut]); set through `extra` like the above.
   static const String _chunkSend = 'waxdeck-chunk-send';
@@ -2105,7 +2108,7 @@ class WaxDeckClient implements WaxDeckRepository {
           // import and invite a duplicate-archive retry. Widened per
           // call rather than loosening every request's budget.
           if (options.extra[_longOperation] == true) {
-            options.receiveTimeout = const Duration(minutes: 30);
+            options.receiveTimeout = longOperationBudget;
           }
           // A chunk's send where the transport would cut the whole
           // request at connect plus receive: a chunk on a slow uplink
@@ -2171,6 +2174,11 @@ class WaxDeckClient implements WaxDeckRepository {
   /// own would cut the whole request at forty seconds, so a stuck send
   /// ends here and a slow one that keeps moving is never cut.
   static const defaultChunkStall = Duration(seconds: 30);
+
+  /// The longest a chunk whose body the transport took whole waits on the
+  /// server's word that it is still reading it, once its stall is due:
+  /// a try still ends within forty seconds without one.
+  static const _readingCheck = Duration(seconds: 10);
 
   /// The pieces an upload chunk's body is handed to the transport in: a
   /// native transport reports progress as it takes each.
@@ -4374,16 +4382,30 @@ class WaxDeckClient implements WaxDeckRepository {
     // after the last of it): a slow chunk that keeps moving is never cut,
     // and a stuck one ends in the retry its caller makes of any timeout.
     // Progress is what the transport reports: the pieces a native one
-    // takes, the upload events a browser fires.
+    // takes, the upload events a browser fires. Both count bytes handed
+    // to the network stack, whose buffers a slow link can still be
+    // draining long after the last, so a body taken whole is cut only
+    // once the server says it is not reading it.
     final cancel = CancelToken();
     Timer? stall;
     var stalled = false;
+    var handedOver = false;
+    var ended = false;
     void arm() {
       stall?.cancel();
-      stall = Timer(_chunkStall, () {
+      late final Timer due;
+      // Acts after the check only while still the armed stall: progress
+      // during the check armed a fresher one, which judges instead.
+      due = Timer(_chunkStall, () async {
+        if (handedOver && await _stillReading(uploadId)) {
+          if (!ended && identical(stall, due)) arm();
+          return;
+        }
+        if (ended || !identical(stall, due)) return;
         stalled = true;
         cancel.cancel('the chunk stopped moving');
       });
+      stall = due;
     }
 
     Stream<List<int>> pieces() async* {
@@ -4407,7 +4429,10 @@ class WaxDeckClient implements WaxDeckRepository {
           headers: {Headers.contentLengthHeader: '${bytes.length}'},
           extra: _wholeRequestCut ? const {_chunkSend: true} : null,
           cancelToken: cancel,
-          onSendProgress: (_, _) => arm(),
+          onSendProgress: (sent, _) {
+            handedOver = sent >= bytes.length;
+            arm();
+          },
         );
         return uploadSessionFromGen(_require(response.data));
       });
@@ -4418,7 +4443,22 @@ class WaxDeckClient implements WaxDeckRepository {
         message: 'the chunk stopped moving',
       );
     } finally {
+      ended = true;
       stall?.cancel();
+    }
+  }
+
+  /// Whether the server is reading a chunk's body for [uploadId] now, which
+  /// it says by an idle of zero; asked within [_readingCheck], and no
+  /// answer is a no.
+  Future<bool> _stillReading(String uploadId) async {
+    try {
+      final session = await getUpload(
+        uploadId,
+      ).timeout(_chunkStall < _readingCheck ? _chunkStall : _readingCheck);
+      return session.state == 'receiving' && session.idle == Duration.zero;
+    } on Object {
+      return false;
     }
   }
 
@@ -5611,10 +5651,10 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<AdminSettings> putAdminSettings(AdminSettings settings) =>
+  Future<AdminSettings> putAdminSettings(AdminSettingsChange change) =>
       _guard(() async {
         final response = await _gen.getAdminApi().putAdminSettings(
-          adminSettings: adminSettingsToGen(settings),
+          adminSettingsChange: adminSettingsChangeToGen(change),
         );
         return adminSettingsFromGen(_require(response.data));
       });

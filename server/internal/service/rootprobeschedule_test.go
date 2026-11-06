@@ -93,7 +93,7 @@ func TestAReadOnlyServerWritesNoProbeAtItsStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, st); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	stop()
@@ -283,12 +283,12 @@ func TestLiftingTheServersReadOnlySwitchProbesTheRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, st); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	chmodFor(t, flipped, 0o555)
 	st.ReadOnly = false
-	if _, err := svc.AdminSettingsPut(ctx, uc, st); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, svc.rootProbe.idle, "the probe pass the lift started")

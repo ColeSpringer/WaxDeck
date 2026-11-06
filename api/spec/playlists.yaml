@@ -99,8 +99,10 @@ paths:
         The field vocabulary for smart playlist rules: every rule
         field with its value kind, the operators it accepts, whether
         it reads per-user state, and whether it can sort; plus the
-        catalog's custom tag keys (usable as `tag.KEY` fields) with
-        item counts, most used first. Rule editors build their
+        custom tag keys (usable as `tag.KEY` fields) carried by the
+        items the caller may see, inside their library grants and
+        content rules, each with how many of those items carry it,
+        most used first. Rule editors build their
         dropdowns from this instead of hardcoding the vocabulary.
       tags: [playlists]
       responses:
@@ -477,13 +479,17 @@ paths:
         their own). Entries the caller cannot see (outside their
         library grants, denied by their content settings, or episodes
         of shows they do not follow) are omitted, and the list's
-        `itemCount` counts the same way, so a restricted viewer's
-        `position` values can skip numbers. `position` is the entry's index in the full stored
+        `itemCount` counts the same way. `position` goes to the owner
+        of a static playlist alone, the one caller that may remove by
+        it, and can skip numbers where entries are hidden from the
+        owner too. It is the entry's index in the full stored
         order, kept contiguous from 0 by every change to the list;
         pass it, with the entry's item pid as `itemPid`, to the
         removal endpoint, never the row index of a filtered page.
         Keyset-paginated within one evaluation; a membership change
-        between pages may shift entries.
+        between pages may shift entries. A page's `nextCursor` counts
+        only the entries shown to the caller, and comes only when
+        another one follows.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -1651,8 +1657,9 @@ components:
           type: integer
           description: >
             Zero-based index in the full stored member order, contiguous
-            after every change (hidden entries leave gaps in a viewer's
-            listing); static playlists only, and what the removal takes.
+            after every change (entries hidden from the owner leave gaps
+            in the owner's listing); static playlists only, sent to their
+            owner alone, and what the removal takes.
         item:
           $ref: "#/components/schemas/ItemSummary"
 
@@ -1852,7 +1859,7 @@ components:
           example: MOOD
         itemCount:
           type: integer
-          description: Distinct items carrying this key.
+          description: Distinct items the caller may see carrying this key.
 
     RuleFields:
       type: object

@@ -8,20 +8,20 @@ import 'package:built_value/serializer.dart';
 
 part 'playback_session_entry.g.dart';
 
-/// One queue entry of a playback session, hydrated for display.
+/// One queue entry of a playback session, hydrated for display. On a session the caller does not own, an entry for an item the caller may not see, outside their library grants or content rules, keeps its place with an empty `pid` and `title` and no `artist` or `durationMs`, so `index` still lines up. 
 ///
 /// Properties:
-/// * [pid] - The item's PID.
-/// * [title] - Display title.
+/// * [pid] - The item's PID; empty in a slot the caller may not see.
+/// * [title] - Display title; empty in a slot the caller may not see.
 /// * [artist] - Display artist, when the item has one.
 /// * [durationMs] - Item duration in milliseconds, when known.
 @BuiltValue()
 abstract class PlaybackSessionEntry implements Built<PlaybackSessionEntry, PlaybackSessionEntryBuilder> {
-  /// The item's PID.
+  /// The item's PID; empty in a slot the caller may not see.
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// Display title.
+  /// Display title; empty in a slot the caller may not see.
   @BuiltValueField(wireName: r'title')
   String get title;
 

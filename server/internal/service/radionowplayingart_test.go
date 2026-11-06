@@ -398,7 +398,7 @@ func TestRadioArtIsNotServedWhileOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	cur.RadioExternalArt = false
-	if _, err := svc.AdminSettingsPut(ctx, nil, cur); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, nil, everySetting(cur)); err != nil {
 		t.Fatalf("switching the rung off: %v", err)
 	}
 	if _, err := svc.RadioNowPlayingArt(key); KindOf(err) != KindNotFound {

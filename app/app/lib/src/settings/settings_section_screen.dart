@@ -179,31 +179,35 @@ class _Group extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      // Top only: the header owns the space under itself, and a screen
-      // adding its own on top of that is what makes one section sit
-      // differently from the next.
-      Padding(
-        padding: EdgeInsets.only(top: WaxLayout.of(context).sectionGap),
-        child: switch (title) {
-          final title? => SectionHeader(title: title),
-          null => null,
-        },
-      ),
-      if (note case final note?)
+  Widget build(BuildContext context) => SettingGroupFrame(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        // Top only: the header owns the space under itself, and a screen
+        // adding its own on top of that is what makes one section sit
+        // differently from the next.
         Padding(
-          padding: const EdgeInsets.only(bottom: WaxSpace.s8),
-          child: WaxProse(
-            note,
-            style: WaxType.bodySmall.copyWith(
-              color: WaxColors.of(context).textTertiary,
+          padding: EdgeInsets.only(top: WaxLayout.of(context).sectionGap),
+          child: switch (title) {
+            final title? => SectionHeader(title: title),
+            null => null,
+          },
+        ),
+        if (note case final note?)
+          SettingGroupNote(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+              child: WaxProse(
+                note,
+                style: WaxType.bodySmall.copyWith(
+                  color: WaxColors.of(context).textTertiary,
+                ),
+              ),
             ),
           ),
-        ),
-      ...children,
-    ],
+        ...children,
+      ],
+    ),
   );
 }
 

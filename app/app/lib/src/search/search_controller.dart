@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
+import 'package:waxdeck_data/waxdeck_data.dart'
+    show ClientSettingKeys, ClientSettingsStore;
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../radio/radio_controller.dart';
@@ -212,6 +215,7 @@ final searchScopeProvider =
 /// chips filter an answer already in hand, so watching the whole chip
 /// refires the identical query, behind a skeleton, on every tap.
 final searchResultsProvider = FutureProvider<SearchResults?>((ref) async {
+  ref.watch(signedInAccountProvider);
   final query = ref.watch(searchQueryProvider);
   if (query.isEmpty) return null;
   final asks = ref.watch(
@@ -295,17 +299,26 @@ final podcastDirectoryResultsProvider =
 
 /// The last few queries, newest first.
 ///
-/// Per-device rather than per-account, and stored where those go: what
-/// someone typed on this machine is a shortcut back to
-/// it, not a fact about their library. JSON is the encoding because the
-/// value is a list and a query may hold anything a keyboard emits - a
-/// separator would eventually appear inside one.
+/// Kept on this machine with the per-device preferences, since what
+/// someone typed here is a shortcut back to it rather than a fact about
+/// their library, but filed under the signed-in account: the strings
+/// name things in that account's library, and another account on this
+/// browser or device never reads them, however the last session ended.
+/// JSON is the encoding because the value is a list and a query may hold
+/// anything a keyboard emits - a separator would eventually appear
+/// inside one.
 class RecentSearches extends Notifier<List<String>>
     with StoredSetting<List<String>> {
   static const limit = 10;
 
+  /// Whose list this is: the signed-in account, or nobody.
+  String? _account;
+
   @override
-  String get settingKey => ClientSettingKeys.recentSearches;
+  String? get settingKey => switch (_account) {
+    final account? => ClientSettingKeys.recentSearchesOf(account),
+    null => null,
+  };
 
   @override
   List<String> get defaultValue => const <String>[];
@@ -360,7 +373,21 @@ class RecentSearches extends Notifier<List<String>>
   String encode(List<String> value) => jsonEncode(value);
 
   @override
-  List<String> build() => hydrate();
+  List<String> build() {
+    _account = ref.watch(signedInAccountProvider);
+    unawaited(_dropUnkeyed(ref.read(clientSettingsStoreProvider)));
+    return hydrate();
+  }
+
+  /// Older builds kept one list for every account. Whose searches it held
+  /// is not known, so it is dropped rather than adopted.
+  static Future<void> _dropUnkeyed(ClientSettingsStore store) async {
+    try {
+      await store.remove(ClientSettingKeys.unkeyedRecentSearches);
+    } on Object catch (error) {
+      debugPrint('recent searches: the unkeyed list did not clear: $error');
+    }
+  }
 
   void remember(String query) {
     if (query.trim().isEmpty) return;
@@ -386,21 +413,30 @@ final recentSearchesProvider = NotifierProvider<RecentSearches, List<String>>(
   RecentSearches.new,
 );
 
-/// What search leaves behind when a session ends: nothing.
+/// What search leaves behind when [account]'s session ends: nothing.
 ///
-/// The store these live in is per-device and a sign-out deliberately
-/// leaves most of it standing - a collapsed sidebar describes the
-/// machine, not the account. This key is the exception, and the
-/// distinction is worth being exact about: recent searches are strings
-/// the departing listener typed, and they name artists, albums, and
-/// books in *their* library. On web they sit in origin-scoped
-/// `localStorage`, which is to say in a place the next account to use
-/// this browser reads back. That makes them the departing account's
-/// content, like the queue and the cached artwork, and they go the same
-/// way.
+/// The list is filed under the account, so no other account reads it
+/// however the session ended. A session that ends here forgets it too:
+/// the strings name things in that account's library, and like the queue
+/// and the cached artwork they go with it, so the account itself comes
+/// back to none. The slot goes whether or not this session ever read it.
 ///
 /// Never throws. A history that will not clear is not a reason to leave
 /// the session standing, and a session left standing is a dead
 /// credential the UI keeps using.
-Future<void> forgetSearchesOnSignOut(Ref ref) =>
-    ref.read(recentSearchesProvider.notifier).clearStored();
+Future<void> forgetSearchesOnSignOut(Ref ref, String account) async {
+  // Through the container: the list watches the signed-in account, so a
+  // read through the auth controller's own ref is a cycle to Riverpod.
+  final container = ref.container;
+  // The list in memory too, and a read still in flight cannot put it back.
+  if (container.exists(recentSearchesProvider)) {
+    await container.read(recentSearchesProvider.notifier).clearStored();
+  }
+  try {
+    await container
+        .read(clientSettingsStoreProvider)
+        .remove(ClientSettingKeys.recentSearchesOf(account));
+  } on Object catch (error) {
+    debugPrint('recent searches: the list did not clear: $error');
+  }
+}

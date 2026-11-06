@@ -289,6 +289,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// Listing cursors that stand on a row the caller may not see travel
+	// sealed, under a subkey of the same secret so they outlive a restart.
+	cursorSealer, err := auth.NewSealer(secret, "waxdeck-cursor-v1")
+	if err != nil {
+		return err
+	}
 
 	svcRoots, err := serviceRoots(roots, *managedRoots, *bookRoots)
 	if err != nil {
@@ -476,6 +482,7 @@ func run() error {
 		ResetStaleCatalog:         *resetStale,
 		Sealer:                    sealer,
 		SecretCipher:              catalogCipher,
+		CursorSealer:              cursorSealer,
 		PodcastDir:                *podcastDir,
 		PodcastRootName:           *podcastRoot,
 		AllowPrivateFeedHosts:     *allowPrivateNet,
@@ -1254,6 +1261,7 @@ func run() error {
 		Bases:                bases,
 		InvalidatePlayer:     hub.MarkPlayerAll,
 		SharedOutputsAllowed: svc.UserSharedOutputsAllowed,
+		EntriesVisible:       svc.QueueEntriesVisible,
 		Logger:               log,
 	})
 	if err != nil {

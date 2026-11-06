@@ -71,6 +71,33 @@ Widget _host(FakeRepository repo, Widget home, {FilePickerPort? picker}) =>
       child: routedHost(home, pushed: true),
     );
 
+/// Playlist listings that fail as a restarting server's do while [down].
+class _ListsDown extends FakeRepository {
+  _ListsDown() : super(items: const [_track]);
+
+  var down = true;
+
+  @override
+  Future<PlaylistPage> listPlaylists({
+    String? cursor,
+    int? limit,
+    String? containsItem,
+  }) async {
+    if (down) {
+      throw const WaxDeckApiException(
+        code: 'internal',
+        message: 'boom',
+        statusCode: 500,
+      );
+    }
+    return super.listPlaylists(
+      cursor: cursor,
+      limit: limit,
+      containsItem: containsItem,
+    );
+  }
+}
+
 /// A picker that resolves pickFile to one fixed image.
 class _CoverPicker implements FilePickerPort {
   _CoverPicker(this.image);
@@ -2155,6 +2182,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.playlistMembers[empty.pid], [_track.pid]);
+  });
+
+  testWidgets('a sheet whose lists fail to load says why, and asking again '
+      'lists them', (tester) async {
+    final repo = _ListsDown();
+    await repo.createPlaylist(name: 'Empty', kind: 'static');
+    await tester.pumpWidget(
+      _host(repo, const AddToPlaylistSheet(item: _track)),
+    );
+    // Past the default ladder's ten attempts: the failure is final.
+    await tester.pump(const Duration(seconds: 40));
+    await tester.pump();
+
+    expect(
+      find.text('The server ran into a problem it could not handle.'),
+      findsOneWidget,
+    );
+    repo.down = false;
+    await tester.tap(find.widgetWithText(WaxButton, 'Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('Empty'), findsOneWidget);
   });
 
   // A toast would sit under the sheet, which stays open.

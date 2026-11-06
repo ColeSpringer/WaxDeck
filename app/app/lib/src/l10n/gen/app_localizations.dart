@@ -141,12 +141,6 @@ abstract class AppLocalizations {
   /// **'App {app}, server {server}'**
   String aboutRowVersions(String app, String server);
 
-  /// Stands in for the server's version when it did not answer. Lower case: it sits where a version number would.
-  ///
-  /// In en, this message translates to:
-  /// **'unreachable'**
-  String get aboutServerUnreachable;
-
   /// Title of the About page.
   ///
   /// In en, this message translates to:
@@ -404,6 +398,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No backups yet'**
   String get adminBackupsEmpty;
+
+  /// Title of the error state when the backup archive list could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the backups'**
+  String get adminBackupsLoadError;
 
   /// Heading over the fields saying how many backups the server keeps.
   ///
@@ -2559,6 +2559,12 @@ abstract class AppLocalizations {
   /// **'Transcoding'**
   String get adminServerTranscodingGroup;
 
+  /// Title of the error state in place of the transcoding group when its limits could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the transcoding limits'**
+  String get adminServerTranscodingLoadError;
+
   /// Message after the transcoding limits were written.
   ///
   /// In en, this message translates to:
@@ -2616,7 +2622,7 @@ abstract class AppLocalizations {
   /// Caption under the streaming engine tile while the engine is unreachable: playback goes on with the original files.
   ///
   /// In en, this message translates to:
-  /// **'Originals play directly meanwhile'**
+  /// **'Originals play directly'**
   String get adminStreamingDirect;
 
   /// Streaming engine tile value: the server runs without one (no engine URL is set).
@@ -2720,6 +2726,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{checked} of {total} checked'**
   String adminTileChecked(int checked, int total);
+
+  /// Caption of a dashboard tile whose number could not be read from the server, drawn under a dash in the error colour, so a failure never reads as zero or as still loading.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read'**
+  String get adminTileCouldNotRead;
 
   /// Caption of the health tile while the first health sweep is running.
   ///
@@ -3411,19 +3423,19 @@ abstract class AppLocalizations {
   /// **'Pending'**
   String get adminUsersStatePending;
 
-  /// Tab holding invite tokens.
+  /// Segment showing the invite tokens.
   ///
   /// In en, this message translates to:
   /// **'Invites'**
   String get adminUsersTabInvites;
 
-  /// Tab holding signup requests waiting for a decision.
+  /// Segment showing the signup requests waiting for a decision.
   ///
   /// In en, this message translates to:
   /// **'Requests'**
   String get adminUsersTabRequests;
 
-  /// Tab holding the list of accounts.
+  /// Segment showing the list of accounts.
   ///
   /// In en, this message translates to:
   /// **'Users'**
@@ -3452,6 +3464,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'unlimited'**
   String get adminUsersUploadsUnlimited;
+
+  /// Segmented control on the users screen choosing which list it shows: the accounts, the signup requests or the invites.
+  ///
+  /// In en, this message translates to:
+  /// **'Show'**
+  String get adminUsersViewLabel;
 
   /// Body of the first-hour card. It exists to tell "still working" from "apparently broken" on a new server.
   ///
@@ -3956,6 +3974,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Log in'**
   String get authLogIn;
+
+  /// Under the heading of the page the system browser shows once a desktop sign-in is done: the tab has nothing left to do.
+  ///
+  /// In en, this message translates to:
+  /// **'Close this tab and return to WaxDeck.'**
+  String get authLoopbackMessage;
+
+  /// Heading of the page the system browser shows once a desktop sign-in has handed its code back to the app.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in'**
+  String get authLoopbackTitle;
 
   /// Between the password form and the single-sign-on buttons. Lower case: it is a divider, not a heading.
   ///
@@ -4629,7 +4659,7 @@ abstract class AppLocalizations {
   /// **'{count, plural, other{{count} parts}}'**
   String bookPartsCount(int count);
 
-  /// How far through a book the listener is, in the line under its title.
+  /// How far through a book the listener is, in the line under its title, and under the full player's seek bar once nothing is left.
   ///
   /// In en, this message translates to:
   /// **'{percent} percent'**
@@ -5055,12 +5085,6 @@ abstract class AppLocalizations {
   /// **'Done'**
   String get commonDone;
 
-  /// A control's own label while it is fetching what it was pressed for.
-  ///
-  /// In en, this message translates to:
-  /// **'Loading'**
-  String get commonLoading;
-
   /// Stands in for a track's name while the row it sits in is still resolving. The trailing character is a single-glyph ellipsis.
   ///
   /// In en, this message translates to:
@@ -5168,6 +5192,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show WaxDeck'**
   String get desktopTrayShow;
+
+  /// Names a device a session plays on when the server knows no name for it: the remote screen's title, and inside the device sentences. Lower case: it is read inside them.
+  ///
+  /// In en, this message translates to:
+  /// **'another device'**
+  String get devicesAnotherDevice;
 
   /// Says a cast address was set by the server's operator rather than found.
   ///
@@ -5943,6 +5973,12 @@ abstract class AppLocalizations {
   /// **'That device could not carry that out. It is still connected, so it is worth trying again.'**
   String get errorEndpointFailed;
 
+  /// Error sentence for the spec code `endpoint-idle`: a play or skip sent to another device found nothing live there to act on, with its queue empty or standing with nothing playing.
+  ///
+  /// In en, this message translates to:
+  /// **'That device has nothing to play.'**
+  String get errorEndpointIdle;
+
   /// Error sentence for the spec code `endpoint-offline`.
   ///
   /// In en, this message translates to:
@@ -6057,6 +6093,12 @@ abstract class AppLocalizations {
   /// **'Could not reach the server. Check the connection and try again.'**
   String get errorNetwork;
 
+  /// Error sentence for the spec code `no-session`: a command sent to another device named a session that has ended there or been replaced.
+  ///
+  /// In en, this message translates to:
+  /// **'That device is no longer playing this session.'**
+  String get errorNoSession;
+
   /// Error sentence for the spec code `not-found`.
   ///
   /// In en, this message translates to:
@@ -6068,6 +6110,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Podcasts are turned off on this server.'**
   String get errorPodcastsOff;
+
+  /// Error sentence for the spec code `queue-end`: a next sent to another device found nothing after what it plays.
+  ///
+  /// In en, this message translates to:
+  /// **'That device is already at the end of its queue.'**
+  String get errorQueueEnd;
+
+  /// Error sentence for the spec code `queue-start`: a previous sent to another device found nothing before what it plays.
+  ///
+  /// In en, this message translates to:
+  /// **'That device is already at the start of its queue.'**
+  String get errorQueueStart;
 
   /// Error sentence for the spec code `quota-exceeded`. The code is shared by an upload over the uploader's allowance, a backup import and an account export, so it names no particular limit.
   ///
@@ -9675,6 +9729,12 @@ abstract class AppLocalizations {
   /// **'Preview first. Nothing moves until you apply.'**
   String get organizeHint;
 
+  /// Title of the error state when the list of past organize runs could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load past runs'**
+  String get organizeHistoryLoadError;
+
   /// Button under the organize history that lists the next, older page of runs. Shown while the server holds older ones.
   ///
   /// In en, this message translates to:
@@ -10089,6 +10149,12 @@ abstract class AppLocalizations {
   /// **'Artwork {index} of {count}'**
   String playerArtworkPosition(int index, int count);
 
+  /// Under the full player's seek bar for a book: how far through the whole book the listener is, and how much of it is left. {left} is an already-worded span.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent} percent, {left} left'**
+  String playerBookProgress(int percent, String left);
+
   /// Button that bookmarks the position it names. {time} is a timecode.
   ///
   /// In en, this message translates to:
@@ -10317,7 +10383,7 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 left} other{{count} left}}'**
   String playerLeftCount(int count);
 
-  /// Opens the lyrics of what is playing.
+  /// Opens the lyrics of what is playing, and titles the panel and sheet that show them.
   ///
   /// In en, this message translates to:
   /// **'Lyrics'**
@@ -10437,7 +10503,7 @@ abstract class AppLocalizations {
   /// **'Previous'**
   String get playerPrevious;
 
-  /// Opens the queue of what plays next.
+  /// Opens the queue of what plays next, and titles the panel and screen that show it.
   ///
   /// In en, this message translates to:
   /// **'Queue'**
@@ -10701,6 +10767,12 @@ abstract class AppLocalizations {
   /// **'Could not load the transcript.'**
   String get playerTranscriptError;
 
+  /// What the trim control has saved while it is under a minute, abbreviated as the minutes beside it are; it fills {saved} in playerTrimSilenceSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds} sec'**
+  String playerTrimSavedSeconds(int seconds);
+
   /// Control that skips the quiet parts of a spoken recording.
   ///
   /// In en, this message translates to:
@@ -10710,7 +10782,7 @@ abstract class AppLocalizations {
   /// The trim control once it has saved some listening time. {saved} is an already-worded duration.
   ///
   /// In en, this message translates to:
-  /// **'Trim silence ({saved})'**
+  /// **'Trim silence ({saved} saved)'**
   String playerTrimSilenceSaved(String saved);
 
   /// Accessible name of the control that drops a station from the favourites.
@@ -12862,12 +12934,6 @@ abstract class AppLocalizations {
   /// **'Could not load your playlists'**
   String get playlistsLoadError;
 
-  /// The same failure as a sentence in the add-to-playlist sheet, which has no room for an error state and says it in a line.
-  ///
-  /// In en, this message translates to:
-  /// **'Could not load your playlists.'**
-  String get playlistsLoadErrorSentence;
-
   /// Action that makes a playlist: the toolbar button, the empty state's button, and the row at the foot of the add-to-playlist sheet.
   ///
   /// In en, this message translates to:
@@ -13977,6 +14043,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 selected} other{{count} selected}}'**
   String queueSelectedCount(int count);
+
+  /// The line under an earlier session that played on no named device: how many items its queue holds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 item} other{{count} items}}'**
+  String queueSessionItems(int count);
+
+  /// The line under an earlier session: how many items its queue holds, left out for one, and the device it played on. Lower case: it continues the title above it.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{on {endpoint}} other{{count} items · on {endpoint}}}'**
+  String queueSessionItemsOn(int count, String endpoint);
+
+  /// Names an earlier session by its size when its current entry is unknown: in its row, in the restore control's name and in the message after restoring it.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 queued item} other{{count} queued items}}'**
+  String queueSessionQueued(int count);
 
   /// Accessible name of the control that unfolds the already-played rows.
   ///
@@ -15279,6 +15363,24 @@ abstract class AppLocalizations {
   /// **'Revoke {label}'**
   String settingsAppPasswordRevoke(String label);
 
+  /// The confirming button of the dialog that revokes one app password.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get settingsAppPasswordRevokeAction;
+
+  /// Body of the dialog confirming that an app password is revoked. {label} is what that password is called.
+  ///
+  /// In en, this message translates to:
+  /// **'Apps that sign in with \"{label}\" lose access immediately.'**
+  String settingsAppPasswordRevokeBody(String label);
+
+  /// Title of the dialog confirming that an app password is revoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke app password?'**
+  String get settingsAppPasswordRevokeTitle;
+
   /// What an app password with no label of its own is called.
   ///
   /// In en, this message translates to:
@@ -15621,12 +15723,6 @@ abstract class AppLocalizations {
   /// **'{name} (this device)'**
   String settingsDeviceThisDevice(String name);
 
-  /// Second line of the session list error state.
-  ///
-  /// In en, this message translates to:
-  /// **'The server did not answer.'**
-  String get settingsDevicesErrorMessage;
-
   /// Error state where the session list would be.
   ///
   /// In en, this message translates to:
@@ -15963,12 +16059,6 @@ abstract class AppLocalizations {
   /// **'Clear'**
   String get settingsLastfmCredentialsClear;
 
-  /// Shown in the Last.fm credentials dialog when the read failed.
-  ///
-  /// In en, this message translates to:
-  /// **'Could not load the credential state'**
-  String get settingsLastfmCredentialsError;
-
   /// Title of the administrator dialog holding the server's Last.fm credentials.
   ///
   /// In en, this message translates to:
@@ -16106,12 +16196,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Apprise URLs'**
   String get settingsNotifyAppriseTargetsHint;
-
-  /// Shown where the event checklist would be when the read failed.
-  ///
-  /// In en, this message translates to:
-  /// **'Could not load the event catalog'**
-  String get settingsNotifyCatalogError;
 
   /// Field choosing which service a new notification target uses.
   ///
@@ -16328,6 +16412,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove'**
   String get settingsNotifyTargetRemove;
+
+  /// Body of the dialog confirming that a notification target is removed. {name} is the target's label, or its kind where it has none.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{name}\" stops receiving notifications.'**
+  String settingsNotifyTargetRemoveBody(String name);
+
+  /// Title of the dialog confirming that a notification target is removed.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove notification target?'**
+  String get settingsNotifyTargetRemoveTitle;
 
   /// Shown where the notification target rows would be when there are none.
   ///
@@ -18945,6 +19041,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Finishing'**
   String get uploadsFinishing;
+
+  /// Under an upload row in place of uploadsFinishing while asking the server how its seal went fails on the network; the row keeps asking and goes back to Finishing at the first answer.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing, can\'t reach the server'**
+  String get uploadsFinishingUnreachable;
 
   /// Accessible name of the picker choosing what a URL download is converted to.
   ///

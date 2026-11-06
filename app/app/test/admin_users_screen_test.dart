@@ -18,17 +18,12 @@ import 'wax_finders.dart';
 /// The editor is a console location, and the console refuses an account
 /// without the role, so the fake has to hold an administrator's session
 /// for a row to open into anything.
-Widget _host(
-  FakeRepository repo, {
-  List<Override> overrides = const [],
-  Duration? Function(int, Object)? retry,
-}) {
+Widget _host(FakeRepository repo, {List<Override> overrides = const []}) {
   repo.sessionState = const SessionState(
     authenticated: true,
     user: WaxDeckUser(id: 'us-0', username: 'admin', roles: ['admin']),
   );
   return ProviderScope(
-    retry: retry,
     overrides: [
       repositoryProvider.overrideWithValue(repo),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
@@ -372,11 +367,17 @@ void main() {
     tester.view.physicalSize = const Size(900, 220);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(_host(_DownRepository(), retry: (_, _) => null));
-    await tester.pumpAndSettle();
+    await tester.pumpWidget(_host(_DownRepository()));
+    // Past the first retry's delay: the read asks again behind the face,
+    // whose Try again spins meanwhile.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
 
     expect(tester.takeException(), isNull);
     expect(find.byType(ErrorState), findsOneWidget);
+    // Unmounted inside the test, so no retry timer outlives it.
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('a password set from the editor reaches the server', (

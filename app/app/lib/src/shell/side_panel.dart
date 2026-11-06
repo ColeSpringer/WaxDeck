@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../l10n/l10n.dart';
 import '../player/lyrics.dart';
 import '../queue/queue_panel.dart';
 
@@ -11,13 +12,14 @@ import '../queue/queue_panel.dart';
 /// second navigation to reason about. The remote session joins this list
 /// when that surface exists.
 enum WaxPanel {
-  queue('Queue'),
-  lyrics('Lyrics');
-
-  const WaxPanel(this.title);
+  queue,
+  lyrics;
 
   /// Names the panel in its header and to assistive tech.
-  final String title;
+  String titleOf(AppLocalizations l10n) => switch (this) {
+    WaxPanel.queue => l10n.playerQueue,
+    WaxPanel.lyrics => l10n.playerLyrics,
+  };
 }
 
 /// Which panel is open, or none.

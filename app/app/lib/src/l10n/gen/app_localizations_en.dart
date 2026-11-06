@@ -36,9 +36,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get aboutServerUnreachable => 'unreachable';
-
-  @override
   String get aboutTitle => 'About';
 
   @override
@@ -177,6 +174,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminBackupsEmpty => 'No backups yet';
+
+  @override
+  String get adminBackupsLoadError => 'Could not load the backups';
 
   @override
   String get adminBackupsRetention => 'Retention';
@@ -1452,6 +1452,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminServerTranscodingGroup => 'Transcoding';
 
   @override
+  String get adminServerTranscodingLoadError =>
+      'Could not load the transcoding limits';
+
+  @override
   String get adminServerTranscodingSaved => 'Transcoding limits saved';
 
   @override
@@ -1481,7 +1485,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminStreamingConnected => 'Connected';
 
   @override
-  String get adminStreamingDirect => 'Originals play directly meanwhile';
+  String get adminStreamingDirect => 'Originals play directly';
 
   @override
   String get adminStreamingNotConfigured => 'Not configured';
@@ -1548,6 +1552,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String adminTileChecked(int checked, int total) {
     return '$checked of $total checked';
   }
+
+  @override
+  String get adminTileCouldNotRead => 'Could not read';
 
   @override
   String get adminTileFirstSweep => 'First sweep still running';
@@ -2008,6 +2015,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminUsersUploadsUnlimited => 'unlimited';
 
   @override
+  String get adminUsersViewLabel => 'Show';
+
+  @override
   String get adminWarmingBlurb =>
       'Files appear as indexed; artwork and matching follow.';
 
@@ -2308,6 +2318,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authLogIn => 'Log in';
+
+  @override
+  String get authLoopbackMessage => 'Close this tab and return to WaxDeck.';
+
+  @override
+  String get authLoopbackTitle => 'Signed in';
 
   @override
   String get authOr => 'or';
@@ -3096,9 +3112,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonDone => 'Done';
 
   @override
-  String get commonLoading => 'Loading';
-
-  @override
   String get commonLoadingTitle => 'Loading…';
 
   @override
@@ -3151,6 +3164,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopTrayShow => 'Show WaxDeck';
+
+  @override
+  String get devicesAnotherDevice => 'another device';
 
   @override
   String get devicesBaseConfigured => 'Configured address';
@@ -3698,6 +3714,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'That device could not carry that out. It is still connected, so it is worth trying again.';
 
   @override
+  String get errorEndpointIdle => 'That device has nothing to play.';
+
+  @override
   String get errorEndpointOffline =>
       'That device is not connected. Refresh the list of devices.';
 
@@ -3772,10 +3791,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not reach the server. Check the connection and try again.';
 
   @override
+  String get errorNoSession => 'That device is no longer playing this session.';
+
+  @override
   String get errorNotFound => 'That is not here any more.';
 
   @override
   String get errorPodcastsOff => 'Podcasts are turned off on this server.';
+
+  @override
+  String get errorQueueEnd => 'That device is already at the end of its queue.';
+
+  @override
+  String get errorQueueStart =>
+      'That device is already at the start of its queue.';
 
   @override
   String get errorQuotaExceeded => 'That is over a limit this server keeps.';
@@ -6268,6 +6297,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeHint => 'Preview first. Nothing moves until you apply.';
 
   @override
+  String get organizeHistoryLoadError => 'Could not load past runs';
+
+  @override
   String get organizeHistoryMore => 'Show older runs';
 
   @override
@@ -6539,6 +6571,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String playerArtworkPosition(int index, int count) {
     return 'Artwork $index of $count';
+  }
+
+  @override
+  String playerBookProgress(int percent, String left) {
+    return '$percent percent, $left left';
   }
 
   @override
@@ -6924,11 +6961,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerTranscriptError => 'Could not load the transcript.';
 
   @override
+  String playerTrimSavedSeconds(int seconds) {
+    return '$seconds sec';
+  }
+
+  @override
   String get playerTrimSilence => 'Trim silence';
 
   @override
   String playerTrimSilenceSaved(String saved) {
-    return 'Trim silence ($saved)';
+    return 'Trim silence ($saved saved)';
   }
 
   @override
@@ -8381,9 +8423,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistsLoadError => 'Could not load your playlists';
 
   @override
-  String get playlistsLoadErrorSentence => 'Could not load your playlists.';
-
-  @override
   String get playlistsNew => 'New playlist';
 
   @override
@@ -9158,6 +9197,39 @@ class AppLocalizationsEn extends AppLocalizations {
       locale: localeName,
       other: '$count selected',
       one: '1 selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String queueSessionItems(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String queueSessionItemsOn(int count, String endpoint) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items · on $endpoint',
+      one: 'on $endpoint',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String queueSessionQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count queued items',
+      one: '1 queued item',
     );
     return '$_temp0';
   }
@@ -10080,6 +10152,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get settingsAppPasswordRevokeAction => 'Revoke';
+
+  @override
+  String settingsAppPasswordRevokeBody(String label) {
+    return 'Apps that sign in with \"$label\" lose access immediately.';
+  }
+
+  @override
+  String get settingsAppPasswordRevokeTitle => 'Revoke app password?';
+
+  @override
   String get settingsAppPasswordUnlabeled => 'Unlabeled';
 
   @override
@@ -10278,9 +10361,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsDevicesErrorMessage => 'The server did not answer.';
-
-  @override
   String get settingsDevicesErrorTitle => 'Could not load devices';
 
   @override
@@ -10463,10 +10543,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLastfmCredentialsClear => 'Clear';
 
   @override
-  String get settingsLastfmCredentialsError =>
-      'Could not load the credential state';
-
-  @override
   String get settingsLastfmCredentialsTitle => 'Last.fm API credentials';
 
   @override
@@ -10553,9 +10629,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsNotifyAppriseTargetsHint => 'Apprise URLs';
-
-  @override
-  String get settingsNotifyCatalogError => 'Could not load the event catalog';
 
   @override
   String get settingsNotifyDeliverVia => 'Deliver via';
@@ -10680,6 +10753,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsNotifyTargetRemove => 'Remove';
+
+  @override
+  String settingsNotifyTargetRemoveBody(String name) {
+    return '\"$name\" stops receiving notifications.';
+  }
+
+  @override
+  String get settingsNotifyTargetRemoveTitle => 'Remove notification target?';
 
   @override
   String get settingsNotifyTargetsEmpty => 'No notification targets yet';
@@ -12370,6 +12451,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uploadsFinishing => 'Finishing';
+
+  @override
+  String get uploadsFinishingUnreachable =>
+      'Finishing, can\'t reach the server';
 
   @override
   String get uploadsFormat => 'Download format';

@@ -13,6 +13,7 @@ import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/pending_actions.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -327,6 +328,9 @@ class _ActionBar extends ConsumerWidget {
     final actions = EpisodeActions(ref: ref, showPid: showPid);
     final playable = EpisodeActions.playable(episode);
     final resuming = progress.inProgress;
+    final marking = ref
+        .watch(pendingActionsProvider)
+        .contains(PendingAction.markPlayed(episode.pid));
     final l10n = context.l10n;
 
     return WaxActionBar(
@@ -356,14 +360,19 @@ class _ActionBar extends ConsumerWidget {
           l10n,
           episode.pid,
           episodeFetchOf(episode),
-          onFetch: () => unawaited(actions.fetch(context, episode.pid)),
-          onRemove: () =>
-              unawaited(actions.removeDownload(context, episode.pid)),
+          onFetch: () => unawaited(actions.fetch(context, episode)),
+          onRemove: () => unawaited(actions.removeDownload(context, episode)),
         ),
         WaxAction(
           label: progress.played ? l10n.podcastPlayed : l10n.podcastMarkPlayed,
           glyph: WaxIcons.check,
           semanticsId: SemanticsIds.episodeMarkPlayed,
+          // Played is a state to read, never the disabled tint.
+          state: progress.played
+              ? const WaxActionState.done()
+              : marking
+              ? const WaxActionState.busy()
+              : const WaxActionState.ready(),
           onPressed: progress.played
               ? null
               : () => unawaited(

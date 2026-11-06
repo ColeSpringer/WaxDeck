@@ -177,6 +177,40 @@
       }
     }
   },
+  "queueSessionItems": "{count, plural, =1{1 item} other{{count} items}}",
+  "@queueSessionItems": {
+    "description": "The line under an earlier session that played on no named device: how many items its queue holds.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "queueSessionItemsOn": "{count, plural, =1{on {endpoint}} other{{count} items · on {endpoint}}}",
+  "@queueSessionItemsOn": {
+    "description": "The line under an earlier session: how many items its queue holds, left out for one, and the device it played on. Lower case: it continues the title above it.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      },
+      "endpoint": {
+        "type": "String",
+        "example": "Kitchen speaker"
+      }
+    }
+  },
+  "queueSessionQueued": "{count, plural, =1{1 queued item} other{{count} queued items}}",
+  "@queueSessionQueued": {
+    "description": "Names an earlier session by its size when its current entry is unknown: in its row, in the restore control's name and in the message after restoring it.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "queueShowHistory": "Show what has played",
   "@queueShowHistory": {
     "description": "Accessible name of the control that unfolds the already-played rows."

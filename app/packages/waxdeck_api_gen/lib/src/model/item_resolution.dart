@@ -14,13 +14,13 @@ part 'item_resolution.g.dart';
 ///
 /// Properties:
 /// * [items] 
-/// * [departed] - The requested PIDs gone for everyone: no item answers to it any more (a kind change folded it into another) or ever did, or its item lost its files for good (purged from the trash, deleted permanently, or its library removed). As requested, in request order, a repeated PID once, and absent rather than empty when no miss was one of these. 
+/// * [departed] - The requested PIDs gone for everyone: no item answers to it any more (a kind change folded it into another) or ever did. An archived item is answered rather than named here. As requested, in request order, a repeated PID once, and absent rather than empty when no miss was one of these. 
 @BuiltValue()
 abstract class ItemResolution implements Built<ItemResolution, ItemResolutionBuilder> {
   @BuiltValueField(wireName: r'items')
   BuiltList<ItemSummary> get items;
 
-  /// The requested PIDs gone for everyone: no item answers to it any more (a kind change folded it into another) or ever did, or its item lost its files for good (purged from the trash, deleted permanently, or its library removed). As requested, in request order, a repeated PID once, and absent rather than empty when no miss was one of these. 
+  /// The requested PIDs gone for everyone: no item answers to it any more (a kind change folded it into another) or ever did. An archived item is answered rather than named here. As requested, in request order, a repeated PID once, and absent rather than empty when no miss was one of these. 
   @BuiltValueField(wireName: r'departed')
   BuiltList<String>? get departed;
 

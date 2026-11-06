@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../shell/async_box_face.dart';
+import '../shell/pending_actions.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -68,6 +69,9 @@ class ReviewEntryView extends ConsumerStatefulWidget {
   ConsumerState<ReviewEntryView> createState() => _ReviewEntryViewState();
 }
 
+/// What a revert runs as in the entry's decision in flight.
+const _revertWork = 'revert';
+
 class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
   ReviewCandidate? _selectedCandidate(ReviewEntryDetail detail) {
     if (detail.candidates.isEmpty) return null;
@@ -76,31 +80,35 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
         detail.candidates.first;
   }
 
-  Future<void> _decide(String action, {String? candidateMbid}) async {
-    final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    try {
-      final warnings = await ref
-          .read(reviewEntryProvider(widget.entryId).notifier)
-          .decide(action, candidateMbid: candidateMbid);
-      // The server's own words: a warning names the file or the field it
-      // is about, which no table sentence can.
-      if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
-    } on WaxDeckApiException catch (e) {
-      // A `conflict` names the file the library cannot take, which the
-      // table's "something changed first" would hide.
-      showRefusal(
-        messenger,
-        l10n,
-        explainRefusal(l10n, e),
-        refused: {widget.entryId: e.code},
-        mounted: () => mounted,
-        retry: (_) => _decide(action, candidateMbid: candidateMbid),
-      );
-    }
-  }
+  /// One decision at a time for the entry, shared with the queue's keys
+  /// and its bulk decisions: a press while one runs is dropped rather than
+  /// refused by the server.
+  Future<void> _decide(String action, {String? candidateMbid}) =>
+      _claim(action, () async {
+        final l10n = context.l10n;
+        final messenger = ref.read(shellMessengerProvider.notifier);
+        try {
+          final warnings = await ref
+              .read(reviewEntryProvider(widget.entryId).notifier)
+              .decide(action, candidateMbid: candidateMbid);
+          // The server's own words: a warning names the file or the field
+          // it is about, which no table sentence can.
+          if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
+        } on WaxDeckApiException catch (e) {
+          // A `conflict` names the file the library cannot take, which the
+          // table's "something changed first" would hide.
+          showRefusal(
+            messenger,
+            l10n,
+            explainRefusal(l10n, e),
+            refused: {widget.entryId: e.code},
+            mounted: () => mounted,
+            retry: (_) => _decide(action, candidateMbid: candidateMbid),
+          );
+        }
+      });
 
-  Future<void> _revert() async {
+  Future<void> _revert() => _claim(_revertWork, () async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
@@ -108,10 +116,18 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
     }
-  }
+  });
+
+  /// Runs [work] as the entry's [action], holding the entry's lock.
+  Future<void> _claim(String action, Future<void> Function() work) =>
+      ref.read(pendingActionsProvider.notifier).runAll([
+        PendingAction.reviewEntry(widget.entryId),
+        PendingAction.reviewAction(widget.entryId, action),
+      ], work);
 
   @override
   Widget build(BuildContext context) {
+    final pending = ref.watch(pendingActionsProvider);
     // The shared face rather than a switch on the state's type: a read
     // Riverpod is retrying is a loading state carrying its error, which a
     // type switch drew as a skeleton for as long as the retries ran.
@@ -126,6 +142,10 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
           _ActionBar(
             detail: value,
             candidate: _selectedCandidate(value),
+            busy: pending.contains(PendingAction.reviewEntry(widget.entryId)),
+            busyBy: (action) => pending.contains(
+              PendingAction.reviewAction(widget.entryId, action),
+            ),
             onDecide: _decide,
             onRevert: _revert,
           ),
@@ -301,12 +321,19 @@ class _ActionBar extends StatelessWidget {
   const _ActionBar({
     required this.detail,
     required this.candidate,
+    required this.busy,
+    required this.busyBy,
     required this.onDecide,
     required this.onRevert,
   });
 
   final ReviewEntryDetail detail;
   final ReviewCandidate? candidate;
+
+  /// Whether a decision is in flight, and which action's: that one draws
+  /// busy and no other takes a press.
+  final bool busy;
+  final bool Function(String action) busyBy;
   final void Function(String action, {String? candidateMbid}) onDecide;
   final VoidCallback onRevert;
 
@@ -332,7 +359,8 @@ class _ActionBar extends StatelessWidget {
       label: l10n.reviewActionDiscard,
       kind: WaxButtonKind.destructive,
       semanticsId: SemanticsIds.reviewDiscard,
-      onPressed: () => onDecide('discard'),
+      busy: busyBy('discard'),
+      onPressed: busy ? null : () => onDecide('discard'),
     );
     return Container(
       decoration: BoxDecoration(
@@ -363,7 +391,8 @@ class _ActionBar extends StatelessWidget {
                       label: l10n.reviewActionRevert,
                       kind: WaxButtonKind.tonal,
                       semanticsId: SemanticsIds.reviewRevert,
-                      onPressed: onRevert,
+                      busy: busyBy(_revertWork),
+                      onPressed: busy ? null : onRevert,
                     ),
                 ],
               )
@@ -377,7 +406,8 @@ class _ActionBar extends StatelessWidget {
                   WaxButton(
                     label: l10n.reviewActionApprove,
                     semanticsId: SemanticsIds.reviewApprove,
-                    onPressed: candidate == null || allCopies
+                    busy: busyBy('approve'),
+                    onPressed: busy || candidate == null || allCopies
                         ? null
                         : () => onDecide(
                             'approve',
@@ -389,26 +419,32 @@ class _ActionBar extends StatelessWidget {
                       label: l10n.reviewActionAddCopy,
                       kind: WaxButtonKind.tonal,
                       semanticsId: SemanticsIds.reviewAddCopy,
-                      onPressed: () => onDecide('as-is'),
+                      busy: busyBy('as-is'),
+                      onPressed: busy ? null : () => onDecide('as-is'),
                     )
                   else
                     WaxButton(
                       label: l10n.reviewActionAsIs,
                       kind: WaxButtonKind.tonal,
                       semanticsId: SemanticsIds.reviewAsIs,
-                      onPressed: () => onDecide('as-is'),
+                      busy: busyBy('as-is'),
+                      onPressed: busy ? null : () => onDecide('as-is'),
                     ),
                   WaxButton(
                     label: l10n.reviewActionUnofficial,
                     kind: WaxButtonKind.tonal,
                     semanticsId: SemanticsIds.reviewUnofficial,
-                    onPressed: allCopies ? null : () => onDecide('unofficial'),
+                    busy: busyBy('unofficial'),
+                    onPressed: busy || allCopies
+                        ? null
+                        : () => onDecide('unofficial'),
                   ),
                   WaxButton(
                     label: l10n.reviewActionSkip,
                     kind: WaxButtonKind.text,
                     semanticsId: SemanticsIds.reviewSkip,
-                    onPressed: () => onDecide('skip'),
+                    busy: busyBy('skip'),
+                    onPressed: busy ? null : () => onDecide('skip'),
                   ),
                   if (staged && !held) discard,
                 ],

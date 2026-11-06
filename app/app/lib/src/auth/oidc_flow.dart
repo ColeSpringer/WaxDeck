@@ -18,6 +18,10 @@ abstract interface class DeepLinkPort {
   Stream<Uri> get uriLinkStream;
 }
 
+/// What the browser tab says once the loopback redirect has landed. It
+/// is drawn outside the app, so the caller words it.
+typedef LoopbackPage = ({String heading, String line});
+
 /// A bound localhost listener that receives the loopback-mode redirect
 /// and hands over the one-time code.
 abstract interface class LoopbackReceiverPort {
@@ -48,7 +52,8 @@ class OidcLoginFlow {
   final WaxDeckRepository repository;
   final UrlOpenerPort urlOpener;
   final DeepLinkPort? deepLinks;
-  final Future<LoopbackReceiverPort> Function()? bindLoopbackReceiver;
+  final Future<LoopbackReceiverPort> Function(LoopbackPage page)?
+  bindLoopbackReceiver;
   final Random _random;
 
   static const defaultTimeout = Duration(minutes: 5);
@@ -128,10 +133,12 @@ class OidcLoginFlow {
     );
   }
 
-  /// Loopback mode (desktop): bind a localhost listener, open the browser,
-  /// and exchange the code the redirect delivers.
+  /// Loopback mode (desktop): bind a localhost listener that answers the
+  /// redirect with [page], open the browser, and exchange the code the
+  /// redirect delivers.
   Future<LoginResult> loginWithLoopback(
     OidcProvider provider, {
+    required LoopbackPage page,
     String? deviceName,
     Duration timeout = defaultTimeout,
   }) async {
@@ -139,7 +146,7 @@ class OidcLoginFlow {
     if (bind == null) {
       throw StateError('loopback login is not available on this platform');
     }
-    final receiver = await bind();
+    final receiver = await bind(page);
     try {
       final verifier = newVerifier();
       await urlOpener.open(

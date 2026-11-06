@@ -5,6 +5,7 @@ void main() {
   group('DriftClientSettingsStore', () {
     late MirrorDatabase db;
     late ClientSettingsStore store;
+    final searches = ClientSettingKeys.recentSearchesOf('us-ann');
 
     setUp(() {
       db = inMemoryMirrorDatabase();
@@ -28,17 +29,17 @@ void main() {
       final next = DriftClientSettingsStore(db);
       await snapshotOf(next, ClientSettingKeys.sidebarCollapsed);
       expect(next.peek(ClientSettingKeys.sidebarCollapsed)?.value, 'true');
-      expect(next.peek(ClientSettingKeys.recentSearches), isNotNull);
-      expect(next.peek(ClientSettingKeys.recentSearches)?.value, isNull);
+      expect(next.peek(searches), isNotNull);
+      expect(next.peek(searches)?.value, isNull);
     });
 
     test('a change made while the snapshot loads is not lost to it', () async {
       await store.write(ClientSettingKeys.sidebarCollapsed, 'true');
       final next = DriftClientSettingsStore(db);
-      await next.write(ClientSettingKeys.recentSearches, '["a"]');
+      await next.write(searches, '["a"]');
       await next.remove(ClientSettingKeys.sidebarCollapsed);
-      await snapshotOf(next, ClientSettingKeys.recentSearches);
-      expect(next.peek(ClientSettingKeys.recentSearches)?.value, '["a"]');
+      await snapshotOf(next, searches);
+      expect(next.peek(searches)?.value, '["a"]');
       expect(next.peek(ClientSettingKeys.sidebarCollapsed)?.value, isNull);
     });
 
@@ -48,15 +49,15 @@ void main() {
     });
 
     test('a second write replaces rather than duplicating', () async {
-      await store.write(ClientSettingKeys.recentSearches, '["a"]');
-      await store.write(ClientSettingKeys.recentSearches, '["b","a"]');
-      expect(await store.read(ClientSettingKeys.recentSearches), '["b","a"]');
+      await store.write(searches, '["a"]');
+      await store.write(searches, '["b","a"]');
+      expect(await store.read(searches), '["b","a"]');
       expect(await db.select(db.clientSettings).get(), hasLength(1));
     });
 
     test('keys do not read each other', () async {
       await store.write(ClientSettingKeys.sidebarCollapsed, 'true');
-      expect(await store.read(ClientSettingKeys.recentSearches), isNull);
+      expect(await store.read(searches), isNull);
     });
 
     test('a removed key is unset again, not empty', () async {
@@ -66,8 +67,8 @@ void main() {
     });
 
     test('removing a key that was never set is not an error', () async {
-      await store.remove(ClientSettingKeys.recentSearches);
-      expect(await store.read(ClientSettingKeys.recentSearches), isNull);
+      await store.remove(searches);
+      expect(await store.read(searches), isNull);
     });
 
     test('a database that is gone costs the preference, not the '

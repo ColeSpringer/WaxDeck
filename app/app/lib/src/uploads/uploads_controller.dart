@@ -253,11 +253,19 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   /// references windowed through here.
   static const chunkBytes = 1024 * 1024;
 
+  /// The smallest a chunk shrinks to on a link that cannot move a whole
+  /// one inside the stall: the piece the client hands its transport.
+  static const minChunkBytes = 64 * 1024;
+
   /// Tries a chunk gets after a transient failure before the transfer
   /// stops.
   static const chunkRetries = 3;
 
   var _generation = 0;
+
+  /// The send this client runs for each upload. A discard takes it away
+  /// before its delete goes, which stops that send at its next step.
+  final _sends = <String, Object>{};
 
   @override
   Future<UploadsState> build() async {
@@ -347,8 +355,9 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   /// ones window through their lazy accessor. [batchId] and
   /// [batchPath] join the session to a batch; [identify] is the
   /// submission's identification choice, which a batch overrides with
-  /// its own.
-  Future<void> uploadPicked(
+  /// its own. Answers false for one discarded while it was sent, which
+  /// is no failure and was not uploaded.
+  Future<bool> uploadPicked(
     PickedAudioFile file, {
     required String mediaType,
     String? libraryPid,
@@ -357,7 +366,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   }) async {
     final path = file.path;
     if (path != null) {
-      await uploadFromPath(
+      return uploadFromPath(
         fileName: file.name,
         path: path,
         mediaType: mediaType,
@@ -367,13 +376,12 @@ class UploadsController extends AsyncNotifier<UploadsState> {
         sizeBytes: file.size,
         identify: identify,
       );
-      return;
     }
     final openRead = file.openRead;
     if (openRead == null) {
       throw StateError('picked file carries neither a path nor a reader');
     }
-    await uploadFromReader(
+    return uploadFromReader(
       fileName: file.name,
       size: file.size,
       openRead: openRead,
@@ -391,8 +399,8 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   /// [liveTransfersProvider] and keeps the path for [retry]; the create
   /// failure itself propagates to the caller since no row exists yet.
   /// [sizeBytes] skips a redundant stat when the pick already measured
-  /// the file.
-  Future<void> uploadFromPath({
+  /// the file. Answers false for one discarded while it was sent.
+  Future<bool> uploadFromPath({
     required String fileName,
     required String path,
     required String mediaType,
@@ -414,7 +422,10 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     );
     _upsert(session);
     ref.read(_retryPathsProvider)[session.id] = path;
-    await _transferFromPath(session.id, path, size, from: 0);
+    return _asSend(
+      session.id,
+      (send) => _transferFromPath(session.id, path, size, from: 0, send: send),
+    );
   }
 
   /// Opens a session for a reader-backed source (web picks and drops)
@@ -422,7 +433,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   /// accessor - only the window in flight materializes. Failure
   /// handling matches [uploadFromPath], with the accessor retained
   /// for [retry].
-  Future<void> uploadFromReader({
+  Future<bool> uploadFromReader({
     required String fileName,
     required int size,
     required Stream<List<int>> Function([int? start, int? end]) openRead,
@@ -443,7 +454,11 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     );
     _upsert(session);
     ref.read(_retryReadersProvider)[session.id] = openRead;
-    await _transferFromReader(session.id, openRead, size, from: 0);
+    return _asSend(
+      session.id,
+      (send) =>
+          _transferFromReader(session.id, openRead, size, from: 0, send: send),
+    );
   }
 
   /// Creates a session, counted in [uploadCreatesProvider] until its
@@ -506,107 +521,133 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     if (path == null && openRead == null) return;
     // Running before the first await, so a second tap meanwhile is
     // refused too.
-    _emit(uploadId, TransferStarted(live?.sent ?? 0));
-    final UploadSession session;
-    final int size;
-    try {
-      session = await ref.read(repositoryProvider).getUpload(uploadId);
-      if (session.state != 'receiving') {
-        _forgetSource(uploadId);
-        _emit(uploadId, const Ended());
-        _upsert(session);
-        return;
+    await _asSend(uploadId, (send) async {
+      _emit(uploadId, TransferStarted(live?.sent ?? 0));
+      final UploadSession session;
+      final int size;
+      try {
+        session = await ref.read(repositoryProvider).getUpload(uploadId);
+        if (session.state != 'receiving') {
+          _forgetSource(uploadId);
+          _emit(uploadId, const Ended());
+          _upsert(session);
+          return false;
+        }
+        size = path != null ? await localFileLength(path) : session.sizeBytes;
+      } on WaxDeckApiException catch (e) {
+        if (!_sending(uploadId, send)) return false;
+        if (e.code == 'not-found') {
+          // Gone from the server: nothing is left to send it to, so the
+          // entry, its source and its row go, and the caller says why.
+          _forgetSource(uploadId);
+          _emit(uploadId, const Ended());
+          _drop(uploadId);
+        } else {
+          _emit(uploadId, Stopped(e));
+        }
+        rethrow;
+      } catch (e) {
+        if (!_sending(uploadId, send)) return false;
+        _emit(uploadId, Stopped(e));
+        rethrow;
       }
-      size = path != null ? await localFileLength(path) : session.sizeBytes;
-    } on WaxDeckApiException catch (e) {
-      if (e.code == 'not-found') {
-        // Gone from the server: nothing is left to send it to, so the
-        // entry, its source and its row go, and the caller says why.
-        _forgetSource(uploadId);
-        _emit(uploadId, const Ended());
-        _drop(uploadId);
-      } else {
+      // Discarded during the reads: a loop now would start it again.
+      if (!_sending(uploadId, send)) return false;
+      return path != null
+          ? _transferFromPath(
+              uploadId,
+              path,
+              size,
+              from: session.receivedBytes,
+              send: send,
+            )
+          : _transferFromReader(
+              uploadId,
+              openRead!,
+              size,
+              from: session.receivedBytes,
+              send: send,
+            );
+    });
+  }
+
+  /// Discards a session and its staged bytes. A send of it here stops
+  /// before the delete goes, so what that send meets meanwhile is no
+  /// failure; a delete that fails leaves it stopped, for Retry.
+  Future<void> discard(String uploadId) async {
+    _sends.remove(uploadId);
+    try {
+      await ref.read(repositoryProvider).deleteUpload(uploadId);
+    } on Object catch (e) {
+      if (ref.mounted &&
+          ref.read(liveTransfersProvider)[uploadId]?.status ==
+              TransferStatus.running) {
         _emit(uploadId, Stopped(e));
       }
       rethrow;
-    } catch (e) {
-      _emit(uploadId, Stopped(e));
-      rethrow;
     }
-    if (path != null) {
-      await _transferFromPath(
-        uploadId,
-        path,
-        size,
-        from: session.receivedBytes,
-      );
-    } else {
-      await _transferFromReader(
-        uploadId,
-        openRead!,
-        size,
-        from: session.receivedBytes,
-      );
-    }
-  }
-
-  /// Discards a session and its staged bytes.
-  Future<void> discard(String uploadId) async {
-    await ref.read(repositoryProvider).deleteUpload(uploadId);
     _forgetSource(uploadId);
     _emit(uploadId, const Ended());
     if (!ref.mounted) return;
     ref.invalidateSelf();
   }
 
-  Future<void> _transferFromPath(
+  Future<bool> _transferFromPath(
     String uploadId,
     String path,
     int size, {
     required int from,
-  }) async {
-    await _transferWindows(
-      uploadId,
-      size,
-      from: from,
-      read: (offset, want) => readLocalFileRange(path, offset, want),
-      onSealed: () => ref.read(_retryPathsProvider).remove(uploadId),
-    );
-  }
+    required Object send,
+  }) => _transferWindows(
+    uploadId,
+    size,
+    from: from,
+    send: send,
+    read: (offset, want) => readLocalFileRange(path, offset, want),
+    onSealed: () => ref.read(_retryPathsProvider).remove(uploadId),
+  );
 
-  Future<void> _transferFromReader(
+  Future<bool> _transferFromReader(
     String uploadId,
     Stream<List<int>> Function([int? start, int? end]) openRead,
     int size, {
     required int from,
-  }) async {
-    await _transferWindows(
-      uploadId,
-      size,
-      from: from,
-      read: (offset, want) => _collectRange(openRead, offset, offset + want),
-      onSealed: () => ref.read(_retryReadersProvider).remove(uploadId),
-    );
-  }
+    required Object send,
+  }) => _transferWindows(
+    uploadId,
+    size,
+    from: from,
+    send: send,
+    read: (offset, want) => _collectRange(openRead, offset, offset + want),
+    onSealed: () => ref.read(_retryReadersProvider).remove(uploadId),
+  );
 
   /// The shared transfer loop: reads [chunkBytes] windows from the
-  /// source, appends each at its offset, then seals the session. A
-  /// chunk that fails on the wire is tried again [chunkRetries] times,
-  /// each after asking the server where it stands; the transfer stops
-  /// only once those are spent or the server refuses outright.
-  Future<void> _transferWindows(
+  /// source (smaller once one could not move inside the stall), appends
+  /// each at its offset, then seals the session. A chunk that fails on
+  /// the wire is tried again [chunkRetries] times, each after asking the
+  /// server where it stands; the transfer stops only once those are
+  /// spent or the server refuses outright. A discard takes its [send]
+  /// away, and the loop stops with it: nothing more is sent or applied,
+  /// and it answers false.
+  Future<bool> _transferWindows(
     String uploadId,
     int size, {
     required int from,
     required Future<Uint8List> Function(int offset, int want) read,
     required void Function() onSealed,
+    required Object send,
   }) async {
+    bool sending() => _sending(uploadId, send);
     final repository = ref.read(repositoryProvider);
     final backoff = ref.read(uploadRetryBackoffProvider);
+    final clock = ref.read(monotonicClockProvider);
     _emit(uploadId, TransferStarted(from));
     var sealing = false;
+    var sealFrom = Duration.zero;
     try {
       var offset = from;
+      var chunkSize = chunkBytes;
       var failures = 0;
       var conflictResynced = false;
       var resync = false;
@@ -620,24 +661,34 @@ class UploadsController extends AsyncNotifier<UploadsState> {
             resync = false;
             if (offset >= size) break;
           }
-          final want = (size - offset).clamp(0, chunkBytes);
+          final want = (size - offset).clamp(0, chunkSize);
           final window = await read(offset, want);
           if (window.isEmpty) {
             throw StateError('the picked file shrank mid-upload');
           }
+          if (!sending()) return false;
           final session = await repository.putUploadData(
             uploadId,
             offset: offset,
             bytes: window,
           );
+          if (!sending()) return false;
           offset += window.length;
           failures = 0;
           conflictResynced = false;
           _upsert(session);
           _emit(uploadId, ChunkAcked(offset));
         } catch (e) {
+          // A send a discard took away reports nothing more, a try neither.
+          if (!sending()) return false;
           if (_transient(e) && failures < chunkRetries) {
             failures++;
+            // Cut for not moving: the link cannot drain this much inside
+            // the stall, and the stall's check queues behind it. Smaller
+            // from here on.
+            if (e is WaxDeckApiException && e.code == 'transport-timeout') {
+              chunkSize = (chunkSize ~/ 2).clamp(minChunkBytes, chunkBytes);
+            }
             _emit(uploadId, const ChunkRetrying());
             await Future<void>.delayed(backoff(failures));
             resync = true;
@@ -653,24 +704,47 @@ class UploadsController extends AsyncNotifier<UploadsState> {
           rethrow;
         }
       }
+      if (!sending()) return false;
       sealing = true;
       _emit(uploadId, const Sealing());
+      sealFrom = clock();
       final sealed = await repository.completeUpload(uploadId);
       onSealed();
       _upsert(sealed);
       _emit(uploadId, const Sealed());
+      return true;
     } catch (e) {
+      if (!sending()) return false;
       // A seal the server refused for bytes no retry can mend (they do
       // not read as audio, or miss their hash) ended the session there,
       // so the row goes rather than offering a Retry that cannot work.
-      // The refusal's reason says so; without one the session is asked.
-      if (sealing &&
-          e is WaxDeckApiException &&
-          (_endsSession(e) || await _ended(uploadId))) {
-        onSealed();
-        _drop(uploadId);
-        _emit(uploadId, const SealRefused());
-        rethrow;
+      // The refusal's reason says so; without one the session is asked,
+      // and one that sealed (its answer lost on the wire) or is still
+      // being sealed there is no failure.
+      if (sealing && e is WaxDeckApiException) {
+        final after = _endsSession(e)
+            ? (gone: true, settled: null)
+            : await _afterSeal(
+                repository,
+                uploadId,
+                backoff: backoff,
+                clock: clock,
+                until: sealFrom + WaxDeckClient.longOperationBudget,
+                sending: sending,
+              );
+        if (!sending()) return false;
+        if (after.settled case final session?) {
+          onSealed();
+          _upsert(session);
+          _emit(uploadId, const Sealed());
+          return true;
+        }
+        if (after.gone) {
+          onSealed();
+          _drop(uploadId);
+          _emit(uploadId, const SealRefused());
+          rethrow;
+        }
       }
       // Stopped whatever else threw - a server refusal, but also a
       // source that stopped answering (a SAF document moved
@@ -731,15 +805,73 @@ class UploadsController extends AsyncNotifier<UploadsState> {
         _ => false,
       };
 
-  /// Whether the server no longer holds the session.
-  Future<bool> _ended(String uploadId) async {
-    try {
-      await ref.read(repositoryProvider).getUpload(uploadId);
-      return false;
-    } on WaxDeckApiException catch (e) {
-      return e.code == 'not-found';
+  /// Where a session stands after a seal that did not answer success:
+  /// [gone] once the server no longer holds it, [settled] once it is past
+  /// receiving (the seal ran), neither once it waits for a seal or refuses
+  /// the read. One the server is still sealing (every byte in, idle zero,
+  /// which holds only while a live seal holds the session), or that the
+  /// wire keeps from answering, is read again after a wait until [until],
+  /// the end of the budget the seal had while its caller was connected.
+  /// The row says the server cannot be reached from the first read the
+  /// wire fails to the first answer.
+  Future<({bool gone, UploadSession? settled})> _afterSeal(
+    WaxDeckRepository repository,
+    String uploadId, {
+    required Duration Function(int attempt) backoff,
+    required Duration Function() clock,
+    required Duration until,
+    required bool Function() sending,
+  }) async {
+    var unreachable = false;
+    void sayUnreachable(bool now) {
+      if (now == unreachable || !sending()) return;
+      unreachable = now;
+      _emit(uploadId, now ? const SealUnreachable() : const Sealing());
+    }
+
+    for (var check = 1; ; check++) {
+      try {
+        final session = await repository.getUpload(uploadId);
+        sayUnreachable(false);
+        if (session.state != 'receiving') {
+          return (gone: false, settled: session);
+        }
+        final sealingThere =
+            session.receivedBytes == session.sizeBytes &&
+            session.idle == Duration.zero;
+        if (!sealingThere) return (gone: false, settled: null);
+      } on WaxDeckApiException catch (e) {
+        if (e.code == 'not-found') return (gone: true, settled: null);
+        if (!_transient(e)) return (gone: false, settled: null);
+        sayUnreachable(true);
+      }
+      if (clock() >= until || !sending()) {
+        return (gone: false, settled: null);
+      }
+      await Future<void>.delayed(backoff(check.clamp(1, chunkRetries)));
     }
   }
+
+  /// Runs [body] as this client's send of [uploadId]: taken before [body]
+  /// starts, let go however it ends, and away early only by a discard.
+  Future<bool> _asSend(
+    String uploadId,
+    Future<bool> Function(Object send) body,
+  ) async {
+    final send = _sends[uploadId] = Object();
+    try {
+      return await body(send);
+    } finally {
+      if (identical(_sends[uploadId], send)) _sends.remove(uploadId);
+    }
+  }
+
+  /// Whether [send] is still this client's send of [uploadId]: a discard
+  /// takes it away.
+  bool _sending(String uploadId, Object send) =>
+      ref.mounted &&
+      identical(_sends[uploadId], send) &&
+      ref.read(liveTransfersProvider).containsKey(uploadId);
 
   /// Reads [uploadIds] again, each alone: rows sent from elsewhere whose
   /// window ran out, which only a fresh read can say went quiet. A row the

@@ -657,7 +657,8 @@ func (l *Library) notificationLink(event, targetPID string) string {
 	case "review-ready":
 		path = "/review"
 	case "signup-requested":
-		path = "/admin/users"
+		// The users screen on its requests, as the app's own row opens it.
+		path = "/admin/users?view=requests"
 	case "backup-completed", "backup-failed":
 		path = "/admin/backups"
 	case "catalog-reset":

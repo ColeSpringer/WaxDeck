@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 
 /// The playlists visible to the caller: their own plus every shared
@@ -15,6 +16,8 @@ class PlaylistsController extends AsyncNotifier<List<Playlist>> {
 
   @override
   Future<List<Playlist>> build() async {
+    // Keyed on the account: the repository moves only with the server.
+    ref.watch(signedInAccountProvider);
     final page = await ref
         .watch(repositoryProvider)
         .listPlaylists(limit: pageSize);
@@ -199,8 +202,11 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
   final String pid;
 
   @override
-  Future<PlaylistView> build() =>
-      fetchPlaylistView(ref.watch(repositoryProvider), pid);
+  Future<PlaylistView> build() {
+    // Keyed on the account: the repository moves only with the server.
+    ref.watch(signedInAccountProvider);
+    return fetchPlaylistView(ref.watch(repositoryProvider), pid);
+  }
 
   /// Replaces a smart playlist's rule in place; the pid is stable, so
   /// the caller keeps this detail view. Returns the updated playlist.

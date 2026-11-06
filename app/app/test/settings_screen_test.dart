@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
@@ -45,6 +46,49 @@ Widget _host(
 
 Widget _section(FakeRepository repo, SettingsSection section) =>
     _host(repo, SettingsSectionScreen(section: section));
+
+/// A write lost to a dropped connection, worded the way the client's
+/// transport words it: in English, whatever the app's language.
+const _dropped = WaxDeckApiException(
+  code: 'transport',
+  message: 'DioException [connection error]',
+);
+
+/// A password change that never reaches the server.
+class _PasswordUnreachable extends FakeRepository {
+  _PasswordUnreachable()
+    : super(sessionState: const SessionState(authenticated: true, user: _user));
+
+  @override
+  Future<void> setUserPassword(
+    String userId,
+    String newPassword, {
+    String? currentPassword,
+  }) async => throw _dropped;
+}
+
+/// A device list the server fails to read while [down] is set.
+class _SessionsDown extends FakeRepository {
+  _SessionsDown()
+    : super(
+        sessionState: const SessionState(authenticated: true, user: _user),
+        sessions: [testSession('se-2', deviceName: 'Pixel 9')],
+      );
+
+  var down = true;
+
+  @override
+  Future<List<DeviceSession>> listSessions() async {
+    if (down) {
+      throw const WaxDeckApiException(
+        code: 'internal',
+        message: 'boom',
+        statusCode: 500,
+      );
+    }
+    return super.listSessions();
+  }
+}
 
 FakeRepository _signedInRepo({List<DeviceSession> sessions = const []}) =>
     FakeRepository(
@@ -462,6 +506,54 @@ void main() {
       expect(repo.renamedSessions, isEmpty);
     });
 
+    testWidgets("a rename lost to a dropped connection is said in the app's "
+        'words', (tester) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo(
+        sessions: [testSession('se-2', deviceName: 'Pixel 9')],
+      )..renameError = _dropped;
+      await tester.pumpWidget(_section(repo, SettingsSection.account));
+      await tester.pumpAndSettle();
+      final rename = find.bySemanticsIdentifier(
+        SemanticsIds.deviceRename('se-2'),
+      );
+      await _show(tester, rename);
+      await tester.tap(rename);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Kitchen radio');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('device-rename-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<WaxTextField>(find.byType(WaxTextField)).errorText,
+        AppLocalizationsEn().errorNetwork,
+      );
+      expect(find.textContaining('DioException'), findsNothing);
+    });
+
+    testWidgets('a device list that fails says why, and asking again once '
+        'it gives up reads it', (tester) async {
+      _tallWindow(tester);
+      final repo = _SessionsDown();
+      await tester.pumpWidget(_section(repo, SettingsSection.account));
+      // Past the default ladder's ten attempts: the failure is final.
+      await tester.pump(const Duration(seconds: 40));
+      await tester.pump();
+
+      final en = AppLocalizationsEn();
+      expect(find.text(en.settingsDevicesErrorTitle), findsOneWidget);
+      expect(find.text(en.errorInternal), findsOneWidget);
+      final retry = find.widgetWithText(WaxButton, 'Try again');
+      expect(tester.widget<WaxButton>(retry).busy, isFalse);
+
+      repo.down = false;
+      await _show(tester, retry);
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+      expect(find.text('Pixel 9'), findsOneWidget);
+    });
+
     testWidgets('cancelling the confirm dialog revokes nothing', (
       tester,
     ) async {
@@ -594,6 +686,38 @@ void main() {
       expect(repo.setUserPasswordCalls, [
         (userId: _user.id, newPassword: 'newsecret1'),
       ]);
+    });
+
+    testWidgets("a password change lost to a dropped connection is said in "
+        "the app's words, under the new password", (tester) async {
+      _tallWindow(tester);
+      await tester.pumpWidget(
+        _section(_PasswordUnreachable(), SettingsSection.account),
+      );
+      await tester.pumpAndSettle();
+      await _show(
+        tester,
+        find.bySemanticsIdentifier(SemanticsIds.setting('password')),
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.setting('password')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'password123');
+      await tester.enterText(find.byType(TextField).last, 'newsecret1');
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.setting('password-save')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widgetList<WaxTextField>(find.byType(WaxTextField))
+            .map((f) => f.errorText)
+            .toList(),
+        <String?>[null, AppLocalizationsEn().errorNetwork],
+      );
+      expect(find.textContaining('DioException'), findsNothing);
     });
   });
 

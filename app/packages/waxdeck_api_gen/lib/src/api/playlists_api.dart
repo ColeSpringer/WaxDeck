@@ -724,7 +724,7 @@ class PlaylistsApi {
   }
 
   /// Discover smart rule fields
-  /// The field vocabulary for smart playlist rules: every rule field with its value kind, the operators it accepts, whether it reads per-user state, and whether it can sort; plus the catalog&#39;s custom tag keys (usable as &#x60;tag.KEY&#x60; fields) with item counts, most used first. Rule editors build their dropdowns from this instead of hardcoding the vocabulary. 
+  /// The field vocabulary for smart playlist rules: every rule field with its value kind, the operators it accepts, whether it reads per-user state, and whether it can sort; plus the custom tag keys (usable as &#x60;tag.KEY&#x60; fields) carried by the items the caller may see, inside their library grants and content rules, each with how many of those items carry it, most used first. Rule editors build their dropdowns from this instead of hardcoding the vocabulary. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -1137,7 +1137,7 @@ class PlaylistsApi {
   }
 
   /// List a playlist&#39;s items
-  /// The playlist&#39;s members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner&#39;s user state for shared lists, the caller&#39;s for their own). Entries the caller cannot see (outside their library grants, denied by their content settings, or episodes of shows they do not follow) are omitted, and the list&#39;s &#x60;itemCount&#x60; counts the same way, so a restricted viewer&#39;s &#x60;position&#x60; values can skip numbers. &#x60;position&#x60; is the entry&#39;s index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry&#39;s item pid as &#x60;itemPid&#x60;, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries. 
+  /// The playlist&#39;s members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner&#39;s user state for shared lists, the caller&#39;s for their own). Entries the caller cannot see (outside their library grants, denied by their content settings, or episodes of shows they do not follow) are omitted, and the list&#39;s &#x60;itemCount&#x60; counts the same way. &#x60;position&#x60; goes to the owner of a static playlist alone, the one caller that may remove by it, and can skip numbers where entries are hidden from the owner too. It is the entry&#39;s index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry&#39;s item pid as &#x60;itemPid&#x60;, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries. A page&#39;s &#x60;nextCursor&#x60; counts only the entries shown to the caller, and comes only when another one follows. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

@@ -82,7 +82,7 @@ func enableSonicAnalysis(t *testing.T, ctx context.Context, svc *Library, uc *Us
 		t.Fatalf("reading settings: %v", err)
 	}
 	cur.SonicAnalysis = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, cur); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(cur)); err != nil {
 		t.Fatalf("enabling sonic analysis: %v", err)
 	}
 }

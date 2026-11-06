@@ -647,6 +647,53 @@ func (l *Library) entityVisible(ctx context.Context, uc *UserCtx, prefix string,
 	return vis[pid], nil
 }
 
+// artistReached is entityVisible for an artist named by any of the three
+// ways an item names one: its artist, its album's artist, or a credit.
+// The facet gate reads the first alone, which would hide the portrait of
+// a featured artist the caller is offered a track by; it is still asked
+// first, being the indexed read and the usual answer.
+func (l *Library) artistReached(ctx context.Context, uc *UserCtx, pid model.PID) (bool, error) {
+	if ok, err := l.entityVisible(ctx, uc, PrefixArtist, pid); err != nil || ok {
+		return ok, err
+	}
+	return l.offeredWhere(ctx, uc, query.Or{Nodes: []query.Node{
+		query.Cond{Field: "album_artist_pid", Op: query.OpIs, Value: string(pid)},
+		query.Cond{Field: "credit_artist_pid", Op: query.OpIs, Value: string(pid)},
+	}})
+}
+
+// offeredWhere reports whether the caller's listings offer any item the
+// node selects.
+func (l *Library) offeredWhere(ctx context.Context, uc *UserCtx, node query.Node) (bool, error) {
+	items, err := l.lib.Query(ctx, l.facetScopeBuilder(ctx, uc).WhereNode(node).Limit(1).Build(), "")
+	if err != nil {
+		return false, classify(err)
+	}
+	return len(items) > 0, nil
+}
+
+// entityReached is the gate an entity's curation read shares with its
+// detail read: an entity none of whose items the caller is offered
+// answers as one that does not exist. Free for a caller of full reach.
+func (l *Library) entityReached(ctx context.Context, uc *UserCtx, et model.MergeEntity, pid model.PID) (bool, error) {
+	if fullReach(uc) {
+		return true, nil
+	}
+	switch et {
+	case model.MergeAlbum:
+		return l.entityVisible(ctx, uc, PrefixAlbum, pid)
+	case model.MergeReleaseGroup:
+		return l.entityVisible(ctx, uc, PrefixReleaseGroup, pid)
+	case model.MergeArtist:
+		return l.artistReached(ctx, uc, pid)
+	case model.MergeGenre:
+		return l.offeredWhere(ctx, uc, query.Cond{Field: "genre_pid", Op: query.OpIs, Value: string(pid)})
+	case model.MergeSeries:
+		return l.seriesReached(ctx, uc, pid)
+	}
+	return false, nil
+}
+
 // entityInLibraries reports whether any library holding the entity's
 // members is in the caller's grant. Full-visibility callers never reach
 // this (they see every entity). A nil info (which the facade never
@@ -876,30 +923,46 @@ func artMime(format string) string {
 }
 
 // Art resolves artwork: original when size is 0, square-fit thumbnail
-// otherwise. Besides item PIDs it accepts album and artist PIDs, so
-// search hits render artwork without a second identifier scheme.
-// Item artwork honors library visibility; album and artist artwork is
-// served without an attribution check (entities span libraries and
-// PIDs are unguessable ULIDs; restricted users never discover them
-// through listings, which are filtered).
+// otherwise. Besides item PIDs it accepts album, artist, show and
+// playlist PIDs, so search hits render artwork without a second
+// identifier scheme, and each answers only what its own read would show
+// the caller (artTarget).
 func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID, role string, size int) (ArtBlob, error) {
 	art, ok := model.ParseArtRole(role)
 	if !ok {
 		return ArtBlob{}, errInvalid("unknown art role " + role)
 	}
-	ref, err := l.artRef(ctx, uc, apiPID)
+	ref, pl, err := l.artTarget(ctx, uc, apiPID)
 	if err != nil {
 		return ArtBlob{}, err
+	}
+	generated := false
+	if pl != nil && art == model.ArtRoleFront {
+		member, err := l.readerPlaylistCover(ctx, uc, pl)
+		if err != nil {
+			return ArtBlob{}, err
+		}
+		if member != nil {
+			ref, generated = *member, true
+		}
 	}
 	blob, err := l.lib.ResolveArt(ctx, ref, art, size)
 	if err != nil {
 		return ArtBlob{}, classify(err)
 	}
+	source := l.artSourceFor(ctx, ref, artSourceFromBlob(blob))
+	if generated {
+		// Drawn from the members for this reader, as the stored cover is
+		// drawn from them for the owner: nobody chose it.
+		source = ArtSourceDTO{
+			Source: string(model.SourceGenerated), Level: string(model.ArtPlaylist), UpdatedAt: source.UpdatedAt,
+		}
+	}
 	return ArtBlob{
 		Bytes:      blob.Bytes,
 		MimeType:   artMime(blob.Format),
 		SourceHash: blob.SourceHash,
-		Source:     l.artSourceFor(ctx, ref, artSourceFromBlob(blob)),
+		Source:     source,
 		Width:      blob.Width,
 		Height:     blob.Height,
 		Box:        blob.Box,
@@ -1038,47 +1101,64 @@ func (l *Library) feedArtIsPublic(ctx context.Context, ref model.EntityRef) bool
 	return !l.showIsPrivate(ctx, pod)
 }
 
-// artRef resolves an art read/roles pid to its entity ref. Item PIDs honor
-// library visibility; album, artist, and podcast-show PIDs resolve without an
-// attribution check (entities span libraries, their PIDs are unguessable
-// ULIDs, and restricted users never surface them through filtered listings).
+// artRef resolves an art read/roles pid to its entity ref; see artTarget.
 func (l *Library) artRef(ctx context.Context, uc *UserCtx, apiPID string) (model.EntityRef, error) {
+	ref, _, err := l.artTarget(ctx, uc, apiPID)
+	return ref, err
+}
+
+// artTarget resolves an art pid to its entity ref behind the gate the
+// entity's own read keeps, not-found when it fails: an item inside the
+// caller's grants and content rules, an album or artist with a member
+// the caller is offered, a show while the podcast library is granted,
+// and a playlist of the caller's own or a shared one, which comes back
+// too for the cover rule a reader of somebody else's follows.
+func (l *Library) artTarget(ctx context.Context, uc *UserCtx, apiPID string) (model.EntityRef, *model.Playlist, error) {
 	prefix, pid, ok := parseAPIPID(apiPID)
 	if !ok {
-		return model.EntityRef{}, errNotFound("no artwork for pid " + apiPID)
+		return model.EntityRef{}, nil, errNotFound("no artwork for pid " + apiPID)
+	}
+	gate := func(ok bool, err error) error {
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errNotFound("no artwork for pid " + apiPID)
+		}
+		return nil
 	}
 	switch {
 	case prefix == PrefixAlbum:
-		return model.EntityRef{Type: model.ArtAlbum, PID: pid}, nil
+		if err := gate(l.entityVisible(ctx, uc, PrefixAlbum, pid)); err != nil {
+			return model.EntityRef{}, nil, err
+		}
+		return model.EntityRef{Type: model.ArtAlbum, PID: pid}, nil, nil
 	case prefix == PrefixArtist:
-		return model.EntityRef{Type: model.ArtArtist, PID: pid}, nil
+		if err := gate(l.artistReached(ctx, uc, pid)); err != nil {
+			return model.EntityRef{}, nil, err
+		}
+		return model.EntityRef{Type: model.ArtArtist, PID: pid}, nil, nil
 	case prefix == PrefixPodcast:
-		// A podcast show is not a catalog item, so it resolves to its own art
-		// level directly (its feed image), like album and artist entities.
-		return model.EntityRef{Type: model.ArtPodcast, PID: pid}, nil
+		// A show is not a catalog item: it resolves to its own art level
+		// (its feed image) behind what the show's detail answers.
+		if err := gate(l.showReached(ctx, uc, pid)); err != nil {
+			return model.EntityRef{}, nil, err
+		}
+		return model.EntityRef{Type: model.ArtPodcast, PID: pid}, nil, nil
 	case prefix == PrefixPlaylist:
-		// Unlike the entity cases above, a playlist goes through its
-		// visibility check. Those skip attribution because entity pids are
-		// unguessable and never surface through a filtered listing; a
-		// playlist has explicit user-facing visibility, and resolvePlaylist
-		// is the same owner-or-shared gate every other playlist read uses.
 		pl, err := l.resolvePlaylist(ctx, uc, apiPID)
 		if err != nil {
-			return model.EntityRef{}, err
+			return model.EntityRef{}, nil, err
 		}
-		return model.EntityRef{Type: model.ArtPlaylist, PID: pl.PID}, nil
+		return model.EntityRef{Type: model.ArtPlaylist, PID: pl.PID}, pl, nil
 	case itemPrefix(prefix):
 		it, err := l.getVisibleItem(ctx, uc, apiPID)
 		if err != nil {
-			return model.EntityRef{}, err
+			return model.EntityRef{}, nil, err
 		}
-		entity := model.ArtTrack
-		if it.Kind == model.KindEpisode {
-			entity = model.ArtEpisode
-		}
-		return model.EntityRef{Type: entity, PID: it.PID}, nil
+		return itemArtRef(it), nil, nil
 	default:
-		return model.EntityRef{}, errNotFound("no artwork for pid " + apiPID)
+		return model.EntityRef{}, nil, errNotFound("no artwork for pid " + apiPID)
 	}
 }
 
@@ -1117,8 +1197,8 @@ type ArtRolesDTO struct {
 
 // ItemArtRoles lists the artwork slots an entity holds at its own level
 // (not inherited from the album/artist chain), the own-versus-inherited
-// signal the front-cover read cannot give. Accepts item, album, and artist
-// PIDs like Art.
+// signal the front-cover read cannot give. Accepts the PIDs Art does,
+// behind the same gate.
 func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) (ArtRolesDTO, error) {
 	ref, err := l.artRef(ctx, uc, apiPID)
 	if err != nil {

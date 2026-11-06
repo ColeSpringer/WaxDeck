@@ -64,6 +64,7 @@ class TrayBinder {
       a.title == b.title &&
       a.subtitle == b.subtitle &&
       a.canStep == b.canStep &&
+      a.canToggle == b.canToggle &&
       a.labels == b.labels;
 }
 
@@ -132,6 +133,8 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
       // Radio never queues, so there is nothing to step to; an item
       // needs a queue with somewhere to go, and one radio parked is not up.
       canStep: slot is ItemSlot && ref.read(queueControllerProvider).length > 1,
+      // As the keys have it.
+      canToggle: slot is StationSlot || slot is ItemSlot,
       labels: TrayLabels(
         play: copy.desktopTrayPlay,
         pause: copy.desktopTrayPause,

@@ -48,31 +48,6 @@ void main() {
     handle.dispose();
   });
 
-  testWidgets('a label names the glyph and the message stays the popover', (
-    tester,
-  ) async {
-    final handle = tester.ensureSemantics();
-    await tester.pumpWidget(
-      _host(
-        const WaxInfoTip(
-          message: _message,
-          label: 'About play counts',
-          semanticsId: 'tip',
-        ),
-      ),
-    );
-
-    expect(
-      tester.getSemantics(find.bySemanticsIdentifier('tip')).label,
-      'About play counts',
-    );
-    await tester.tap(find.byType(WaxInfoTip));
-    await tester.pump();
-    expect(find.text(_message), findsOne);
-
-    handle.dispose();
-  });
-
   testWidgets('a second tap, an outside tap and Escape each close it', (
     tester,
   ) async {
@@ -862,29 +837,9 @@ void main() {
   });
 
   group('for assistive technology', () {
-    testWidgets('a label keeps the message reachable without a press', (
+    testWidgets('the message names the glyph and is spoken once', (
       tester,
     ) async {
-      final handle = tester.ensureSemantics();
-      await tester.pumpWidget(
-        _host(
-          const WaxInfoTip(
-            message: _message,
-            label: 'About play counts',
-            semanticsId: 'tip',
-          ),
-        ),
-      );
-
-      final data = tester
-          .getSemantics(find.bySemanticsIdentifier('tip'))
-          .getSemanticsData();
-      expect(data.label, 'About play counts');
-      expect('${data.tooltip}${data.hint}', contains(_message));
-      handle.dispose();
-    });
-
-    testWidgets('no label means the message is spoken once', (tester) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
         _host(const WaxInfoTip(message: _message, semanticsId: 'tip')),
@@ -964,12 +919,7 @@ void main() {
       for (final (name, host, title) in <(String, Widget, String)>[
         (
           'a setting row',
-          WaxSettingRow(
-            title: 'Crossfade',
-            info: _message,
-            infoSemanticsId: 'tip',
-            control: toggle(),
-          ),
+          WaxSettingRow(title: 'Crossfade', info: _message, control: toggle()),
           'Crossfade',
         ),
         (
@@ -978,7 +928,6 @@ void main() {
             title: 'Crossfade',
             help: 'Overlap the end of one track with the next',
             info: _message,
-            infoSemanticsId: 'tip',
             glyph: WaxIcons.downloads,
             control: toggle(),
           ),
@@ -990,7 +939,6 @@ void main() {
             overline: 'Playback',
             title: 'Listening',
             info: _message,
-            infoSemanticsId: 'tip',
             actionLabel: 'Reset',
             onAction: () {},
           ),
@@ -1014,10 +962,14 @@ void main() {
             glyph.center.dy,
             moreOrLessEquals(words.center.dy, epsilon: 1),
           );
-          expect(
-            tester.getSemantics(find.bySemanticsIdentifier('tip')).label,
-            _message,
+          // The glyph's own node, which its tip names.
+          final glyphNode = tester.getSemantics(
+            find.descendant(
+              of: find.byType(WaxInfoTip),
+              matching: find.byType(Icon),
+            ),
           );
+          expect(glyphNode.label, _message);
 
           await tester.tap(find.byType(WaxInfoTip));
           await tester.pumpAndSettle();

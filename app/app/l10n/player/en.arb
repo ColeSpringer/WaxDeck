@@ -45,6 +45,19 @@
       }
     }
   },
+  "playerBookProgress": "{percent} percent, {left} left",
+  "@playerBookProgress": {
+    "description": "Under the full player's seek bar for a book: how far through the whole book the listener is, and how much of it is left. {left} is an already-worded span.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "left": {
+        "type": "String",
+        "example": "6 hr 12 min"
+      }
+    }
+  },
   "playerBookmarkAdd": "Mark {time}",
   "@playerBookmarkAdd": {
     "description": "Button that bookmarks the position it names. {time} is a timecode.",
@@ -275,7 +288,7 @@
   },
   "playerLyrics": "Lyrics",
   "@playerLyrics": {
-    "description": "Opens the lyrics of what is playing."
+    "description": "Opens the lyrics of what is playing, and titles the panel and sheet that show them."
   },
   "playerLyricsError": "Could not load the lyrics",
   "@playerLyricsError": {
@@ -373,7 +386,7 @@
   },
   "playerQueue": "Queue",
   "@playerQueue": {
-    "description": "Opens the queue of what plays next."
+    "description": "Opens the queue of what plays next, and titles the panel and screen that show it."
   },
   "playerRatingFailed": "Could not save that change",
   "@playerRatingFailed": {
@@ -623,11 +636,20 @@
   "@playerTranscriptError": {
     "description": "Drawn in the transcript panel when the read failed for a reason the error table has no sentence for."
   },
+  "playerTrimSavedSeconds": "{seconds} sec",
+  "@playerTrimSavedSeconds": {
+    "description": "What the trim control has saved while it is under a minute, abbreviated as the minutes beside it are; it fills {saved} in playerTrimSilenceSaved.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
   "playerTrimSilence": "Trim silence",
   "@playerTrimSilence": {
     "description": "Control that skips the quiet parts of a spoken recording."
   },
-  "playerTrimSilenceSaved": "Trim silence ({saved})",
+  "playerTrimSilenceSaved": "Trim silence ({saved} saved)",
   "@playerTrimSilenceSaved": {
     "description": "The trim control once it has saved some listening time. {saved} is an already-worded duration.",
     "placeholders": {

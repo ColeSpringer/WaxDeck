@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -134,6 +135,74 @@ class _BrowserLikeAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// Takes a chunk's body whole, reports one more progress event
+/// [progressAfter] later (a browser's last, at the end of the body) and
+/// answers [answerAfter] after that. A stall's check answers [checkIdleMs]
+/// after [checkAfter].
+class _LateProgressAdapter implements HttpClientAdapter {
+  _LateProgressAdapter({
+    required this.progressAfter,
+    required this.answerAfter,
+    required this.checkAfter,
+    required this.checkIdleMs,
+  });
+
+  final Duration progressAfter;
+  final Duration answerAfter;
+  final Duration checkAfter;
+  final int checkIdleMs;
+  var checks = 0;
+
+  static ResponseBody _answer(int idleMs) => ResponseBody.fromString(
+    jsonEncode({..._session, 'idleMs': idleMs}),
+    200,
+    headers: {
+      Headers.contentTypeHeader: ['application/json'],
+    },
+  );
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    if (options.method == 'GET') {
+      checks++;
+      await Future<void>.delayed(checkAfter);
+      return _answer(checkIdleMs);
+    }
+    final total = await requestStream!.fold<int>(
+      0,
+      (n, piece) => n + piece.length,
+    );
+    final done = Completer<ResponseBody>();
+    unawaited(
+      cancelFuture?.then((_) {
+        if (done.isCompleted) return;
+        done.completeError(
+          DioException.requestCancelled(
+            requestOptions: options,
+            reason: 'aborted',
+          ),
+        );
+      }),
+    );
+    unawaited(() async {
+      await Future<void>.delayed(progressAfter);
+      if (done.isCompleted) return;
+      options.onSendProgress?.call(total, total);
+      await Future<void>.delayed(answerAfter);
+      if (done.isCompleted) return;
+      done.complete(_answer(0));
+    }());
+    return done.future;
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 /// A client sending through [adapter] as a browser does, its whole-request
 /// budget brought down to 400 ms so a test can run past it.
 WaxDeckClient _browserClient(_BrowserLikeAdapter adapter) {
@@ -262,6 +331,101 @@ void main() {
             .having((e) => e.statusCode, 'statusCode', isNull),
       ),
     );
+  });
+
+  test('a body the transport took whole is not cut while the server still '
+      'reads it', () async {
+    // A real socket: its buffers take the whole body at once, as a slow
+    // link's do, so no progress follows while the server reads.
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    var reading = false;
+    var reads = 0;
+    void answer(HttpRequest request, int idleMs) => request.response
+      ..headers.contentType = ContentType.json
+      ..write(jsonEncode({..._session, 'idleMs': idleMs}))
+      ..close();
+    server.listen((request) async {
+      if (request.method != 'PUT') {
+        reads++;
+        answer(request, reading ? 0 : 5000);
+        return;
+      }
+      reading = true;
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      await request.drain<void>();
+      reading = false;
+      answer(request, 0);
+    });
+    final client = WaxDeckClient(
+      baseUrl: 'http://127.0.0.1:${server.port}',
+      chunkStall: const Duration(milliseconds: 300),
+    );
+
+    final session = await client.putUploadData(
+      'up-01JZX5N8QW3F4V9T2B7KD3M9R6',
+      offset: 0,
+      bytes: Uint8List(64 * 1024),
+    );
+
+    expect(session.receivedBytes, 1048576);
+    expect(reads, greaterThan(0), reason: 'the stall asked the server');
+  });
+
+  // A stall falls due and asks the server; while it waits, the transport
+  // reports progress and arms a fresh stall. The answer is about a moment
+  // that progress has since replaced.
+  group('a check that answers after fresh progress', () {
+    test('does not cut the chunk', () async {
+      // From the body taken: due at 300 ms and asked until 500 ms; the
+      // progress at 400 ms sets the next deadline, and the answer at
+      // 650 ms comes inside it.
+      final client = WaxDeckClient(
+        baseUrl: 'http://host:4420',
+        dio: Dio()
+          ..httpClientAdapter = _LateProgressAdapter(
+            progressAfter: const Duration(milliseconds: 400),
+            answerAfter: const Duration(milliseconds: 250),
+            checkAfter: const Duration(milliseconds: 200),
+            checkIdleMs: 5000,
+          ),
+        chunkStall: const Duration(milliseconds: 300),
+      );
+
+      final session = await client.putUploadData(
+        'up-01JZX5N8QW3F4V9T2B7KD3M9R6',
+        offset: 0,
+        bytes: Uint8List(64 * 1024),
+      );
+
+      expect(session.receivedBytes, 1048576);
+    });
+
+    test('leaves the deadline that progress set', () async {
+      // From the body taken: due at 1 s and asked until 1.9 s; the
+      // progress at 1.1 s sets the next check for 2.1 s, 400 ms before the
+      // answer at 2.5 s. Re-armed from the stale answer, it would wait to
+      // 2.9 s, 400 ms after it.
+      final adapter = _LateProgressAdapter(
+        progressAfter: const Duration(milliseconds: 1100),
+        answerAfter: const Duration(milliseconds: 1400),
+        checkAfter: const Duration(milliseconds: 900),
+        checkIdleMs: 0,
+      );
+      final client = WaxDeckClient(
+        baseUrl: 'http://host:4420',
+        dio: Dio()..httpClientAdapter = adapter,
+        chunkStall: const Duration(seconds: 1),
+      );
+
+      await client.putUploadData(
+        'up-01JZX5N8QW3F4V9T2B7KD3M9R6',
+        offset: 0,
+        bytes: Uint8List(64 * 1024),
+      );
+
+      expect(adapter.checks, 2);
+    });
   });
 
   test('a chunk sent slowly but steadily is never cut', () async {

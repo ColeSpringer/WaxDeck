@@ -10,12 +10,17 @@ package service
 // whose decoded dimensions come with it.
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"math"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -118,6 +123,26 @@ func healthRuleWeight(rule string) float64 {
 // reads as "share of items in good shape" rather than letting one
 // thoroughly broken item swing it.
 const itemFailWeightCap = 3.0
+
+// itemFailWeight is one failing item's contribution to the score: its
+// rules' weights summed, capped, over the cap, so a clean item gives 0
+// and a thoroughly broken one 1.
+func itemFailWeight(rules []string) float64 {
+	w := 0.0
+	for _, r := range rules {
+		w += healthRuleWeight(r)
+	}
+	return min(w, itemFailWeightCap) / itemFailWeightCap
+}
+
+// healthScore is 100 times the weighted share of evaluated items passing
+// every rule that applies to them.
+func healthScore(failWeight float64, evaluated int) float64 {
+	if evaluated == 0 {
+		return 100
+	}
+	return 100 * (1 - failWeight/float64(evaluated))
+}
 
 // healthState is the aggregate JSON stored under healthStateKey.
 type healthState struct {
@@ -277,11 +302,7 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 			if len(rules) == 0 {
 				continue
 			}
-			w := 0.0
-			for _, r := range rules {
-				w += healthRuleWeight(r)
-			}
-			failWeight += min(w, itemFailWeightCap) / itemFailWeightCap
+			failWeight += itemFailWeight(rules)
 			raw, err := json.Marshal(rules)
 			if err != nil {
 				return &Error{Kind: KindInternal, Err: err}
@@ -314,17 +335,8 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 		return &Error{Kind: KindInternal, Err: err}
 	}
 
-	// Score: 100 * (1 - weightedFailShare). Each item contributes
-	// min(sum of its failed rules' weights, itemFailWeightCap) divided
-	// by the cap, so a clean item contributes 0, a thoroughly broken
-	// one contributes 1, and the score is the weighted share of
-	// evaluated items passing every rule that applies to them.
-	score := 100.0
-	if evaluated > 0 {
-		score = 100 * (1 - failWeight/float64(evaluated))
-	}
 	state := healthState{
-		Score:          score,
+		Score:          healthScore(failWeight, evaluated),
 		TotalItems:     evaluated,
 		EvaluatedItems: evaluated,
 		SweptAtNS:      time.Now().UnixNano(),
@@ -684,8 +696,10 @@ func misplaced(a *organize.Action) bool {
 
 // HealthSummaryFor reads the dashboard aggregate: the stored sweep
 // state (absent means the first sweep has not landed, reported as
-// warming up) plus live per-rule counts from the health index.
-func (l *Library) HealthSummaryFor(ctx context.Context) (HealthSummaryDTO, error) {
+// warming up) plus live per-rule counts from the health index. A caller
+// who does not see everything reads the counts, totals and score over
+// the items it is offered instead.
+func (l *Library) HealthSummaryFor(ctx context.Context, uc *UserCtx) (HealthSummaryDTO, error) {
 	out := HealthSummaryDTO{WarmingUp: true}
 	raw, err := l.db.SettingGet(ctx, healthStateKey)
 	switch {
@@ -705,9 +719,26 @@ func (l *Library) HealthSummaryFor(ctx context.Context) (HealthSummaryDTO, error
 	}
 	out.Sweeping = l.sweeping.Load() || l.SweepRequested(ctx)
 	out.SweepFailed = l.sweepFailed.Load()
-	counts, err := l.db.HealthRuleCounts(ctx)
-	if err != nil {
-		return HealthSummaryDTO{}, &Error{Kind: KindInternal, Err: err}
+	var counts map[string]int
+	if seesEverything(uc) {
+		if counts, err = l.db.HealthRuleCounts(ctx); err != nil {
+			return HealthSummaryDTO{}, &Error{Kind: KindInternal, Err: err}
+		}
+	} else {
+		var failWeight float64
+		if counts, failWeight, err = l.offeredHealthCounts(ctx, uc); err != nil {
+			return HealthSummaryDTO{}, err
+		}
+		// The totals and the score stay zero while warming up, as the
+		// stored state's do.
+		if !out.WarmingUp {
+			evaluated, err := l.healthEvaluatedFor(ctx, uc)
+			if err != nil {
+				return HealthSummaryDTO{}, err
+			}
+			out.TotalItems, out.EvaluatedItems = evaluated, evaluated
+			out.Score = healthScore(failWeight, evaluated)
+		}
 	}
 	fixing, err := l.fixingRules(ctx)
 	if err != nil {
@@ -731,25 +762,67 @@ func (l *Library) HealthSummaryFor(ctx context.Context) (HealthSummaryDTO, error
 }
 
 // ListHealthIssuesFor pages failing items worst first, optionally
-// restricted to one rule.
-func (l *Library) ListHealthIssuesFor(ctx context.Context, rule, cursor string, limit int) ([]HealthIssueDTO, string, error) {
+// restricted to one rule, and only those the caller's listings offer:
+// inside their library grants and content rules. A caller who sees
+// everything reads every row.
+func (l *Library) ListHealthIssuesFor(ctx context.Context, uc *UserCtx, rule, cursor string, limit int) ([]HealthIssueDTO, string, error) {
 	afterCount, afterTitle, afterPID := 0, "", ""
 	if cursor != "" {
-		c, t, p, ok := decodeHealthCursor(cursor)
+		c, t, p, ok := l.openHealthCursor(ctx, cursor)
 		if !ok {
 			return nil, "", errInvalid("malformed cursor")
 		}
 		afterCount, afterTitle, afterPID = c, t, p
 	}
-	rows, err := l.db.ListHealthRows(ctx, rule, afterCount, afterTitle, afterPID, limit+1)
-	if err != nil {
-		return nil, "", &Error{Kind: KindInternal, Err: err}
+	// A narrowed caller's page can fall short of what one read holds, so
+	// the scan reads on in bigger steps until the page and the row that
+	// proves there is a next one are in hand, or until it has read
+	// healthScanBudget rows: then the page goes out short, with a sealed
+	// cursor at the last row read.
+	everything := seesEverything(uc)
+	step := limit + 1
+	if !everything {
+		step = max(step, healthScanStep)
+	}
+	var rows []wdb.HealthRow
+	scanned, cut := 0, false
+	for len(rows) <= limit {
+		if !everything && scanned >= healthScanBudget {
+			cut = true
+			break
+		}
+		batch, err := l.db.ListHealthRows(ctx, rule, afterCount, afterTitle, afterPID, step)
+		if err != nil {
+			return nil, "", &Error{Kind: KindInternal, Err: err}
+		}
+		if len(batch) == 0 {
+			break
+		}
+		last := batch[len(batch)-1]
+		afterCount, afterTitle, afterPID = last.RuleCount, last.Title, last.ItemPID
+		read := len(batch)
+		scanned += read
+		if !everything {
+			if batch, err = l.offeredHealthRows(ctx, uc, batch); err != nil {
+				return nil, "", err
+			}
+		}
+		rows = append(rows, batch...)
+		if read < step {
+			break
+		}
 	}
 	next := ""
-	if len(rows) > limit {
+	switch {
+	case len(rows) > limit:
 		rows = rows[:limit]
 		last := rows[len(rows)-1]
 		next = encodeHealthCursor(last.RuleCount, last.Title, last.ItemPID)
+	case cut:
+		var err error
+		if next, err = l.sealHealthCursor(afterCount, afterTitle, afterPID); err != nil {
+			return nil, "", err
+		}
 	}
 	out := make([]HealthIssueDTO, 0, len(rows))
 	for _, r := range rows {
@@ -775,6 +848,95 @@ func (l *Library) ListHealthIssuesFor(ctx context.Context, rule, cursor string, 
 	return out, next, nil
 }
 
+// healthScanStep is how many index rows a narrowed caller's listing reads
+// at a time, the size one item read takes. healthScanBudget is how many
+// one page reads before it goes out short.
+const (
+	healthScanStep   = 400
+	healthScanBudget = 4 * healthScanStep
+)
+
+// offeredHealthCounts walks the whole health index for a caller who does
+// not see everything and answers, over the rows offeredHealthRows keeps,
+// each rule's failing count and the summed failure weight.
+func (l *Library) offeredHealthCounts(ctx context.Context, uc *UserCtx) (map[string]int, float64, error) {
+	counts := map[string]int{}
+	var failWeight float64
+	afterCount, afterTitle, afterPID := 0, "", ""
+	for {
+		batch, err := l.db.ListHealthRows(ctx, "", afterCount, afterTitle, afterPID, healthScanStep)
+		if err != nil {
+			return nil, 0, &Error{Kind: KindInternal, Err: err}
+		}
+		if len(batch) == 0 {
+			break
+		}
+		last := batch[len(batch)-1]
+		afterCount, afterTitle, afterPID = last.RuleCount, last.Title, last.ItemPID
+		read := len(batch)
+		if batch, err = l.offeredHealthRows(ctx, uc, batch); err != nil {
+			return nil, 0, err
+		}
+		for _, r := range batch {
+			var rules []string
+			if json.Unmarshal([]byte(r.Rules), &rules) != nil {
+				continue
+			}
+			for _, rule := range rules {
+				counts[rule]++
+			}
+			failWeight += itemFailWeight(rules)
+		}
+		if read < healthScanStep {
+			break
+		}
+	}
+	return counts, failWeight, nil
+}
+
+// healthEvaluatedFor counts the items a sweep grades, the present ones,
+// that the caller is offered as offeredHealthRows reads it: its grants,
+// tag rules and explicit toggle.
+func (l *Library) healthEvaluatedFor(ctx context.Context, uc *UserCtx) (int, error) {
+	b := visibleItems().Where("state", query.OpIs, string(model.StatePresent))
+	for _, n := range l.contentNarrow(ctx, uc) {
+		b = b.WhereNode(n)
+	}
+	if grants := l.grantNode(ctx, uc); grants != nil {
+		b = b.WhereNode(grants)
+	}
+	n, err := l.lib.Count(ctx, b.Build(), "")
+	if err != nil {
+		return 0, classify(err)
+	}
+	return n, nil
+}
+
+// offeredHealthRows keeps the rows whose items the caller's listings
+// offer: inside their library grants and content rules, and not in the
+// trash. An item the catalog no longer holds is not offered.
+func (l *Library) offeredHealthRows(ctx context.Context, uc *UserCtx, rows []wdb.HealthRow) ([]wdb.HealthRow, error) {
+	pids := make([]model.PID, len(rows))
+	for i, r := range rows {
+		pids[i] = model.PID(r.ItemPID)
+	}
+	views, err := l.itemViewsByPID(ctx, pids)
+	if err != nil {
+		return nil, err
+	}
+	verdicts, err := l.tagVerdicts(ctx, uc, slices.Collect(maps.Values(views)))
+	if err != nil {
+		return nil, err
+	}
+	kept := make([]wdb.HealthRow, 0, len(rows))
+	for _, r := range rows {
+		if v, ok := views[model.PID(r.ItemPID)]; ok && l.offersWith(ctx, uc, verdicts, v) {
+			kept = append(kept, r)
+		}
+	}
+	return kept, nil
+}
+
 // healthAPIPID renders a stored bare item pid with the API prefix its
 // media type implies.
 func healthAPIPID(mediaType, pid string) string {
@@ -791,6 +953,83 @@ func healthAPIPID(mediaType, pid string) string {
 // two parts are dot-free, so parsing is a strict three-way split.
 func encodeHealthCursor(count int, title, pid string) string {
 	return strconv.Itoa(count) + "." + base64.RawURLEncoding.EncodeToString([]byte(title)) + "." + pid
+}
+
+// A sealed issues cursor: the rule count, the bare pid, the title's
+// first healthCursorTitle bytes with their length and a digest of the
+// whole title, one size whatever the row holds. A longer title is read
+// back from the row by its pid, when the digest says it is still the one.
+const (
+	sealedHealthCursor = "s."
+	healthCursorPID    = 26
+	healthCursorTitle  = 64
+	healthCursorDigest = 16
+	healthCursorSize   = 1 + 4 + healthCursorPID + 1 + healthCursorTitle + healthCursorDigest
+)
+
+// healthTitleDigest is what a sealed cursor keeps of a whole title.
+func healthTitleDigest(title string) []byte {
+	sum := sha256.Sum256([]byte(title))
+	return sum[:healthCursorDigest]
+}
+
+// sealHealthCursor seals a cursor standing on the last row a cut page
+// read, which is usually one the caller may not see: the position comes
+// back with the next request, and nothing of the row, its title's length
+// included, goes to anyone.
+func (l *Library) sealHealthCursor(count int, title, pid string) (string, error) {
+	if len(pid) != healthCursorPID || count < 0 || count > math.MaxUint32 {
+		return "", &Error{Kind: KindInternal, Msg: "an issues cursor cannot stand on row " + pid}
+	}
+	buf := make([]byte, healthCursorSize)
+	n := min(len(title), healthCursorTitle)
+	if len(title) > n {
+		buf[0] = 1
+	}
+	binary.BigEndian.PutUint32(buf[1:5], uint32(count))
+	copy(buf[5:], pid)
+	buf[5+healthCursorPID] = byte(n)
+	copy(buf[6+healthCursorPID:], title[:n])
+	copy(buf[healthCursorSize-healthCursorDigest:], healthTitleDigest(title))
+	sealed, err := l.cursorSealer.Seal(buf)
+	if err != nil {
+		return "", &Error{Kind: KindInternal, Err: err}
+	}
+	return sealedHealthCursor + base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+
+// openHealthCursor parses an issues cursor, sealed or not. A sealed one
+// over a longer title takes the rest of it from the row, where the row
+// still stands as the cursor left it (its count and its title's digest
+// unchanged); otherwise the position is the title's first bytes, which
+// at worst reads a few rows sharing them twice, and never skips one.
+func (l *Library) openHealthCursor(ctx context.Context, s string) (count int, title, pid string, ok bool) {
+	rest, sealed := strings.CutPrefix(s, sealedHealthCursor)
+	if !sealed {
+		return decodeHealthCursor(s)
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(rest)
+	if err != nil {
+		return 0, "", "", false
+	}
+	buf, err := l.cursorSealer.Open(raw)
+	if err != nil || len(buf) != healthCursorSize || buf[0] > 1 {
+		return 0, "", "", false
+	}
+	pid = string(buf[5 : 5+healthCursorPID])
+	n := int(buf[5+healthCursorPID])
+	if n > healthCursorTitle || !model.PID(pid).Valid() {
+		return 0, "", "", false
+	}
+	count, title = int(binary.BigEndian.Uint32(buf[1:5])), string(buf[6+healthCursorPID:6+healthCursorPID+n])
+	if buf[0] == 1 {
+		digest := buf[healthCursorSize-healthCursorDigest:]
+		if row, err := l.db.HealthRowByItem(ctx, pid); err == nil && row.RuleCount == count &&
+			strings.HasPrefix(row.Title, title) && bytes.Equal(healthTitleDigest(row.Title), digest) {
+			title = row.Title
+		}
+	}
+	return count, title, pid, true
 }
 
 // decodeHealthCursor strictly parses an issues cursor; ok is false for

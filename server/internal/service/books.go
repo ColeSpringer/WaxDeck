@@ -489,6 +489,26 @@ func (l *Library) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID s
 	return out, nil
 }
 
+// seriesReached is the series detail's gate for a caller not of full
+// reach: a book of the series inside its grants that its listings offer.
+func (l *Library) seriesReached(ctx context.Context, uc *UserCtx, pid model.PID) (bool, error) {
+	ent, err := l.lib.EntityByPID(ctx, read.EntitySeries, pid)
+	if err != nil {
+		if err := classify(err); KindOf(err) != KindNotFound {
+			return false, err
+		}
+		return false, nil
+	}
+	if ent == nil || (!uc.AllLibraries && !l.entityInLibraries(ent, uc)) {
+		return false, nil
+	}
+	offered, err := l.seriesOffering(ctx, uc, []*read.EntityInfo{ent})
+	if err != nil {
+		return false, err
+	}
+	return offered[ent.PID], nil
+}
+
 // tagRestricted reports whether tag rules narrow what the caller sees,
 // the one content rule a book answers to.
 func tagRestricted(uc *UserCtx) bool {

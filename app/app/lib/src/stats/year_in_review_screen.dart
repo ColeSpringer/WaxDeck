@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'media_split.dart';
@@ -227,9 +228,11 @@ class _PersonalRecap extends ConsumerWidget {
                   _ShareCardsDoor(data: ShareCardData.personal(l10n, value)),
                 ],
               ),
-      AsyncValue(:final error?) => _RecapError(
-        error: error,
-        retrying: recap.isLoading,
+      // Titled, because the explanation alone is a generic sentence for
+      // anything that is not an API exception.
+      AsyncValue(hasError: true) => AsyncFailureCard.from(
+        recap,
+        title: l10n.statsRecapLoadError,
         onRetry: () => ref.invalidate(yearInReviewProvider(year)),
       ),
       _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -292,9 +295,11 @@ class _ServerRecap extends ConsumerWidget {
                   _ShareCardsDoor(data: ShareCardData.server(l10n, value)),
                 ],
               ),
-      AsyncValue(:final error?) => _RecapError(
-        error: error,
-        retrying: recap.isLoading,
+      // Titled, because the explanation alone is a generic sentence for
+      // anything that is not an API exception.
+      AsyncValue(hasError: true) => AsyncFailureCard.from(
+        recap,
+        title: l10n.statsRecapLoadError,
         onRetry: () => ref.invalidate(serverYearInReviewProvider(year)),
       ),
       _ => const SkeletonShapes(shape: SkeletonShape.list),
@@ -365,46 +370,6 @@ class _NothingPlayed extends StatelessWidget {
           context.l10n.statsYearNothingPlayed,
           key: const Key('yir-nothing-played'),
         ),
-      ),
-    );
-  }
-}
-
-class _RecapError extends StatelessWidget {
-  const _RecapError({
-    required this.error,
-    required this.onRetry,
-    this.retrying = false,
-  });
-
-  final Object error;
-  final VoidCallback onRetry;
-
-  /// Riverpod is still retrying: the retry is already running.
-  final bool retrying;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return Padding(
-      padding: const EdgeInsets.all(WaxSpace.s16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Titled, because `explain` answers a generic sentence for
-          // anything that is not an API exception, and a panel among
-          // panels has to say which one could not be drawn.
-          Text(l10n.statsRecapLoadError, textAlign: TextAlign.center),
-          const SizedBox(height: WaxSpace.s4),
-          Text(context.explain(error), textAlign: TextAlign.center),
-          const SizedBox(height: WaxSpace.s12),
-          WaxButton(
-            label: l10n.commonRetry,
-            kind: WaxButtonKind.tonal,
-            busy: retrying,
-            onPressed: onRetry,
-          ),
-        ],
       ),
     );
   }

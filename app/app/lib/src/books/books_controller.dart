@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../library/page_walk.dart';
 import '../player/play_progress.dart';
@@ -128,6 +129,7 @@ class BooksController extends AsyncNotifier<BooksState> {
     final generation = ++_generation;
     // Watched rather than read so a sign-in swap rebuilds the listing.
     ref.watch(repositoryProvider);
+    ref.watch(signedInAccountProvider);
     // To the first page with books on it, past pages the listing emptied,
     // which the contract allows with books behind them: never "no
     // audiobooks" over books a page further on. No further, so a later
@@ -243,16 +245,16 @@ List<ItemSummary> arrangeBooks(
 /// ones that do rather than jumbling with them.
 List<ItemSummary> continueListening(
   List<ItemSummary> books,
-  Map<String, PlayProgress> progress, {
+  PlayProgressView progress, {
   int limit = 12,
 }) {
   final started =
       <ItemSummary>[
         for (final book in books)
-          if (progress[book.pid]?.inProgress ?? false) book,
+          if (progress[book.pid].inProgress) book,
       ]..sort((a, b) {
-        final left = progress[a.pid]?.updatedAt;
-        final right = progress[b.pid]?.updatedAt;
+        final left = progress[a.pid].updatedAt;
+        final right = progress[b.pid].updatedAt;
         // With no timestamps to go on, newest-added leads: a ULID sorts by
         // mint time, so this is the direction `BookSort.recent` runs and
         // the direction every other recency order in the app runs. A state

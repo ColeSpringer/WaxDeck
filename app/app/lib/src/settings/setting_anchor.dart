@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 /// Landing on a setting rather than on the section it lives in.
@@ -33,6 +34,58 @@ class WantedSetting extends InheritedWidget {
 
   @override
   bool updateShouldNotify(WantedSetting oldWidget) => oldWidget.id != id;
+}
+
+/// A run of settings under one heading. A landing on one of its rows
+/// keeps the group's top in view with the row where both fit, else the
+/// line its rows share ([SettingGroupNote]): a group states a reason
+/// once, and a row centred on its own can leave it off screen.
+class SettingGroupFrame extends StatefulWidget {
+  const SettingGroupFrame({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<SettingGroupFrame> createState() => _SettingGroupFrameState();
+}
+
+class _SettingGroupFrameState extends State<SettingGroupFrame> {
+  /// The group's shared line, while it draws one.
+  BuildContext? _note;
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// The line a [SettingGroupFrame]'s rows share, such as why they are
+/// disabled.
+class SettingGroupNote extends StatefulWidget {
+  const SettingGroupNote({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<SettingGroupNote> createState() => _SettingGroupNoteState();
+}
+
+class _SettingGroupNoteState extends State<SettingGroupNote> {
+  _SettingGroupFrameState? _frame;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _frame = context.findAncestorStateOfType<_SettingGroupFrameState>()
+      ?.._note = context;
+  }
+
+  @override
+  void dispose() {
+    if (_frame?._note == context) _frame?._note = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// One settings row that knows its own id, so an arriving `?setting=`
@@ -143,12 +196,34 @@ class _SettingAnchorState extends State<SettingAnchor>
     if (at == null) return;
     if (_revealed != null && (at - _revealed!).abs() < 0.5) return;
     _revealed = at;
+    // The group's top where the row fits under it, else its shared line;
+    // the row alone, centred, where neither does.
+    final frame = context.findAncestorStateOfType<_SettingGroupFrameState>();
+    BuildContext? lead;
+    for (final top in [frame?.context, frame?._note]) {
+      if (top != null && _fitsUnder(top)) {
+        lead = top;
+        break;
+      }
+    }
     Scrollable.ensureVisible(
-      context,
-      alignment: 0.5,
+      lead ?? context,
+      alignment: lead == null ? 0.5 : 0,
       duration: _travel,
       curve: WaxMotion.emphasized,
     );
+  }
+
+  /// Whether the whole row stays in view once [top]'s top is at the top
+  /// of the view, under whatever the view pins there.
+  bool _fitsUnder(BuildContext top) {
+    final row = context.findRenderObject();
+    final lead = top.findRenderObject();
+    if (row is! RenderBox || lead is! RenderBox) return false;
+    final viewport = RenderAbstractViewport.maybeOf(row);
+    if (viewport == null) return false;
+    return viewport.getOffsetToReveal(lead, 0).offset >=
+        viewport.getOffsetToReveal(row, 1).offset;
   }
 
   /// This row's offset within the scrollable's content, or null when

@@ -849,18 +849,18 @@ The tasks screen shows background work: file tooling, acquisitions,
 migration imports (with their reports), health fixes, catalog repairs,
 and, for an administrator, the catalog's own jobs (scans, analysis, enrichment,
 organize runs and their undos, library removals, emptying the trash)
-with their progress and, once they end, what they did. A running job
-is listed however many newer ones came after it; finished per-item jobs
-(an upload's imports, deletes, restores, trash purges) are left out,
-and only the 20 newest finished jobs are shown. A job on one target,
-such as an enrichment of one item or the watcher's scan of one library,
-is listed by that target's name only while it runs, except a kind
-change, an organize undo and a library removal, which stay listed once
-they end; only its starter hears of it while it runs (the watcher's
+with their progress and, once they end, what they did. A running job is
+listed however many newer ones came after it; finished jobs that answer
+their own request (an upload's imports, deletes, restores, trash purges)
+are left out, and only the 20 newest finished jobs are shown. A job on
+one target, such as an enrichment of one item or the watcher's scan of
+one library, is listed by that target's name only while it runs, except
+a kind change, an organize undo and a library removal, which stay listed
+once they end; only its starter hears of it while it runs (the watcher's
 scans notify nobody). Task and job progress streams live over the
-WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves a
-task's lifecycle as server-sent events for anything that prefers a
-plain HTTP stream.
+WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves a task's
+lifecycle as server-sent events for anything that prefers a plain HTTP
+stream.
 
 A book merge or split, or a CUE split, waiting out a passing failure
 reads Waiting rather than running: why (the catalog busy, a library
@@ -921,7 +921,8 @@ a menu of two sweeps - your own, or everyone's, which asks first and
 takes the reports other accounts have not read
 (`POST /api/v1/tools/tasks/clear-finished` with `scope` `mine`, the
 default, or `all`, which is administrators only). Running and queued
-tasks stay either way. Either sweep also hides the administrator's own
-finished library jobs (`POST /api/v1/jobs/clear-finished`), for that
-administrator only; the jobs themselves stay, and the prune never
-touches them.
+tasks stay either way. On the Tasks screen either sweep makes a second
+call, `POST /api/v1/jobs/clear-finished`, which hides the
+administrator's own finished library jobs, for that administrator only;
+`POST /api/v1/tools/tasks/clear-finished` alone hides no catalog jobs.
+The jobs themselves stay, and the prune never touches them.

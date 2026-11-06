@@ -248,7 +248,12 @@ class _BookSeekState extends ConsumerState<BookSeek> {
               // Always the whole book, whichever bar is drawn: it is the
               // answer the chapter view cannot give, and the reason the
               // toggle is not needed most of the time.
-              remainingLabel: _bookProgress(context.waxL10n, total, at),
+              remainingLabel: _bookProgress(
+                context.l10n,
+                context.waxL10n,
+                total,
+                at,
+              ),
               onSeek: (to) => unawaited(widget.session.seek(start + to)),
               semanticsId: SemanticsIds.playerSeek,
             ),
@@ -314,13 +319,18 @@ class _BookSeekState extends ConsumerState<BookSeek> {
   /// "42 percent, 6 hr 12 min left". Percent and a span, because
   /// each answers a question the other does not: how far in, and how
   /// much of the evening this is.
-  String? _bookProgress(WaxLocalizations l10n, Duration total, Duration at) {
+  String? _bookProgress(
+    AppLocalizations l10n,
+    WaxLocalizations wax,
+    Duration total,
+    Duration at,
+  ) {
     final totalMs = total.inMilliseconds;
     if (totalMs <= 0) return null;
     final percent = ((at.inMilliseconds / totalMs) * 100).clamp(0, 100).round();
     final left = total - at;
-    if (left <= Duration.zero) return '$percent percent';
-    return '$percent percent, ${l10n.formatSpan(left)} left';
+    if (left <= Duration.zero) return l10n.bookPercent(percent);
+    return l10n.playerBookProgress(percent, wax.formatSpan(left));
   }
 }
 
@@ -439,12 +449,16 @@ class TrimChip extends StatelessWidget {
 
   final PlaybackSession session;
 
-  static String savedLabel(int savedMs) {
-    final d = Duration(milliseconds: savedMs);
-    final m = d.inMinutes;
-    final s = d.inSeconds.remainder(60);
-    if (m > 0) return 'saved ${m}m ${s}s';
-    return 'saved ${s}s';
+  /// What the trim has saved: a span from a minute on, and seconds below
+  /// one, which a span would round up to a minute.
+  static String savedLabel(
+    AppLocalizations l10n,
+    WaxLocalizations wax,
+    int savedMs,
+  ) {
+    final saved = Duration(milliseconds: savedMs);
+    if (saved.inMinutes > 0) return wax.formatSpan(saved);
+    return l10n.playerTrimSavedSeconds(saved.inSeconds);
   }
 
   @override
@@ -457,7 +471,9 @@ class TrimChip extends StatelessWidget {
           builder: (context, savedMs, _) {
             final l10n = context.l10n;
             final label = savedMs > 0
-                ? l10n.playerTrimSilenceSaved(savedLabel(savedMs))
+                ? l10n.playerTrimSilenceSaved(
+                    savedLabel(l10n, context.waxL10n, savedMs),
+                  )
                 : l10n.playerTrimSilence;
             // A chip with its readout drawn rather than an icon with the
             // readout only spoken: what the session has saved is the

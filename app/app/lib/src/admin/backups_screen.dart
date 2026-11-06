@@ -178,9 +178,10 @@ class BackupsScreen extends ConsumerWidget {
                       // An error first, as the house faces read it: between
                       // retries the state is loading and still carries it.
                       switch (backups) {
-                        AsyncValue(:final error?) => Padding(
-                          padding: const EdgeInsets.all(WaxSpace.s16),
-                          child: Text(context.explain(error)),
+                        AsyncValue(hasError: true) => AsyncFailureCard.from(
+                          backups,
+                          title: l10n.adminBackupsLoadError,
+                          onRetry: () => ref.invalidate(backupsProvider),
                         ),
                         AsyncData(:final value) when value.isEmpty => Padding(
                           padding: const EdgeInsets.all(WaxSpace.s16),
@@ -398,7 +399,6 @@ class _RestorePlanDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final colorScheme = Theme.of(context).colorScheme;
     final l10n = context.l10n;
     final keyfileVerdict = !plan.keyfilePresent
         ? l10n.adminRestoreNoKeyfile
@@ -414,14 +414,9 @@ class _RestorePlanDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(WaxSpace.s8),
-                color: colorScheme.tertiaryContainer,
-                child: Text(
-                  l10n.adminRestoreAppliesAtRestart,
-                  style: TextStyle(color: colorScheme.onTertiaryContainer),
-                ),
+              WaxBanner(
+                message: l10n.adminRestoreAppliesAtRestart,
+                tone: WaxBannerTone.notice,
               ),
               const SizedBox(height: WaxSpace.s12),
               Text(keyfileVerdict),
@@ -468,12 +463,25 @@ class _RetentionFields extends ConsumerStatefulWidget {
 class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
   final _keepCount = TextEditingController();
   final _keepMb = TextEditingController();
-  var _seeded = false;
   var _busy = false;
+
+  /// What is stored, as the boxes last took it: a save sends the values
+  /// that differ from it, so it never rewrites one another administrator
+  /// changed, and a box still showing it follows when it moves.
+  int? _storedCount;
+  int? _storedMb;
 
   /// What each box is refusing, once a save has looked at it.
   String? _countError;
   String? _mbError;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(adminSettingsProvider, (_, next) {
+      if (next.value case final settings?) _follow(settings);
+    }, fireImmediately: true);
+  }
 
   @override
   void dispose() {
@@ -482,11 +490,21 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
     super.dispose();
   }
 
-  void _seed(AdminSettings settings) {
-    if (_seeded) return;
-    _seeded = true;
-    _keepCount.text = '${settings.backupKeepCount}';
-    _keepMb.text = '${settings.backupKeepBytes ~/ (1024 * 1024)}';
+  void _follow(AdminSettings settings) {
+    _storedCount = _moved(_keepCount, _storedCount, settings.backupKeepCount);
+    _storedMb = _moved(_keepMb, _storedMb, _megabytes(settings));
+  }
+
+  static int _megabytes(AdminSettings settings) =>
+      settings.backupKeepBytes ~/ (1024 * 1024);
+
+  /// Takes [now] as the stored value behind [box]: a box still showing
+  /// the previous one moves with it, one the admin typed in keeps that.
+  static int _moved(TextEditingController box, int? stored, int now) {
+    if (now != stored && (stored == null || _whole(box.text) == stored)) {
+      box.text = '$now';
+    }
+    return now;
   }
 
   /// A whole number at or above zero, or null for anything else -
@@ -497,7 +515,7 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
     return parsed == null || parsed < 0 ? null : parsed;
   }
 
-  Future<void> _save(AdminSettings settings) async {
+  Future<void> _save() async {
     if (_busy) return;
     // Refused rather than quietly kept. Both values used to fall back to
     // what was already stored, so a typo or a cleared box saved the old
@@ -518,12 +536,21 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
     try {
       await ref
           .read(adminSettingsProvider.notifier)
-          .save(
-            settings.copyWith(
-              backupKeepCount: count,
-              backupKeepBytes: mb * 1024 * 1024,
+          .edit(
+            AdminSettingsChange(
+              backupKeepCount: count == _storedCount ? null : count,
+              backupKeepBytes: mb == _storedMb ? null : mb * 1024 * 1024,
             ),
           );
+      // Both boxes show what was stored: a value not sent shows the one
+      // another administrator stored.
+      final stored = mounted ? ref.read(adminSettingsProvider).value : null;
+      if (stored != null) {
+        _storedCount = stored.backupKeepCount;
+        _storedMb = _megabytes(stored);
+        _keepCount.text = '$_storedCount';
+        _keepMb.text = '$_storedMb';
+      }
       messenger.show(l10n.adminBackupRetentionSaved);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainRefusal(l10n, e));
@@ -549,7 +576,6 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
       }
       return const SkeletonShapes(shape: SkeletonShape.list, count: 2);
     }
-    _seed(settings);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -581,7 +607,7 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
           label: l10n.adminBackupSaveRetention,
           kind: WaxButtonKind.tonal,
           busy: _busy,
-          onPressed: () => _save(settings),
+          onPressed: _save,
         ),
       ],
     );

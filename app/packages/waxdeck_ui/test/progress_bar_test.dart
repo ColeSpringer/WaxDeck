@@ -28,11 +28,8 @@ SemanticsNode _bar(WidgetTester tester) =>
 void main() {
   testWidgets('a progress bar reports its fraction', (tester) async {
     final handle = tester.ensureSemantics();
-    await tester.pumpWidget(
-      _host(const WaxProgressBar(value: 0.42, semanticsLabel: 'Scanning')),
-    );
+    await tester.pumpWidget(_host(const WaxProgressBar(value: 0.42)));
 
-    expect(_bar(tester).label, 'Scanning');
     expect(_bar(tester).value, '42%');
     expect(tester.getSize(find.byType(WaxProgressBar)).height, 4);
 
@@ -68,11 +65,8 @@ void main() {
     tester,
   ) async {
     final handle = tester.ensureSemantics();
-    await tester.pumpWidget(
-      _host(const WaxProgressBar(semanticsLabel: 'Scanning')),
-    );
+    await tester.pumpWidget(_host(const WaxProgressBar()));
 
-    expect(_bar(tester).label, 'Scanning');
     expect(_bar(tester).value, isEmpty);
     expect(tester.hasRunningAnimations, isTrue);
 

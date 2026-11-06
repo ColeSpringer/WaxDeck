@@ -9,7 +9,10 @@ paths:
         Health is computed by a background sweep; `warmingUp` is true
         until the first sweep covers the library (a fresh install
         shows honest progress instead of a wall of red), and
-        `sweptAt` dates the numbers. Items marked unofficial are
+        `sweptAt` dates the numbers. The counts, totals and score are
+        taken over the items the caller may see, inside their library
+        grants and content rules; administrators read the whole
+        library's. Items marked unofficial are
         exempt from rules that assume a canonical release. Rule names
         are server-defined strings; the current set is `missing-art`,
         `small-art`, `missing-mbid`, `missing-year`, `missing-genre`,
@@ -54,7 +57,12 @@ paths:
         Keyset-paginated items with outstanding issues, optionally
         restricted to one rule, worst first (most failed rules, then
         title). Each row carries every rule the item currently fails
-        so the list doubles as a per-item worklist.
+        so the list doubles as a per-item worklist. Lists only the
+        items the caller may see, inside their library grants and
+        content rules; administrators see every item. A page can hold
+        fewer than `limit` items, none at all, and still carry a
+        `nextCursor`: each request reads a bounded part of the list. A
+        cursor carries nothing of an item the caller may not see.
       tags: [health]
       parameters:
         - name: rule

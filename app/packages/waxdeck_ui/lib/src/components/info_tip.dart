@@ -22,23 +22,13 @@ import 'tooltip.dart';
 /// popover closes on a tap anywhere else, on Escape, when focus moves
 /// anywhere but onto the tip, when an enclosing scrollable moves, and when
 /// a resize moves the glyph. The two are never up together. The glyph is a
-/// button named by [label], or by [message] itself; with a [label] the
-/// message is read after it, as the glyph's hint.
+/// button named by [message] itself, so it is read without a press.
 class WaxInfoTip extends StatefulWidget {
-  const WaxInfoTip({
-    required this.message,
-    this.semanticsId,
-    this.label,
-    super.key,
-  });
+  const WaxInfoTip({required this.message, this.semanticsId, super.key});
 
   /// The text the tip holds.
   final String message;
   final String? semanticsId;
-
-  /// The glyph's accessible name. Null takes [message]; set, the message
-  /// becomes the glyph's hint, so it is still read without a press.
-  final String? label;
 
   @override
   State<WaxInfoTip> createState() => _WaxInfoTipState();
@@ -301,10 +291,7 @@ class _WaxInfoTipState extends State<WaxInfoTip> with WidgetsBindingObserver {
                 ? WaxTooltipSuppression.focus
                 : WaxTooltipSuppression.none,
             child: WaxTappable(
-              label: widget.label ?? widget.message,
-              // With a label the glyph is named by it, and the message is
-              // its description; without one the name is the message.
-              hint: widget.label == null ? null : widget.message,
+              label: widget.message,
               semanticsId: widget.semanticsId,
               borderRadius: WaxRadius.pill,
               onPressed: toggle,

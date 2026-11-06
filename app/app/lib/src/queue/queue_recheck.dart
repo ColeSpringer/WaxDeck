@@ -18,14 +18,17 @@ import 'queue_item.dart';
 /// [itemLookupCap] queued items. One that is now another kind has its
 /// summary replaced, its row read again and a park naming it offered anew,
 /// so it starts and reads as what it is. One the server names departed
-/// (folded into a book, or its files gone for good) leaves the queue as a
-/// watched kind change lets it go, but with no stop: playing, it plays on
-/// and the queue moves past it at its end; parked, what follows takes over
-/// the park; standing on the deck (paused, or failed), what follows waits
-/// in its place and the listener is told. One merely out of sight stays,
-/// since it can come back, and so does every item a failed lookup asked
-/// about. Summaries the queue does not hold are let go too, so none is
-/// left unchecked.
+/// (folded into a book) leaves the queue as a watched kind change lets it
+/// go, but with no stop: playing, it plays on and the queue moves past it
+/// at its end; parked, what follows takes over the park; standing on the
+/// deck (paused, or failed), what follows waits in its place and the
+/// listener is told. One archived (trashed, purged, deleted, or its
+/// library removed) stays: the server cannot yet tell a removed library's
+/// archive, which adding the folder again undoes, from a delete's, so it
+/// answers every archived item, and one that cannot start is skipped when
+/// reached. One merely out of sight stays too, since it can come back, and
+/// so does every item a failed lookup asked about. Summaries the queue
+/// does not hold are let go too, so none is left unchecked.
 final queueRecheckProvider = Provider<QueueRecheck>(QueueRecheck.new);
 
 class QueueRecheck {

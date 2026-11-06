@@ -36,9 +36,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get aboutServerUnreachable => 'no disponible';
-
-  @override
   String get aboutTitle => 'Acerca de';
 
   @override
@@ -179,6 +176,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminBackupsEmpty => 'Todavía no hay copias de seguridad';
+
+  @override
+  String get adminBackupsLoadError =>
+      'No se han podido cargar las copias de seguridad';
 
   @override
   String get adminBackupsRetention => 'Conservación';
@@ -1486,6 +1487,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminServerTranscodingGroup => 'Transcodificación';
 
   @override
+  String get adminServerTranscodingLoadError =>
+      'No se han podido cargar los límites de transcodificación';
+
+  @override
   String get adminServerTranscodingSaved =>
       'Se han guardado los límites de transcodificación';
 
@@ -1518,8 +1523,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminStreamingConnected => 'Conectado';
 
   @override
-  String get adminStreamingDirect =>
-      'Mientras tanto, los originales se reproducen directamente';
+  String get adminStreamingDirect => 'Suenan los originales tal cual';
 
   @override
   String get adminStreamingNotConfigured => 'Sin configurar';
@@ -1584,12 +1588,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String adminTileChecked(int checked, int total) {
-    return '$checked de $total comprobados';
+    return '$checked de $total revisados';
   }
 
   @override
-  String get adminTileFirstSweep =>
-      'El primer barrido todavía se está ejecutando';
+  String get adminTileCouldNotRead => 'No se ha podido leer';
+
+  @override
+  String get adminTileFirstSweep => 'Primer barrido en curso';
 
   @override
   String get adminTileHealth => 'Salud de la biblioteca';
@@ -1644,7 +1650,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminTileScansAndPasses => 'escaneos y pasadas';
 
   @override
-  String get adminTileSessions => 'sesiones de reproducción activas';
+  String get adminTileSessions => 'sesiones activas';
 
   @override
   String get adminTileSimilarity => 'Cobertura de similitud';
@@ -2050,6 +2056,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminUsersUploadsUnlimited => 'sin límite';
 
   @override
+  String get adminUsersViewLabel => 'Mostrar';
+
+  @override
   String get adminWarmingBlurb =>
       'Los archivos aparecen según se indexan; después llegan las portadas y las coincidencias.';
 
@@ -2352,6 +2361,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get authLogIn => 'Iniciar sesión';
+
+  @override
+  String get authLoopbackMessage => 'Cierra esta pestaña y vuelve a WaxDeck.';
+
+  @override
+  String get authLoopbackTitle => 'Sesión iniciada';
 
   @override
   String get authOr => 'o';
@@ -3143,9 +3158,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get commonDone => 'Listo';
 
   @override
-  String get commonLoading => 'Cargando';
-
-  @override
   String get commonLoadingTitle => 'Cargando…';
 
   @override
@@ -3198,6 +3210,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopTrayShow => 'Mostrar WaxDeck';
+
+  @override
+  String get devicesAnotherDevice => 'otro dispositivo';
 
   @override
   String get devicesBaseConfigured => 'Dirección configurada';
@@ -3752,6 +3767,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Ese dispositivo no ha podido hacerlo. Sigue conectado, así que merece la pena intentarlo de nuevo.';
 
   @override
+  String get errorEndpointIdle =>
+      'Ese dispositivo no tiene nada que reproducir.';
+
+  @override
   String get errorEndpointOffline =>
       'Ese dispositivo no está conectado. Actualiza la lista de dispositivos.';
 
@@ -3827,11 +3846,22 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se ha podido conectar con el servidor. Comprueba la conexión e inténtalo de nuevo.';
 
   @override
+  String get errorNoSession =>
+      'Ese dispositivo ya no está reproduciendo esta sesión.';
+
+  @override
   String get errorNotFound => 'Eso ya no está aquí.';
 
   @override
   String get errorPodcastsOff =>
       'Los pódcasts están desactivados en este servidor.';
+
+  @override
+  String get errorQueueEnd => 'Ese dispositivo ya está al final de su cola.';
+
+  @override
+  String get errorQueueStart =>
+      'Ese dispositivo ya está al principio de su cola.';
 
   @override
   String get errorQuotaExceeded => 'Eso supera un límite de este servidor.';
@@ -6354,6 +6384,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Previsualiza primero. No se mueve nada hasta que apliques.';
 
   @override
+  String get organizeHistoryLoadError =>
+      'No se han podido cargar las ejecuciones anteriores';
+
+  @override
   String get organizeHistoryMore => 'Mostrar ejecuciones anteriores';
 
   @override
@@ -6643,6 +6677,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String playerArtworkPosition(int index, int count) {
     return 'Ilustración $index de $count';
+  }
+
+  @override
+  String playerBookProgress(int percent, String left) {
+    return '$percent por ciento, quedan $left';
   }
 
   @override
@@ -7030,11 +7069,16 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se ha podido cargar la transcripción.';
 
   @override
+  String playerTrimSavedSeconds(int seconds) {
+    return '$seconds s';
+  }
+
+  @override
   String get playerTrimSilence => 'Recortar los silencios';
 
   @override
   String playerTrimSilenceSaved(String saved) {
-    return 'Recortar los silencios ($saved)';
+    return 'Recortar los silencios ($saved ahorrados)';
   }
 
   @override
@@ -8500,10 +8544,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se han podido cargar tus listas de reproducción';
 
   @override
-  String get playlistsLoadErrorSentence =>
-      'No se han podido cargar tus listas de reproducción.';
-
-  @override
   String get playlistsNew => 'Nueva lista de reproducción';
 
   @override
@@ -9284,6 +9324,39 @@ class AppLocalizationsEs extends AppLocalizations {
       locale: localeName,
       other: '$count seleccionadas',
       one: '1 seleccionada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String queueSessionItems(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos',
+      one: '1 elemento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String queueSessionItemsOn(int count, String endpoint) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos · en $endpoint',
+      one: 'en $endpoint',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String queueSessionQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos en cola',
+      one: '1 elemento en cola',
     );
     return '$_temp0';
   }
@@ -10219,6 +10292,18 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get settingsAppPasswordRevokeAction => 'Revocar';
+
+  @override
+  String settingsAppPasswordRevokeBody(String label) {
+    return 'Las aplicaciones que inician sesión con «$label» pierden el acceso de inmediato.';
+  }
+
+  @override
+  String get settingsAppPasswordRevokeTitle =>
+      '¿Revocar la contraseña de aplicación?';
+
+  @override
   String get settingsAppPasswordUnlabeled => 'Sin etiqueta';
 
   @override
@@ -10424,9 +10509,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get settingsDevicesErrorMessage => 'El servidor no ha respondido.';
-
-  @override
   String get settingsDevicesErrorTitle =>
       'No se han podido cargar los dispositivos';
 
@@ -10614,10 +10696,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsLastfmCredentialsClear => 'Borrar';
 
   @override
-  String get settingsLastfmCredentialsError =>
-      'No se ha podido cargar el estado de las credenciales';
-
-  @override
   String get settingsLastfmCredentialsTitle =>
       'Credenciales de la API de Last.fm';
 
@@ -10706,10 +10784,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsNotifyAppriseTargetsHint => 'URLs de Apprise';
-
-  @override
-  String get settingsNotifyCatalogError =>
-      'No se ha podido cargar el catálogo de eventos';
 
   @override
   String get settingsNotifyDeliverVia => 'Enviar por';
@@ -10835,6 +10909,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsNotifyTargetRemove => 'Quitar';
+
+  @override
+  String settingsNotifyTargetRemoveBody(String name) {
+    return '«$name» deja de recibir notificaciones.';
+  }
+
+  @override
+  String get settingsNotifyTargetRemoveTitle =>
+      '¿Quitar el destino de notificación?';
 
   @override
   String get settingsNotifyTargetsEmpty =>
@@ -12551,6 +12634,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get uploadsFinishing => 'Terminando';
+
+  @override
+  String get uploadsFinishingUnreachable =>
+      'Terminando, no se puede contactar con el servidor';
 
   @override
   String get uploadsFormat => 'Formato de descarga';

@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'playlist_create.dart';
@@ -221,11 +222,11 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
                   },
                 ),
               ),
-              AsyncValue(hasError: true) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
-                child: Text(
-                  l10n.playlistsLoadErrorSentence,
-                  style: WaxType.bodySmall.copyWith(color: colors.error),
+              AsyncValue(hasError: true) => Flexible(
+                child: AsyncFailureCard.from(
+                  playlists,
+                  title: l10n.playlistsLoadError,
+                  onRetry: () => ref.invalidate(playlistsProvider),
                 ),
               ),
               _ => const Flexible(

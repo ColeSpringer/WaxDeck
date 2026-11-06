@@ -67,7 +67,7 @@ func TestSignupPendingFlow(t *testing.T) {
 		t.Fatalf("signup while disabled: got %v, want forbidden", err)
 	}
 
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{SignupEnabled: true})); err != nil {
 		t.Fatal(err)
 	}
 	acct, state, err := svc.Signup(ctx, "sam", "password123", "Sam", "")
@@ -110,7 +110,7 @@ func TestSignupPendingFlow(t *testing.T) {
 func TestSignupRejectFreesUsername(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{SignupEnabled: true})); err != nil {
 		t.Fatal(err)
 	}
 	acct, _, err := svc.Signup(ctx, "sam", "password123", "", "")
@@ -231,7 +231,7 @@ func TestAnInviteRevokeNamesItsInvite(t *testing.T) {
 func TestAnApprovalRecordsWhatItAssigned(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{SignupEnabled: true})); err != nil {
 		t.Fatal(err)
 	}
 	libs, err := svc.Libraries(ctx)
@@ -309,7 +309,7 @@ func TestAnInvitedSignupIsTheNewAccountsOwnAct(t *testing.T) {
 func TestASignupRequestIsTheRequestersOwnAct(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{SignupEnabled: true})); err != nil {
 		t.Fatal(err)
 	}
 	acct, _, err := svc.Signup(ctx, "sam", "password123", "", "")
@@ -325,7 +325,7 @@ func TestASignupRequestIsTheRequestersOwnAct(t *testing.T) {
 func TestAuditRecordsAndFilters(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{SignupEnabled: true}); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{SignupEnabled: true})); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.CreateInvite(ctx, admin, InviteCreate{}); err != nil {
@@ -385,13 +385,13 @@ func TestSchedulesAndReadOnlyToggles(t *testing.T) {
 	}
 
 	// Global read-only refuses the write surfaces via CheckWritable.
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{ReadOnly: true}); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{ReadOnly: true})); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.CheckWritable(ctx, ""); KindOf(err) != KindReadOnly {
 		t.Fatalf("read-only check: got %v, want read-only", err)
 	}
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettings{}); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{})); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.CheckWritable(ctx, ""); err != nil {

@@ -25,21 +25,52 @@ Finder _byId(String id) => find.bySemanticsIdentifier(id);
 Finder _trackRow(String pid) =>
     rowWithIdentifier(SemanticsIds.workbenchRow(pid));
 
-FakeRepository _repo() {
-  final repo = FakeRepository(
-    sessionState: const SessionState(
-      authenticated: true,
-      user: WaxDeckUser(
-        id: 'us-1',
-        username: 'admin',
-        roles: <String>['admin'],
-      ),
-    ),
+const _admin = SessionState(
+  authenticated: true,
+  user: WaxDeckUser(id: 'us-1', username: 'admin', roles: <String>['admin']),
+);
+
+/// One member's metadata refused while it is named in [refused], with
+/// every read counted by pid.
+class _MetadataRefused extends FakeRepository {
+  _MetadataRefused(this.refused)
+    : super(
+        sessionState: _admin,
+        items: [
+          testItem('tr-A', title: 'Salt Harbour'),
+          testItem('tr-B', title: 'Nightjar'),
+        ],
+      );
+
+  final Set<String> refused;
+  final asked = <String, int>{};
+
+  @override
+  Future<ItemMetadata> getItemMetadata(String pid) async {
+    asked[pid] = (asked[pid] ?? 0) + 1;
+    if (refused.contains(pid)) {
+      throw const WaxDeckApiException(
+        code: 'forbidden',
+        message: 'not an administrator',
+        statusCode: 403,
+      );
+    }
+    return super.getItemMetadata(pid);
+  }
+}
+
+FakeRepository _repo() => _seeded(
+  FakeRepository(
+    sessionState: _admin,
     items: [
       testItem('tr-A', title: 'Salt Harbour'),
       testItem('tr-B', title: 'Nightjar'),
     ],
-  );
+  ),
+);
+
+/// The album and its two members' tags, on [repo].
+FakeRepository _seeded(FakeRepository repo) {
   repo.albums[_album] = const AlbumDetail(
     pid: _album,
     title: 'Long Exposure',
@@ -253,6 +284,42 @@ void main() {
     await tester.tap(_byId(SemanticsIds.workbenchSelectToggle));
     await tester.pumpAndSettle();
     expect(_byId(SemanticsIds.workbenchBulkPane), findsNothing);
+  });
+
+  testWidgets('a bulk seed the server refuses says so at once and is asked '
+      'once', (tester) async {
+    final repo = _MetadataRefused({'tr-B'});
+    _seeded(repo);
+    await _pump(tester, repo);
+    await tester.longPress(_trackRow('tr-A'));
+    await tester.pumpAndSettle();
+    await tester.tap(_trackRow('tr-B'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    expect(repo.asked['tr-B'], 1);
+    final retry = find.widgetWithText(WaxButton, 'Try again');
+    expect(tester.widget<WaxButton>(retry).busy, isFalse);
+  });
+
+  testWidgets('a rename seed the server refuses is asked once', (tester) async {
+    final repo = _MetadataRefused({'tr-A', 'tr-B'});
+    _seeded(repo);
+    tester.view.physicalSize = const Size(1200, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    // Not settled: a retrying card's busy Try again keeps frames coming
+    // for the whole backoff, so settling would sit through it.
+    await tester.pumpWidget(_bench(repo));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    // The album pane's seed reads the first member and nothing else.
+    expect(repo.asked, {'tr-A': 1});
+    final retry = find.widgetWithText(WaxButton, 'Try again');
+    expect(tester.widget<WaxButton>(retry).busy, isFalse);
   });
 
   testWidgets('a shared value credits whoever set it on every track, and '

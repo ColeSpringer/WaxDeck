@@ -143,7 +143,7 @@ func TestAScopedFixFillsWhatItNames(t *testing.T) {
 	if sum.Rule != ruleMissingLyrics || sum.Attempted != 1 || sum.Filled != 1 || sum.Failed != 0 {
 		t.Fatalf("summary %+v, want one item filled", sum)
 	}
-	if issues, _, err := svc.ListHealthIssuesFor(ctx, ruleMissingLyrics, "", 10); err != nil || len(issues) != 0 {
+	if issues, _, err := svc.ListHealthIssuesFor(ctx, uc, ruleMissingLyrics, "", 10); err != nil || len(issues) != 0 {
 		t.Fatalf("still missing lyrics = %+v (%v), want none after the re-check", issues, err)
 	}
 	rows := inboxOf(t, ctx, svc, uc, "health-fix-finished")
@@ -175,7 +175,7 @@ func TestAScopedFixWhileAPassRunsIsAConflict(t *testing.T) {
 // ruleFixing reads whether the summary says a fix for rule is running.
 func ruleFixing(t *testing.T, ctx context.Context, svc *Library, rule string) bool {
 	t.Helper()
-	sum, err := svc.HealthSummaryFor(ctx)
+	sum, err := svc.HealthSummaryFor(ctx, &UserCtx{Admin: true, AllLibraries: true, Explicit: true})
 	if err != nil {
 		t.Fatal(err)
 	}

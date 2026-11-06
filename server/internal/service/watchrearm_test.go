@@ -231,7 +231,7 @@ func (g *gate) release() { g.once.Do(func() { close(g.ch) }) }
 
 func (g *gate) wait() { <-g.ch }
 
-// armPass is a watcher pass parked before it arms anything.
+// armPass is a watcher pass, or a walk, parked before it arms anything.
 type armPass struct {
 	parked chan struct{}
 	*gate
@@ -251,6 +251,23 @@ func parkNextArm(t *testing.T, svc *Library) *armPass {
 		}
 	}
 	svc.watchArmHook.Store(&hook)
+	return p
+}
+
+// parkNextWalk parks the next walk of root, a pass's or the root's own,
+// before it arms anything, until the test releases it.
+func parkNextWalk(t *testing.T, svc *Library, root string) *armPass {
+	p := &armPass{parked: make(chan struct{}), gate: newGate(t)}
+	var once sync.Once
+	hook := func(stage, path string) {
+		if stage == "walk" && path == root {
+			once.Do(func() {
+				close(p.parked)
+				p.wait()
+			})
+		}
+	}
+	svc.watchLookHook.Store(&hook)
 	return p
 }
 
@@ -423,13 +440,19 @@ func TestTwoRootsOnOneFolderAreNotTakenUpOnEveryRecheck(t *testing.T) {
 	alias := filepath.Join(base, "link", "music")
 	_, svc := openWatched(t, []Root{{Name: "a", Path: first}, {Name: "b", Path: alias}}, &logged)
 	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	var passes atomic.Int32
+	var passes, walks atomic.Int32
 	arm := func(armed bool) {
 		if !armed {
 			passes.Add(1)
 		}
 	}
 	svc.watchArmHook.Store(&arm)
+	look := func(stage, _ string) {
+		if stage == "walk" {
+			walks.Add(1)
+		}
+	}
+	svc.watchLookHook.Store(&look)
 	var mu sync.Mutex
 	checked := map[string]int{}
 	rechecked := make(chan struct{})
@@ -447,11 +470,244 @@ func TestTwoRootsOnOneFolderAreNotTakenUpOnEveryRecheck(t *testing.T) {
 	if n := passes.Load(); n != 0 {
 		t.Fatalf("%d passes over five rechecks with nothing changed, want none", n)
 	}
+	if n := walks.Load(); n != 0 {
+		t.Fatalf("%d walks over five rechecks with nothing changed, want none", n)
+	}
 	for _, root := range []string{first, alias} {
 		if _, owed := svc.watchQueue.owedSince(root); owed {
 			t.Errorf("%s is owed a catch-up with nothing changed", root)
 		}
 	}
+}
+
+// Of two roots on one folder, the one whose path the kernel lists the folder
+// under can leave the table while its walk is out. The walk can arm the
+// folder again before the other root's walk reaches it, and its late answer
+// lets go of that watch: the root left in the table is walked again, so its
+// folder stays watched.
+func TestARemovedRootsLateWalkLeavesItsAliasWatched(t *testing.T) {
+	t.Parallel()
+	var logged lockedBuffer
+	base := t.TempDir()
+	first := filepath.Join(base, "real", "music")
+	if err := os.MkdirAll(first, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "real"), filepath.Join(base, "link")); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "link", "music")
+	roots := []Root{{Name: "a", Path: first}, {Name: "b", Path: alias}}
+	ctx, svc := openWatched(t, roots, &logged)
+	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.watcher.Load()
+	// The kernel lists the folder under the path that took it first.
+	holder, kept := roots[0], roots[1]
+	if slices.Contains(w.WatchList(), alias) {
+		holder, kept = kept, holder
+	}
+	// The removal is the watcher's table alone: a refresh from the catalog
+	// would put the holder back.
+	svc.refreshMu.Lock()
+	t.Cleanup(svc.refreshMu.Unlock)
+
+	walking := map[string]chan struct{}{holder.Path: make(chan struct{}), kept.Path: make(chan struct{})}
+	walks := map[string]*gate{holder.Path: newGate(t), kept.Path: newGate(t)}
+	var held sync.Map
+	look := func(stage, path string) {
+		if ch, ok := walking[path]; ok && stage == "walk" {
+			if _, again := held.LoadOrStore(path, true); !again {
+				close(ch)
+				walks[path].wait()
+			}
+		}
+	}
+	svc.watchLookHook.Store(&look)
+	// The pass that let go of the holder's watch is held at its end.
+	var removed atomic.Bool
+	parked, park := make(chan struct{}), newGate(t)
+	var parkOnce sync.Once
+	arm := func(armed bool) {
+		if armed && removed.Load() && !slices.Contains(w.WatchList(), holder.Path) {
+			parkOnce.Do(func() {
+				close(parked)
+				park.wait()
+			})
+		}
+	}
+	svc.watchArmHook.Store(&arm)
+	var mu sync.Mutex
+	answered := map[string]bool{}
+	both := make(chan struct{})
+	var bothOnce sync.Once
+	check := func(root string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if removed.Load() {
+			answered[root] = true
+		}
+		if answered[holder.Path] && answered[kept.Path] {
+			bothOnce.Do(func() { close(both) })
+		}
+	}
+	svc.watchCheckHook.Store(&check)
+
+	// An overflow walks both roots again; both walks wait.
+	w.Errors <- fsnotify.ErrEventOverflow
+	awaitClosed(t, walking[holder.Path], "the holder's walk")
+	awaitClosed(t, walking[kept.Path], "the other root's walk")
+	removed.Store(true)
+	setRoots(svc, []Root{kept})
+	svc.nudgeWatcher()
+	awaitClosed(t, parked, "the pass after the removal")
+	// The holder's walk arms the folder again, then the other root's walk
+	// finds it armed. A folder made in between is the one thing the second
+	// walk arms under its own path, which says it has walked.
+	walks[holder.Path].release()
+	waitFor(t, func() bool { return slices.Contains(w.WatchList(), holder.Path) }, "the holder's late walk to arm the folder")
+	if err := os.Mkdir(filepath.Join(holder.Path, "zz"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	walks[kept.Path].release()
+	waitFor(t, func() bool { return slices.Contains(w.WatchList(), filepath.Join(kept.Path, "zz")) },
+		"the other root's walk to finish")
+	park.release()
+	awaitClosed(t, both, "both walks' answers")
+	waitFor(t, func() bool { return slices.Contains(w.WatchList(), kept.Path) }, "the root left in the table watched again")
+	dropTrack(t, kept.Path, "Heard After Its Alias Left")
+	waitForTitle(t, ctx, svc, "Heard After Its Alias Left")
+}
+
+// An alias whose first walk is still out when its holder leaves the table
+// is walked again too: its walk may have found the folder in the watch the
+// holder's removal lets go of. Here the alias's folder appears after the
+// start, so its first walk comes while the holder is watched.
+func TestAnAliasOnItsFirstWalkIsWatchedWhenItsHolderLeaves(t *testing.T) {
+	t.Parallel()
+	var logged lockedBuffer
+	base := t.TempDir()
+	first := filepath.Join(base, "real", "music")
+	if err := os.MkdirAll(first, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "link", "music")
+	holder, kept := Root{Name: "a", Path: first}, Root{Name: "b", Path: alias}
+	ctx, svc := openWatched(t, []Root{holder, kept}, &logged)
+	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.watcher.Load()
+	if !slices.Contains(w.WatchList(), first) {
+		t.Fatalf("the watch table is %v, want the holder's %s", w.WatchList(), first)
+	}
+	// The removal is the watcher's table alone: a refresh from the catalog
+	// would put the holder back.
+	svc.refreshMu.Lock()
+	t.Cleanup(svc.refreshMu.Unlock)
+
+	walking := make(chan struct{})
+	walk := newGate(t)
+	var walkOnce sync.Once
+	look := func(stage, path string) {
+		if stage == "walk" && path == alias {
+			walkOnce.Do(func() {
+				close(walking)
+				walk.wait()
+			})
+		}
+	}
+	svc.watchLookHook.Store(&look)
+	// The pass that sends the alias's first walk is let end; the next, after
+	// the removal, is held before it lets go of anything.
+	var removed atomic.Bool
+	var ended atomic.Int32
+	parked, park := make(chan struct{}), newGate(t)
+	var parkOnce sync.Once
+	arm := func(armed bool) {
+		switch {
+		case armed:
+			select {
+			case <-walking:
+				ended.Add(1)
+			default:
+			}
+		case removed.Load():
+			parkOnce.Do(func() {
+				close(parked)
+				park.wait()
+			})
+		}
+	}
+	svc.watchArmHook.Store(&arm)
+
+	// A recheck finds the alias's folder there and takes it up.
+	if err := os.Symlink(filepath.Join(base, "real"), filepath.Join(base, "link")); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(t, walking, "the alias's first walk")
+	waitFor(t, func() bool { return ended.Load() >= 1 }, "the pass to stop waiting for the walk")
+	removed.Store(true)
+	setRoots(svc, []Root{kept})
+	svc.nudgeWatcher()
+	awaitClosed(t, parked, "the pass after the removal")
+	// The alias's walk finds the folder in the holder's watch. A folder made
+	// first is the one thing it arms under its own path, which says it has
+	// walked.
+	if err := os.Mkdir(filepath.Join(first, "zz"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	walk.release()
+	waitFor(t, func() bool { return slices.Contains(w.WatchList(), filepath.Join(alias, "zz")) },
+		"the alias's walk to finish")
+	if list := w.WatchList(); !slices.Contains(list, first) || slices.Contains(list, alias) {
+		t.Fatalf("the watch table is %v, want the folder still under the holder's path", list)
+	}
+	park.release()
+	waitFor(t, func() bool { return slices.Contains(w.WatchList(), alias) }, "the alias watched under its own path")
+	dropTrack(t, alias, "Heard Through A New Alias")
+	waitForTitle(t, ctx, svc, "Heard Through A New Alias")
+}
+
+// A folder inside a root that another root reaches by another path, as a
+// root symlinked into it does, is listed under the path that armed it
+// first; when that root leaves the table, the one whose folder it is gets
+// walked again and keeps it watched.
+func TestARootsFolderListedUnderAnotherRootStaysWatchedWhenThatRootLeaves(t *testing.T) {
+	t.Parallel()
+	var logged lockedBuffer
+	base := t.TempDir()
+	music := filepath.Join(base, "music")
+	if err := os.MkdirAll(filepath.Join(music, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	inner := filepath.Join(base, "inner")
+	if err := os.Symlink(filepath.Join(music, "sub"), inner); err != nil {
+		t.Fatal(err)
+	}
+	// The outer root's folder appears after the start, so the inner root
+	// has armed the folder they share first.
+	outer := filepath.Join(base, "outer")
+	whole, part := Root{Name: "whole", Path: outer}, Root{Name: "part", Path: inner}
+	ctx, svc := openWatched(t, []Root{whole, part}, &logged)
+	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	w := svc.watcher.Load()
+	if err := os.Symlink(music, outer); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return slices.Contains(w.WatchList(), outer) }, "the outer root taken up")
+	shared := filepath.Join(outer, "sub")
+	if list := w.WatchList(); !slices.Contains(list, inner) || slices.Contains(list, shared) {
+		t.Fatalf("the watch table is %v, want the shared folder under %s alone", list, inner)
+	}
+	// The removal is the watcher's table alone: a refresh from the catalog
+	// would put the inner root back.
+	svc.refreshMu.Lock()
+	t.Cleanup(svc.refreshMu.Unlock)
+	setRoots(svc, []Root{whole})
+	svc.nudgeWatcher()
+	waitFor(t, func() bool { return slices.Contains(w.WatchList(), shared) }, "the shared folder watched under the outer root")
+	dropTrack(t, shared, "Heard In A Folder Once Shared")
+	waitForTitle(t, ctx, svc, "Heard In A Folder Once Shared")
 }
 
 // A root whose folder stops answering, as a hard-mounted network share
@@ -507,13 +763,13 @@ func TestADirectoryThatLostItsWatchIsCaughtUpAndWatchedAgain(t *testing.T) {
 	}
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
 	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	pass := parkNextArm(t, svc)
+	walk := parkNextWalk(t, svc, lib)
 	if err := svc.watcher.Load().Remove(nas); err != nil {
 		t.Fatal(err)
 	}
-	awaitClosed(t, pass.parked, "the watcher to notice the lost watch inside the root")
+	awaitClosed(t, walk.parked, "the watcher to notice the lost watch inside the root")
 	dropTrack(t, nas, "Landed While Unmounted")
-	pass.release()
+	walk.release()
 	waitForTitle(t, ctx, svc, "Landed While Unmounted")
 	dropTrack(t, nas, "Landed Once Watched Again")
 	waitForTitle(t, ctx, svc, "Landed Once Watched Again")
@@ -582,12 +838,12 @@ func TestAMountChangeUnderARootIsCaughtUp(t *testing.T) {
 		{"a remount", mount(101)},
 		{"an unmount", ""},
 	} {
-		pass := parkNextArm(t, svc)
+		walk := parkNextWalk(t, svc, lib)
 		mu.Lock()
 		table = step.table
 		mu.Unlock()
-		awaitClosed(t, pass.parked, "the watcher to notice "+step.what)
-		pass.release()
+		awaitClosed(t, walk.parked, "the watcher to notice "+step.what)
+		walk.release()
 		caughtUp(t, decided, "after "+step.what)
 	}
 }
@@ -677,13 +933,13 @@ func TestADirectoryRecreatedAfterALostWatchSettles(t *testing.T) {
 		t.Fatal(err)
 	}
 	caughtUp(t, decided, "after the lost watch")
-	var passes atomic.Int32
-	arm := func(armed bool) {
-		if !armed {
-			passes.Add(1)
+	var walks atomic.Int32
+	look := func(stage, path string) {
+		if stage == "walk" && path == lib {
+			walks.Add(1)
 		}
 	}
-	svc.watchArmHook.Store(&arm)
+	svc.watchLookHook.Store(&look)
 	checked := make(chan struct{}, 64)
 	check := func(root string) {
 		if root == lib {
@@ -709,8 +965,8 @@ func TestADirectoryRecreatedAfterALostWatchSettles(t *testing.T) {
 		}
 	}
 	// A recheck already out when the directory came back may walk once.
-	if n := passes.Load(); n > 1 {
-		t.Fatalf("%d passes over five recreates, want at most one", n)
+	if n := walks.Load(); n > 1 {
+		t.Fatalf("%d walks over five recreates, want at most one", n)
 	}
 }
 
@@ -895,6 +1151,381 @@ func TestAnOverflowLetsGoOfPathsRenamedInTheGap(t *testing.T) {
 	waitForTitle(t, ctx, svc, "Landed After The Overflow")
 }
 
+// An overflow walks every root again, one whose look was out as it came
+// included: that root is walked again once its look answers, so a rename
+// the lost events never reported leaves no stale path under it.
+func TestAnOverflowWalksAgainARootWhoseLookWasOut(t *testing.T) {
+	t.Parallel()
+	var logged lockedBuffer
+	lib := t.TempDir()
+	a := filepath.Join(lib, "a")
+	if err := os.MkdirAll(filepath.Join(a, "x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// No recheck: the look out is a create's, held at its arm.
+	_, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}}, &logged, time.Hour)
+	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.watcher.Load()
+	created := filepath.Join(lib, "c")
+	arming := make(chan struct{})
+	arm := newGate(t)
+	var armOnce sync.Once
+	look := func(stage, path string) {
+		if stage == "arm" && path == created {
+			armOnce.Do(func() {
+				close(arming)
+				arm.wait()
+			})
+		}
+	}
+	svc.watchLookHook.Store(&look)
+	var overflowed atomic.Bool
+	var ended atomic.Int32
+	hook := func(armed bool) {
+		if armed && overflowed.Load() {
+			ended.Add(1)
+		}
+	}
+	svc.watchArmHook.Store(&hook)
+	if err := os.Mkdir(created, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(t, arming, "the create's arm")
+	// No event reports the rename: only a/x keeps its watch, under the
+	// path it had.
+	for _, p := range []string{a, lib} {
+		if err := w.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b := filepath.Join(lib, "b")
+	if err := os.Rename(a, b); err != nil {
+		t.Fatal(err)
+	}
+	overflowed.Store(true)
+	w.Errors <- fsnotify.ErrEventOverflow
+	waitFor(t, func() bool { return ended.Load() >= 1 }, "the overflow's pass to end")
+	arm.release()
+	waitFor(t, func() bool {
+		list := w.WatchList()
+		return !slices.ContainsFunc(list, func(p string) bool { return underRoot(p, a) }) &&
+			slices.Contains(list, lib) && slices.Contains(list, b) && slices.Contains(list, filepath.Join(b, "x"))
+	}, "the root walked again once its look answered")
+}
+
+// The re-walk an overflow owes a root it passed over is paid by the
+// answer of the look that was out, before the creates queued behind that
+// look go out: a create queued meanwhile neither strands the debt nor is
+// lost, and the root is walked once, by a look of its own, with no pass.
+func TestAnOverflowsOwedWalkIsPaidWhenItsLookAnswersWithACreateQueued(t *testing.T) {
+	t.Parallel()
+	var logged lockedBuffer
+	lib := t.TempDir()
+	p := filepath.Join(lib, "p")
+	if err := os.Mkdir(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// No recheck: only the look's answer can pay.
+	_, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}}, &logged, time.Hour)
+	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.watcher.Load()
+	first, second := filepath.Join(lib, "c"), filepath.Join(lib, "d")
+	arming, queued := make(chan struct{}), make(chan struct{})
+	arm := newGate(t)
+	var armOnce, queueOnce sync.Once
+	var overflowed atomic.Bool
+	var walks atomic.Int32
+	look := func(stage, path string) {
+		switch {
+		case stage == "arm" && path == first:
+			armOnce.Do(func() {
+				close(arming)
+				arm.wait()
+			})
+		case stage == "queue" && path == second:
+			queueOnce.Do(func() { close(queued) })
+		case stage == "walk" && path == lib && overflowed.Load():
+			walks.Add(1)
+		}
+	}
+	svc.watchLookHook.Store(&look)
+	var ended atomic.Int32
+	hook := func(armed bool) {
+		if armed && overflowed.Load() {
+			ended.Add(1)
+		}
+	}
+	svc.watchArmHook.Store(&hook)
+	var checked atomic.Int32
+	check := func(root string) {
+		if root == lib {
+			checked.Add(1)
+		}
+	}
+	svc.watchCheckHook.Store(&check)
+	if err := os.Mkdir(first, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(t, arming, "the create's arm")
+	// Born in the gap: p's watch is let go first, so its create raises
+	// nothing; only a walk arms it.
+	if err := w.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	gap := filepath.Join(p, "gap")
+	if err := os.Mkdir(gap, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	overflowed.Store(true)
+	w.Errors <- fsnotify.ErrEventOverflow
+	waitFor(t, func() bool { return ended.Load() >= 1 }, "the overflow's pass to end")
+	if err := os.Mkdir(second, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(t, queued, "the second create to queue behind the arm out")
+	arm.release()
+	// The arm's answer sends the root its walk, which takes the queued
+	// create along: their two answers are the root's last.
+	waitFor(t, func() bool { return checked.Load() >= 2 }, "the root walked again once its look answered")
+	if list := w.WatchList(); !slices.Contains(list, gap) || !slices.Contains(list, second) {
+		t.Fatalf("the watch table is %v, want the folder born in the gap and the queued create", list)
+	}
+	if n := ended.Load(); n != 1 {
+		t.Fatalf("%d passes after the overflow, want its own alone", n)
+	}
+	// A pass that finds the root idle walks it only if it is still owed.
+	svc.nudgeWatcher()
+	waitFor(t, func() bool { return checked.Load() >= 3 }, "a pass to look at the root")
+	if n := walks.Load(); n != 1 {
+		t.Fatalf("the root walked %d times after the overflow, want once", n)
+	}
+}
+
+// The re-walk an overflow owes a root is a look of the root's own, sent by
+// the answer of the look that was out: no other root's look is waited on,
+// so a second root whose stat is slow holds up no create the loop takes
+// meanwhile, and the root is walked once.
+func TestAnOverflowsOwedWalkWaitsOnNoOtherRoot(t *testing.T) {
+	t.Parallel()
+	var logged lockedBuffer
+	lib, slow := t.TempDir(), t.TempDir()
+	p := filepath.Join(lib, "p")
+	if err := os.Mkdir(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// No recheck: only the look's answer can pay.
+	_, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}, {Name: "slow", Path: slow}}, &logged, time.Hour)
+	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	// A pass waits for the slow root longer than the test waits for a create.
+	svc.watchLookWait.Store(int64(time.Minute))
+	w := svc.watcher.Load()
+	first, next := filepath.Join(lib, "c"), filepath.Join(lib, "d")
+	arming, walking, queued := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	arm, stat := newGate(t), newGate(t)
+	var armOnce, walkOnce, queueOnce sync.Once
+	var overflowed, slowed atomic.Bool
+	var walks atomic.Int32
+	look := func(stage, path string) {
+		switch {
+		case stage == "arm" && path == first:
+			armOnce.Do(func() {
+				close(arming)
+				arm.wait()
+			})
+		case stage == "stat" && path == slow && slowed.Load():
+			stat.wait()
+		case stage == "walk" && path == lib && overflowed.Load():
+			walks.Add(1)
+			walkOnce.Do(func() { close(walking) })
+		case stage == "queue" && path == next:
+			queueOnce.Do(func() { close(queued) })
+		}
+	}
+	svc.watchLookHook.Store(&look)
+	var ended atomic.Int32
+	hook := func(armed bool) {
+		if armed && overflowed.Load() {
+			ended.Add(1)
+		}
+	}
+	svc.watchArmHook.Store(&hook)
+	var checked atomic.Int32
+	check := func(root string) {
+		if root == lib {
+			checked.Add(1)
+		}
+	}
+	svc.watchCheckHook.Store(&check)
+	if err := os.Mkdir(first, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(t, arming, "the create's arm")
+	// Born in the gap: p's watch is let go first, so its create raises
+	// nothing; only a walk arms it.
+	if err := w.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	gap := filepath.Join(p, "gap")
+	if err := os.Mkdir(gap, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	overflowed.Store(true)
+	w.Errors <- fsnotify.ErrEventOverflow
+	waitFor(t, func() bool { return ended.Load() >= 1 }, "the overflow's pass to end")
+	slowed.Store(true)
+	arm.release()
+	awaitClosed(t, walking, "the owed walk of the root")
+	if err := os.Mkdir(next, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(t, queued, "the next create to be taken while the slow root's stat is held")
+	stat.release()
+	// The arm's, the walk's and the next create's answers are the root's
+	// last; a pass that then finds it idle walks it only if it is owed.
+	waitFor(t, func() bool {
+		list := w.WatchList()
+		return checked.Load() >= 3 && slices.Contains(list, gap) && slices.Contains(list, next)
+	}, "the root walked again and the next create armed")
+	svc.nudgeWatcher()
+	waitFor(t, func() bool { return checked.Load() >= 4 }, "a pass to look at the root")
+	if n := walks.Load(); n != 1 {
+		t.Fatalf("the root walked %d times after the overflow, want once", n)
+	}
+}
+
+// The re-walk owed a root an overflow passed over may come after the
+// overflow's catch-up of that root ran: it owes the root a catch-up of its
+// own, so a file that landed between the two in a folder born in the gap
+// is scanned.
+func TestAnOverflowsOwedWalkOwesItsCatchUp(t *testing.T) {
+	t.Parallel()
+	var logged lockedBuffer
+	lib := t.TempDir()
+	p := filepath.Join(lib, "p")
+	if err := os.Mkdir(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}}, &logged, time.Hour)
+	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.watcher.Load()
+	scanned := make(chan struct{}, 16)
+	svc.watchScanHook = func(dir string, did bool) {
+		if dir == lib && did {
+			select {
+			case scanned <- struct{}{}:
+			default:
+			}
+		}
+	}
+	created := filepath.Join(lib, "c")
+	arming := make(chan struct{})
+	arm := newGate(t)
+	var once sync.Once
+	look := func(stage, path string) {
+		if stage == "arm" && path == created {
+			once.Do(func() {
+				close(arming)
+				arm.wait()
+			})
+		}
+	}
+	svc.watchLookHook.Store(&look)
+	var overflowed atomic.Bool
+	var ended atomic.Int32
+	hook := func(armed bool) {
+		if armed && overflowed.Load() {
+			ended.Add(1)
+		}
+	}
+	svc.watchArmHook.Store(&hook)
+	if err := os.Mkdir(created, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(t, arming, "the create's arm")
+	// Born in the gap: p's watch is let go first, so its create raises
+	// nothing; only a walk arms it.
+	if err := w.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	gap := filepath.Join(p, "gap")
+	if err := os.Mkdir(gap, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	overflowed.Store(true)
+	w.Errors <- fsnotify.ErrEventOverflow
+	waitFor(t, func() bool { return ended.Load() >= 1 }, "the overflow's pass to end")
+	// The overflow's catch-up of the root runs with the look still out.
+	awaitClosed(t, scanned, "the overflow's catch-up of the root")
+	dropTrack(t, gap, "Landed Between The Catch Up And The Walk")
+	arm.release()
+	waitFor(t, func() bool { return slices.Contains(w.WatchList(), gap) },
+		"the owed walk to arm the folder born in the gap")
+	waitForTitle(t, ctx, svc, "Landed Between The Catch Up And The Walk")
+}
+
+// The overflow pass's own walk of a root may outlast the settle window of
+// the overflow's catch-up: it owes the root a catch-up of its own, so a
+// file that landed in a folder born in the gap after that scan started is
+// scanned.
+func TestAnOverflowsWalkOutlastingItsCatchUpOwesAnother(t *testing.T) {
+	t.Parallel()
+	var logged lockedBuffer
+	lib := t.TempDir()
+	p := filepath.Join(lib, "p")
+	if err := os.Mkdir(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}}, &logged, time.Hour)
+	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.watcher.Load()
+	scanned := make(chan struct{}, 16)
+	svc.watchScanHook = func(dir string, did bool) {
+		if dir == lib && did {
+			select {
+			case scanned <- struct{}{}:
+			default:
+			}
+		}
+	}
+	walking := make(chan struct{})
+	walk := newGate(t)
+	var once sync.Once
+	var overflowed atomic.Bool
+	look := func(stage, path string) {
+		if stage == "walk" && path == lib && overflowed.Load() {
+			once.Do(func() {
+				close(walking)
+				walk.wait()
+			})
+		}
+	}
+	svc.watchLookHook.Store(&look)
+	// Born in the gap: p's watch is let go first, so its create raises
+	// nothing; only a walk arms it.
+	if err := w.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	gap := filepath.Join(p, "gap")
+	if err := os.Mkdir(gap, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	overflowed.Store(true)
+	w.Errors <- fsnotify.ErrEventOverflow
+	awaitClosed(t, walking, "the overflow's walk of the root")
+	// The pass stops waiting for the walk; the overflow's catch-up of the
+	// root runs with the walk still out.
+	awaitClosed(t, scanned, "the overflow's catch-up of the root")
+	dropTrack(t, gap, "Landed While The Walk Was Out")
+	walk.release()
+	waitFor(t, func() bool { return slices.Contains(w.WatchList(), gap) },
+		"the walk to arm the folder born in the gap")
+	waitForTitle(t, ctx, svc, "Landed While The Walk Was Out")
+}
+
 // returns fails the test when f does not return in time: the watcher
 // deadlocked.
 func returns(t *testing.T, what string, f func()) {
@@ -1009,7 +1640,7 @@ func TestARetargetedRootSymlinkIsWalkedAgainAndCaughtUp(t *testing.T) {
 	_, svc := openWatched(t, []Root{{Name: "lib", Path: link}}, &logged)
 	awaitClosed(t, svc.watchReady, "the watcher to arm")
 	decided := rootCatchUps(svc, link)
-	pass := parkNextArm(t, svc)
+	walk := parkNextWalk(t, svc, link)
 	next := filepath.Join(base, "link.next")
 	if err := os.Symlink(two, next); err != nil {
 		t.Fatal(err)
@@ -1017,8 +1648,8 @@ func TestARetargetedRootSymlinkIsWalkedAgainAndCaughtUp(t *testing.T) {
 	if err := os.Rename(next, link); err != nil {
 		t.Fatal(err)
 	}
-	awaitClosed(t, pass.parked, "the watcher to notice the link retargeted")
-	pass.release()
+	awaitClosed(t, walk.parked, "the watcher to notice the link retargeted")
+	walk.release()
 	caughtUp(t, decided, "after the retarget")
 	list := svc.watcher.Load().WatchList()
 	if !slices.Contains(list, filepath.Join(link, "other")) || slices.Contains(list, filepath.Join(link, "sub")) {
@@ -1065,6 +1696,79 @@ func TestADirectoryArmedSinceTheLastRecheckLeavesNoWatchWhenMovedOut(t *testing.
 		}
 	}
 	svc.watchLookHook.Store(&look)
+	if err := os.Rename(n, filepath.Join(outside, "n")); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(t, dropping, "the loop to take the move in")
+	// fsnotify's MOVE_SELF lets go of the directory's own watch first.
+	waitFor(t, func() bool { return !slices.Contains(w.WatchList(), n) }, "fsnotify to let go of the moved directory")
+	drop.release()
+	waitFor(t, func() bool {
+		return !slices.ContainsFunc(w.WatchList(), func(p string) bool { return underRoot(p, n) })
+	}, "the moved directory's subtree to leave the table")
+}
+
+// A directory a pass's walk armed after the pass stopped waiting, moved out
+// of every root before the next recheck, leaves nothing under its old path
+// either: the walk's late answer told the loop what it armed. Here the
+// walk is of a root whose folder came back, as a drive mounted late is.
+func TestADirectoryALateWalkArmedLeavesNoWatchWhenMovedOut(t *testing.T) {
+	t.Parallel()
+	var logged lockedBuffer
+	lib, base, outside := t.TempDir(), t.TempDir(), t.TempDir()
+	later := filepath.Join(base, "later")
+	// No recheck runs in this test: only the passes and the late answer say
+	// what the table held.
+	_, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}, {Name: "later", Path: later}}, &logged, time.Hour)
+	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.watcher.Load()
+	walking, dropping := make(chan struct{}), make(chan struct{})
+	walk, drop := newGate(t), newGate(t)
+	n := filepath.Join(later, "n")
+	var walkOnce, dropOnce sync.Once
+	look := func(stage, path string) {
+		switch {
+		case stage == "walk" && path == later:
+			walkOnce.Do(func() { close(walking) })
+			walk.wait()
+		case stage == "drop" && path == n:
+			dropOnce.Do(func() { close(dropping) })
+			drop.wait()
+		}
+	}
+	svc.watchLookHook.Store(&look)
+	// Only a pass that ends with the walk held counts.
+	var ended atomic.Int32
+	arm := func(armed bool) {
+		select {
+		case <-walking:
+			if armed {
+				ended.Add(1)
+			}
+		default:
+		}
+	}
+	svc.watchArmHook.Store(&arm)
+	answered := make(chan struct{})
+	var answeredOnce sync.Once
+	check := func(root string) {
+		if root == later {
+			answeredOnce.Do(func() { close(answered) })
+		}
+	}
+	svc.watchCheckHook.Store(&check)
+	if err := os.MkdirAll(filepath.Join(n, "x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	svc.nudgeWatcher()
+	awaitClosed(t, walking, "the watcher to walk the root that came back")
+	waitFor(t, func() bool { return ended.Load() >= 1 }, "the pass to stop waiting for the walk")
+	walk.release()
+	awaitClosed(t, answered, "the watcher to take the walk's late answer in")
+	if !slices.Contains(w.WatchList(), filepath.Join(n, "x")) {
+		t.Fatalf("the watch table is %v, want the late walk's %s", w.WatchList(), filepath.Join(n, "x"))
+	}
 	if err := os.Rename(n, filepath.Join(outside, "n")); err != nil {
 		t.Fatal(err)
 	}

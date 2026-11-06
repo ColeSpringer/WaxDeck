@@ -90,7 +90,7 @@ func TestWatchSkipsTrash(t *testing.T) {
 		t.Skipf("no fsnotify facility: %v", err)
 	}
 	defer w.Close()
-	armed, failed := watchTree(w, root)
+	armed, failed, _ := walkWatch(w, root, nil)
 	if armed != 2 || failed != 0 {
 		t.Fatalf("(armed, failed) = (%d, %d), want the root and the album dir only", armed, failed)
 	}

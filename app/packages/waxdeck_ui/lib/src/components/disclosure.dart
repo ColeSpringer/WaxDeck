@@ -19,7 +19,6 @@ class WaxDisclosure extends StatefulWidget {
   const WaxDisclosure({
     required this.title,
     required this.children,
-    this.initiallyExpanded = false,
     this.onExpansionChanged,
     this.semanticsId,
     super.key,
@@ -27,7 +26,6 @@ class WaxDisclosure extends StatefulWidget {
 
   final String title;
   final List<Widget> children;
-  final bool initiallyExpanded;
 
   /// Told each time it opens or closes, such as to load what it holds the
   /// first time somebody asks for it.
@@ -42,12 +40,9 @@ class WaxDisclosure extends StatefulWidget {
 
 class _WaxDisclosureState extends State<WaxDisclosure>
     with SingleTickerProviderStateMixin {
-  late bool _expanded = widget.initiallyExpanded;
+  bool _expanded = false;
 
-  late final AnimationController _open = AnimationController(
-    vsync: this,
-    value: _expanded ? 1 : 0,
-  );
+  late final AnimationController _open = AnimationController(vsync: this);
 
   void _toggle() {
     final motion = WaxMotion.of(context);

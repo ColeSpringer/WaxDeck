@@ -245,19 +245,24 @@ func (l *Library) warmSimilarity(ctx context.Context) error {
 
 // SimilarityStatusFor answers coverage. enabled reports whether an
 // analyzer can feed the surface: the embedded analyzer's runtime
-// setting, or a configured external worker token.
+// setting, or a configured external worker token. The counts are the
+// whole library's for a caller of full reach and the caller's own
+// tracks' otherwise.
 func (l *Library) SimilarityStatusFor(ctx context.Context, uc *UserCtx) (SimilarityStatus, error) {
 	enabled := l.SonicAnalysisEnabled() || l.workerAPIConfigured
 	count, mdl, dims, lastIngest, err := l.db.EmbeddingStats(ctx)
 	if err != nil {
 		return SimilarityStatus{}, &Error{Kind: KindInternal, Err: err}
 	}
-	depth, err := l.db.SimilarityQueueDepth(ctx)
-	if err != nil {
-		return SimilarityStatus{}, &Error{Kind: KindInternal, Err: err}
-	}
-	total, err := l.countAnalyzableTracks(ctx, uc.CatalogPID)
-	if err != nil {
+	var depth, total int
+	if fullReach(uc) {
+		if depth, err = l.db.SimilarityQueueDepth(ctx); err != nil {
+			return SimilarityStatus{}, &Error{Kind: KindInternal, Err: err}
+		}
+		if total, err = l.countAnalyzableTracks(ctx, uc.CatalogPID); err != nil {
+			return SimilarityStatus{}, err
+		}
+	} else if total, count, depth, err = l.analysisInReach(ctx, uc); err != nil {
 		return SimilarityStatus{}, err
 	}
 	st := SimilarityStatus{
@@ -277,6 +282,48 @@ func (l *Library) SimilarityStatusFor(ctx context.Context, uc *UserCtx) (Similar
 		st.CoveragePct = pct
 	}
 	return st, nil
+}
+
+// analysisInReach answers the status counts over the tracks the caller
+// may enumerate: how many there are, how many hold a vector, and how many
+// wait for one.
+func (l *Library) analysisInReach(ctx context.Context, uc *UserCtx) (total, embedded, queued int, err error) {
+	tracks := func() *query.Builder {
+		return l.facetScopeBuilder(ctx, uc).Where("kind", query.OpIs, string(model.KindTrack))
+	}
+	if total, err = l.lib.Count(ctx, tracks().Build(), ""); err != nil {
+		return 0, 0, 0, classify(err)
+	}
+	vectors, err := l.db.EmbeddedItems(ctx)
+	if err != nil {
+		return 0, 0, 0, &Error{Kind: KindInternal, Err: err}
+	}
+	if embedded, err = l.countAmong(ctx, vectors, tracks); err != nil {
+		return 0, 0, 0, err
+	}
+	waiting, err := l.db.QueuedItems(ctx)
+	if err != nil {
+		return 0, 0, 0, &Error{Kind: KindInternal, Err: err}
+	}
+	if queued, err = l.countAmong(ctx, waiting, tracks); err != nil {
+		return 0, 0, 0, err
+	}
+	return total, embedded, queued, nil
+}
+
+// countAmong counts the items base selects among the bare pids, once per
+// 400 of them, under the engine's 500-value membership test.
+func (l *Library) countAmong(ctx context.Context, pids []string, base func() *query.Builder) (int, error) {
+	n := 0
+	for start := 0; start < len(pids); start += 400 {
+		chunk := pids[start:min(start+400, len(pids))]
+		c, err := l.lib.Count(ctx, base().WhereValues("pid", query.OpIn, query.Values(chunk)...).Build(), "")
+		if err != nil {
+			return 0, classify(err)
+		}
+		n += c
+	}
+	return n, nil
 }
 
 // countAnalyzableTracks counts the catalog's music tracks, carved ones

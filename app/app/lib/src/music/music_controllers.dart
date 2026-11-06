@@ -87,9 +87,6 @@ enum MusicDimension {
   /// lands, this is where release groups join.
   bool get hasArtwork =>
       this == MusicDimension.albums || this == MusicDimension.artists;
-
-  static MusicDimension? bySegment(String segment) =>
-      MusicDimension.values.where((d) => d.segment == segment).firstOrNull;
 }
 
 /// The URL segment the unknown bucket takes.
@@ -353,7 +350,9 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
 }
 
 /// Disposed with the index: a visit reads the account's library as it
-/// stands, and the window holds still while the index is open.
+/// stands, and the window holds still while the index is open. An index
+/// left open on a tab keeps its rows until it is left and re-entered;
+/// only the hub's count follows the catalog.
 final musicIndexProvider = AsyncNotifierProvider.autoDispose
     .family<MusicIndexController, MusicIndexState, MusicIndexKey>(
       MusicIndexController.new,
@@ -614,7 +613,8 @@ class MusicIndexCount {
 /// destination people come back to, and a hub's counts are not a fetch
 /// worth repeating on every visit. The account, the catalog fan-out and
 /// a kind change move it. It counts what the index lists, so the
-/// unknown bucket only while the account shows it.
+/// unknown bucket only while the account shows it. A refusal is final,
+/// as for the Series count beside it.
 final musicIndexCountProvider =
     FutureProvider.family<MusicIndexCount, MusicIndexId>((ref, key) async {
       ref.watch(signedInAccountProvider);
@@ -635,7 +635,7 @@ final musicIndexCountProvider =
         buckets: page.buckets.where((b) => showUnknown || !b.unknown).length,
         atLeast: page.hasMore,
       );
-    });
+    }, retry: retryUnlessRefused);
 
 /// One entity's card, for a screen that arrived at its pid without the
 /// name that goes with it.

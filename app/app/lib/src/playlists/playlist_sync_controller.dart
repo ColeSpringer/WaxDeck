@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 
 /// One playlist's source binding, keyed by pid. Null is the unbound
@@ -13,6 +14,8 @@ class PlaylistSyncController extends AsyncNotifier<PlaylistSource?> {
 
   @override
   Future<PlaylistSource?> build() async {
+    // Keyed on the account: the repository moves only with the server.
+    ref.watch(signedInAccountProvider);
     try {
       return await ref.watch(repositoryProvider).getPlaylistSource(pid);
     } on WaxDeckApiException catch (e) {

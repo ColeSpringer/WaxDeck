@@ -46,6 +46,37 @@ FakeRepository _repo({
   return repo;
 }
 
+/// The cover pin's read refused, counted.
+class _PinRefused extends FakeRepository {
+  _PinRefused()
+    : super(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-1',
+            username: 'admin',
+            roles: <String>['admin'],
+          ),
+        ),
+      );
+
+  var asked = 0;
+
+  @override
+  Future<bool> getEntityArtworkLock(
+    String entityType,
+    String entityPid, {
+    String role = 'front',
+  }) async {
+    asked++;
+    throw const WaxDeckApiException(
+      code: 'forbidden',
+      message: 'not an administrator',
+      statusCode: 403,
+    );
+  }
+}
+
 /// Wide enough for two panes, so the album pane the tests are about is
 /// on screen from the first frame.
 Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
@@ -413,6 +444,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.entityArtworkLocks['album/$_album/front'], isTrue);
+  });
+
+  testWidgets('a cover pin the server refuses to read is asked once', (
+    tester,
+  ) async {
+    final repo = _PinRefused()
+      ..albums[_album] = const AlbumDetail(pid: _album, title: 'Long Exposure');
+    await _pump(tester, repo);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(repo.asked, 1);
   });
 
   testWidgets('a member gets the refusal rather than an editable form', (

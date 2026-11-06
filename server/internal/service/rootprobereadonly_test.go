@@ -69,7 +69,7 @@ func TestAReadOnlyLibraryIsNeverProbed(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, st); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool { return svc.rootProbe.idle() }, "the probe pass to end")
@@ -159,7 +159,7 @@ func TestACreateOnAReadOnlyServerWritesNoProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, st); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	n, mtime := folderState(t, fresh)

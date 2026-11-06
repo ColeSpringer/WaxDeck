@@ -246,6 +246,17 @@ List<String> playProgressKeys(List<ItemSummary> loaded) => <String>[
     ),
 ];
 
+/// Watches the progress of [items], one window of [kPlayProgressWindow]
+/// rows at a time so a listing that pages never re-reads the pages before
+/// it.
+PlayProgressView watchPlayProgress(WidgetRef ref, List<ItemSummary> items) {
+  final states = <String, PlayProgress>{};
+  for (final key in playProgressKeys(items)) {
+    states.addAll(ref.watch(playProgressProvider(key)).value ?? const {});
+  }
+  return PlayProgressView(states);
+}
+
 /// How far through each of a set of items the caller is; an item with no
 /// state reads as [PlayProgress.none] rather than as missing, so call
 /// sites never branch on null.

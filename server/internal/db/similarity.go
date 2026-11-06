@@ -338,6 +338,35 @@ func (d *DB) SimilarityQueueDepth(ctx context.Context) (int, error) {
 	return n, nil
 }
 
+// EmbeddedItems lists the items holding a vector, each once: what a
+// caller who sees part of the library counts its own share of.
+func (d *DB) EmbeddedItems(ctx context.Context) ([]string, error) {
+	return d.itemPIDs(ctx, `SELECT DISTINCT item_pid FROM embeddings`)
+}
+
+// QueuedItems lists the items awaiting analysis, each once, leaving out
+// the attempt-exhausted rows SimilarityQueueDepth leaves out.
+func (d *DB) QueuedItems(ctx context.Context) ([]string, error) {
+	return d.itemPIDs(ctx, `SELECT DISTINCT item_pid FROM similarity_queue WHERE attempts < ?`, maxAnalysisAttempts)
+}
+
+func (d *DB) itemPIDs(ctx context.Context, q string, args ...any) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing analysis items: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var pid string
+		if err := rows.Scan(&pid); err != nil {
+			return nil, fmt.Errorf("db: listing analysis items: %w", err)
+		}
+		out = append(out, pid)
+	}
+	return out, rows.Err()
+}
+
 // AddSimilarityBackfill records nodes that lost a neighbor edge.
 func (d *DB) AddSimilarityBackfill(ctx context.Context, essences []string) error {
 	for _, e := range essences {

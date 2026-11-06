@@ -432,7 +432,7 @@ class SyncEngine {
       for (final e in page.entries) {
         final item = e.item;
         if (e.op != 'upsert' || item == null) continue;
-        rows[_ulidOf(item.pid)] = _itemRow(item);
+        rows[ulidOf(item.pid)] = _itemRow(item);
       }
       if (page.nextCursor == null) break;
       cursor = page.nextCursor;
@@ -445,7 +445,7 @@ class SyncEngine {
       final held = await _heldUnder();
       final waiting = <String, Set<String>>{};
       for (final pid in await _pidsAt(_kindsKey)) {
-        (waiting[_ulidOf(pid)] ??= <String>{}).add(pid);
+        (waiting[ulidOf(pid)] ??= <String>{}).add(pid);
       }
       await db.delete(db.mirrorItems).go();
       await db.batch(
@@ -523,7 +523,7 @@ class SyncEngine {
   Future<_Asked> _removedForGood(Set<String> listed) async {
     final unlisted = [
       for (final pid in await _downloadedHere())
-        if (!listed.contains(_ulidOf(pid))) pid,
+        if (!listed.contains(ulidOf(pid))) pid,
     ]..sort();
     return _askRemoved(unlisted);
   }
@@ -570,13 +570,13 @@ class SyncEngine {
     for (var i = 0; i < waiting.length; i += 500) {
       listed.addAll(
         (await _mirroredPids([
-          for (final pid in waiting.skip(i).take(500)) _ulidOf(pid),
+          for (final pid in waiting.skip(i).take(500)) ulidOf(pid),
         ])).keys,
       );
     }
     final asked = await _askRemoved([
       for (final pid in waiting)
-        if (held.contains(pid) && !listed.contains(_ulidOf(pid))) pid,
+        if (held.contains(pid) && !listed.contains(ulidOf(pid))) pid,
     ]);
     // What is named moves from waiting to owed in one commit.
     await db.transaction(() async {
@@ -733,20 +733,20 @@ class SyncEngine {
         // applies, since one page can carry the same item twice.
         final upserted = [
           for (final e in page.entries)
-            if (e.op == 'upsert' && e.item != null) _ulidOf(e.item!.pid),
+            if (e.op == 'upsert' && e.item != null) ulidOf(e.item!.pid),
         ];
         final mirrored = await _mirroredPids(upserted);
         final held = await _heldUnder([
           ...upserted,
           for (final e in page.entries)
-            if (e.op == 'delete' && e.reason == 'removed') _ulidOf(e.pid),
+            if (e.op == 'delete' && e.reason == 'removed') ulidOf(e.pid),
         ]);
         for (final e in page.entries) {
           switch (e.op) {
             case 'upsert':
               final item = e.item;
               if (item == null) continue;
-              final ulid = _ulidOf(item.pid);
+              final ulid = ulidOf(item.pid);
               final was = {?mirrored[ulid], ...?held.remove(ulid)}
                 ..remove(item.pid);
               mirrored[ulid] = item.pid;
@@ -799,7 +799,7 @@ class SyncEngine {
             case 'delete':
               // Tombstones match on the ULID; the prefix carries no
               // meaning once the item is gone.
-              final ulid = _ulidOf(e.pid);
+              final ulid = ulidOf(e.pid);
               mirrored.remove(ulid);
               if (e.reason != 'removed') {
                 // The row goes either way; the bytes only when the catalog
@@ -1728,7 +1728,7 @@ class SyncEngine {
   MirrorItemsCompanion _itemRow(ItemSummary item) {
     return MirrorItemsCompanion.insert(
       pid: item.pid,
-      ulid: _ulidOf(item.pid),
+      ulid: ulidOf(item.pid),
       mediaType: item.mediaType.wireName,
       title: item.title,
       artist: Value(item.artist),
@@ -1762,7 +1762,7 @@ class SyncEngine {
     final wanted = ulids?.toSet();
     final held = <String, Set<String>>{};
     for (final pid in await _downloadedPids()) {
-      final ulid = _ulidOf(pid);
+      final ulid = ulidOf(pid);
       if (wanted == null || wanted.contains(ulid)) {
         (held[ulid] ??= <String>{}).add(pid);
       }
@@ -1856,7 +1856,7 @@ class SyncEngine {
   ) async {
     final checks = <String, _Sole>{};
     for (final pid in await _downloadedPids()) {
-      final row = rows[_ulidOf(pid)];
+      final row = rows[ulidOf(pid)];
       if (row == null ||
           row.pid.value == pid ||
           row.mediaType.value == MediaType.music.wireName) {
@@ -1903,10 +1903,5 @@ class SyncEngine {
             info.spanEndMs == held.spanEndMs
         ? (answered: true, essence: held.essenceHash)
         : none;
-  }
-
-  static String _ulidOf(String pid) {
-    final i = pid.indexOf('-');
-    return i < 0 ? pid : pid.substring(i + 1);
   }
 }

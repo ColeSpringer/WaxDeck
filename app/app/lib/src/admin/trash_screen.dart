@@ -22,12 +22,20 @@ class TrashScreen extends ConsumerWidget {
   ) async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    try {
-      await ref.read(trashProvider.notifier).restore(entry.id);
-      messenger.show(l10n.adminTrashRestored(entry.name));
-    } on WaxDeckApiException catch (error) {
-      messenger.show(explainError(l10n, error));
-    }
+    final restoring = ref.read(trashProvider.notifier);
+    // A second restore of one entry finds it gone and says so after the
+    // first one's success.
+    await ref.read(pendingActionsProvider.notifier).run(
+      PendingAction.trashRestore(entry.id),
+      () async {
+        try {
+          await restoring.restore(entry.id);
+          messenger.show(l10n.adminTrashRestored(entry.name));
+        } on WaxDeckApiException catch (error) {
+          messenger.show(explainError(l10n, error));
+        }
+      },
+    );
   }
 
   /// One file, behind a plain confirmation: it is one file, its name is
@@ -118,6 +126,7 @@ class TrashScreen extends ConsumerWidget {
     final l10n = context.l10n;
     final trash = ref.watch(trashProvider);
     final includeRestored = ref.watch(trashIncludeRestoredProvider);
+    final pending = ref.watch(pendingActionsProvider);
     return WaxScaffold(
       title: l10n.adminTrashTitle,
       largeTitle: false,
@@ -230,6 +239,9 @@ class TrashScreen extends ConsumerWidget {
                     ? const SizedBox.shrink()
                     : _RowActions(
                         entry: entry,
+                        restoring: pending.contains(
+                          PendingAction.trashRestore(entry.id),
+                        ),
                         onRestore: () => _restore(context, ref, entry),
                         onPurge: () => _purge(context, ref, entry),
                       ),
@@ -413,11 +425,13 @@ String _reasonLabel(AppLocalizations l10n, TrashEntry entry) {
 class _RowActions extends StatelessWidget {
   const _RowActions({
     required this.entry,
+    required this.restoring,
     required this.onRestore,
     required this.onPurge,
   });
 
   final TrashEntry entry;
+  final bool restoring;
   final VoidCallback onRestore;
   final VoidCallback onPurge;
 
@@ -441,6 +455,7 @@ class _RowActions extends StatelessWidget {
             glyph: WaxIcons.refresh,
             label: l10n.adminTrashRestoreAction(entry.name),
             semanticsId: SemanticsIds.trashRestore(entry.id),
+            busy: restoring,
             onPressed: onRestore,
           ),
         WaxIconButton(

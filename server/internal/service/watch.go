@@ -40,8 +40,12 @@ import (
 //
 // What the watcher keeps true:
 //   - Coverage: every directory under a present root that the kernel lets
-//     it watch is in the watch table under its current path, and nothing
-//     outside a present root outlives the answer of the look that added it.
+//     it watch is in the watch table under its current path, or under
+//     another root's path when that root reaches the same folder and
+//     armed it first (an alias's own folder, a folder another root is
+//     symlinked or bind-mounted into); whenever a watch such a directory
+//     may be held by goes, the root is walked again. Nothing outside a
+//     present root outlives the answer of the look that added it.
 //   - No stale paths: a rename drops the old path's entry and every entry
 //     under it before the new path is armed.
 //   - Gaps are caught up: what lands in a directory while it has no watch
@@ -50,11 +54,23 @@ import (
 //   - The loop never looks at the filesystem: it keeps the watch table,
 //     the queue and its own state; every stat, walk and mount-table read
 //     is a look on a worker of its own, one at a time per root.
-//   - A root delays only itself: a pass skips a root whose look is out and
-//     waits for its own looks to a bound; only a look whose stat has not
-//     answered is said not to answer.
-//   - Nothing loops: a recheck runs a pass only for a change since the
-//     last look, and the pass clears what triggered it.
+//   - A root delays only itself: a pass skips a root whose look is out,
+//     owing it what the pass would have done (an overflow's re-walk, the
+//     walk a dropped watch it may share asks). The answer of that look
+//     pays when its root is there and taken up: it sends the root its own
+//     walk, which the loop does not wait on, before the creates queued
+//     behind it go out; otherwise a pass takes the root up once it is
+//     there. A pass waits for its own looks to a bound; only a look whose
+//     stat has not answered is said not to answer.
+//   - A walk after an overflow pays itself: the overflow pass's own walk
+//     of a root, and the one owed a root it passed over, owes the root a
+//     catch-up, so what lands in a folder born in the gap before the walk
+//     arms it is covered by a scan started after, however long the walk
+//     runs or however late it is sent.
+//   - Nothing loops: a recheck runs a pass or a walk only for a change
+//     since the last look, and that clears what triggered it; a walk is
+//     sent again only when a watch went, or events were lost, while it
+//     was out.
 //   - What is owed: the process's first pass owes nothing; every later
 //     take-up, a supervised restart's included, owes its root a catch-up.
 //   - No lock cycle: fsnotify sends its errors holding its own lock, so a
@@ -294,7 +310,8 @@ func (l *Library) watchLibraries(ctx context.Context) error {
 				return err
 			}
 		case look := <-arms.takes:
-			// A pass's look that answered after the pass stopped waiting.
+			// A pass's look that answered after the pass stopped waiting, or
+			// a walk sent on its own.
 			if err := l.sayArmed(arms, l.tookUp(arms, look)); err != nil {
 				return err
 			}
@@ -316,7 +333,7 @@ type watchArms struct {
 	w   *fsnotify.Watcher
 	ctx context.Context
 	// checks carries the answers of the looks a recheck or a create sends
-	// out, takes those of a pass's.
+	// out, takes those of a pass's and of a walk sent on its own.
 	checks, takes chan rootLook
 	// owes is whether a root taken up owes a catch-up: false through the
 	// process's first pass only.
@@ -330,14 +347,20 @@ type watchArms struct {
 	// held are the roots whose own folder is watched under their path,
 	// alias those whose folder the kernel watches under another path: the
 	// same folder by a second path (a symlinked parent, a bind mount),
-	// which is never a lost watch.
-	held, alias map[string]bool
+	// which is never a lost watch. shares are those with any directory, an
+	// alias's own folder included, listed under another root's path, as
+	// their last walk found.
+	held, alias, shares map[string]bool
 	// relost are the roots owed a walk and a catch-up because a directory
 	// inside lost its watch with its folder staying, or the mounts under
 	// them changed; remounted are the mount points that changed, whose
 	// watches hold the folder that was there before.
 	relost    map[string]bool
 	remounted map[string][]string
+	// rewalks are the roots an overflow's pass passed over, their look out:
+	// each is owed that walk again, pruning first and owing a catch-up, sent
+	// at that look's answer or by the first pass that finds it idle.
+	rewalks map[string]bool
 	// created are the paths created under each root, in event order, that
 	// its next look arms or notes; arming are those handed to a look out.
 	created map[string][]string
@@ -356,19 +379,22 @@ func newWatchArms(ctx context.Context, w *fsnotify.Watcher) *watchArms {
 	return &watchArms{
 		w: w, ctx: ctx, checks: make(chan rootLook), takes: make(chan rootLook),
 		looking: map[string]*lookOut{}, absent: map[string]bool{}, taken: map[string]bool{},
-		held: map[string]bool{}, alias: map[string]bool{},
-		relost: map[string]bool{}, remounted: map[string][]string{},
+		held: map[string]bool{}, alias: map[string]bool{}, shares: map[string]bool{},
+		relost: map[string]bool{}, remounted: map[string][]string{}, rewalks: map[string]bool{},
 		created: map[string][]string{}, arming: map[string]bool{},
 		known: map[string]bool{}, mounts: map[string]map[string]string{}, resolved: map[string]string{},
 	}
 }
 
 // lookOut is a look that is out: since when, and whether its stat of the
-// root has answered.
+// root has answered. stale, set by the loop, says a watch the root's folder
+// may have been held by went, or an overflow lost events, while it was out,
+// so its walk does not settle the walk its root is owed.
 type lookOut struct {
 	since   time.Time
 	statted atomic.Bool
 	warned  bool
+	stale   bool
 }
 
 // lookKind is what a look at a root is for.
@@ -378,7 +404,8 @@ const (
 	// lookCheck is a recheck's: whether the root moved away from what is
 	// watched.
 	lookCheck lookKind = iota
-	// lookPass is a pass's: a check, and a walk when walk asks.
+	// lookPass is a pass's, or a walk sent on its own: a check, and a walk
+	// when walk asks.
 	lookPass
 	// lookArm only arms and notes what was created under the root.
 	lookArm
@@ -412,12 +439,15 @@ type rootLook struct {
 	mounts   map[string]string
 	armed    []string
 	// walked is whether the walk ran, failed what it could not watch,
-	// held and alias how the root's own folder is watched, and at when
-	// the walk ended.
-	walked      bool
-	failed      int
-	held, alias bool
-	at          time.Time
+	// held and alias how the root's own folder is watched, shares whether
+	// a directory it armed is listed under another root's path, at when
+	// the walk ended, and listed what the table listed under the root's
+	// path then.
+	walked              bool
+	failed              int
+	held, alias, shares bool
+	at                  time.Time
+	listed              map[string]bool
 }
 
 // look sends a look at a root out on a worker, which answers the loop.
@@ -491,11 +521,20 @@ func (l *Library) lookAtRoot(w *fsnotify.Watcher, look rootLook) rootLook {
 			}
 		}
 	}
-	_, look.failed, look.held = watchRoot(w, look.root)
+	var armed []string
+	_, look.failed, look.held = walkWatch(w, look.root, func(dir string) { armed = append(armed, dir) })
 	look.walked, look.at = true, time.Now()
-	if look.held && !slices.Contains(w.WatchList(), look.root) {
-		// The kernel watched this folder already, under another path: it
-		// is listed there, and events come by that path.
+	listed := map[string]bool{}
+	for _, p := range w.WatchList() {
+		if underRoot(p, look.root) {
+			listed[p] = true
+		}
+	}
+	look.listed = listed
+	// A directory the kernel watched already, under another root's path,
+	// is listed there, and its events come by that path.
+	look.shares = slices.ContainsFunc(armed, func(dir string) bool { return !listed[dir] })
+	if look.held && !listed[look.root] {
 		look.held, look.alias = false, true
 	}
 	return look
@@ -649,6 +688,7 @@ func (l *Library) queueCreated(arms *watchArms, path string) {
 		return
 	}
 	arms.created[root] = append(arms.created[root], path)
+	l.lookHook("queue", path)
 	l.sendCreated(arms, root)
 }
 
@@ -735,34 +775,92 @@ func (l *Library) answered(arms *watchArms, look rootLook) bool {
 			keep[root.Path] = true
 		}
 	}
+	letGo := false
 	for _, p := range arms.w.WatchList() {
 		if underRoot(p, look.root) && !underAnyRoot(p, keep) {
 			_ = arms.w.Remove(p)
+			letGo = true
 		}
+	}
+	if letGo {
+		// One of them may be the folder another root is watched through,
+		// armed again by this late walk after the pass that let go of it.
+		l.rewalkSharers(arms)
 	}
 	return false
 }
 
+// rewalkSharers owes every root that may share a watch that went a walk,
+// after the look it has out if it has one.
+func (l *Library) rewalkSharers(arms *watchArms) {
+	for _, root := range l.libraryRoots() {
+		if !arms.mayShare(root.Path) {
+			continue
+		}
+		arms.relost[root.Path] = true
+		if out := arms.looking[root.Path]; out != nil {
+			out.stale = true
+		}
+	}
+	l.nudgeWatcher()
+}
+
+// mayShare reports whether a directory of root, its own folder included,
+// may be watched under another root's path: its last walk found one, or a
+// walk of it is out and none has said yet how its folders are held (its
+// first take-up, or its take-up after an outage, which forgets it).
+func (a *watchArms) mayShare(root string) bool {
+	return a.shares[root] || (a.looking[root] != nil && !a.held[root])
+}
+
 // rechecked takes a recheck's or a create's look in. A recheck's runs a
-// pass when the root moved away from what is watched: its folder came or
-// went, its watch or a directory's inside was lost with the folder
-// staying and no arm on the way, or the mounts under it changed.
+// pass when the root's folder came or went, and owes the root a walk when
+// its watch or a directory's inside was lost with the folder staying and
+// no arm on the way, or the mounts under it changed. A root still taken
+// up, owed a walk, is sent it before the creates queued behind the look
+// go out (an arm's look does not stat: its root was there at its last
+// look).
 func (l *Library) rechecked(arms *watchArms, look rootLook) error {
 	var err error
-	if l.answered(arms, look) && look.kind == lookCheck {
-		if moved := arms.moved(look); len(moved) > 0 {
-			arms.relost[look.root] = true
-			arms.remounted[look.root] = append(arms.remounted[look.root], moved...)
+	if l.answered(arms, look) {
+		pass := false
+		if look.kind == lookCheck {
+			if moved := arms.moved(look); len(moved) > 0 {
+				arms.relost[look.root] = true
+				arms.remounted[look.root] = append(arms.remounted[look.root], moved...)
+			}
+			if l.stillLost(arms, look.root, look.stayed) {
+				arms.relost[look.root] = true
+			}
+			pass = look.present != arms.taken[look.root]
 		}
-		if l.stillLost(arms, look.root, look.stayed) {
-			arms.relost[look.root] = true
-		}
-		if look.present != arms.taken[look.root] || (look.present && arms.relost[look.root]) {
+		if pass {
 			err = l.armWatches(arms, false)
+		} else {
+			l.payOwed(arms, look)
 		}
 	}
 	l.lookDone(arms, look.root)
 	return err
+}
+
+// payOwed takes in an answer at a root that may be owed a walk, idle now
+// and in the table. Taken up, it is sent the walk as a look of its own,
+// which takes its queued creates along and which the loop does not wait
+// on; a stale look's root not taken up is left to a pass, which takes it
+// up once it is there.
+func (l *Library) payOwed(arms *watchArms, look rootLook) {
+	p := look.root
+	if arms.taken[p] && (arms.relost[p] || arms.rewalks[p]) {
+		roots := l.libraryRoots()
+		if i := slices.IndexFunc(roots, func(r Root) bool { return r.Path == p }); i >= 0 {
+			l.look(arms, arms.passLook(roots[i], arms.relost[p], false))
+			return
+		}
+	}
+	if look.out.stale {
+		l.nudgeWatcher()
+	}
 }
 
 // lookDone sends a root's queued creates out once its look is in.
@@ -790,8 +888,9 @@ func (l *Library) stillLost(arms *watchArms, root string, stayed []string) bool 
 // does not watch yet, those whose watch was lost, and those owed a walk
 // for a directory inside, and lets go of the watches of roots gone. A
 // root it keeps is not walked again unless rewalk asks (after an
-// overflow). It waits for its looks a while; one that answers later is
-// taken in then. It errs when nothing could be armed, for the supervisor
+// overflow), or an overflow's pass passed it over and owes it that walk.
+// It waits for its looks a while; one that answers later is taken in
+// then. It errs when nothing could be armed, for the supervisor
 // to retry with backoff.
 func (l *Library) armWatches(arms *watchArms, rewalk bool) error {
 	if hook := l.watchArmHook.Load(); hook != nil {
@@ -802,7 +901,7 @@ func (l *Library) armWatches(arms *watchArms, rewalk bool) error {
 	for _, root := range roots {
 		inTable[root.Path] = true
 	}
-	for _, m := range []map[string]bool{arms.absent, arms.taken, arms.held, arms.alias, arms.relost} {
+	for _, m := range []map[string]bool{arms.absent, arms.taken, arms.held, arms.alias, arms.shares, arms.relost, arms.rewalks} {
 		maps.DeleteFunc(m, func(root string, _ bool) bool { return !inTable[root] })
 	}
 	maps.DeleteFunc(arms.remounted, func(root string, _ []string) bool { return !inTable[root] })
@@ -832,7 +931,16 @@ func (l *Library) armWatches(arms *watchArms, rewalk bool) error {
 	for _, root := range roots {
 		p := root.Path
 		if out := arms.looking[p]; out != nil {
-			// Its look answers when its folder does.
+			// Its look answers when its folder does. A walk of one that may
+			// share a folder may have found it in a watch dropped above, so
+			// it is walked again after.
+			if dropped && arms.mayShare(p) {
+				arms.relost[p], out.stale = true, true
+			}
+			// Nor does what it saw answer for events an overflow lost.
+			if rewalk {
+				arms.rewalks[p], out.stale = true, true
+			}
 			l.warnUnanswered(out, root, wait)
 			continue
 		}
@@ -844,10 +952,8 @@ func (l *Library) armWatches(arms *watchArms, rewalk bool) error {
 		// before its watch existed. Only a catalog scan started once it
 		// is armed covers that, so a create's scan that ran first leaves
 		// it owed. The first pass owes nothing.
-		owed := !arms.taken[p] || lost || arms.relost[p] || (dropped && arms.alias[p])
-		look := rootLook{kind: lookPass, root: p, name: root.Name, walk: owed || rewalk,
-			owe: arms.owes && owed, rewalk: rewalk, remounted: arms.remounted[p]}
-		if l.look(arms, look) {
+		owed := !arms.taken[p] || lost || arms.relost[p] || (dropped && arms.shares[p])
+		if l.look(arms, arms.passLook(root, owed, rewalk)) {
 			waiting[p] = true
 		}
 	}
@@ -885,6 +991,18 @@ func (l *Library) armWatches(arms *watchArms, rewalk bool) error {
 	return nil
 }
 
+// passLook is the look a pass sends an idle root: a walk when the root is
+// owed one or rewalk asks, owing a catch-up after the first pass.
+func (a *watchArms) passLook(root Root, owed, rewalk bool) rootLook {
+	// A walk after an overflow, a pass's own or the one owed a root an
+	// overflow's pass passed over, owes a catch-up too: the gap's folders
+	// are armed only when it ends, which may be after the scan the overflow
+	// queued started.
+	again := rewalk || a.rewalks[root.Path]
+	return rootLook{kind: lookPass, root: root.Path, name: root.Name, walk: owed || again,
+		owe: a.owes && (owed || again), rewalk: again, remounted: a.remounted[root.Path]}
+}
+
 // warnUnanswered says once that a root has not answered its look, when
 // its stat has been out the whole wait; a slow walk is no silence. It
 // answers whether the root has not answered.
@@ -906,12 +1024,21 @@ func (l *Library) tookUp(arms *watchArms, look rootLook) int {
 	if !l.answered(arms, look) {
 		return 0
 	}
+	// What a stale look saw settles nothing its root is owed: that is paid
+	// once the rest of its answer is in, before its queued creates go out.
+	if look.out.stale {
+		defer l.payOwed(arms, look)
+	}
 	if !look.present {
 		if !arms.absent[look.root] {
 			arms.absent[look.root] = true
 			l.log.Warn("library root is not present; not watched", "library", look.name, "path", look.root)
 		}
+		// Its watches went with its folder: how they were held is for its
+		// walk back to say.
 		delete(arms.taken, look.root)
+		delete(arms.held, look.root)
+		delete(arms.shares, look.root)
 		return 0
 	}
 	if arms.absent[look.root] {
@@ -928,13 +1055,23 @@ func (l *Library) tookUp(arms *watchArms, look rootLook) int {
 	if !look.walked {
 		return look.failed
 	}
-	delete(arms.relost, look.root)
+	// What the walk left listed under the root is known from here, as a
+	// pass's own walks are at its end: a move out of every root before the
+	// next recheck drops a directory's subtree even when fsnotify let go of
+	// its own watch first.
+	maps.Copy(arms.known, look.listed)
+	if !look.out.stale {
+		delete(arms.relost, look.root)
+		if look.rewalk {
+			delete(arms.rewalks, look.root)
+		}
+	}
 	delete(arms.remounted, look.root)
 	if look.alias && !arms.alias[look.root] {
 		l.log.Warn("library root is a folder another library holds by another path; it is watched once",
 			"library", look.name, "path", look.root)
 	}
-	arms.held[look.root], arms.alias[look.root] = look.held, look.alias
+	arms.held[look.root], arms.alias[look.root], arms.shares[look.root] = look.held, look.alias, look.shares
 	if (look.held || look.alias) && look.owe {
 		l.watchQueue.owe(look.root, look.at.UnixNano(), look.at)
 	}
@@ -1194,27 +1331,15 @@ func dropWatches(w *fsnotify.Watcher, path string, wasDir bool) {
 	}
 }
 
-// watchTree arms a watch on every directory under root. inotify is per
-// directory, so a recursive watch is a walk; a directory that refuses
-// (the kernel watch budget, permissions) or cannot be read at all is
-// counted and skipped, and stays covered by scheduled scans only. The
-// trash directory is left out on purpose.
-func watchTree(w *fsnotify.Watcher, root string) (armed, failed int) {
-	armed, failed, _ = walkWatch(w, root, nil)
-	return armed, failed
-}
-
-// watchRoot is watchTree, also reporting whether root's own folder is
-// watched.
-func watchRoot(w *fsnotify.Watcher, root string) (armed, failed int, held bool) {
-	return walkWatch(w, root, nil)
-}
-
-// walkWatch is the walk behind watchTree. It descends the folder root
-// resolves to - a root that is a symlink, or lies under one, is walked
-// all the same - and adds each directory under root's own path, so the
-// table and the events keep that path. each, when not nil, is told every
-// directory armed.
+// walkWatch arms a watch on every directory under root, reporting too
+// whether root's own folder is watched. inotify is per directory, so a
+// recursive watch is a walk; a directory that refuses (the kernel watch
+// budget, permissions) or cannot be read at all is counted and skipped,
+// and stays covered by scheduled scans only. The trash directory is left
+// out on purpose. It descends the folder root resolves to - a root that is
+// a symlink, or lies under one, is walked all the same - and adds each
+// directory under root's own path, so the table and the events keep that
+// path. each, when not nil, is told every directory armed.
 func walkWatch(w *fsnotify.Watcher, root string, each func(dir string)) (armed, failed int, held bool) {
 	folder, err := filepath.EvalSymlinks(root)
 	if err != nil {

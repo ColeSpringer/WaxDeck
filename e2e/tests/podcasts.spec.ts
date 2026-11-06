@@ -81,11 +81,9 @@ test('subscribe, fetch, and play an episode with silence trimming', async (
   // The *fraction* is this account's own and is asserted exactly; the
   // count is not one to write down. A show's episode set belongs to the
   // catalog, and one subscriber unfetching an episode archives the item
-  // for everybody - which today takes it out of the hub's count while
-  // leaving it in the show's listing (docs/bugs.md, "unfetching an
-  // episode drops it from the hub's count"). Three copies of this file
-  // in flight is exactly when that bites, and "3 unplayed" written down
-  // reads as a wrong count rather than as somebody else's unfetch.
+  // for everybody, so another copy of this file in flight can move the
+  // count, and "3 unplayed" written down would read as a wrong count
+  // rather than as somebody else's unfetch.
   //
   // Both numbers re-read each attempt, on the fetch tier: they are a
   // live query over the episodes ingested so far, and the ingest is a

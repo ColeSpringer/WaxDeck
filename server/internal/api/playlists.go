@@ -204,10 +204,11 @@ func (s *Server) PreviewSmartRule(ctx context.Context, req PreviewSmartRuleReque
 }
 
 func (s *Server) GetRuleFields(ctx context.Context, _ GetRuleFieldsRequestObject) (GetRuleFieldsResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
 		return nil, err
 	}
-	vocab, err := s.svc.RuleVocabulary(ctx)
+	vocab, err := s.svc.RuleVocabulary(ctx, uc)
 	if err != nil {
 		return nil, err
 	}

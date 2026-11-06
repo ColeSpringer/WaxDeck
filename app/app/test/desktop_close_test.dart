@@ -303,13 +303,14 @@ void main() {
     await pumpEventQueue();
   });
 
-  test('a queue radio parked offers no stepping, and its play starts '
-      'nothing', () async {
+  test('a queue radio parked offers no stepping and no play, and a press '
+      'starts nothing', () async {
     final h = _Harness();
     await h.start();
     h.container.read(queueControllerProvider.notifier).addToEnd(['tr-next']);
     await pumpEventQueue();
     expect(h.tray.faces.last.canStep, isTrue);
+    expect(h.tray.faces.last.canToggle, isTrue);
 
     final radio = h.container.read(radioPlaybackProvider.notifier);
     await radio.play(
@@ -321,11 +322,13 @@ void main() {
       ),
     );
     await pumpEventQueue();
+    expect(h.tray.faces.last.canToggle, isTrue, reason: 'it stops the station');
     await radio.stop();
     await pumpEventQueue();
 
     expect(h.tray.faces.last.title, isNull);
     expect(h.tray.faces.last.canStep, isFalse);
+    expect(h.tray.faces.last.canToggle, isFalse);
 
     final loads = h.engine.loadedUrls.length;
     h.tray.actions!.onPlayPause();

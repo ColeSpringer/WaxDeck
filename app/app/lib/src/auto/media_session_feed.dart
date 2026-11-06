@@ -152,8 +152,8 @@ class MediaSessionFeed {
   void dispose() {
     _closed = true;
     // Not cleared on the way out: this provider is scoped to the signed-in
-    // session, and a sign-out already stops playback, so the last publish
-    // to make is "nothing".
+    // session, and a sign-out stops local playback, items and radio alike,
+    // so the last publish to make is "nothing".
     _clear();
     unawaited(forgetMediaSessionArt());
   }

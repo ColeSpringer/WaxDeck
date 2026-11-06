@@ -18,6 +18,7 @@ import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
@@ -319,14 +320,37 @@ void main() {
     );
     expect(shellMessageText(raisedMessage(tester)), 'Added to the queue');
 
+    // The write is out: the pill draws busy and takes no second press.
+    final write = repo.putPlayStateGate = Completer<void>();
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.episodeMarkPlayed),
     );
+    await tester.pump();
+    expect(
+      tester
+          .widget<WaxButton>(
+            waxControl<WaxButton>(SemanticsIds.episodeMarkPlayed),
+          )
+          .busy,
+      isTrue,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.episodeMarkPlayed),
+    );
+    await tester.pump();
+    write.complete();
     await tester.pumpAndSettle();
     // Played is a position at the full duration; there is no flag to set.
     expect(repo.putPlayStateCalls.single.pid, episodePid);
     expect(repo.putPlayStateCalls.single.positionMs, 214000);
     expect(shellMessageText(raisedMessage(tester)), 'Marked as played');
+    // Finished is a state to read, not an unavailable control.
+    expect(
+      tester.getSemantics(
+        find.bySemanticsIdentifier(SemanticsIds.episodeMarkPlayed),
+      ),
+      isSemantics(label: 'Played', isButton: false, hasEnabledState: false),
+    );
 
     container.read(queueControllerProvider.notifier).clear();
     await tester.pumpAndSettle();

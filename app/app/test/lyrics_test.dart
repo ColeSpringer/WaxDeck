@@ -511,4 +511,27 @@ void main() {
     expect(find.text('The tide comes in'), findsOneWidget);
     await harness.endPlayback(tester);
   });
+
+  testWidgets('the panel is titled in the listener\'s language', (
+    tester,
+  ) async {
+    _wide(tester);
+    final container = playbackContainer(
+      repo: FakeRepository()..lyrics[_pid] = _synced,
+      engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+    );
+    final harness = PlayerHarness(container);
+    harness.play([testItem(_pid)]);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const LyricsPanel(), locale: const Locale('es')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Letra'), findsOneWidget);
+    expect(find.text('Lyrics'), findsNothing);
+    await harness.endPlayback(tester);
+  });
 }

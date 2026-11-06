@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/player/now_playing_slot.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
@@ -44,6 +48,23 @@ class _TimingRepository extends FakeRepository {
   /// The pids released while the engine had not yet loaded anything
   /// other than that same rendering.
   final releasedWhileLoading = <String>[];
+
+  /// Holds every mint until completed.
+  Completer<void>? mintGate;
+
+  @override
+  Future<QueueTimeline> createQueueTimeline(
+    List<String> pids, {
+    double? crossfadeSeconds,
+    List<String>? formats,
+  }) async {
+    await mintGate?.future;
+    return super.createQueueTimeline(
+      pids,
+      crossfadeSeconds: crossfadeSeconds,
+      formats: formats,
+    );
+  }
 
   @override
   Future<void> releaseQueueTimeline(String pid) {
@@ -788,6 +809,188 @@ void main() {
     // once: a rendering released twice is a second request for nothing.
     expect(h.repo.timelineReleases, [held]);
     expect(h.container.playback.loadedTimelinePid, isNull);
+  });
+
+  group('a station tuned while a lost timeline is re-minted', () {
+    final station = RadioStation(
+      pid: 'ra-1',
+      name: 'Coastal FM',
+      streamUrl: 'https://radio.example/stream',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+
+    /// A timeline playing, lost, and its re-mint held open.
+    Future<
+      ({
+        ProviderContainer container,
+        _TimingRepository repo,
+        FakeEngine engine,
+        Completer<void> mint,
+      })
+    >
+    lostMidMint() async {
+      final h = _harness();
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _play(h.engine, 10000);
+      expect(h.engine.loadedTimeline, isNotNull);
+      final mint = h.repo.mintGate = Completer<void>();
+      h.engine.loseTimeline();
+      await pumpEventQueue();
+      return (
+        container: h.container,
+        repo: h.repo,
+        engine: h.engine,
+        mint: mint,
+      );
+    }
+
+    test('keeps the engine for the station', () async {
+      final h = await lostMidMint();
+      final radio = h.container.read(radioPlaybackProvider.notifier);
+      await radio.play(station);
+      await pumpEventQueue();
+
+      h.mint.complete();
+      await pumpEventQueue();
+
+      expect(h.container.read(radioPlaybackProvider).station, isNotNull);
+      expect(h.engine.loadedTimeline, isNull);
+      expect(h.engine.loadedUrl, contains('/media/radio/'));
+      // Neither rendering is anybody's now, so both slots go back.
+      expect(
+        h.repo.timelineReleases,
+        containsAll(<String>['tl-fake1', 'tl-fake2']),
+      );
+      expect(h.container.playback.loadedTimelinePid, isNull);
+      await radio.stop();
+    });
+
+    test(
+      'and a still-measuring answer after it asks for nothing more',
+      () async {
+        final h = await lostMidMint();
+        final radio = h.container.read(radioPlaybackProvider.notifier);
+        await radio.play(station);
+        await pumpEventQueue();
+
+        h.repo.timelineError = const WaxDeckApiException(
+          code: 'timeline-measuring',
+          message: 'the server is still measuring this queue',
+          statusCode: 202,
+        );
+        h.mint.complete();
+        await pumpEventQueue();
+        h.repo.timelineError = null;
+        final asked = h.repo.timelineCalls.length;
+
+        // Past the measuring poll's delay: a re-mint now would hold a
+        // transcode slot for a queue the station has taken.
+        await Future<void>.delayed(const Duration(seconds: 4));
+        await pumpEventQueue();
+
+        expect(h.repo.timelineCalls, hasLength(asked));
+        expect(h.container.playback.heldTimelinePids, isEmpty);
+        await radio.stop();
+      },
+    );
+
+    test('and a transcode-limit answer after it says nothing', () async {
+      final h = await lostMidMint();
+      final raised = <ShellMessage>[];
+      h.container.listen(shellMessengerProvider, (_, next) {
+        if (next != null) raised.add(next);
+      });
+      final radio = h.container.read(radioPlaybackProvider.notifier);
+      await radio.play(station);
+      await pumpEventQueue();
+
+      h.repo.timelineError = const WaxDeckApiException(
+        code: 'transcode-limited',
+        message: 'busy',
+        statusCode: 429,
+      );
+      h.mint.complete();
+      await pumpEventQueue();
+      h.repo.timelineError = null;
+
+      // The queue it asked about is the station's now: its limit is not
+      // news for the listener.
+      expect([
+        for (final m in raised) m.resolve(_l10n),
+      ], isNot(contains(_l10n.playerGaplessBusy)));
+      expect(h.container.read(webGaplessStatusProvider), isNull);
+      await radio.stop();
+    });
+
+    for (final mintFails in <bool>[true, false]) {
+      test('and stopped, leaves the park standing whether the mint '
+          '${mintFails ? 'fails' : 'lands'}', () async {
+        final h = await lostMidMint();
+        final radio = h.container.read(radioPlaybackProvider.notifier);
+        await radio.play(station);
+        await pumpEventQueue();
+        await radio.stop();
+        await pumpEventQueue();
+        expect(h.container.read(nowPlayingSlotProvider), isA<ParkedSlot>());
+        final loads = h.engine.loadedUrls.length;
+
+        if (mintFails) h.repo.timelineError = StateError('transport');
+        h.mint.complete();
+        await pumpEventQueue();
+
+        expect(h.container.read(nowPlayingSlotProvider), isA<ParkedSlot>());
+        expect(h.engine.loadedUrls, hasLength(loads));
+        expect(h.engine.loadedTimeline, isNull);
+        expect(h.engine.playing, isFalse);
+      });
+    }
+  });
+
+  group("a start's own mint answering after", () {
+    final station = RadioStation(
+      pid: 'ra-1',
+      name: 'Coastal FM',
+      streamUrl: 'https://radio.example/stream',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+
+    /// A music start whose mint is held until [supersede] has run.
+    Future<_TimingRepository> mintLandsAfter(
+      Future<void> Function(ProviderContainer container) supersede,
+    ) async {
+      final h = _harness();
+      final mint = h.repo.mintGate = Completer<void>();
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      expect(h.engine.loadedTimeline, isNull);
+
+      await supersede(h.container);
+      await pumpEventQueue();
+      mint.complete();
+      await pumpEventQueue();
+
+      expect(h.container.playback.loadedTimelinePid, isNull);
+      expect(h.container.playback.heldTimelinePids, isEmpty);
+      return h.repo;
+    }
+
+    test('a station tuned is handed back, not kept', () async {
+      late RadioPlaybackController radio;
+      final repo = await mintLandsAfter((container) {
+        radio = container.read(radioPlaybackProvider.notifier);
+        return radio.play(station);
+      });
+      expect(repo.timelineReleases, ['tl-fake1']);
+      await radio.stop();
+    });
+
+    test('the queue went away is handed back, not kept', () async {
+      final repo = await mintLandsAfter(
+        (container) => container.playback.goingAway(),
+      );
+      expect(repo.timelineReleases, ['tl-fake1']);
+    });
   });
 
   test('a lost rendering is released only when the re-mint differs', () async {

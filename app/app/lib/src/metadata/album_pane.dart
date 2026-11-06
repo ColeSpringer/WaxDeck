@@ -53,7 +53,7 @@ final _rewriteSeedProvider = FutureProvider.autoDispose
         for (final field in albumRewriteFields)
           field: metadata.fields[field] ?? '',
       };
-    });
+    }, retry: retryUnlessRefused);
 
 /// The album half of the release workbench: what the album editor
 /// screen used to be, as a pane. The release before the form - the

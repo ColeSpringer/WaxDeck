@@ -141,6 +141,7 @@ class TrayFace {
     this.title,
     this.subtitle,
     this.canStep = false,
+    this.canToggle = false,
   });
 
   /// Which glyph: the needle swings up while the music plays.
@@ -154,6 +155,10 @@ class TrayFace {
   /// Whether next and previous mean anything. A station has nothing to
   /// step to, and an empty queue has nowhere to go.
   final bool canStep;
+
+  /// Whether play and pause mean anything: a station or an item up. A
+  /// queue a station holds back is taken back from the deck.
+  final bool canToggle;
 
   final TrayLabels labels;
 }

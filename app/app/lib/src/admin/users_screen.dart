@@ -98,57 +98,84 @@ class UsersController extends AsyncNotifier<UsersState> {
 
 final adminUsersProvider = AsyncNotifierProvider<UsersController, UsersState>(
   UsersController.new,
+  retry: retryUnlessRefused,
 );
+
+/// The three lists account administration switches between, each a
+/// location of its own.
+enum UsersView {
+  users(WaxRoute.users),
+  requests(WaxRoute.userRequests),
+  invites(WaxRoute.userInvites);
+
+  const UsersView(this.location);
+
+  final String location;
+
+  /// The view a location's query names (`WaxRoute.usersViewParam`), the
+  /// users where it names none this screen has.
+  static UsersView fromQuery(String? value) =>
+      values.where((view) => view.name == value).firstOrNull ?? users;
+}
 
 /// Account administration: the user list with per-account editing,
 /// pending signup requests, and invites.
-class UsersScreen extends ConsumerWidget {
-  const UsersScreen({super.key});
+class UsersScreen extends StatelessWidget {
+  const UsersScreen({this.view = UsersView.users, super.key});
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return DefaultTabController(
-      length: 3,
-      child: WaxScaffold(
-        title: context.l10n.adminUsersTitle,
-        largeTitle: false,
-        semanticsId: SemanticsIds.adminUsers,
-        onBack: adminBack(context),
-        // Slivers rather than a body: a TabBarView needs bounded height
-        // and each tab pages a list of its own, so the remaining space
-        // is exactly what it should get.
-        slivers: const <Widget>[
-          SliverToBoxAdapter(child: _Tabs()),
-          SliverFillRemaining(
-            child: TabBarView(
-              children: <Widget>[_UsersTab(), _RequestsTab(), _InvitesTab()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Tabs extends StatelessWidget {
-  const _Tabs();
+  /// The view on screen, which is the location's: a segment goes to its
+  /// view's location, so a reload or a copied link opens the same view.
+  final UsersView view;
 
   @override
   Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
     final l10n = context.l10n;
-    return Material(
-      color: colors.canvas,
-      child: TabBar(
-        labelColor: colors.accent,
-        unselectedLabelColor: colors.textSecondary,
-        indicatorColor: colors.accent,
-        tabs: <Widget>[
-          Tab(key: const Key('users-tab'), text: l10n.adminUsersTabUsers),
-          Tab(key: const Key('requests-tab'), text: l10n.adminUsersTabRequests),
-          Tab(key: const Key('invites-tab'), text: l10n.adminUsersTabInvites),
-        ],
-      ),
+    return WaxScaffold(
+      title: l10n.adminUsersTitle,
+      largeTitle: false,
+      semanticsId: SemanticsIds.adminUsers,
+      onBack: adminBack(context),
+      // Slivers rather than a body: each view pages a list of its own, so
+      // the remaining space is exactly what it should get.
+      slivers: <Widget>[
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: WaxSizeClass.of(
+              context,
+            ).gutter.add(const EdgeInsets.only(top: WaxSpace.s8)),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: WaxSegmented(
+                label: l10n.adminUsersViewLabel,
+                selected: view.name,
+                onSelect: (name) =>
+                    context.go(UsersView.values.byName(name).location),
+                segments: <WaxSegment>[
+                  WaxSegment(
+                    name: UsersView.users.name,
+                    label: l10n.adminUsersTabUsers,
+                  ),
+                  WaxSegment(
+                    name: UsersView.requests.name,
+                    label: l10n.adminUsersTabRequests,
+                  ),
+                  WaxSegment(
+                    name: UsersView.invites.name,
+                    label: l10n.adminUsersTabInvites,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        SliverFillRemaining(
+          child: switch (view) {
+            UsersView.users => const _UsersTab(),
+            UsersView.requests => const _RequestsTab(),
+            UsersView.invites => const _InvitesTab(),
+          },
+        ),
+      ],
     );
   }
 }

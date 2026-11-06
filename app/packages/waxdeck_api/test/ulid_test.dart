@@ -38,4 +38,17 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 2));
     expect(newUlid().compareTo(first), greaterThan(0));
   });
+
+  test('a pid names its item by the ULID after its prefix', () {
+    expect(
+      ulidOf('tr-01JZX5N8QW3F4V9T2B7KD3M9R6'),
+      '01JZX5N8QW3F4V9T2B7KD3M9R6',
+    );
+    // A kind change keeps the ULID and moves only the prefix.
+    expect(
+      ulidOf('bk-01JZX5N8QW3F4V9T2B7KD3M9R6'),
+      ulidOf('tr-01JZX5N8QW3F4V9T2B7KD3M9R6'),
+    );
+    expect(ulidOf('01JZX5N8QW3F4V9T2B7KD3M9R6'), '01JZX5N8QW3F4V9T2B7KD3M9R6');
+  });
 }

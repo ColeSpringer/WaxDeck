@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/auth/oidc_flow.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/settings/integrations_sections.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -58,6 +60,102 @@ class _ConfigDown extends FakeRepository {
       message: 'down',
       statusCode: 500,
     );
+  }
+}
+
+/// The reads named in [down] fail as a restarting server's do, until
+/// taken out of it.
+class _ReadsDown extends FakeRepository {
+  _ReadsDown(this.down)
+    : super(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      );
+
+  final Set<String> down;
+
+  Future<T> _read<T>(String name, Future<T> Function() read) async {
+    if (down.contains(name)) {
+      throw const WaxDeckApiException(
+        code: 'internal',
+        message: 'boom',
+        statusCode: 500,
+      );
+    }
+    return read();
+  }
+
+  @override
+  Future<List<Scrobbler>> listScrobblers() =>
+      _read('scrobblers', super.listScrobblers);
+
+  @override
+  Future<List<AppPassword>> listAppPasswords() =>
+      _read('passwords', super.listAppPasswords);
+
+  @override
+  Future<List<NotificationTarget>> listMyNotificationTargets() =>
+      _read('targets', super.listMyNotificationTargets);
+
+  @override
+  Future<List<NotifyEvent>> listNotificationEvents() =>
+      _read('catalog', super.listNotificationEvents);
+
+  @override
+  Future<ScrobblingAdminConfig> getScrobblingConfig() =>
+      _read('lastfm', super.getScrobblingConfig);
+}
+
+/// Last.fm's connect and disconnect held until [release], counted.
+class _HeldLastfm extends FakeRepository {
+  final release = Completer<void>();
+  var asked = 0;
+
+  @override
+  Future<String> startLastfmConnect() async {
+    asked++;
+    await release.future;
+    return super.startLastfmConnect();
+  }
+
+  @override
+  Future<void> disconnectLastfm() async {
+    asked++;
+    await release.future;
+    return super.disconnectLastfm();
+  }
+}
+
+/// Records what the app asked the platform to open.
+class _Opener implements UrlOpenerPort {
+  final opened = <String>[];
+
+  @override
+  Future<void> open(String url) async => opened.add(url);
+}
+
+/// Deletes that wait for [release], then fail as a dropped connection
+/// does, counted.
+class _FailingDeletes extends FakeRepository {
+  final release = Completer<void>();
+  var deletes = 0;
+
+  static const _dropped = WaxDeckApiException(
+    code: 'transport',
+    message: 'DioException [connection error]',
+  );
+
+  @override
+  Future<void> deleteMyNotificationTarget(String pid) async {
+    deletes++;
+    await release.future;
+    throw _dropped;
+  }
+
+  @override
+  Future<void> revokeAppPassword(String id) async {
+    deletes++;
+    await release.future;
+    throw _dropped;
   }
 }
 
@@ -988,8 +1086,232 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
 
-    expect(find.text('Could not load the credential state'), findsOneWidget);
+    // Explained, with its retry drawn busy while the read asks again.
+    expect(find.text(AppLocalizationsEn().errorInternal), findsOneWidget);
+    expect(
+      tester.widget<WaxButton>(find.widgetWithText(WaxButton, 'Retry')).busy,
+      isTrue,
+    );
     expect(find.byType(SkeletonShapes), findsNothing);
     await tester.pumpWidget(const SizedBox());
+  });
+
+  group('a read that fails for good says why and asks again', () {
+    final en = AppLocalizationsEn();
+
+    for (final (read, section, title, after) in [
+      (
+        'scrobblers',
+        const ScrobblingSection() as Widget,
+        en.settingsScrobblingError,
+        'ListenBrainz',
+      ),
+      (
+        'passwords',
+        const AppPasswordsSection() as Widget,
+        en.settingsAppPasswordsError,
+        en.settingsAppPasswordsEmpty,
+      ),
+      (
+        'targets',
+        const PersonalNotificationTargetsSection() as Widget,
+        en.settingsNotifyTargetsError,
+        en.settingsNotifyTargetsEmpty,
+      ),
+    ]) {
+      testWidgets(read, (tester) async {
+        final repo = _ReadsDown({read});
+        await tester.pumpWidget(_host(repo, section));
+        // Past the default ladder's ten attempts: the failure is final.
+        await tester.pump(const Duration(seconds: 40));
+        await tester.pump();
+
+        expect(find.text(title), findsOneWidget);
+        expect(find.text(en.errorInternal), findsOneWidget);
+        final retry = find.widgetWithText(WaxButton, 'Try again');
+        expect(tester.widget<WaxButton>(retry).busy, isFalse);
+
+        repo.down.clear();
+        await tester.tap(retry);
+        await tester.pumpAndSettle();
+        expect(find.text(after), findsOneWidget);
+      });
+    }
+
+    testWidgets('the Last.fm credentials, in their dialog', (tester) async {
+      final repo = _ReadsDown({'lastfm'})
+        ..scrobblers = const [
+          Scrobbler(service: 'lastfm', available: false, connected: false),
+        ];
+      await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
+      );
+      await tester.pump(const Duration(seconds: 40));
+      await tester.pump();
+
+      expect(find.text(en.errorInternal), findsOneWidget);
+      repo.down.clear();
+      await tester.tap(find.widgetWithText(WaxButton, 'Retry'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('lastfm-api-key-field')), findsOneWidget);
+    });
+
+    testWidgets('the event checklist, in the target editor', (tester) async {
+      final repo = _ReadsDown({'catalog'});
+      await tester.pumpWidget(
+        _host(repo, const PersonalNotificationTargetsSection()),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd),
+      );
+      await tester.pump(const Duration(seconds: 40));
+      await tester.pump();
+
+      expect(find.text(en.errorInternal), findsOneWidget);
+      repo.down.clear();
+      await tester.tap(find.widgetWithText(WaxButton, 'Retry'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WaxSwitch), findsWidgets);
+    });
+  });
+
+  group('a Last.fm connect or disconnect takes one press while it runs', () {
+    for (final connected in const <bool>[false, true]) {
+      final id = connected
+          ? SemanticsIds.scrobblerDisconnect('lastfm')
+          : SemanticsIds.scrobblerConnect('lastfm');
+      testWidgets(connected ? 'disconnect' : 'connect', (tester) async {
+        final repo = _HeldLastfm()
+          ..scrobblers = [
+            Scrobbler(service: 'lastfm', available: true, connected: connected),
+          ];
+        final opener = _Opener();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              repositoryProvider.overrideWithValue(repo),
+              credentialStoreProvider.overrideWithValue(
+                InMemoryCredentialStore(),
+              ),
+              urlOpenerProvider.overrideWithValue(opener),
+            ],
+            child: localizedHost(
+              Scaffold(body: ListView(children: const [ScrobblingSection()])),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        WaxButton button() =>
+            tester.widget<WaxButton>(waxControl<WaxButton>(id));
+
+        await tester.tap(find.bySemanticsIdentifier(id));
+        await tester.pump();
+        expect(button().busy, isTrue);
+        await tester.tap(find.bySemanticsIdentifier(id), warnIfMissed: false);
+        await tester.pump();
+        expect(repo.asked, 1);
+
+        repo.release.complete();
+        await tester.pumpAndSettle();
+        if (connected) {
+          expect(
+            find.bySemanticsIdentifier(SemanticsIds.scrobblerConnect('lastfm')),
+            findsOneWidget,
+          );
+        } else {
+          expect(opener.opened, hasLength(1));
+          expect(button().busy, isFalse);
+        }
+      });
+    }
+  });
+
+  group('a removal asks first, draws busy and says what failed', () {
+    final en = AppLocalizationsEn();
+    NotificationTarget target() => NotificationTarget(
+      pid: 'nt-SEED',
+      kind: 'ntfy',
+      scope: 'user',
+      label: 'Tablet',
+      config: const {'topic': 'waxdeck'},
+      enabledEvents: const [],
+      createdAt: DateTime.utc(2026),
+    );
+    final password = AppPassword(
+      id: 'ap-1',
+      label: 'Feishin',
+      createdAt: DateTime.utc(2026),
+    );
+
+    // One shape for both rows: the row, its delete button and the
+    // dialog's confirm.
+    for (final (name, row, press, confirm, seed, section) in [
+      (
+        'a notification target',
+        const ValueKey('notify-target-nt-SEED'),
+        const ValueKey('notify-target-remove-nt-SEED'),
+        const Key('notify-target-remove-confirm'),
+        (FakeRepository repo) => repo.myNotificationTargets.add(target()),
+        const PersonalNotificationTargetsSection() as Widget,
+      ),
+      (
+        'an app password',
+        const ValueKey('app-password-ap-1'),
+        ValueKey(SemanticsIds.appPasswordRevoke('ap-1')),
+        const Key('app-password-revoke-confirm'),
+        (FakeRepository repo) => repo.appPasswords.add(password),
+        const AppPasswordsSection() as Widget,
+      ),
+    ]) {
+      testWidgets('$name goes only once confirmed', (tester) async {
+        final repo = FakeRepository();
+        seed(repo);
+        await tester.pumpWidget(_host(repo, section));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(press));
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        await tester.tap(find.widgetWithText(WaxButton, en.commonCancel));
+        await tester.pumpAndSettle();
+        expect(find.byKey(row), findsOneWidget);
+
+        await tester.tap(find.byKey(press));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(confirm));
+        await tester.pumpAndSettle();
+        expect(find.byKey(row), findsNothing);
+      });
+
+      testWidgets('$name that fails to go says why and stays, and takes one '
+          'press while it is out', (tester) async {
+        final repo = _FailingDeletes();
+        seed(repo);
+        await tester.pumpWidget(_host(repo, section));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(press));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(confirm));
+        // The spinner never settles: frames past the dialog's exit.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.widget<WaxIconButton>(find.byKey(press)).busy, isTrue);
+        await tester.tap(find.byKey(press), warnIfMissed: false);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(repo.deletes, 1);
+
+        repo.release.complete();
+        await tester.pumpAndSettle();
+        expect(shellMessageText(raisedMessage(tester)), en.errorNetwork);
+        expect(find.byKey(row), findsOneWidget);
+        expect(tester.widget<WaxIconButton>(find.byKey(press)).busy, isFalse);
+      });
+    }
   });
 }

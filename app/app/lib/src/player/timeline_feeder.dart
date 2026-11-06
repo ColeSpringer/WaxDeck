@@ -158,6 +158,7 @@ class TimelineFeeder {
   ) async {
     _flushHandedOff();
     if (!_admits(item)) return null;
+    final generation = _generation;
     if (!await _engineCanPlay()) return null;
     final held = _slotIn(_loaded, entry);
     if (held != null) return held;
@@ -180,6 +181,12 @@ class TimelineFeeder {
     }
     final minted = await _mintFrom(queue, entry);
     if (minted == null) return null;
+    if (generation != _generation) {
+      // Cleared while the mint was out (a station took the engine, the
+      // queue stopped): the start it was for is gone, so is its slot.
+      _release(minted);
+      return null;
+    }
     _releaseAll([_loaded, _pending], keeping: minted);
     _loaded = minted;
     _pending = null;
@@ -356,10 +363,17 @@ class TimelineFeeder {
     final outgoing = <_Minted?>[_loaded, _pending];
     _loaded = null;
     _pending = null;
+    final generation = _generation;
     // After the mint rather than before it, so the pid it answers is
     // known: a re-mint of a queue the server still holds answers the
     // same one.
     final minted = await _mintFrom(queue, entry);
+    if (generation != _generation) {
+      // Cleared while the mint was out (a station took the engine, the
+      // queue stopped), so none of these is anybody's to play.
+      _releaseAll(<_Minted?>[...outgoing, minted]);
+      return false;
+    }
     for (final gone in outgoing) {
       _replace(gone, minted);
     }
@@ -584,6 +598,7 @@ class TimelineFeeder {
     final start = queue.entries.indexWhere((e) => e.queueId == entry.queueId);
     if (start < 0) return null;
     _minting = true;
+    final generation = _generation;
     try {
       final run = await _musicRun(queue, start);
       if (run.isEmpty) return null;
@@ -623,7 +638,7 @@ class TimelineFeeder {
         for (final e in run) e.queueId,
       ], tl.pid);
     } on WaxDeckApiException catch (e) {
-      _handleMintRefusal(e, queue, entry);
+      _handleMintRefusal(e, queue, entry, cleared: generation != _generation);
       return null;
     } on Object catch (error) {
       // Transport, or anything else nobody planned for: this start
@@ -635,11 +650,14 @@ class TimelineFeeder {
     }
   }
 
+  /// [cleared] when a [clear] came while the mint was out: the queue it
+  /// asked about is nobody's any more.
   void _handleMintRefusal(
     WaxDeckApiException e,
     QueueState queue,
-    QueueEntry entry,
-  ) {
+    QueueEntry entry, {
+    required bool cleared,
+  }) {
     switch (e.statusCode) {
       case 501:
         // This server renders no timelines at all. Said once, and then
@@ -650,14 +668,16 @@ class TimelineFeeder {
         // Member lengths are still being measured. This track plays the
         // ordinary way while the mint is asked for again; re-requesting
         // is the poll the contract describes, and the replacement is
-        // swapped in at the next seam.
-        _scheduleRemint(queue, delay: measuringDelay);
+        // swapped in at the next seam. Not for a cleared queue, whose
+        // re-mint would hold a transcode slot nobody listens on.
+        if (!cleared) _scheduleRemint(queue, delay: measuringDelay);
       case 429:
         // The server's transcode limit, met at the mint. Not sticky -
         // it is about how busy the server is, not about this queue -
         // but said, because a switch that is on and doing nothing has
-        // to explain itself. The next mint that lands clears it.
-        _busy(e.code);
+        // to explain itself. The next mint that lands clears it. Not
+        // said for a cleared queue, which nothing plays any more.
+        if (!cleared) _busy(e.code);
       default:
         // A queue this server cannot render as one stream (409), a bad
         // crossfade (400): the ordinary path plays it and a different

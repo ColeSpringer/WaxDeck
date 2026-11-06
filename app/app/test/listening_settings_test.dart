@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
@@ -37,6 +38,26 @@ Widget _host(
 FakeRepository _signedInRepo() => FakeRepository(
   sessionState: const SessionState(authenticated: true, user: _user),
 );
+
+/// A similarity status the server fails to read while [down].
+class _SimilarityDown extends FakeRepository {
+  _SimilarityDown()
+    : super(sessionState: const SessionState(authenticated: true, user: _user));
+
+  var down = true;
+
+  @override
+  Future<SimilarityStatus> getSimilarityStatus() async {
+    if (down) {
+      throw const WaxDeckApiException(
+        code: 'internal',
+        message: 'boom',
+        statusCode: 500,
+      );
+    }
+    return super.getSimilarityStatus();
+  }
+}
 
 Future<void> _show(WidgetTester tester, Key key) => tester.scrollUntilVisible(
   find.byKey(key),
@@ -144,6 +165,35 @@ void main() {
     expect(repo.prefs.timezone, isNull);
   });
 
+  testWidgets("a timezone lost to a dropped connection is said in the app's "
+      'words', (tester) async {
+    final repo = _signedInRepo()
+      ..putPrefsError = const WaxDeckApiException(
+        code: 'transport',
+        message: 'DioException [connection error]',
+      );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await _show(tester, const Key(SemanticsIds.timezoneEdit));
+    await tester.tap(find.byKey(const Key(SemanticsIds.timezoneEdit)));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('timezone-field')),
+      'Europe/Amsterdam',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.timezoneSave));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<WaxTextField>(find.byKey(const Key('timezone-field')))
+          .errorText,
+      AppLocalizationsEn().errorNetwork,
+    );
+    expect(find.textContaining('DioException'), findsNothing);
+  });
+
   testWidgets('the share-links row opens the shares screen', (tester) async {
     final repo = _signedInRepo();
     await tester.pumpWidget(_host(repo));
@@ -154,6 +204,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No share links yet'), findsOneWidget);
+  });
+
+  testWidgets('a similarity status that fails says why, and asking again '
+      'reads it', (tester) async {
+    final repo = _SimilarityDown()
+      ..similarityStatus = const SimilarityStatus(
+        enabled: true,
+        embeddedTracks: 80,
+        totalTracks: 100,
+        coveragePct: 80,
+        queueDepth: 5,
+      );
+    await tester.pumpWidget(_host(repo, section: SettingsSection.server));
+    // Past the default ladder's ten attempts: the failure is final.
+    await tester.pump(const Duration(seconds: 40));
+    await tester.pump();
+
+    final en = AppLocalizationsEn();
+    final retry = find.widgetWithText(WaxButton, 'Try again');
+    await tester.scrollUntilVisible(
+      retry,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text(en.settingsSimilarityError), findsOneWidget);
+    expect(find.text(en.errorInternal), findsOneWidget);
+    repo.down = false;
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+    expect(find.text('Coverage 80%'), findsOneWidget);
   });
 
   testWidgets('administrators see the sonic-similarity coverage', (

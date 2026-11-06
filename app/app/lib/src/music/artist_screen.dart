@@ -11,8 +11,10 @@ import '../books/book_dimension.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
+import '../library/item_play.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
+import '../player/play_progress.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
@@ -511,7 +513,8 @@ class _Body extends ConsumerWidget {
 }
 
 /// An artist's books, as the shelf an author's own page under Books is
-/// the whole of. Its covers open each book; Show all goes there.
+/// the whole of. Its covers open each book, and play or resume it in
+/// place as the Books hub's do; Show all goes there.
 class _Books extends ConsumerWidget {
   const _Books({required this.pid, required this.books});
 
@@ -521,6 +524,8 @@ class _Books extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final store = ref.watch(artworkStoreProvider);
+    final l10n = context.l10n;
+    final progress = watchPlayProgress(ref, books);
     final tiles = <MediaTileData>[
       for (final book in books)
         MediaTileData(
@@ -532,9 +537,9 @@ class _Books extends ConsumerWidget {
         ),
     ];
     return ShelfRow(
-      title: context.l10n.musicArtistAudiobooksSection,
+      title: l10n.musicArtistAudiobooksSection,
       items: tiles,
-      actionLabel: context.l10n.musicArtistShowAll,
+      actionLabel: l10n.musicArtistShowAll,
       actionSemanticsId: SemanticsIds.entityAllBooks,
       // Pushed, as a release is: the author's page is declared under the
       // authors index, and `go` would throw this artist away.
@@ -545,6 +550,20 @@ class _Books extends ConsumerWidget {
         final at = tiles.indexOf(tile);
         if (at < 0) return;
         unawaited(context.push(WaxRoute.book(books[at].pid)));
+      },
+      onPlayItem: (tile) {
+        final at = tiles.indexOf(tile);
+        if (at < 0) return;
+        playOrResumeItem(ref, books[at], progress[books[at].pid]);
+      },
+      playSemanticsIdAt: (at) => SemanticsIds.bookPlay(books[at].pid),
+      playLabelAt: (at) =>
+          resumeLabel(l10n, books[at], progress[books[at].pid]),
+      onMoreItem: (tile) {
+        final at = tiles.indexOf(tile);
+        if (at < 0) return;
+        final book = books[at];
+        unawaited(showItemCardMenu(context, ref, book, progress[book.pid]));
       },
     );
   }

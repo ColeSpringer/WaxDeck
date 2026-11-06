@@ -500,7 +500,7 @@ class _DevicePickerSheet extends ConsumerWidget {
     final messenger = handles.messenger;
     final controller = ref.read(remoteSessionProvider.notifier);
     final l10n = context.l10n;
-    final name = remote.endpointName;
+    final name = remote.endpointNameIn(l10n);
     Navigator.of(context).pop();
     final choice = await showDialog<_LeaveChoice>(
       context: handles.rootContext,

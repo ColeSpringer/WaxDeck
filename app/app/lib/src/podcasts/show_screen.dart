@@ -12,6 +12,7 @@ import '../player/play_progress.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/pending_actions.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/server_health.dart';
@@ -86,17 +87,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     final detail = ref.watch(podcastDetailProvider(widget.pid));
     final episodes = ref.watch(episodesProvider(widget.pid));
     final loaded = episodes.value?.items ?? const <EpisodeSummary>[];
-    // One read per window of loaded rows rather than one over all of
-    // them: paging then costs the page it just loaded instead of every
-    // page before it.
-    final positions = <String, PlayProgress>{};
-    for (final key in playProgressKeys(loaded)) {
-      positions.addAll(
-        ref.watch(playProgressProvider(key)).value ??
-            const <String, PlayProgress>{},
-      );
-    }
-    final view = PlayProgressView(positions);
+    final view = watchPlayProgress(ref, loaded);
     final visible = _visible(loaded, view);
     final l10n = context.l10n;
     final title = detail.value?.show.title ?? l10n.podcastShowFallbackTitle;
@@ -555,16 +546,23 @@ class _ShowHeader extends ConsumerWidget {
 
     final l10n = context.l10n;
 
+    // Run as the follow control's pending request: it draws busy for as
+    // long as the request is out, and a second press is dropped.
     Future<void> guarded(Future<void> Function() action) async {
       final messenger = ref.read(shellMessengerProvider.notifier);
       try {
-        await action();
+        await ref
+            .read(pendingActionsProvider.notifier)
+            .run(PendingAction.follow(pid), action);
       } on WaxDeckApiException catch (e) {
         messenger.show(explainError(l10n, e), channel: ShellChannel.podcasts);
       }
     }
 
     final count = show.episodeCount;
+    final following = ref
+        .watch(pendingActionsProvider)
+        .contains(PendingAction.follow(pid));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -592,6 +590,9 @@ class _ShowHeader extends ConsumerWidget {
                 glyph: WaxIcons.check,
                 slot: _followSlot,
                 semanticsId: SemanticsIds.podcastUnsubscribe,
+                state: following
+                    ? const WaxActionState.busy()
+                    : const WaxActionState.ready(),
                 onPressed: () => unawaited(_unsubscribe(context, ref, guarded)),
               )
             // A server whose podcasts are off refuses the follow.
@@ -602,6 +603,9 @@ class _ShowHeader extends ConsumerWidget {
                 emphasis: WaxActionEmphasis.primary,
                 slot: _followSlot,
                 semanticsId: SemanticsIds.podcastSubscribe,
+                state: following
+                    ? const WaxActionState.busy()
+                    : const WaxActionState.ready(),
                 // A private show's address is its followers' alone, so it
                 // is followed by the address the listener was given.
                 onPressed: show.feedUrl == null

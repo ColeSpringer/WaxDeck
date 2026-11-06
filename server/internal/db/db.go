@@ -228,6 +228,22 @@ const baselineSchema = `
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL
 	);
+
+	-- The library each item sat in as the catalog's change log moved,
+	-- read from the item when the journal reaches a row that changed it,
+	-- so the catalog delta tells an item a caller may hold from one only
+	-- ever in libraries outside its grants. A change's rows name where the
+	-- item sat from that change on, more than one where its trash rows
+	-- name several; '' marks the change that dropped it. The service's
+	-- markers stand for the podcast library, no library, and a library it
+	-- could not follow. Rows superseded at or below the change log's floor
+	-- go with it; where the journal stands is sync_state's.
+	CREATE TABLE item_library_journal (
+		item_pid    TEXT    NOT NULL,
+		seq         INTEGER NOT NULL,
+		library_pid TEXT    NOT NULL,
+		PRIMARY KEY (item_pid, seq, library_pid)
+	) WITHOUT ROWID;
 	CREATE TABLE app_passwords (
 		id            TEXT    PRIMARY KEY,
 		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1068,12 +1084,16 @@ const baselineSchema = `
 	-- instead of leaving the playlist bare; fingerprint is over the
 	-- member list the mosaic was built from plus the artwork-write epoch
 	-- in sync_state, so a membership change or a member repainting its
-	-- own cover regenerates it and an unrelated read does not.
+	-- own cover regenerates it and an unrelated read does not. sources
+	-- names the members a generated cover's tiles came from (a JSON
+	-- array of item pids, '' where that is not known), so a reader who
+	-- cannot see one of them is not shown it.
 	CREATE TABLE playlist_cover (
 		playlist_pid  TEXT    PRIMARY KEY,
 		origin        TEXT    NOT NULL,
 		fingerprint   TEXT    NOT NULL DEFAULT '',
-		updated_at_ns INTEGER NOT NULL DEFAULT 0
+		updated_at_ns INTEGER NOT NULL DEFAULT 0,
+		sources       TEXT    NOT NULL DEFAULT ''
 	);
 
 	-- Synced external playlists. playlist_source binds a manual playlist

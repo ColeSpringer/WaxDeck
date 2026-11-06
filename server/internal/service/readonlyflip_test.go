@@ -28,7 +28,7 @@ func TestFlippingServerReadOnlyMarksEveryAccountChanged(t *testing.T) {
 		t.Helper()
 		next := settings
 		mutate(&next)
-		saved, err := svc.AdminSettingsPut(ctx, admin, next)
+		saved, err := svc.AdminSettingsPut(ctx, admin, everySetting(next))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +100,7 @@ func TestServerReadOnlyRefusesInTheServersWords(t *testing.T) {
 		t.Fatalf("a writable server refused: %v", err)
 	}
 	settings.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, admin, settings); err != nil {
+	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(settings)); err != nil {
 		t.Fatal(err)
 	}
 	err = svc.CheckWritable(ctx, "")

@@ -272,7 +272,7 @@ func TestUnmappedGenrePassesThrough(t *testing.T) {
 	if err := f.svc.SweepHealth(f.ctx); err != nil {
 		t.Fatalf("health sweep: %v", err)
 	}
-	issues, _, err := f.svc.ListHealthIssuesFor(f.ctx, ruleGenreWhitelist, "", 50)
+	issues, _, err := f.svc.ListHealthIssuesFor(f.ctx, f.uc, ruleGenreWhitelist, "", 50)
 	if err != nil {
 		t.Fatalf("listing genre-whitelist issues: %v", err)
 	}

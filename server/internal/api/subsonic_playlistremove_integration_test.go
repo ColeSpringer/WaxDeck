@@ -154,3 +154,30 @@ func TestSubsonicRemoveSeveralIndexesAtOnce(t *testing.T) {
 		t.Fatalf("after removing 1 and 3: %v, want %v", got, want)
 	}
 }
+
+// Removing by index is the owner's. An account reading somebody else's
+// shared list is sent no stored positions, and its removal is refused
+// as not authorized, the list left as it was.
+func TestSubsonicRemoveFromSomebodyElsesListIsRefused(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	items := h.items(t, "")
+	if len(items.Items) < 2 {
+		t.Fatalf("fixture library has %d items, want at least 2", len(items.Items))
+	}
+	pl := decodeStatus[Playlist](t, h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Shared", "kind": "static", "visibility": "shared",
+		"itemPids": []string{items.Items[0].Pid, items.Items[1].Pid},
+	}), 201, "share a list")
+
+	member := otherSubsonicAccount(t, h, "member")
+	refused := clientCallAs(t, h, member, "updatePlaylist",
+		"&playlistId="+url.QueryEscape(pl.Pid)+"&songIndexToRemove=0")
+	if refused["status"] != "failed" || jmap(refused["error"])["code"] != float64(50) {
+		t.Errorf("a removal from somebody else's list = %v, want refused not authorized (50)", refused)
+	}
+	after := decodeStatus[PlaylistItemsPage](t, get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/items", h.token), 200, "the owner's read")
+	if len(after.Entries) != 2 {
+		t.Errorf("the list holds %d members after the refused removal, want both", len(after.Entries))
+	}
+}

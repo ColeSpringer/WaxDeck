@@ -516,6 +516,10 @@ class _TrayMenu {
       _next.isEnabled = face.canStep;
       edited = true;
     }
+    if (was == null || was.canToggle != face.canToggle) {
+      _playPause.isEnabled = face.canToggle;
+      edited = true;
+    }
     if (edited) changed(menu);
   }
 

@@ -855,9 +855,12 @@ func TestRemoteCommands(t *testing.T) {
 	if got.Index != 1 {
 		t.Fatalf("index %d after next", got.Index)
 	}
-	// next past the end refuses with repeat off.
-	if _, err := svc.HandleCommand(ctx, link, snap.ID, "next", CommandArgs{}); err == nil {
-		t.Fatal("next past the end accepted")
+	// next past the end refuses with repeat off, by the code a controller
+	// words in its own language.
+	_, err = svc.HandleCommand(ctx, link, snap.ID, "next", CommandArgs{})
+	var refused InvalidError
+	if !errors.As(err, &refused) || refused.Code != "queue-end" {
+		t.Fatalf("next past the end answered %#v, want an InvalidError coded queue-end", err)
 	}
 }
 

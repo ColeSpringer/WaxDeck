@@ -8,6 +8,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
+import 'package:waxdeck/src/shell/pending_actions.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/shell/shortcuts.dart';
@@ -17,6 +18,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'routed_host.dart';
+import 'wax_finders.dart';
 
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
@@ -46,6 +48,36 @@ Future<void> _pump(WidgetTester tester, Widget host) async {
 
 Finder _row(String id) =>
     find.bySemanticsIdentifier(SemanticsIds.reviewRow(id));
+
+/// Decides at once, then holds the answer until [release] completes.
+class _HeldDecisions extends FakeRepository {
+  final release = Completer<void>();
+
+  @override
+  Future<ReviewDecideResult> decideReviewEntry(
+    String entryId, {
+    required String action,
+    String? candidateMbid,
+  }) async {
+    final decided = await super.decideReviewEntry(
+      entryId,
+      action: action,
+      candidateMbid: candidateMbid,
+    );
+    await release.future;
+    return decided;
+  }
+
+  @override
+  Future<List<ReviewBulkOutcome>> decideReviewBulk(
+    List<String> entryIds, {
+    required String action,
+  }) async {
+    final outcomes = await super.decideReviewBulk(entryIds, action: action);
+    await release.future;
+    return outcomes;
+  }
+}
 
 void main() {
   testWidgets('a failed queue draws Try again busy while it retries', (
@@ -351,6 +383,95 @@ void main() {
       repo.reviewEntries.where((e) => e.status == 'skipped'),
       hasLength(2),
     );
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Decided 2 entries',
+    );
+  });
+
+  testWidgets('a key pressed again while its decision runs sends nothing', (
+    tester,
+  ) async {
+    final repo = _HeldDecisions();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1'),
+      testReviewEntry('rv-2', title: 'Second Album'),
+    ];
+    await _pump(tester, _host(_container(repo)));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pump();
+    expect(repo.decideReviewCalls, hasLength(1));
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.single.action, 'skip');
+  });
+
+  testWidgets('a key for another entry goes while one decision runs', (
+    tester,
+  ) async {
+    final repo = _HeldDecisions();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1'),
+      testReviewEntry('rv-2', title: 'Second Album'),
+    ];
+    await _pump(tester, _host(_container(repo)));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pump();
+    expect(repo.decideReviewCalls.map((c) => c.entryId), ['rv-1', 'rv-2']);
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a bulk decision in flight draws busy and takes no second '
+      'press', (tester) async {
+    final repo = _HeldDecisions();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1'),
+      testReviewEntry('rv-2', title: 'Second Album'),
+    ];
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(_row('rv-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(_row('rv-2'));
+    await tester.pumpAndSettle();
+    WaxButton button(String id) =>
+        tester.widget<WaxButton>(waxControl<WaxButton>(id));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip));
+    await tester.pump();
+    expect(button(SemanticsIds.reviewBulkSkip).busy, isTrue);
+    expect(button(SemanticsIds.reviewBulkApprove).onPressed, isNull);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip),
+      warnIfMissed: false,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewBulkApprove),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    expect(repo.decideBulkCalls, hasLength(1));
+
+    repo.release.complete();
+    await tester.pumpAndSettle();
     expect(
       shellMessageText(container.read(shellMessengerProvider)),
       'Decided 2 entries',
@@ -881,6 +1002,131 @@ void main() {
     expect(find.bySemanticsIdentifier(SemanticsIds.matchingMenu), findsNothing);
   });
 
+  // The pane's decision bar and the bulk bar are on screen together, and
+  // either can decide the entry the other is deciding.
+  group('one entry decided from the pane and from the bulk bar', () {
+    /// rv-1 open beside the queue, with a release to approve it against,
+    /// and rv-1 and rv-2 selected.
+    Future<ProviderContainer> pumpBoth(
+      WidgetTester tester,
+      _HeldDecisions repo,
+    ) async {
+      repo.reviewEntries = [
+        testReviewEntry('rv-1'),
+        testReviewEntry('rv-2', title: 'Second Album'),
+      ];
+      repo.reviewEntryDetails['rv-1'] = ReviewEntryDetail(
+        id: 'rv-1',
+        kind: 'match',
+        status: 'pending',
+        mediaType: MediaType.music,
+        origin: 'scan',
+        trackCount: 1,
+        createdAt: DateTime.utc(2026, 7, 1),
+        candidates: const [
+          ReviewCandidate(
+            mbid: 'mb-1',
+            title: 'Neon Meridian',
+            artist: 'The Cardinal Waves',
+            similarityPct: 94,
+          ),
+        ],
+      );
+      final container = _container(repo);
+      tester.view.physicalSize = const Size(1400, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: routedHost(
+            const ReviewSurface(openEntryId: 'rv-1'),
+            at: '/review/rv-1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewPane),
+        findsOneWidget,
+      );
+      await tester.longPress(_row('rv-1'));
+      await tester.pumpAndSettle();
+      await tester.tap(_row('rv-2'));
+      await tester.pumpAndSettle();
+      return container;
+    }
+
+    WaxButton button(WidgetTester tester, String id) =>
+        tester.widget<WaxButton>(waxControl<WaxButton>(id));
+
+    testWidgets("the pane's decision out holds the bulk bar, which sends "
+        'nothing and reports no failure', (tester) async {
+      final repo = _HeldDecisions();
+      // What the server answers an entry already being decided.
+      repo.bulkOutcomes['rv-1'] = const ReviewBulkOutcome(
+        entryId: 'rv-1',
+        ok: false,
+        code: 'conflict',
+        error: 'the entry is being decided',
+      );
+      final container = await pumpBoth(tester, repo);
+      final raised = <String>[];
+      container.listen(shellMessengerProvider, (_, next) {
+        if (shellMessageText(next) case final text?) raised.add(text);
+      });
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewApprove));
+      await tester.pump();
+      expect(repo.decideReviewCalls.map((c) => c.entryId), ['rv-1']);
+      expect(button(tester, SemanticsIds.reviewBulkAsIs).onPressed, isNull);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.reviewBulkAsIs),
+        warnIfMissed: false,
+      );
+      await tester.pump();
+
+      repo.release.complete();
+      await tester.pumpAndSettle();
+      expect(repo.decideBulkCalls, isEmpty);
+      expect(repo.decideReviewCalls, hasLength(1));
+      expect(raised, isEmpty);
+    });
+
+    testWidgets('a bulk decision out holds its entries from the pane and the '
+        'queue keys', (tester) async {
+      final repo = _HeldDecisions();
+      final container = await pumpBoth(tester, repo);
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkAsIs));
+      await tester.pump();
+      expect(repo.decideBulkCalls.single.entryIds, ['rv-1', 'rv-2']);
+      expect(button(tester, SemanticsIds.reviewApprove).onPressed, isNull);
+      expect(button(tester, SemanticsIds.reviewApprove).busy, isFalse);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+        warnIfMissed: false,
+      );
+      // The queue's own key, on the row the pane shows.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.pump();
+      expect(repo.decideReviewCalls, isEmpty);
+      // Refused whole: not even its action's key was taken.
+      expect(container.read(pendingActionsProvider), {
+        PendingAction.reviewEntry('rv-1'),
+        PendingAction.reviewEntry('rv-2'),
+      });
+
+      repo.release.complete();
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls, isEmpty);
+      expect(
+        shellMessageText(container.read(shellMessengerProvider)),
+        'Decided 2 entries',
+      );
+    });
+  });
+
   group('the two panes', () {
     /// The width the report came from: a 1020-pixel window, less the
     /// shell rail and the console list that used to sit in front of
@@ -978,6 +1224,33 @@ void main() {
       await tester.tap(find.byType(WaxSplitter));
       await tester.pumpAndSettle();
       expect(container.read(reviewListWidthProvider), 0);
+    });
+
+    testWidgets('let j move the cursor off the open entry, and keep it there '
+        'through a rebuild', (tester) async {
+      final repo = FakeRepository()
+        ..reviewEntries = [
+          testReviewEntry('rv-1'),
+          testReviewEntry('rv-2', title: 'Second Album'),
+          testReviewEntry('rv-3', title: 'Third Album'),
+        ];
+      final container = _container(repo);
+      await pumpSurface(tester, container);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pumpAndSettle();
+      // A rebuild from elsewhere: the queue read again.
+      container.invalidate(reviewQueueProvider);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.pumpAndSettle();
+
+      expect(repo.decideReviewCalls.map((c) => c.entryId), ['rv-2']);
+      expect(
+        tester.widget<ReviewEntryView>(find.byType(ReviewEntryView)).entryId,
+        'rv-1',
+        reason: 'the pane keeps the entry it opened',
+      );
     });
 
     testWidgets('give the whole page to the entry rather than a squeezed '

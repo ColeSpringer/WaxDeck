@@ -46,8 +46,9 @@ final class ItemSlot extends NowPlayingSlot {
 }
 
 /// The entry a station holds back (displaced, or queued under it) and
-/// nothing has taken back. Not playing: only the deck offers it, and
-/// every other surface reads it as nothing.
+/// nothing has taken back. Not playing: the deck offers it, the queue
+/// and a cover play take it back, and the transport surfaces read it as
+/// nothing.
 final class ParkedSlot extends NowPlayingSlot {
   const ParkedSlot(this.parked);
 

@@ -14,11 +14,9 @@ import '../tokens/typography.dart';
 import 'controls.dart';
 import 'prose.dart';
 
-/// An empty state: an invitation with exactly one next action.
-///
-/// "No podcasts yet. Follow a show to see new episodes here." plus a
-/// button. Never a shrug, never a dead end. The message is optional: drop
-/// it when the title or the button already says it.
+/// An empty state: a title that names what is empty, an optional line
+/// only for a next step or a consequence the title cannot carry, and at
+/// most one action, offered where the page has no other way forward.
 ///
 /// Fits whatever room it is given, so it needs no wrapper: centred where
 /// there is room, scrolling within a fixed box shorter than itself, its

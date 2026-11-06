@@ -170,7 +170,7 @@ class LyricsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return WaxSidePanel(
-      title: WaxPanel.lyrics.title,
+      title: WaxPanel.lyrics.titleOf(context.l10n),
       semanticsId: SemanticsIds.panel,
       closeSemanticsId: SemanticsIds.panelClose,
       onClose: ref.read(sidePanelProvider.notifier).close,
@@ -246,7 +246,7 @@ class _LyricsSheet extends StatelessWidget {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    WaxPanel.lyrics.title,
+                    WaxPanel.lyrics.titleOf(context.l10n),
                     style: WaxType.headline.copyWith(color: colors.textPrimary),
                   ),
                 ),

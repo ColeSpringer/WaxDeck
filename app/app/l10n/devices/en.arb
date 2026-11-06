@@ -1,6 +1,10 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "devicesAnotherDevice": "another device",
+  "@devicesAnotherDevice": {
+    "description": "Names a device a session plays on when the server knows no name for it: the remote screen's title, and inside the device sentences. Lower case: it is read inside them."
+  },
   "devicesBaseConfigured": "Configured address",
   "@devicesBaseConfigured": {
     "description": "Says a cast address was set by the server's operator rather than found."

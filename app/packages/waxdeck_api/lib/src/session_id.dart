@@ -1,4 +1,5 @@
-/// Client-minted identifiers: listen-session keys and ULIDs.
+/// Client-minted identifiers, listen-session keys and ULIDs, and the ULID
+/// a pid carries.
 library;
 
 import 'dart:math';
@@ -29,6 +30,11 @@ String newListenSessionId() {
   }
   return buffer.toString();
 }
+
+/// [pid] without its type prefix: the item's ULID, which a kind change
+/// keeps while the prefix follows the kind. Whatever matches items across
+/// a kind change keys them by this. A pid with no prefix is its own ULID.
+String ulidOf(String pid) => pid.substring(pid.indexOf('-') + 1);
 
 /// Returns a fresh ULID: a millisecond timestamp and 80 random bits in
 /// Crockford base32, so it sorts by when it was minted and the server's

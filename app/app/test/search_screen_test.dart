@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
@@ -553,6 +554,42 @@ void main() {
     expect(tester.widget<WaxButton>(first).busy, isFalse);
   });
 
+  testWidgets('a directory Add spins while it adds, and once', (tester) async {
+    final gate = Completer<void>();
+    final repository = FakeRepository()
+      ..createStationGate = gate
+      ..searchResults['jazz'] = _results()
+      ..directoryEntries = const <RadioDirectoryEntry>[
+        RadioDirectoryEntry(
+          name: 'Jazz24',
+          streamUrl: 'https://jazz24.example/stream',
+        ),
+        RadioDirectoryEntry(
+          name: 'Jazz Lounge',
+          streamUrl: 'https://lounge.example/stream',
+        ),
+      ];
+    await _pump(tester, repository, initialQuery: 'jazz');
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('radio')),
+    );
+    await tester.pumpAndSettle();
+    final first = waxControl<WaxButton>(SemanticsIds.radioSearchAdd(0));
+    final second = waxControl<WaxButton>(SemanticsIds.radioSearchAdd(1));
+
+    await tester.tap(first);
+    await tester.pump();
+    await tester.tap(first);
+    await tester.pump();
+
+    expect(tester.widget<WaxButton>(first).busy, isTrue);
+    expect(tester.widget<WaxButton>(second).onPressed, isNull);
+    expect(repository.createStationCalls, ['https://jazz24.example/stream']);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(tester.widget<WaxButton>(first).busy, isFalse);
+  });
+
   testWidgets('a Subscribe in flight stays on its show while the results '
       'are asked again', (tester) async {
     // A new query answers new entry objects, the show among them; the
@@ -791,7 +828,9 @@ void main() {
     // case-insensitively, so forget has to mean that one. Every caller
     // today passes a string read off the list; a screen that forgot what
     // was typed rather than what was drawn would not.
-    final container = ProviderContainer();
+    final container = ProviderContainer(
+      overrides: [signedInAccountProvider.overrideWithValue('us-listener')],
+    );
     addTearDown(container.dispose);
     final recents = container.read(recentSearchesProvider.notifier);
 

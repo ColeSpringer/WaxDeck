@@ -624,7 +624,10 @@ paths:
       description: >
         Stores the image in one artwork slot (`role`; an artist's portrait is
         its `front`), and with `writeBack` embeds an album front in its files.
-        Administrators; a playlist's owner, and `managePodcasts` for a show.
+        Administrators; a playlist's owner, and `managePodcasts` for a show
+        whose detail answers the caller (the podcast library in their
+        grants, and explicit content for an explicit show): any other show
+        answers `not-found`.
       tags: [metadata]
       parameters:
         - name: role
@@ -684,7 +687,9 @@ paths:
         is two steps, unpin through the lock endpoint and then clear.
         Catalog entities are administrators-only; a playlist cover is
         cleared by its owner, and a podcast show cover by `managePodcasts`
-        holders as well.
+        holders as well, provided the show's detail answers them (the
+        podcast library in their grants, and explicit content for an
+        explicit show; any other show answers `not-found`).
       tags: [metadata]
       parameters:
         - name: role
@@ -721,7 +726,10 @@ paths:
         and the pin left standing, which says "do not refill this"
         rather than "this has no cover yet". Administrators only, like
         every other catalog-entity curation read, except the podcast
-        pin, which `managePodcasts` holders read too.
+        pin, which `managePodcasts` holders read too for a show whose
+        detail answers them (the podcast library in their grants, and
+        explicit content for an explicit show; any other show answers
+        `not-found`).
 
 
         `locked` for an auxiliary role is the **effective** lock - the
@@ -763,7 +771,9 @@ paths:
         cleared and left pinned. Administrators only, except the podcast
         pin, which `managePodcasts` holders set too - the pin is what
         keeps a hand-set show cover from being refetched on the next
-        feed sync, so it belongs to whoever may set the cover.
+        feed sync, so it belongs to whoever may set the cover, and it
+        needs the show's detail to answer the caller as the cover
+        does.
 
 
         `role` decides the reach. The default `front` writes the
@@ -1216,7 +1226,11 @@ paths:
     get:
       operationId: getEntityCuration
       summary: Read entity edit provenance
-      description: The entity's curated fields with source and time.
+      description: >
+        The entity's curated fields with source and time. An entity
+        none of whose items the caller may see, inside their library
+        grants and content rules, answers `not-found`, as its own reads
+        do.
       tags: [metadata]
       responses:
         "200":

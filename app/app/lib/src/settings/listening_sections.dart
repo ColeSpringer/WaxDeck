@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'prefs_controller.dart';
@@ -115,6 +116,7 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
       _error = null;
     });
     final navigator = Navigator.of(context);
+    final l10n = context.l10n;
     try {
       // An emptied field returns to the server default; without an
       // explicit clear path a saved timezone could never be unset.
@@ -125,11 +127,10 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
       }
       navigator.pop();
     } on WaxDeckApiException catch (e) {
-      // The server's own sentence, not the code's: what a timezone name
-      // may be is the server's rule, and the translation for
-      // `invalid-request` would say only that something was wrong with
-      // the field it is written under.
-      setState(() => _error = e.message);
+      // A refusal keeps the server's sentence (what a timezone name may
+      // be is its rule); anything else, a dropped connection included,
+      // reads from the table in the app's language.
+      setState(() => _error = explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -200,10 +201,10 @@ class SimilarityStatusSection extends ConsumerWidget {
                   )
                 : l10n.settingsSimilarityFallback,
           ),
-          AsyncValue(hasError: true) => WaxOptionRow(
-            key: const Key('similarity-status'),
-            glyph: WaxIcons.errorCircle,
+          AsyncValue(hasError: true) => AsyncFailureCard.from(
+            status,
             title: l10n.settingsSimilarityError,
+            onRetry: () => ref.invalidate(similarityStatusProvider),
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list, count: 1),
         },

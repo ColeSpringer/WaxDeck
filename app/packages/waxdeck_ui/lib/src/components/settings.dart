@@ -24,7 +24,6 @@ class WaxSettingRow extends StatelessWidget {
     required this.title,
     this.help,
     this.info,
-    this.infoSemanticsId,
     required this.control,
     this.glyph,
     super.key,
@@ -39,9 +38,6 @@ class WaxSettingRow extends StatelessWidget {
   /// A sentence the row holds without printing it, behind a [WaxInfoTip]
   /// right after the title, on the title's line.
   final String? info;
-
-  /// The info tip's handle.
-  final String? infoSemanticsId;
 
   /// The switch, picker, or button that changes it.
   final Widget control;
@@ -119,7 +115,7 @@ class WaxSettingRow extends StatelessWidget {
     // the glyph, help line and control set against it, keep their places.
     // Built with no info too, so an info that comes or goes rebuilds the
     // title's line and not the control.
-    return InfoOverRoom(info: info, semanticsId: infoSemanticsId, builder: row);
+    return InfoOverRoom(info: info, builder: row);
   }
 }
 
