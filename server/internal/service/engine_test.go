@@ -452,7 +452,13 @@ func TestARootHeldWhileTheEngineIsAwayGoesInAtItsAnswer(t *testing.T) {
 	if err := bridge.Connect(ctx); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return slices.Contains(bridge.RootNames(), "lib") }, "the held root taken at the answer")
+	// The bridge maps a root before its reload writes the file, and the
+	// offer holds this lock to its end.
+	waitFor(t, func() bool {
+		svc.flowSyncMu.Lock()
+		defer svc.flowSyncMu.Unlock()
+		return slices.Contains(bridge.RootNames(), "lib")
+	}, "the held root taken at the answer")
 	if got := sidecarConfigNames(t, configPath); !slices.Equal(got, []string{"lib"}) {
 		t.Fatalf("config after the answer = %v, want lib", got)
 	}
