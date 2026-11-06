@@ -352,51 +352,29 @@ jobs:
             app/app/build/app/outputs/flutter-apk/app-release.apk > /dev/null
 
   # The compose stack, brought up the way an operator brings it up and
-  # then asked to do something.
-  #
-  # It used to build the two images and stop there, which proved they
-  # assembled and nothing else. So the images are built, tagged as the
-  # names compose.yaml declares, and the stack is started from them:
-  # what that covers is the compose file itself, the internal network,
-  # the seeded config, the shared data volume, the library bind, and a
-  # media fetch end to end.
-  #
-  # What it does not cover, so nobody reads more into a green run than is
-  # there: nothing here transcodes, so the waxflow API key both sides
-  # read is still unproven. A music item resolves to a direct-play URL
-  # that waxdeck serves from the library bind itself, and the one knob
-  # that forces a transcode (voiceBoost) is honored only for podcasts and
-  # audiobooks with measured loudness. waxflow's own HEALTHCHECK is
-  # `waxflow ping` against itself, which a wrong key passes.
-  #
-  # Seeded through the real `make` targets rather than a hand-written
-  # env file, because those targets are themselves part of what a first
-  # run does and a copy here would drift from them.
+  # then asked to do something: the images built under the names
+  # compose.yaml declares, the stack started from them, a media fetch end
+  # to end. Nothing here transcodes (a music item direct-plays from the
+  # library bind); the engine link and key are proven by the health poll.
+  # CORS is left unset so
+  # the default shape boots; the Feishin phase adds it later. Seeded
+  # through the real `make` target, so it cannot drift from a first run.
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      # The analyzer is behind a profile, and a stack that never starts it
-      # never proves the worker token both halves share. CORS is
-      # deliberately NOT here: this job's purpose is the stack an
-      # operator brings up, and the default deployment runs the bare
-      # handler with no origin named - so the boot and the smoke run
-      # that path, and the Feishin phase recreates waxdeck with the
-      # origin only once the default shape has answered.
-      COMPOSE_PROFILES: similarity
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: false # fixtures module only; no go.sum guarantee
+          cache-dependency-path: server/go.sum
       - uses: docker/setup-buildx-action@v4
       # load: true and the exact `image:` names from compose.yaml, so
-      # `up --no-build` finds them locally and cannot quietly rebuild or
-      # pull `latest` from the registry instead of testing this commit.
-      # The Dockerfile's ARG default is the Flutter pin for `docker
-      # compose build` on a dev box; this job builds with the workflow's
-      # own pin and fails first if the two ever drift apart.
+      # `up --no-build` finds them locally instead of pulling `latest`
+      # (WaxSeal alone is pulled, as it is for every user). The
+      # Dockerfile's ARG default is the Flutter pin for `make up`; this
+      # job builds with the workflow's own pin and fails first if the two
+      # ever drift apart.
       - name: Image toolchain pin agrees with CI
         run: grep -qxF "ARG FLUTTER_VERSION=$FLUTTER_VERSION" deploy/Dockerfile
       - uses: docker/build-push-action@v7
@@ -410,22 +388,15 @@ jobs:
             FLUTTER_VERSION=${{ env.FLUTTER_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # The engine at the server's pin, under upstream's name so
+      # --no-build finds it locally.
       - uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/Dockerfile.waxflow
           push: false
           load: true
-          tags: ghcr.io/colespringer/waxdeck-waxflow:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: deploy/Dockerfile.analyzer
-          push: false
-          load: true
-          tags: ghcr.io/colespringer/waxdeck-analyzer:latest
+          tags: ghcr.io/colespringer/waxflow:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
       # Synthesized, never committed: no binary media in git. The full
@@ -435,6 +406,7 @@ jobs:
           set -euo pipefail
           cd fixtures
           go run ./cmd/fixturegen -out "$RUNNER_TEMP/library" -preset all >/dev/null
+          mkdir -p "$RUNNER_TEMP/audiobooks"
           find "$RUNNER_TEMP/library" -mindepth 1 -maxdepth 1 -printf '%f\n' | head
       # Overrides ride deploy/.env (compose hands it to the container
       # verbatim). Matching off, or every push runs paced live
@@ -442,20 +414,34 @@ jobs:
       - name: Seed the deployment config
         run: |
           set -euo pipefail
-          make deploy/.env deploy/waxflow-config/waxflow.json
+          make deploy/.env
           echo "WAXDECK_MATCHING=false" >> deploy/.env
-      # --wait blocks until every container reports healthy (both images
-      # bake HEALTHCHECKs), so "up" already means answering; the curl
-      # only proves the port is published to the host.
+          # The worker step below needs work left for it.
+          echo "WAXDECK_SONIC_ANALYSIS=false" >> deploy/.env
+          echo "WAXDECK_WORKER_TOKENS=$(openssl rand -hex 24)" >> deploy/.env
+      # --wait blocks until every container reports healthy (all three
+      # images bake HEALTHCHECKs), so "up" already means answering. The
+      # poll then proves the server reached the engine over the host
+      # network: extra_hosts, the loopback port, the seeded roots file
+      # and the shared key, which the bridge refuses when wrong.
       - name: Bring the stack up
         env:
-          WAXDECK_LIBRARY: ${{ runner.temp }}/library
+          WAXDECK_MUSIC: ${{ runner.temp }}/library
+          WAXDECK_AUDIOBOOKS: ${{ runner.temp }}/audiobooks
         run: |
           set -euo pipefail
           WAXDECK_UID=$(id -u) WAXDECK_GID=$(id -g) \
             docker compose -f deploy/compose.yaml up -d --wait --no-build
-          curl -sfo /dev/null --retry 5 --retry-delay 1 --retry-all-errors \
-            http://localhost:4420/api/v1/health
+          for _ in $(seq 1 30); do
+            if curl -sf -o "$RUNNER_TEMP/health.json" http://localhost:4420/api/v1/health \
+              && grep -q '"connected":true' "$RUNNER_TEMP/health.json"; then
+              echo "engine connected"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the server never connected to the engine"
+          exit 1
       # The same readiness idiom run-desktop.sh uses: bootstrap the first
       # administrator (a no-op 409 afterwards), log in, and search for
       # something the scan should have found. A stack that comes up and
@@ -523,6 +509,24 @@ jobs:
             exit 1
             ;;
           esac
+      # The worker binary against the stack, as the similarity doc runs it
+      # on another machine. The server's own analysis is off, so the
+      # fixtures wait for the worker: a wrong token exits non-zero at once,
+      # and a posted batch proves the lease, the decode and the report.
+      - name: Run the analysis worker against the stack
+        run: |
+          set -euo pipefail
+          (cd server && go build -o "$RUNNER_TEMP/waxdeck-analyzer" ./cmd/waxdeck-analyzer)
+          WORKER_TOKEN=$(sed -n 's/^WAXDECK_WORKER_TOKENS=//p' deploy/.env)
+          timeout -k 10 --preserve-status 60 env \
+            WAXDECK_ANALYZER_URL=http://localhost:4420 \
+            WAXDECK_ANALYZER_TOKEN="$WORKER_TOKEN" \
+            WAXDECK_ANALYZER_POLL_SECONDS=2 \
+            WAXDECK_ANALYZER_BATCH=3 \
+            "$RUNNER_TEMP/waxdeck-analyzer" > "$RUNNER_TEMP/analyzer.log" 2>&1
+          cat "$RUNNER_TEMP/analyzer.log"
+          grep -q 'posted embeddings' "$RUNNER_TEMP/analyzer.log"
+          ! grep -q 'rejected the worker token\|work cycle failed' "$RUNNER_TEMP/analyzer.log"
       # And now a real client against that stack, rather than an emulated
       # trace of one: Feishin's own web build, from its own compose
       # project (a test fixture, so it lives in e2e/clients rather than
@@ -532,10 +536,11 @@ jobs:
       #
       # Only now, after the default-shape boot has answered: the origin
       # is appended to .env and waxdeck recreated on the changed config.
-      # WAXDECK_LIBRARY rides along or the recreate re-binds to nothing.
+      # The folder paths ride along or the recreate re-binds to nothing.
       - name: Name the Feishin origin
         env:
-          WAXDECK_LIBRARY: ${{ runner.temp }}/library
+          WAXDECK_MUSIC: ${{ runner.temp }}/library
+          WAXDECK_AUDIOBOOKS: ${{ runner.temp }}/audiobooks
         run: |
           set -euo pipefail
           echo "WAXDECK_CORS_ORIGINS=http://localhost:19180" >> deploy/.env

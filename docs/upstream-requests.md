@@ -701,10 +701,25 @@ note.
 
 ## WaxSeal
 
-(nothing outstanding)
+- **Tenant keys from the environment or a file.** `--tenant-keys` is
+  the only way in, so the key sits in the daemon's argv, where `ps`
+  shows it to every local user; on a host with other users that is the
+  stack's shared key, and with it the engine on `127.0.0.1:4418`.
+  Wanted: a `WAXSEAL_TENANT_KEYS` variable or a key file. Shipped
+  workaround: `WAXDECK_SEAL_KEY` gives WaxSeal a key of its own, so what
+  `ps` shows opens WaxSeal alone.
 
 ## WaxFlow
 
+- **A `pid:` resolver that asks the host over HTTP.** The stock build
+  answers `pid:` with 501 and the only resolver seam is a Go hook, so a
+  host wanting location-free source references has to publish its own
+  engine image with a catalog reader linked in, which WaxDeck did and
+  stopped doing. Wanted: a resolver configured by URL (`pid:<id>` becomes
+  a GET the host answers with a root-relative path), so the published
+  image serves pids for any host. Shipped workaround: WaxDeck sends
+  root-relative references and proxies every stream, which needs no pid
+  support.
 - **The in-process analyzer cannot measure a window's bound the way the
   streaming engine does.** `Slice` bounds a window by the declared
   length, and the server package measures an advisory or absent length

@@ -28,12 +28,19 @@ heavier model) can hand the job to an external worker instead:
    comma separate several for rotation) and, usually, flip Sonic
    analysis off in the server settings so the server stops analyzing
    itself.
-2. Run the `waxdeck-analyzer` image (published alongside the server
-   images) anywhere that can reach the server, with
-   `WAXDECK_ANALYZER_URL` pointing at it and
-   `WAXDECK_ANALYZER_TOKEN` set to the same token. The compose
-   template in `deploy/` carries a ready-made service for it under
-   the `similarity` profile.
+2. On the other machine, download `waxdeck-analyzer_<version>_<os>_<arch>`
+   from the release (it sits beside the server archives) and run it:
+
+   ```sh
+   WAXDECK_ANALYZER_URL=http://your-server:4420 \
+   WAXDECK_ANALYZER_TOKEN=<one of WAXDECK_WORKER_TOKENS> \
+   WAXDECK_ANALYZER_FORMAT=flac \
+   ./waxdeck-analyzer
+   ```
+
+   One static binary, no dependencies; keep it running under systemd or
+   whatever the machine uses. From a clone, `go build ./cmd/waxdeck-analyzer`
+   in `server/` builds the same thing.
 
 The reference worker computes the same embedding as the embedded
 analyzer, so switching between them never restarts coverage.

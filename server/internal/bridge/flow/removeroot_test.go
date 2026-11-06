@@ -104,7 +104,8 @@ func TestRemoveRootOfAnUnknownNameAsksNothing(t *testing.T) {
 	var reloads atomic.Int32
 	b := newRootBridge(t, reloadCapsJSON(), path, twoRoots, func(w http.ResponseWriter, r *http.Request) {
 		reloads.Add(1)
-		fmt.Fprint(w, `{"schemaVersion":1,"added":[],"removed":[],"changed":[],"roots":[]}`)
+		served, _ := json.Marshal(configRootNames(t, path))
+		fmt.Fprintf(w, `{"schemaVersion":1,"added":[],"removed":[],"changed":[],"roots":%s}`, served)
 	})
 	if err := b.RemoveRoot(context.Background(), "never"); err != nil {
 		t.Fatalf("RemoveRoot of an unknown name = %v", err)
@@ -366,7 +367,8 @@ func TestARootTakenOffAndTaughtElsewhereMapsTheNewFolder(t *testing.T) {
 	t.Parallel()
 	path := writeTwoRootConfig(t)
 	b := newRootBridge(t, reloadCapsJSON(), path, twoRoots, func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"schemaVersion":1,"added":[],"removed":[],"changed":[],"roots":[]}`)
+		served, _ := json.Marshal(configRootNames(t, path))
+		fmt.Fprintf(w, `{"schemaVersion":1,"added":[],"removed":[],"changed":[],"roots":%s}`, served)
 	})
 	if err := b.RemoveRoot(context.Background(), "books"); err != nil {
 		t.Fatalf("RemoveRoot: %v", err)

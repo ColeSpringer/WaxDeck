@@ -393,7 +393,9 @@ func newFakeSidecar(t *testing.T, configPath, cannotOpen string) (*fakeSidecar, 
 					return
 				}
 			}
-			fmt.Fprint(w, `{"schemaVersion":1,"added":[],"removed":[],"changed":[],"roots":[]}`)
+			// The real engine answers with the roots it now serves.
+			served, _ := json.Marshal(names)
+			fmt.Fprintf(w, `{"schemaVersion":1,"added":[],"removed":[],"changed":[],"roots":%s}`, served)
 		default:
 			http.NotFound(w, r)
 		}

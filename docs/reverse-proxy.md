@@ -6,6 +6,13 @@ compatibility APIs all listen on port 4420. Put a TLS-terminating
 reverse proxy in front before exposing it beyond your LAN, and proxy
 the whole origin to it; do not split paths between servers.
 
+Under compose the server shares the host's network, so a proxy on the
+same host reaches it at `127.0.0.1:4420`, as the examples below do, and
+`WAXDECK_TRUSTED_PROXIES` names `127.0.0.1`; a proxy running in Docker
+reaches it at `host.docker.internal:4420` with
+`extra_hosts: ["host.docker.internal:host-gateway"]`, and the trusted
+address is that proxy's Docker subnet.
+
 Four things trip generic proxy configs:
 
 1. **WebSockets.** `/api/v1/ws` carries live sync and the remote

@@ -9,19 +9,19 @@ git push origin v0.2.0
 
 The release workflow (`.github/workflows/release.yaml`) does the rest:
 
-- **Container images.** Multi-arch (linux/amd64 + linux/arm64) builds
-  of `deploy/Dockerfile`, `deploy/Dockerfile.waxflow`, and
-  `deploy/Dockerfile.analyzer`, pushed to
-  `ghcr.io/colespringer/waxdeck`, `-waxflow`, and `-analyzer`, each
-  tagged with the git tag and `latest`. These are the images
-  `deploy/compose.yaml` references, so `docker compose pull` picks up a
-  release without edits - or pins one, with `WAXDECK_TAG=v1.2.3` in
-  `deploy/.env`.
-- **Server binaries.** The server cross-compiled for linux, macOS, and
-  Windows on amd64 and arm64, each with the web UI embedded
-  (`-tags withweb`), attached to a GitHub Release created from the tag
-  as `waxdeck-server_<version>_<os>_<arch>.tar.gz` (`.zip` on
-  Windows).
+- **Container image.** A multi-arch (linux/amd64 + linux/arm64) build
+  of `deploy/Dockerfile`, pushed to `ghcr.io/colespringer/waxdeck` and
+  tagged with the git tag and `latest`. It is what `deploy/compose.yaml`
+  references, so `docker compose pull` picks up a release without edits
+  - or pins one, with `WAXDECK_TAG=v1.2.3` in `.env`. The engine is the
+  WaxFlow repo's own image; record the version a release was run
+  against beside the WaxSeal note in `docs/configuration.md`, pinned
+  with `WAXFLOW_TAG`.
+- **Binaries.** The server, with the web UI embedded (`-tags withweb`),
+  and the analysis worker, cross-compiled for linux, macOS, and Windows
+  on amd64 and arm64 and attached to a GitHub Release created from the
+  tag as `waxdeck-server_<version>_<os>_<arch>.tar.gz` and
+  `waxdeck-analyzer_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows).
 - **Desktop installers.** The packaging matrix
   (`.github/workflows/package.yaml`, reused via `workflow_call`) runs
   with the tag's version and its artifacts are attached to the same

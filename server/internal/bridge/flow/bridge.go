@@ -1091,9 +1091,33 @@ func (b *Bridge) reloadRootsLocked(ctx context.Context, drop []string) error {
 		// waxerr code, and re-stringifying here would throw that away.
 		return fmt.Errorf("flow: reloading sidecar roots: %w", err)
 	}
+	// An engine reading another file reloads without the root just written
+	// and still answers 200; the root would never stream, so the sync fails
+	// and the file goes back, as it does after a refused reload.
+	if missing := missingRoot(b.snapshotRoots(), drop, delta.Roots); missing != "" {
+		if rerr := writeFileCrashSafe(b.configPath, prev, perm); rerr != nil {
+			b.log.Error("restoring the sidecar config after a mismatched reload",
+				"path", b.configPath, "err", rerr)
+		}
+		return fmt.Errorf("flow: the sidecar reloaded without root %q; it reads a different file than %s", missing, b.configPath)
+	}
 	b.log.Info("waxflow roots reloaded",
 		"added", delta.Added, "removed", delta.Removed, "changed", delta.Changed, "roots", delta.Roots)
 	return nil
+}
+
+// missingRoot is the first root the bridge expects the sidecar to serve
+// that a reload's root list lacks, or "" (also when the list is absent).
+func missingRoot(roots []Root, drop, served []string) string {
+	if served == nil {
+		return ""
+	}
+	for _, r := range roots {
+		if !slices.Contains(drop, r.Name) && !slices.Contains(served, r.Name) {
+			return r.Name
+		}
+	}
+	return ""
 }
 
 // ServeStream is the /media/stream handler: verify the media token,

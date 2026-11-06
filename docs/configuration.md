@@ -8,15 +8,19 @@ something beyond them.
 
 ## How configuration reaches the server
 
-Under compose, `deploy/.env` is handed to the waxdeck container
-verbatim (`env_file`), so any `WAXDECK_*` variable you set there
-reaches the server as-is - adding a line to `.env` is all it takes,
-with no compose editing. The exceptions are the topology variables
-compose sets itself to wire the containers together
-(`WAXDECK_ADDR`, `WAXDECK_DATA_DIR`, `WAXDECK_LIBRARY_ROOTS`,
-`WAXDECK_FLOW_URL`, `WAXDECK_FLOW_CONFIG`, `WAXDECK_PODCAST_DIR`,
-`WAXDECK_PODCAST_ROOT_NAME`); those win over `.env`, because changing
-them would detach the server from its own volumes and sidecar.
+Under compose, `.env` is handed to the waxdeck container verbatim
+(`env_file`), so any `WAXDECK_*` variable you set there reaches the
+server as-is - adding a line to `.env` is all it takes, with no compose
+editing. The exceptions are the topology variables compose sets itself
+to wire the containers together (`WAXDECK_DATA_DIR`,
+`WAXDECK_LIBRARY_ROOTS`, `WAXDECK_AUDIOBOOK_ROOTS`, `WAXDECK_FLOW_CONFIG`,
+`WAXDECK_FLOW_API_KEY`, `WAXDECK_SEAL_API_KEY`, `WAXDECK_PODCAST_DIR`,
+`WAXDECK_PODCAST_ROOT_NAME`);
+those win over `.env`, because changing them would detach the server
+from its own volumes and sidecars. `WAXDECK_FLOW_URL` and
+`WAXDECK_SEAL_URL` stay `.env` lines on purpose: each is half of the
+switch that runs its sidecar (see [What runs beside the
+server](#what-runs-beside-the-server)).
 
 Running the bare binary instead, nearly every variable below is also a
 command-line flag (`WAXDECK_COOKIE_SECURE` is `-cookie-secure`, and so
@@ -34,42 +38,41 @@ of them where the topology demands it.
 
 ## Compose-only variables
 
-Read by compose itself, not the server.
+Read by compose itself, not the server. Paths resolve beside
+`compose.yaml` (`deploy/` in a clone).
 
-- `WAXDECK_LIBRARY` (default `./library`, resolved beside
-  `compose.yaml`): host path of your music library. WaxDeck mounts it
-  read-write (it manages imports and sidecars); WaxFlow mounts the
-  same path read-only.
-- `WAXDECK_UID` / `WAXDECK_GID` (default `10001`): the user the
-  containers run as, so they can write into the library above. `make
-  up` sets them to the user that runs it; for a bare `docker compose
-  up`, set them to the owner of `WAXDECK_LIBRARY`, or leave the image
-  default and make the library writable by uid 10001.
-- `WAXDECK_TAG` (default `latest`): image tag of the stack, for
-  pinning a release (`WAXDECK_TAG=v1.0.0`).
-- `WAXDECK_AUDIOBOOKS`: host path of an audiobook folder kept apart
-  from the music library. Set, `make up` adds
-  `deploy/compose.audiobooks.yaml`, which mounts it as the root
-  `books`, adds it to `WAXDECK_LIBRARY_ROOTS` and names it in
-  `WAXDECK_AUDIOBOOK_ROOTS`; those two values then come from that file,
-  whatever `deploy/.env` sets them to. By hand it is `docker compose -f
-  deploy/compose.yaml -f deploy/compose.audiobooks.yaml`.
-- `WAXFLOW_API_KEYS`: API keys the WaxFlow sidecar accepts, comma
-  separated; generate each with `openssl rand -hex 24`. `make up`
-  seeds one. `WAXDECK_FLOW_API_KEY` must be one of these values.
-- The optional WaxSeal sidecar takes no key list of its own: compose
-  hands it `WAXDECK_SEAL_API_KEY` (see YouTube below) as its single
-  tenant key, so the key the daemon requires and the key WaxDeck sends
-  cannot drift apart. It reaches the daemon as a `--tenant-keys` flag
-  rather than an environment variable, which is why compose spells the
-  sidecar's whole command out. Left empty the sidecar runs keyless: it
-  accepts any key, including none, from anything that can reach the
-  internal network.
+- `WAXDECK_MUSIC` (default `./music`) and `WAXDECK_AUDIOBOOKS` (default
+  `./audiobooks`): host paths of your music and your audiobooks. Both
+  are mounted read-write into the server, which manages imports and
+  sidecar files there, and read-only into the engine; they are the
+  roots `music` and `books`, the second an audiobook root, so a folder
+  of plain MP3 parts needs no tagging. An empty folder is fine.
+- `WAXDECK_UID` / `WAXDECK_GID`: the user the server and the engine run
+  as, so they can write into the folders above. The example sets
+  `1000`, the usual first user; `make up` sets them to the user that
+  runs it. The images' own user is 10001.
+- `WAXDECK_INTERNAL_KEY`: the one secret the server shares with its
+  sidecars. Compose hands it to the engine as its key list, to the
+  server as the key it presents, and to WaxSeal as its single tenant
+  key, so the key required and the key sent cannot drift apart. Any
+  long random string; `make up` generates one, and the stack refuses
+  to start without it.
+- `WAXDECK_SEAL_KEY`: a key of WaxSeal's own, used in place of the shared
+  one for that sidecar. WaxSeal takes its key on the command line, where
+  any local user can read it, so on a host with other users a separate
+  key keeps the engine's key out of sight.
+- `WAXDECK_ENGINE` and `WAXDECK_SEAL` (default `1`): how many of the
+  engine and of WaxSeal run, `1` or `0`. See [What runs beside the
+  server](#what-runs-beside-the-server).
+- `WAXDECK_TAG` and `WAXFLOW_TAG` (default `latest`): image tags of the
+  server and of the engine, for pinning a release
+  (`WAXDECK_TAG=v1.0.0`).
 
 ## Address, data, and identity
 
-- `WAXDECK_ADDR` (default `:4420`): listen address. The one published
-  port of the compose stack.
+- `WAXDECK_ADDR` (default `:4420`): listen address. Under compose the
+  server shares the host's network, so the default binds the host's
+  port 4420 directly.
 - `WAXDECK_DATA_DIR` (default `./data`): data directory (waxbin.db +
   waxdeck.db, the secret keyfile, and by default the podcast
   downloads).
@@ -121,8 +124,8 @@ Read by compose itself, not the server.
 
 - `WAXDECK_LIBRARY_ROOTS`: library roots as `name=path` pairs, comma
   separated. Root names must match the WaxFlow roots serving the same
-  directories; under compose this is pinned to `lib=/library` (plus
-  `books=/audiobooks` when `WAXDECK_AUDIOBOOKS` is set). A root
+  directories; under compose this is pinned to
+  `music=/music,books=/audiobooks`. A root
   overlapping a library added in the console is left out, with a
   warning in the log. A root set here is registered as Mixed - each
   file classified by its own tags - unless `WAXDECK_AUDIOBOOK_ROOTS`
@@ -136,17 +139,14 @@ Read by compose itself, not the server.
   a folder of plain MP3 parts needs no tagging. The setting wins at every
   start, so a named root is put back to Books whatever set it otherwise
   (the `waxbin` CLI, or the console before the root was named); the
-  console does not offer to change it. Under compose, set
-  `WAXDECK_AUDIOBOOKS` in `deploy/.env` to
-  your audiobook folder instead; `make up` mounts it as the root `books`
-  and pins this to `books` (`deploy/compose.audiobooks.yaml`), over any
-  value `deploy/.env` gives it.
+  console does not offer to change it. Under compose this is pinned to
+  `books`, the folder `WAXDECK_AUDIOBOOKS` names.
 - `WAXDECK_MANAGED_ROOTS`: root names (comma separated) the catalog
   may place files into - uploads import there and the organizer may
   move files there; unlisted roots stay strictly in place. The compose
-  library is WaxDeck-managed by design, so `deploy/.env` seeds `lib`;
-  set it empty to keep the library strictly scan-only, or point it at
-  a separate root if your main library is managed by beets or Picard.
+  folders are WaxDeck-managed by design, so the example seeds
+  `music,books`; set it empty to keep them strictly scan-only, or name
+  only `books` if your music is managed by beets or Picard.
 - `WAXDECK_SCAN_ON_START` (default `true`): launch a library scan at
   startup. A scan is incremental - files whose size and mtime are
   unchanged are skipped. The rescan action (the admin libraries
@@ -179,7 +179,9 @@ Read by compose itself, not the server.
 
 WaxDeck works without an engine (originals stream directly); the
 engine adds transcoding, gapless timelines, voice boost, and the file
-tools. Under compose the three settings below are wired for you.
+tools. Under compose the engine runs by default and the three settings
+below are wired; `WAXDECK_ENGINE=0` with an empty `WAXDECK_FLOW_URL` in
+`.env` runs without it.
 
 - `WAXDECK_FLOW_URL`: WaxFlow sidecar base URL (empty serves originals
   directly: no transcoding, gapless timelines or voice boost). The
@@ -190,10 +192,15 @@ tools. Under compose the three settings below are wired for you.
   not serve progressive streams) is logged once as an error naming what
   it lacks and stays not connected; the server keeps asking it, so an
   upgraded sidecar is taken on without a restart.
-- `WAXDECK_FLOW_API_KEY`: the key WaxDeck presents to the sidecar;
-  must be one of the values in `WAXFLOW_API_KEYS`.
+- `WAXDECK_FLOW_API_KEY`: the key WaxDeck presents to the sidecar, one
+  of the engine's `WAXFLOW_API_KEYS`; under compose both are
+  `WAXDECK_INTERNAL_KEY`.
 - `WAXDECK_FLOW_CONFIG`: the sidecar's JSON config file as WaxDeck
-  sees it. WaxDeck owns the file and rewrites its roots when a library
+  sees it. One that does not exist when the server starts is written
+  with the configured roots, which is how the compose stack seeds it:
+  the server starts first, and the engine then reads
+  `/waxflow/waxflow.json` from the volume the two share. WaxDeck owns
+  the file and rewrites its roots when a library
   is created at runtime, then asks the sidecar to reload, so the new
   root streams without a restart. While the sidecar is not answering, a
   removed root still leaves the file, and a new one waits for its
@@ -370,19 +377,21 @@ root).
   thumbnail as cover art on acquired audio (cropped to its square
   where the source is letterboxed release art) until enrichment finds
   official artwork.
-- `WAXDECK_YOUTUBE_SPONSORBLOCK`: SponsorBlock categories to cut from
-  acquired audio, comma separated (for example `sponsor,selfpromo`).
-  Empty disables cutting.
+- `WAXDECK_YOUTUBE_SPONSORBLOCK` (default `sponsor,music_offtopic`):
+  SponsorBlock categories to cut from acquired audio, comma separated;
+  the default drops sponsor reads and the non-music parts of a music
+  video. Set it empty to keep every second.
 - `WAXDECK_SEAL_URL` / `WAXDECK_SEAL_API_KEY`: the optional WaxSeal
   attestation sidecar, which unlocks the full-quality path. Under
-  compose: start it with `--profile youtube` and uncomment
-  `WAXDECK_SEAL_URL=http://waxseal:4416` in `deploy/.env`. Without that
-  URL the sidecar runs and is never contacted, and acquisitions stay on
-  the key-free path. `WAXDECK_SEAL_API_KEY` is the whole key story -
-  `make up` mints one, and compose gives it to the daemon as its only
-  tenant key and to WaxDeck as the key it sends, so the key required
-  and the key presented cannot drift apart. The container's health is
-  the image's own probe, which since WaxSeal v1.3.0 needs no key: it
+  compose it runs by default, `WAXDECK_SEAL=1` with
+  `WAXDECK_SEAL_URL=http://waxseal:4416` in `.env`, and `0` with an
+  empty URL runs without it; the key is the stack's `WAXDECK_INTERNAL_KEY`
+  (or `WAXDECK_SEAL_KEY` when set),
+  which compose gives to the daemon as its only tenant key and to
+  WaxDeck as the key it sends, so the two cannot drift apart. Without
+  the URL acquisitions stay on the key-free path. The container's
+  health is the image's own probe, which since WaxSeal v1.3.0 needs no
+  key: it
   checks the shared browser and relaunches a dead one. An image cached
   from before that answers a keyed daemon 401 and reports unhealthy
   until `docker compose pull waxseal`; the sidecar still serves.
@@ -403,8 +412,11 @@ root).
 ## Casting and jukebox
 
 See [Connect and casting](connect-and-casting.md) for the network
-shapes; under compose, discovery needs the `cast` profile's
-host-network instance because multicast never crosses the bridge.
+shapes. Under compose the server shares the host's network, so
+discovery works as shipped; on Docker Desktop, or with the server moved
+onto Docker's network, multicast never arrives, so list devices with
+the two variables below and set `WAXDECK_ADVERTISE_BASE` to the host's
+LAN address.
 
 - `WAXDECK_ADVERTISE_BASE`: plain-HTTP LAN base URL cast devices fetch
   media from (empty auto-detects the LAN address).
@@ -434,7 +446,7 @@ architecture.
   setting is first saved.
 - `WAXDECK_WORKER_TOKENS`: tokens the server accepts from external
   analysis workers, comma separated; empty disables the worker API.
-  `make up` seeds one. Pair a worker with
+  Pair a worker with
   `WAXDECK_SONIC_ANALYSIS=false` when the server should stop analyzing
   itself.
 - `WAXDECK_WORKER_LOCAL_PATHS` (default `false`): expose
@@ -442,8 +454,9 @@ architecture.
   with the library mounted read-only decodes locally instead of
   pulling audio over HTTP.
 
-The bundled worker (`--profile similarity`, or the standalone
-`waxdeck-analyzer` binary) reads its own variables:
+The `waxdeck-analyzer` binary (a release artifact, run on the other
+machine as [the similarity worker](similarity-worker.md) shows) reads
+its own variables:
 
 - `WAXDECK_ANALYZER_URL`: the WaxDeck server to pull work from.
 - `WAXDECK_ANALYZER_TOKEN`: one of the server's worker tokens,
@@ -457,16 +470,22 @@ The bundled worker (`--profile similarity`, or the standalone
 - `WAXDECK_ANALYZER_BATCH` (default `10`): work items leased and
   posted per cycle (1 to 50).
 
-## Compose profiles
+## What runs beside the server
 
-Optional services, started by name:
+Two optional parts, both on by default, each a `1`/`0` count in `.env`
+plus the address the server reaches it at. Change both, then
+`docker compose up -d` (`make up` from a clone, which also passes the
+dev tags and your uid): a part at `0` has no container at all, and a
+URL left behind points the server at a sidecar that is gone (a standing
+warning for the engine, degraded acquisitions for WaxSeal). Both bind
+the host's loopback on the host network, so the stack publishes no
+port anywhere; the server reaches them through `extra_hosts`.
 
-- `docker compose --profile youtube up -d`: the WaxSeal sidecar
-  (full-quality YouTube).
-- `docker compose --profile similarity up -d`: the bundled analysis
-  worker.
-- `docker compose --profile cast up -d`: a second waxdeck on host
-  networking that can discover cast devices.
+- The streaming engine: `WAXDECK_ENGINE=1` with
+  `WAXDECK_FLOW_URL=http://waxflow:4418`. Without it originals play
+  directly.
+- WaxSeal, full-quality YouTube through a headless browser:
+  `WAXDECK_SEAL=1` with `WAXDECK_SEAL_URL=http://waxseal:4416`.
 
-(`make up` reads `COMPOSE_PROFILES` from your environment, so
-`COMPOSE_PROFILES=similarity make up` works too.)
+Sonic analysis is the server's own (`WAXDECK_SONIC_ANALYSIS` and the
+switch in the server settings); the worker binary is for another machine.

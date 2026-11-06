@@ -30,10 +30,11 @@ git clone https://github.com/ColeSpringer/WaxDeck.git && cd WaxDeck
 make up
 ```
 
-The first run writes `deploy/.env`; point `WAXDECK_LIBRARY` in it at
-your music and `make up` again. Open http://localhost:4420 and create
-the administrator. `make down` stops the stack and keeps your data;
-your library is bind-mounted, never copied.
+The first run writes `deploy/.env`; point `WAXDECK_MUSIC` and
+`WAXDECK_AUDIOBOOKS` in it at your folders and `make up` again. Open
+http://localhost:4420 and create the administrator. `make down` stops
+the stack and keeps your data; your media are bind-mounted, never
+copied.
 
 Without Docker, `make run` (Go and Flutter, versions per CI) serves the same
 thing as a single binary with the web UI embedded: originals stream
@@ -42,13 +43,22 @@ when you add the streaming engine.
 [Getting started](docs/getting-started.md) covers both paths end to
 end.
 
-To run compose directly rather than through `make up`:
+Without a clone, two files are the whole install:
 
 ```sh
-cd deploy && cp .env.example .env   # edit paths and keys
-mkdir -p waxflow-config && cp waxflow-config.example.json waxflow-config/waxflow.json
+mkdir -p waxdeck/music waxdeck/audiobooks && cd waxdeck
+curl -fsSLO https://raw.githubusercontent.com/ColeSpringer/WaxDeck/main/deploy/compose.yaml
+curl -fsSL https://raw.githubusercontent.com/ColeSpringer/WaxDeck/main/deploy/.env.example -o .env
+chmod 600 .env
+# .env: your music and audiobook folders, your uid and gid, a key (openssl rand -hex 24)
 docker compose up -d
 ```
+
+The stack is the server, the streaming engine, and WaxSeal for
+full-quality YouTube; each sidecar is two lines in `.env` (its count
+and its URL) to turn off. The
+stack shares the host's network so casting works; Docker Desktop users
+add the small override file from [getting started](docs/getting-started.md).
 
 ## Clients
 

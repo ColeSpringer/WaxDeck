@@ -1,60 +1,33 @@
 # syntax=docker/dockerfile:1
-# The WaxFlow streaming sidecar, WaxDeck's flavored build: the stock
-# waxflow CLI plus a catalog resolver answering pid: sources against
-# waxbin.db. No stock WaxFlow build resolves pid: references; this
-# image is what makes src=pid:<ULID> (and direct mode) work.
-#
-# Build context is the REPO ROOT:
-#   docker build -f deploy/Dockerfile.waxflow .
-#
-# The layout mirrors upstream WaxFlow's own Dockerfile (distroless
-# static, UID 10001, /data + /cache state dirs, ping healthcheck).
+# Stock WaxFlow at the version server/go.mod pins, for `make up` only.
+# Users run ghcr.io/colespringer/waxflow (the WaxFlow repo publishes it);
+# compose.yaml never references this file. Build context: REPO ROOT.
 
-## --- stage 1: build -------------------------------------------------------------
-# Cross-compiles from the build host so multi-arch release builds never
-# emulate the Go toolchain; the distroless runtime stage is pull-only.
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
-
 WORKDIR /src
-# Both go.mods: the server module replaces the sibling fixtures module by
-# relative path. Download is its own layer so source edits reuse it.
+# Both go.mods: the server module replaces the sibling fixtures module.
 COPY server/go.mod server/go.sum server/
 COPY fixtures/go.mod fixtures/go.sum fixtures/
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    cd server && go mod download
-COPY server/ server/
-COPY fixtures/ fixtures/
-ARG VERSION=dev
 ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     cd server && \
+    version=$(go list -m -f '{{.Version}}' github.com/colespringer/waxflow/cli) && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
-      -ldflags "-s -w -X main.version=${VERSION}" \
-      -o /out/waxflow ./cmd/waxflow-catalog
-# World-writable so the sidecar accepts whatever UID the compose stack runs it
-# as (it shares the catalog volume with waxdeck, which runs as the host user).
-RUN mkdir -p /out/state/data /out/state/cache \
-    && chown -R 10001:10001 /out/state \
-    && chmod -R 0777 /out/state
+      -ldflags "-s -w -X main.version=${version}" \
+      -o /out/waxflow github.com/colespringer/waxflow/cli/cmd/waxflow
+RUN mkdir -p /out/state/data /out/state/cache && chown -R 10001:10001 /out/state
 
-## --- stage 2: runtime -----------------------------------------------------------
 FROM gcr.io/distroless/static-debian12
-
 LABEL org.opencontainers.image.source="https://github.com/ColeSpringer/WaxDeck" \
-      org.opencontainers.image.description="WaxDeck's WaxFlow streaming sidecar: the stock waxflow CLI plus a catalog resolver for pid: sources" \
-      org.opencontainers.image.licenses="GPL-3.0-only"
-
+      org.opencontainers.image.description="WaxFlow at the version WaxDeck's dev stack pins" \
+      org.opencontainers.image.licenses="MIT"
 COPY --from=build /out/waxflow /usr/local/bin/waxflow
 COPY --from=build /out/state/ /
-
 USER 10001:10001
 ENV WAXFLOW_DATA_DIR=/data \
     WAXFLOW_CACHE_DIR=/cache
 EXPOSE 4418
-
-# start-interval: probe every 2s until first success, so --wait is fast.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s \
   CMD ["/usr/local/bin/waxflow", "ping"]
 ENTRYPOINT ["/usr/local/bin/waxflow"]

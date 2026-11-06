@@ -36,7 +36,7 @@ function sidecarPid(): { pid: number; why: string } {
   } catch {
     return none(`the sidecar pid ${pid} is not running`);
   }
-  if (path.basename(name.trim()) !== 'waxflow-catalog') {
+  if (path.basename(name.trim()) !== 'waxflow') {
     return none(`pid ${pid} is ${name.trim() || 'unnamed'}, not the sidecar`);
   }
   return { pid, why: '' };

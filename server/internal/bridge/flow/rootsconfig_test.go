@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -151,6 +153,119 @@ func TestRootsConfigRefusesMissingFile(t *testing.T) {
 	}
 	if _, statErr := os.Stat(path); statErr == nil {
 		t.Error("readRootsConfig created the file; it must not invent one")
+	}
+}
+
+func TestSeedRootsConfigWritesAMissingFileOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "waxflow.json")
+	roots := []Root{{Name: "music", Path: "/music"}, {Name: "podcasts", Path: "/podcasts"}}
+	created, err := SeedRootsConfig(path, roots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created {
+		t.Fatal("SeedRootsConfig on a missing file reported created = false")
+	}
+	first, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]json.RawMessage
+	if err := json.Unmarshal(first, &cfg); err != nil {
+		t.Fatalf("the seeded file is not a JSON object: %v", err)
+	}
+	if len(cfg) != 1 || cfg["roots"] == nil {
+		t.Errorf("seeded keys = %v, want roots alone", slices.Sorted(maps.Keys(cfg)))
+	}
+	var got []Root
+	if err := json.Unmarshal(cfg["roots"], &got); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, roots) {
+		t.Errorf("seeded roots = %v, want %v in that order", got, roots)
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o644 {
+			t.Errorf("mode = %v, want 0644: the engine may read it as another user", info.Mode().Perm())
+		}
+	}
+
+	created, err = SeedRootsConfig(path, []Root{{Name: "other", Path: "/other"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created {
+		t.Error("SeedRootsConfig on an existing file reported created = true")
+	}
+	if again, _ := os.ReadFile(path); string(again) != string(first) {
+		t.Error("SeedRootsConfig rewrote a file that already existed")
+	}
+}
+
+// The engine refuses duplicate root names at start, so the seed keeps the
+// first entry per name, as the reload path's merge does.
+func TestSeedRootsConfigKeepsOneEntryPerName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "waxflow.json")
+	roots := []Root{{Name: "music", Path: "/music"}, {Name: "music", Path: "/podcasts"}, {Name: "books", Path: "/books"}}
+	if _, err := SeedRootsConfig(path, roots); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Roots []Root `json:"roots"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if want := []Root{{Name: "music", Path: "/music"}, {Name: "books", Path: "/books"}}; !slices.Equal(cfg.Roots, want) {
+		t.Errorf("seeded roots = %v, want %v", cfg.Roots, want)
+	}
+}
+
+// A reload the engine answers without a root the bridge just wrote means
+// it reads another file: the root would never stream, so the sync fails
+// naming the path and the file goes back.
+func TestReloadRootsRefusesAnEngineReadingAnotherFile(t *testing.T) {
+	path := writeConfig(t, t.TempDir())
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := newRootBridge(t, reloadCapsJSON(), path, []Root{{Name: "lib", Path: "/library"}}, func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"schemaVersion":1,"added":[],"removed":[],"changed":[],"roots":["lib"]}`)
+	})
+	b.AddRoot("books", "/b")
+	err = b.ReloadRoots(context.Background())
+	if err == nil || !strings.Contains(err.Error(), path) {
+		t.Fatalf("ReloadRoots = %v, want an error naming %s", err, path)
+	}
+	if after, _ := os.ReadFile(path); string(after) != string(before) {
+		t.Error("the config file was not restored after the mismatch")
+	}
+}
+
+func TestSeedRootsConfigLeavesAnExistingFileAlone(t *testing.T) {
+	path := writeConfig(t, t.TempDir())
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := SeedRootsConfig(path, []Root{{Name: "music", Path: "/music"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created {
+		t.Error("SeedRootsConfig reported created = true over an existing file")
+	}
+	if after, _ := os.ReadFile(path); string(after) != string(before) {
+		t.Error("SeedRootsConfig changed an existing file")
 	}
 }
 

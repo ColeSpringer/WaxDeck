@@ -25,9 +25,9 @@ import (
 // user it runs as, so neither widening nor narrowing it is WaxDeck's
 // call.
 //
-// A missing file is not created: the sidecar was started against this
-// path, so its absence means the two are looking at different files and
-// a reload would silently reconcile against something else.
+// A missing file is not created here (SeedRootsConfig does that at
+// startup): at reload time the sidecar was started against this path, so
+// absence means the two are looking at different files.
 func readRootsConfig(path string) ([]byte, os.FileMode, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -41,6 +41,27 @@ func readRootsConfig(path string) ([]byte, os.FileMode, error) {
 		return nil, 0, fmt.Errorf("flow: reading sidecar config: %w", err)
 	}
 	return raw, info.Mode().Perm(), nil
+}
+
+// SeedRootsConfig writes a roots-only config when none exists at path and
+// reports whether it did: at startup a missing file means the engine has
+// not run yet, while readRootsConfig keeps refusing one at reload time.
+func SeedRootsConfig(path string, roots []Root) (bool, error) {
+	if _, err := os.Stat(path); err == nil {
+		return false, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, fmt.Errorf("flow: looking for sidecar config: %w", err)
+	}
+	// The reload path's merge, so the two agree and a name appears once:
+	// the engine refuses duplicate root names at start.
+	out, err := mergeRootsConfig(nil, path, roots)
+	if err != nil {
+		return false, err
+	}
+	if err := writeFileCrashSafe(path, out, 0o644); err != nil {
+		return false, fmt.Errorf("flow: writing sidecar config: %w", err)
+	}
+	return true, nil
 }
 
 // SeedRoots is a bridge's starting roots: those the sidecar's file holds.

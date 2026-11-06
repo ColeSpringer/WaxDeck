@@ -600,30 +600,31 @@ says (with **Re-read unchanged files** on, unless the move was onto
 Books). A root named in `WAXDECK_AUDIOBOOK_ROOTS` is always Books and
 cannot be changed here.
 
-The compose stack mounts one library, `lib`, registered as Mixed. An
-audiobook folder kept apart from it is mounted as a second library by
-setting `WAXDECK_AUDIOBOOKS` in `deploy/.env`: `make up` then adds it as
-the root `books`, declared Books. A folder added in the console instead
-has to be inside a volume both containers mount.
+The compose stack mounts two libraries: `music` (`WAXDECK_MUSIC`),
+registered as Mixed, and `books` (`WAXDECK_AUDIOBOOKS`), declared Books.
+A folder added in the console instead has to be inside a volume both
+containers mount.
 
 Streaming needs the engine to mount the same root, which it can learn at
 runtime. Point both sides at one JSON config file - `WAXDECK_FLOW_CONFIG`
 for the server, `WAXFLOW_CONFIG` for the engine - and creating a library
 rewrites the file's `roots` array and asks the engine to reconcile. A
-configured root the file does not list yet (`books` the first time it is
-mounted) is added the same way when the server starts. While the engine
+server that finds no file at startup writes one with its configured
+roots, and a configured root an existing file does not list is added the
+same way when the server starts. While the engine
 is not answering (still starting, or stopped), a removed library still
 leaves the file at once, so the engine never starts on a folder that is
 gone, and the reload follows once it answers. A new one waits for that
 answer instead: only a reload checks that the engine can open a path,
-so one it cannot open never reaches the file it starts from.
-`make up` wires this and seeds the file; the compose service mounts the
-directory read-write into WaxDeck and read-only into the engine, and
-both containers run as the same UID (as they already must for the shared
-catalog volume). Under compose the file holds roots only:
-`WAXFLOW_API_KEYS` and `WAXFLOW_CATALOG_DB` stay environment variables,
-and the engine reapplies environment precedence on every reload, so they
-keep working untouched.
+so one it cannot open never reaches the file it starts from (the
+configured roots a first start seeds are the exception, which is why
+compose mounts them in both containers). A reload the engine answers
+without the root just written means it reads another file; the create
+then fails naming the path. Under
+compose the file lives in the `waxflow` volume both containers mount,
+which is also why both run as the same user; it holds roots only, and
+`WAXFLOW_API_KEYS` stays an environment variable the engine reapplies on
+every reload.
 
 Two limits are worth knowing. The engine advertises whether it reloads
 at all (`delivery.rootsReload`), and it only does so when its roots come

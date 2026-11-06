@@ -5,8 +5,8 @@ podcasts, and audiobooks. One server, one origin: the REST API, the
 streaming surface, and the web UI all listen on port 4420.
 
 There are two ways to run it. **`make up`** brings up the full,
-realistic instance in Docker (the server plus the streaming engine),
-and is the one to use for actual testing. **`make run`** is a faster
+realistic instance in Docker (the server, the streaming engine and
+WaxSeal), and is the one to use for actual testing. **`make run`** is a faster
 single-binary path for iterating on the app; it has no streaming
 engine. Everything below the "Run with Docker Compose" section covers
 `make run`.
@@ -27,12 +27,12 @@ is a first run, asking you to create the administrator again. Your music
 is a bind mount rather than a volume, so neither command touches it -
 nor `deploy/.env`, which holds your keys and settings.
 
-`make up` writes `deploy/.env` with fresh internal keys on the first
-run. Set `WAXDECK_LIBRARY` in it to point at your music (it defaults to
-an empty `deploy/library`), then `make up` again. Open
-`http://localhost:4420`; the server scans the library at startup, so
-use the rescan endpoint or restart after adding files. Uploads and
-YouTube downloads are enabled and land in the library out of the box.
+`make up` writes `deploy/.env` with a fresh internal key on the first
+run. Set `WAXDECK_MUSIC` and `WAXDECK_AUDIOBOOKS` in it to your folders
+(they default to empty `deploy/music` and `deploy/audiobooks`), then
+`make up` again. Open `http://localhost:4420`; the server scans the
+folders at startup and watches them afterwards. Uploads and YouTube
+downloads are enabled and land in the matching folder out of the box.
 
 That file is also where every other setting goes: compose hands it to
 the server verbatim, so adding a `WAXDECK_*` line to `deploy/.env` and
@@ -41,17 +41,45 @@ the server verbatim, so adding a `WAXDECK_*` line to `deploy/.env` and
 - single sign-on, scrobbling, casting, similarity workers, and the
 rest.
 
-The stack is two services. `waxdeck` owns the catalog, the API, and the
-web UI, and is the only published port. `waxflow` is the streaming
-engine (WaxDeck's own build of the WaxFlow engine, an optional upgrade
-rather than a requirement; see below); it lives on the internal network
-and every stream is proxied through the WaxDeck origin, so clients, cast
-devices, and reverse proxies only ever need to reach one address.
+Without a clone, the install is the two files from `deploy/`:
+`compose.yaml`, and `.env.example` saved as `.env` beside it with five
+lines edited (the two folders, your uid and gid, a key), then
+`docker compose up -d`. Create the two folders first: Docker creates a
+missing one root-owned, and uploads into it then fail. The README has
+the commands.
 
-(The underlying command is `docker compose -f deploy/compose.yaml up`;
-`make up` wraps it with the key generation and seeds the engine's roots
-file from `deploy/waxflow-config.example.json`. Running compose directly
-needs both of those in place first -- see the README's compose snippet.)
+The stack is three services. `waxdeck` owns the catalog, the API and
+the web UI, and shares the host's network so Chromecast and DLNA
+discovery work; it is the one address clients and reverse proxies
+reach, since every stream is proxied through it. `waxflow` is the
+streaming engine, WaxFlow's own image, and `waxseal` unlocks
+full-quality YouTube. Both run by default; each is two lines in `.env`
+to turn off, its `1`/`0` count and its URL (see [What runs beside the
+server](configuration.md#what-runs-beside-the-server)). The sidecars
+share the host's network too and bind its loopback, so nothing in the
+stack publishes a port.
+
+On Docker Desktop a container cannot join your LAN, and rootless Docker
+or a userns-remapped daemon cannot share the host's network either.
+There, and on any host that wants the stack off its network, save this
+beside `compose.yaml` as `compose.override.yaml` (compose reads it on
+its own) and list cast devices and `WAXDECK_ADVERTISE_BASE` in `.env`;
+`make up` applies the same override itself:
+
+```yaml
+services:
+  waxdeck:
+    network_mode: !reset null
+    extra_hosts: !reset []
+    ports: ["4420:4420"]
+  waxflow:
+    network_mode: !reset null
+    environment:
+      WAXFLOW_ADDR: 0.0.0.0:4418
+  waxseal:
+    network_mode: !reset null
+    command: ["server", "--host", "0.0.0.0", "--tenant-keys", "${WAXDECK_SEAL_KEY:-${WAXDECK_INTERNAL_KEY:-}}"]
+```
 
 ## Run from source
 
@@ -64,13 +92,13 @@ config there once instead of retyping it:
 
 ```sh
 # .env
-WAXDECK_LIBRARY_ROOTS=lib=/path/to/music
-WAXDECK_MANAGED_ROOTS=lib
+WAXDECK_LIBRARY_ROOTS=music=/path/to/music
+WAXDECK_MANAGED_ROOTS=music
 ```
 
 It rebuilds the embedded web UI whenever the Dart sources changed, so
 it never serves a stale build. (You can also run the binary directly
-with the same env: `WAXDECK_LIBRARY_ROOTS=lib=/path ./server/waxdeck`
+with the same env: `WAXDECK_LIBRARY_ROOTS=music=/path ./server/waxdeck`
 after `make web build`.)
 
 That alone plays: without a streaming engine configured, WaxDeck
@@ -83,15 +111,15 @@ the browser decodes. To add all of that, run the bundled engine and
 point the server at it, with the same root names on both sides:
 
 ```sh
-cd server && go build -o waxflow-catalog ./cmd/waxflow-catalog
+cd server && go build -o waxflow github.com/colespringer/waxflow/cli/cmd/waxflow
 WAXFLOW_ADDR=127.0.0.1:4418 \
-WAXFLOW_ROOTS=lib=/path/to/music \
+WAXFLOW_ROOTS=music=/path/to/music \
 WAXFLOW_API_KEYS=devkey \
-./waxflow-catalog server
+./waxflow server
 ```
 
 ```sh
-WAXDECK_LIBRARY_ROOTS=lib=/path/to/music \
+WAXDECK_LIBRARY_ROOTS=music=/path/to/music \
 WAXDECK_FLOW_URL=http://127.0.0.1:4418 \
 WAXDECK_FLOW_API_KEY=devkey \
 ./server/waxdeck

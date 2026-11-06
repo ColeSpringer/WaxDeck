@@ -1,8 +1,9 @@
 # Tagged releases. Push a tag matching v* (e.g. v0.2.0) and this workflow:
-#   - pushes multi-arch container images (linux/amd64 + linux/arm64) to GHCR,
-#     tagged with the git tag and latest;
-#   - cross-compiles the server binary for linux/darwin/windows x amd64/arm64
-#     (web UI embedded) and attaches the archives to a GitHub Release;
+#   - pushes the multi-arch server image (linux/amd64 + linux/arm64) to
+#     GHCR, tagged with the git tag and latest;
+#   - cross-compiles the server (web UI embedded) and the analysis worker
+#     for linux/darwin/windows x amd64/arm64 and attaches the archives to
+#     a GitHub Release;
 #   - runs the packaging matrix (package.yaml via workflow_call) and attaches
 #     the desktop installers and the Android APKs to the same release.
 # Only Android is signed; see docs/releasing.md.
@@ -31,10 +32,10 @@ jobs:
       - id: strip
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-  # Production images, multi-arch, pushed to GHCR. Image names match
-  # deploy/compose.yaml. Both Dockerfiles cross-compile from the build host
-  # (--platform=$BUILDPLATFORM stages), so QEMU only backs the waxdeck
-  # runtime stage's apt layer, never the Flutter or Go toolchains.
+  # The server image compose.yaml references, multi-arch, pushed to GHCR.
+  # The engine is the WaxFlow repo's own image. The Dockerfile
+  # cross-compiles from the build host, so QEMU only backs the runtime
+  # stage's apt layer.
   images:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -66,39 +67,12 @@ jobs:
             ghcr.io/colespringer/waxdeck:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Build and push waxdeck-waxflow (streaming sidecar)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          file: deploy/Dockerfile.waxflow
-          platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: |
-            VERSION=${{ needs.version.outputs.version }}
-          tags: |
-            ghcr.io/colespringer/waxdeck-waxflow:${{ github.ref_name }}
-            ghcr.io/colespringer/waxdeck-waxflow:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - name: Build and push waxdeck-analyzer (external analysis worker)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          file: deploy/Dockerfile.analyzer
-          platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: |
-            VERSION=${{ needs.version.outputs.version }}
-          tags: |
-            ghcr.io/colespringer/waxdeck-analyzer:${{ github.ref_name }}
-            ghcr.io/colespringer/waxdeck-analyzer:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-  # Standalone server binaries with the web UI embedded. The Flutter web
-  # bundle is built once and reused across all six targets; the version is
-  # stamped the way cmd/waxdeck documents (-ldflags -X main.version=...).
-  # This job also creates the GitHub Release the desktop job appends to.
+  # Standalone binaries: the server with the web UI embedded, and the
+  # analysis worker. The Flutter web bundle is built once and reused
+  # across all six targets; the version is stamped the way cmd/waxdeck
+  # documents (-ldflags -X main.version=...). This job also creates the
+  # GitHub Release the desktop job appends to.
   server-binaries:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -130,27 +104,43 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          mkdir -p dist
+          # Every archive carries the license and the third-party notices
+          # beside its binary (the notices cover the server's build graph,
+          # of which the worker's is a subset).
+          mkdir -p dist/stage
+          cp LICENSE dist/stage/LICENSE
+          cp server/internal/notices/third_party_notices.txt dist/stage/THIRD-PARTY-NOTICES.txt
+          # Two commands per target: the server with the web UI embedded,
+          # and the analysis worker (docs/similarity-worker.md).
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             goos=${target%/*}
             goarch=${target#*/}
-            bin=waxdeck
-            [ "$goos" = windows ] && bin=waxdeck.exe
-            echo "building $goos/$goarch"
-            (cd server && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-              go build -tags withweb -trimpath \
-                -ldflags "-X main.version=${VERSION}" \
-                -o "../dist/$bin" ./cmd/waxdeck)
-            name="waxdeck-server_${VERSION}_${goos}_${goarch}"
-            if [ "$goos" = windows ]; then
-              (cd dist && zip -q "${name}.zip" "$bin" && rm "$bin")
-            else
-              tar -czf "dist/${name}.tar.gz" -C dist "$bin"
-              rm "dist/$bin"
-            fi
+            for cmd in waxdeck waxdeck-analyzer; do
+              bin=$cmd
+              [ "$goos" = windows ] && bin="$cmd.exe"
+              tags=
+              name=waxdeck-analyzer
+              if [ "$cmd" = waxdeck ]; then
+                tags="-tags withweb"
+                name=waxdeck-server
+              fi
+              echo "building $cmd for $goos/$goarch"
+              (cd server && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+                go build $tags -trimpath \
+                  -ldflags "-X main.version=${VERSION}" \
+                  -o "../dist/stage/$bin" "./cmd/$cmd")
+              name="${name}_${VERSION}_${goos}_${goarch}"
+              if [ "$goos" = windows ]; then
+                (cd dist/stage && zip -q "../${name}.zip" "$bin" LICENSE THIRD-PARTY-NOTICES.txt && rm "$bin")
+              else
+                tar -czf "dist/${name}.tar.gz" -C dist/stage "$bin" LICENSE THIRD-PARTY-NOTICES.txt
+                rm "dist/stage/$bin"
+              fi
+            done
           done
+          rm -rf dist/stage
           ls -l dist
-      - name: Create release and attach server binaries
+      - name: Create release and attach the binaries
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: dist/*

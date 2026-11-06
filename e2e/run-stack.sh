@@ -46,7 +46,7 @@ echo "not really encrypted" >"$RUN_DIR/upload-src/Harbour Lights/memoir.aax"
 # A cover to set by hand. Beside the upload sources rather than in the
 # library: it is a file a picker walks to, not media under scan.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset cover >/dev/null)
-(cd "$E2E_DIR/../server" && go build -o "$RUN_DIR_NATIVE/waxflow-catalog" ./cmd/waxflow-catalog)
+(cd "$E2E_DIR/../server" && go build -o "$RUN_DIR_NATIVE/waxflow" github.com/colespringer/waxflow/cli/cmd/waxflow)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/testidp" ./cmd/testidp)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/feedserv" ./cmd/feedserv)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR_NATIVE/sourceserv" ./cmd/sourceserv)
@@ -68,16 +68,13 @@ cat >"$RUN_DIR/waxflow.json" <<JSON
 }
 JSON
 
-# The catalog is the server's to create, and the sidecar starts first:
-# it waits for the file, so every run exercises that wait and the catalog
-# resolver behind it.
+# The stock engine at the server's pin; its roots file is written above.
 WAXFLOW_ADDR=127.0.0.1:4418 \
 WAXFLOW_CONFIG="$RUN_DIR_NATIVE/waxflow.json" \
 WAXFLOW_DATA_DIR="$RUN_DIR_NATIVE/waxflow-data" \
 WAXFLOW_CACHE_DIR="$RUN_DIR_NATIVE/waxflow-cache" \
 WAXFLOW_API_KEYS=e2e-test-key \
-WAXFLOW_CATALOG_DB="$RUN_DIR_NATIVE/waxdeck-data/waxbin.db" \
-	"$RUN_DIR/waxflow-catalog" server &
+	"$RUN_DIR/waxflow" server &
 SIDECAR=$!
 # The engine-outage spec stops and continues the sidecar by this pid,
 # which cleanup removes with the sidecar (Playwright stops the stack with

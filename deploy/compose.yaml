@@ -1,204 +1,89 @@
-# WaxDeck server + streaming engine (docs/getting-started.md).
-# Settings go in .env, which waxdeck reads wholesale - see
-# docs/configuration.md; the environment blocks here only wire containers.
-
-# 4420 is the only published port. Put TLS in front before exposing it
-# beyond your LAN (docs/reverse-proxy.md).
+# WaxDeck stack. Settings: .env beside this file (see .env.example).
+# Docs: docs/getting-started.md, docs/configuration.md.
 
 name: waxdeck
 
 services:
   waxdeck:
     image: ghcr.io/colespringer/waxdeck:${WAXDECK_TAG:-latest}
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    # The host user, so the bind-mounted library stays writable.
-    user: "${WAXDECK_UID:-10001}:${WAXDECK_GID:-10001}"
-    ports:
-      - "4420:4420"
+    user: "${WAXDECK_UID:-1000}:${WAXDECK_GID:-1000}"
+    # Host network: cast discovery is multicast; the sidecars bind the
+    # host's loopback. Docker Desktop, or no host network wanted: the
+    # override in docs/getting-started.md.
+    network_mode: host
+    extra_hosts: ["waxflow:127.0.0.1", "waxseal:127.0.0.1"]
     env_file: [.env]
     environment:
-      WAXDECK_ADDR: 0.0.0.0:4420
       WAXDECK_DATA_DIR: /data
-      WAXDECK_LIBRARY_ROOTS: lib=/library
-      WAXDECK_FLOW_CONFIG: /waxflow-config/waxflow.json
-      WAXDECK_FLOW_URL: http://waxflow:4418
+      WAXDECK_LIBRARY_ROOTS: music=/music,books=/audiobooks
+      WAXDECK_AUDIOBOOK_ROOTS: books
+      WAXDECK_MANAGED_ROOTS: ${WAXDECK_MANAGED_ROOTS-music,books}
       WAXDECK_PODCAST_DIR: /podcasts
       WAXDECK_PODCAST_ROOT_NAME: podcasts
-      # `-` not `:-`: an empty value means scan-only and must survive.
-      WAXDECK_MANAGED_ROOTS: ${WAXDECK_MANAGED_ROOTS-lib}
-      WAXDECK_FLOW_API_KEY: ${WAXDECK_FLOW_API_KEY:?set WAXDECK_FLOW_API_KEY in deploy/.env (must match a key in WAXFLOW_API_KEYS)}
+      WAXDECK_FLOW_CONFIG: /waxflow/waxflow.json
+      WAXDECK_FLOW_API_KEY: ${WAXDECK_INTERNAL_KEY:?set WAXDECK_INTERNAL_KEY in .env (openssl rand -hex 24)}
+      WAXDECK_SEAL_API_KEY: ${WAXDECK_SEAL_KEY:-${WAXDECK_INTERNAL_KEY:-}}
     volumes:
       - waxdeck-data:/data
-      - ${WAXDECK_LIBRARY:-./library}:/library
+      - ${WAXDECK_MUSIC:-./music}:/music
+      - ${WAXDECK_AUDIOBOOKS:-./audiobooks}:/audiobooks
       - waxdeck-podcasts:/podcasts
-      # A directory rather than the file: WaxDeck swaps the config by
-      # atomic rename, which a single-file bind mount cannot follow.
-      - ./waxflow-config:/waxflow-config
-    networks: [internal]
+      - waxflow:/waxflow
     cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
+    security_opt: [no-new-privileges:true]
     restart: unless-stopped
     logging:
       driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      options: {max-size: "10m", max-file: "3"}
 
+  # Streaming engine. Off: WAXDECK_ENGINE=0 and WAXDECK_FLOW_URL= in .env.
   waxflow:
-    image: ghcr.io/colespringer/waxdeck-waxflow:${WAXDECK_TAG:-latest}
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.waxflow
-    # Must match waxdeck's user: the two share the catalog volume.
-    user: "${WAXDECK_UID:-10001}:${WAXDECK_GID:-10001}"
+    image: ghcr.io/colespringer/waxflow:${WAXFLOW_TAG:-latest}
+    deploy:
+      replicas: ${WAXDECK_ENGINE:-1}
+    user: "${WAXDECK_UID:-1000}:${WAXDECK_GID:-1000}"
+    network_mode: host
     environment:
-      WAXFLOW_ADDR: 0.0.0.0:4418
-      WAXFLOW_API_KEYS: ${WAXFLOW_API_KEYS:?set WAXFLOW_API_KEYS in deploy/.env (openssl rand -hex 24)}
-      WAXFLOW_CONFIG: /waxflow-config/waxflow.json
-      WAXFLOW_CATALOG_DB: /catalog/waxbin.db
+      WAXFLOW_ADDR: 127.0.0.1:4418
+      WAXFLOW_API_KEYS: ${WAXDECK_INTERNAL_KEY:?set WAXDECK_INTERNAL_KEY in .env (openssl rand -hex 24)}
+      WAXFLOW_CONFIG: /waxflow/waxflow.json
+      WAXFLOW_DATA_DIR: /waxflow/data
+      WAXFLOW_CACHE_DIR: /waxflow/cache
     volumes:
-      - ./waxflow-config:/waxflow-config:ro
-      - ${WAXDECK_LIBRARY:-./library}:/library:ro
+      - waxflow:/waxflow
+      - ${WAXDECK_MUSIC:-./music}:/music:ro
+      - ${WAXDECK_AUDIOBOOKS:-./audiobooks}:/audiobooks:ro
       - waxdeck-podcasts:/podcasts:ro
-      # Read use, writable mount: SQLite WAL readers touch the -wal and
-      # -shm files beside the database.
-      - waxdeck-data:/catalog
-      - waxflow-data:/data
-      - waxflow-cache:/cache
-    networks: [internal]
-    # Healthy, not only started: the catalog this resolves pids against is
-    # waxdeck's to create (and on a first run waxdeck's image seeds the
-    # shared data volume with permissions this image cannot). Waxdeck
-    # answers healthy without its engine, so the wait cannot deadlock.
     depends_on:
       waxdeck:
         condition: service_healthy
     read_only: true
-    tmpfs:
-      - /tmp
+    tmpfs: [/tmp]
     cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
+    security_opt: [no-new-privileges:true]
     restart: unless-stopped
     logging:
       driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      options: {max-size: "10m", max-file: "3"}
 
-  # Optional. Full-quality YouTube: docker compose --profile youtube up -d
+  # Full-quality YouTube (headless browser). Off: WAXDECK_SEAL=0 and
+  # WAXDECK_SEAL_URL= in .env.
   waxseal:
     image: ghcr.io/colespringer/waxseal:latest
-    profiles: [youtube]
-    # Flags, not environment: WaxSeal's knobs are --host, --port and
-    # --tenant-keys, and it has never read an environment variable for
-    # any of them. An empty key list leaves a keyless daemon that warns,
-    # which is the right failure: the `label=key` form refuses to start
-    # on an empty key, and a profile that will not boot is worse than
-    # one that boots open on an internal network.
-    #
-    # The daemon's only tenant is WaxDeck, so its key is WaxDeck's own
-    # rather than a second variable beside it. Two would be one setting
-    # with two places to get it wrong, and getting it wrong keys the
-    # daemon against a key nobody sends - refusing every mint and its
-    # own health check, with nothing naming the cause.
-    command:
-      [
-        "server",
-        "--host",
-        "0.0.0.0",
-        "--tenant-keys",
-        "${WAXDECK_SEAL_API_KEY:-}",
-      ]
-    # Headless Chromium needs the working space; the default 64 MB
-    # crashes it under load. Matches WaxSeal's own compose.
-    shm_size: "1gb"
-    cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
-    # No healthcheck override: since v1.3.0 the image's own probe pings
-    # /ping without a key, which a keyed daemon now answers by checking
-    # the shared browser and relaunching a dead one. An image cached
-    # from before that reports a keyed sidecar unhealthy until
-    # `docker compose pull waxseal`; nothing in the stack waits on the
-    # condition, so the sidecar still serves.
-    #
-    # It drains in-flight mints for up to 60s on SIGTERM; a shorter
-    # grace period would SIGKILL a browser mid-attestation.
-    stop_grace_period: 70s
-    networks: [internal]
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # Optional. Chromecast/DLNA discovery needs multicast, which never
-  # crosses the bridge network: docker compose --profile cast up -d
-  # runs a second waxdeck on host networking that can discover devices.
-  waxdeck-cast:
-    image: ghcr.io/colespringer/waxdeck:${WAXDECK_TAG:-latest}
-    profiles: [cast]
+    deploy:
+      replicas: ${WAXDECK_SEAL:-1}
     network_mode: host
-    env_file: [.env]
-    environment:
-      WAXDECK_ADDR: 0.0.0.0:4420
-      WAXDECK_DATA_DIR: /data
-      WAXDECK_LIBRARY_ROOTS: lib=/library
-      WAXDECK_FLOW_URL: http://127.0.0.1:4418
-      WAXDECK_PODCAST_DIR: /podcasts
-      WAXDECK_PODCAST_ROOT_NAME: podcasts
-      # `-` not `:-`: an empty value means scan-only and must survive.
-      WAXDECK_MANAGED_ROOTS: ${WAXDECK_MANAGED_ROOTS-lib}
-    volumes:
-      - ${WAXDECK_LIBRARY:-./library}:/library
-      - waxdeck-data:/data
-      - waxdeck-podcasts:/podcasts
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # Optional. External analysis worker, stateless:
-  # docker compose --profile similarity up -d
-  waxdeck-analyzer:
-    image: ghcr.io/colespringer/waxdeck-analyzer:${WAXDECK_TAG:-latest}
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.analyzer
-    profiles: [similarity]
-    env_file: [.env]
-    environment:
-      WAXDECK_ANALYZER_URL: http://waxdeck:4420
-      WAXDECK_ANALYZER_TOKEN: ${WAXDECK_WORKER_TOKENS:-}
-      WAXDECK_ANALYZER_LIBRARY: /library
-    volumes:
-      - ${WAXDECK_LIBRARY:-./library}:/library:ro
-    depends_on: [waxdeck]
-    networks: [internal]
-    read_only: true
+    command: ["server", "--host", "127.0.0.1", "--tenant-keys", "${WAXDECK_SEAL_KEY:-${WAXDECK_INTERNAL_KEY:-}}"]
+    shm_size: "1gb"
+    stop_grace_period: 70s
     cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
+    security_opt: [no-new-privileges:true]
     restart: unless-stopped
     logging:
       driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-networks:
-  internal:
-    driver: bridge
+      options: {max-size: "10m", max-file: "3"}
 
 volumes:
   waxdeck-data:
   waxdeck-podcasts:
-  waxflow-data:
-  waxflow-cache:
+  waxflow:

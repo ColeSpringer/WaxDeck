@@ -4,6 +4,9 @@ go 1.26.0
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
+// The engine the dev stack and e2e run, at the pin.
+tool github.com/colespringer/waxflow/cli/cmd/waxflow
+
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/colespringer/waxdeck/fixtures v0.0.0-00010101000000-000000000000
@@ -33,7 +36,7 @@ require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/colespringer/waxbin v0.0.0-20261009013317-c80595fb3048
 	github.com/colespringer/waxflow v0.0.0-20260923050513-446ca3124d89
-	github.com/colespringer/waxflow/cli v0.0.0-20260923050513-446ca3124d89
+	github.com/colespringer/waxflow/cli v0.0.0-20260923050513-446ca3124d89 // indirect
 	github.com/colespringer/waxlabel v1.8.0
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect

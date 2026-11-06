@@ -38,8 +38,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [11-04-26] When approving a track from the review queue, the screen stays at the track you approved. The track you approved is removed from the queue list but it highlights another track without going to it. I don't think we need to stay on a track after a decision has been made for it.
 
-[11-04-26] sponsorblock should default to only sponsors and non-music sections.
-
 [11-04-26] The tracks section under an artist page does not have the track play total like you see when you go to the album page.
 
 [11-04-26] In listening stats under top we should include small images next to the list items. At least for artists and albums. Also, what the hell is shows supposed to be? Where are books and podcasts?

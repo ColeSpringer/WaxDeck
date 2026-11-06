@@ -73,7 +73,9 @@ func newRootEngine(t *testing.T, configPath string) *rootEngine {
 				fmt.Fprintf(w, `{"error":"opening root %s: no such file or directory","code":"invalid-request","schemaVersion":1}`, *bad)
 				return
 			}
-			fmt.Fprint(w, `{"schemaVersion":1,"added":[],"removed":[],"changed":[],"roots":[]}`)
+			// The real engine answers with the roots it now serves.
+			served, _ := json.Marshal(names)
+			fmt.Fprintf(w, `{"schemaVersion":1,"added":[],"removed":[],"changed":[],"roots":%s}`, served)
 		default:
 			http.NotFound(w, r)
 		}

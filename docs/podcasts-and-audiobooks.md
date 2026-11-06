@@ -16,7 +16,8 @@ WAXDECK_PODCAST_DIR=/podcasts
 
 The compose file ships this wired: a `waxdeck-podcasts` volume mounted
 read-write in `waxdeck` and read-only in `waxflow` under the matching
-`podcasts=` root name. If you run the processes yourself, add the same
+`podcasts=` root name, and the audiobooks folder (`WAXDECK_AUDIOBOOKS`)
+the same way as the root `books`. If you run the processes yourself, add the same
 directory to `WAXFLOW_ROOTS` so episodes can stream.
 
 If your feeds live on your own LAN (a private podcast host), set
@@ -301,9 +302,10 @@ requires).
 With the acquisition bridge enabled (`WAXDECK_YOUTUBE=true`), a
 YouTube channel or playlist URL subscribes like a feed: new videos
 appear as episodes and fetch as audio, stamped with their source URL
-and acquisition date. The optional WaxSeal sidecar (compose profile
-`youtube`) unlocks the full-quality path. SponsorBlock segment cutting
-is available opt-in via `WAXDECK_YOUTUBE_SPONSORBLOCK`.
+and acquisition date. The WaxSeal sidecar, on by default under compose,
+unlocks the full-quality path. SponsorBlock cutting drops sponsor reads
+and non-music sections by default; `WAXDECK_YOUTUBE_SPONSORBLOCK` changes
+the categories, and empty turns it off.
 
 A YouTube episode plays once the server has fetched it. What the
 channel lists is a video page rather than audio, so unlike a feed's

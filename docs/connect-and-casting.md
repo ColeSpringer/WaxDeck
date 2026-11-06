@@ -133,14 +133,17 @@ what is there rather than interrupting it. The speaker is held for the
 few seconds the test runs, so sending a queue to it meanwhile is
 refused the same way instead of colliding with the test.
 
-Discovery uses mDNS and SSDP, which are multicast and do not cross
-Docker's default bridge network. Options, most common first:
+Discovery uses mDNS and SSDP, which are multicast. The compose stack
+runs the server on the host's network, so it works as shipped;
+`WAXDECK_CAST_DISCOVERY=false` turns it off. Where multicast never
+arrives (Docker Desktop, or the server moved onto Docker's network),
+the options are:
 
-- Run the `cast` compose profile, which starts the server on host
-  networking where discovery works.
-- List devices statically and skip discovery entirely:
+- List devices statically and skip discovery:
   `WAXDECK_CAST_DEVICES="Kitchen speaker=192.168.1.50:8009"` and
-  `WAXDECK_DLNA_DEVICES="http://192.168.1.60:8200/rootDesc.xml"`.
+  `WAXDECK_DLNA_DEVICES="http://192.168.1.60:8200/rootDesc.xml"`, with
+  `WAXDECK_ADVERTISE_BASE` set to the host's LAN address, since the
+  server would otherwise advertise its container address.
 - A macvlan network or an avahi reflector, for setups that already
   use them.
 

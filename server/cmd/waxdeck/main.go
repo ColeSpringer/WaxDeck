@@ -104,7 +104,7 @@ func run() error {
 		youtubeOn    = env.Bool("youtube", "WAXDECK_YOUTUBE", true, "the YouTube acquisition bridge (download videos, playlists, and channels; subscribe to channels as podcasts). On by default; set WAXDECK_YOUTUBE=false to disable")
 		sealURL      = flag.String("seal-url", envOr("WAXDECK_SEAL_URL", ""), "WaxSeal attestation sidecar base URL (optional; full-quality YouTube path)")
 		sealKey      = flag.String("seal-api-key", envOr("WAXDECK_SEAL_API_KEY", ""), "API key for the WaxSeal sidecar")
-		sponsorBlock = flag.String("youtube-sponsorblock", envOr("WAXDECK_YOUTUBE_SPONSORBLOCK", ""), "SponsorBlock categories to cut from acquired audio, comma separated (empty disables)")
+		sponsorBlock = flag.String("youtube-sponsorblock", envOr("WAXDECK_YOUTUBE_SPONSORBLOCK", ""), "SponsorBlock categories to cut from acquired audio, comma separated (default sponsor,music_offtopic; empty disables)")
 		ytThumbnail  = env.Bool("youtube-thumbnail", "WAXDECK_YOUTUBE_THUMBNAIL", true, "embed the source thumbnail as cover art on acquired audio, cropped to its square where the source is letterboxed release art, until enrichment finds official artwork. On by default; set WAXDECK_YOUTUBE_THUMBNAIL=false to disable")
 		sourceStub   = flag.String("source-stub-url", envOr("WAXDECK_SOURCE_STUB_URL", ""), "base URL of a sourceserv fixture host to use as the acquisition source (test stacks only; never production)")
 
@@ -310,15 +310,13 @@ func run() error {
 		if err := os.MkdirAll(abs, 0o755); err != nil {
 			return fmt.Errorf("creating podcast dir: %w", err)
 		}
+		if err := checkPodcastRootName(roots, *podcastRoot); err != nil {
+			return err
+		}
 	}
 	var providers []source.Provider
 	if *youtubeOn {
-		var categories []string
-		if strings.TrimSpace(*sponsorBlock) != "" {
-			for c := range strings.SplitSeq(*sponsorBlock, ",") {
-				categories = append(categories, strings.TrimSpace(c))
-			}
-		}
+		categories := sponsorBlockFrom(*sponsorBlock, flagWasSet("youtube-sponsorblock"), os.LookupEnv)
 		yt, err := waxtapsource.New(waxtapsource.Config{
 			WorkDir:        filepath.Join(*dataDir, "waxtap-work"),
 			SealBaseURL:    *sealURL,
@@ -683,6 +681,18 @@ func run() error {
 			}
 		}
 	})
+
+	// First start: write the sidecar's roots file (compose starts the
+	// engine after this server), with or without an engine URL.
+	if *flowConfig != "" {
+		seed := engineSeedRoots(roots, *podcastRoot, *podcastDir)
+		switch created, err := flow.SeedRootsConfig(*flowConfig, seed); {
+		case err != nil:
+			log.Warn("could not write the streaming engine's roots file", "path", *flowConfig, "err", err)
+		case created:
+			log.Info("wrote the streaming engine's roots file", "path", *flowConfig, "roots", len(seed))
+		}
+	}
 
 	// The streaming engine is optional: without one, and while a
 	// configured one is not answering, originals play directly. The bridge
@@ -1271,8 +1281,7 @@ func run() error {
 
 	// Device discovery: multicast on the LAN plus statically configured
 	// devices for networks where multicast never arrives (the compose
-	// default network among them; the cast profile documents the
-	// host-networking answer).
+	// stack runs the server on the host network for this).
 	if *castDiscovery || *castDevices != "" {
 		cfg := castv2.DiscoveryConfig{
 			Announce:   connectSvc,
@@ -1504,6 +1513,30 @@ type root struct {
 	Path string
 }
 
+// checkPodcastRootName refuses a podcast root named like a library root:
+// the engine refuses duplicate root names at start.
+func checkPodcastRootName(roots []root, name string) error {
+	for _, r := range roots {
+		if r.Name == name {
+			return fmt.Errorf("WAXDECK_PODCAST_ROOT_NAME %q is also a library root in WAXDECK_LIBRARY_ROOTS; give one of them another name", name)
+		}
+	}
+	return nil
+}
+
+// engineSeedRoots is what the engine's roots file starts with: the
+// configured roots, then the podcast root when podcasts are on.
+func engineSeedRoots(roots []root, podcastRoot, podcastDir string) []flow.Root {
+	out := make([]flow.Root, 0, len(roots)+1)
+	for _, r := range roots {
+		out = append(out, flow.Root{Name: r.Name, Path: r.Path})
+	}
+	if podcastDir != "" {
+		out = append(out, flow.Root{Name: podcastRoot, Path: podcastDir})
+	}
+	return out
+}
+
 // parseRoots parses "name=path,name2=path2". Names must match the
 // WaxFlow roots that mount the same directories, since stream requests
 // address sources as name/relpath.
@@ -1574,6 +1607,26 @@ func podcastDirFrom(value string, flagSet bool, lookupEnv func(string) (string, 
 		return ""
 	}
 	return filepath.Join(dataDir, "podcasts")
+}
+
+// sponsorBlockFrom resolves the SponsorBlock categories cut from acquired
+// audio: the flag when given, else the variable when set (empty turns
+// cutting off), else sponsors and non-music sections.
+func sponsorBlockFrom(value string, flagSet bool, lookupEnv func(string) (string, bool)) []string {
+	if !flagSet {
+		if v, set := lookupEnv("WAXDECK_YOUTUBE_SPONSORBLOCK"); set {
+			value = v
+		} else {
+			value = "sponsor,music_offtopic"
+		}
+	}
+	var out []string
+	for c := range strings.SplitSeq(value, ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func envOr(key, def string) string {
@@ -1667,15 +1720,38 @@ func detectLANIP() string {
 	if err != nil {
 		return ""
 	}
+	var list []lanIface
 	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
 		addrs, err := iface.Addrs()
 		if err != nil {
 			continue
 		}
-		for _, a := range addrs {
+		list = append(list, lanIface{
+			name: iface.Name, up: iface.Flags&net.FlagUp != 0,
+			loopback: iface.Flags&net.FlagLoopback != 0, addrs: addrs,
+		})
+	}
+	return scanLANIP(list)
+}
+
+// lanIface is what detectLANIP reads off an interface, so the choice can
+// be tested without one.
+type lanIface struct {
+	name     string
+	up       bool
+	loopback bool
+	addrs    []net.Addr
+}
+
+// scanLANIP picks the first routable IPv4 of an interface that is up and
+// neither loopback nor virtual: on the host network docker0, compose's
+// br-* and VPN tunnels carry routable addresses no cast device can reach.
+func scanLANIP(ifaces []lanIface) string {
+	for _, iface := range ifaces {
+		if !iface.up || iface.loopback || virtualInterface(iface.name) {
+			continue
+		}
+		for _, a := range iface.addrs {
 			ipNet, ok := a.(*net.IPNet)
 			if !ok {
 				continue
@@ -1688,6 +1764,15 @@ func detectLANIP() string {
 		}
 	}
 	return ""
+}
+
+func virtualInterface(name string) bool {
+	for _, p := range []string{"docker", "br-", "veth", "virbr", "podman", "cni", "flannel", "tun", "tap", "wg", "tailscale"} {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseCastDevices parses name=host:port pairs into static devices.

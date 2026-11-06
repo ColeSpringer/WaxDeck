@@ -6,7 +6,7 @@
 ## --- stage 1: Flutter web build ----------------------------------------------
 # Flutter from the official release archive (as tools/goldens.Dockerfile
 # does), so the image builds with the SDK the gates ran. The ARG default
-# is the pin for compose builds; CI fails if it drifts from the workflows.
+# is the pin for `make up` builds; CI fails if it drifts from the workflows.
 
 # BUILDPLATFORM: the web bundle is arch-independent, so multi-arch builds
 # run this stage once, on the build host - which must be x64 (Flutter
@@ -96,14 +96,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libchromaprint-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# UID 10001 per the Wax* container convention. Compose overrides it with
-# the host user's uid, so /data and /podcasts are world-writable to
-# accept any uid without an entrypoint chown dance.
+# UID 10001 per the Wax* convention; compose runs the host user, so the
+# writable dirs are 0777. /waxflow is shared with the engine.
 RUN groupadd --system --gid 10001 waxdeck \
     && useradd --system --uid 10001 --gid 10001 --home-dir /data --shell /usr/sbin/nologin waxdeck \
-    && mkdir -p /data /library /podcasts \
-    && chown waxdeck:waxdeck /data /podcasts \
-    && chmod 0777 /data /podcasts
+    && mkdir -p /data /music /audiobooks /podcasts /waxflow \
+    && chown waxdeck:waxdeck /data /podcasts /waxflow \
+    && chmod 0777 /data /podcasts /waxflow
 
 COPY --from=build /out/waxdeck /usr/local/bin/waxdeck
 # The artifact conveys its own terms; the binary also prints the

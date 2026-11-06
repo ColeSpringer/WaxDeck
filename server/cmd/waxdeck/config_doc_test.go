@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -90,25 +91,35 @@ func TestEveryServerEnvVarIsDocumented(t *testing.T) {
 	}
 }
 
-// The streaming engine's container waits for WaxDeck to be healthy, not
-// just started: the catalog it resolves pids against is WaxDeck's to
-// create, so a start order alone has it restart until that exists.
-func TestComposeStartsTheEngineOnceWaxDeckIsHealthy(t *testing.T) {
+// composeService reads a service loosely; each test checks the form it expects.
+type composeService struct {
+	DependsOn   any               `yaml:"depends_on"`
+	Build       any               `yaml:"build"`
+	NetworkMode string            `yaml:"network_mode"`
+	Ports       any               `yaml:"ports"`
+	Environment map[string]string `yaml:"environment"`
+	Command     []string          `yaml:"command"`
+}
+
+func loadComposeServices(t *testing.T) map[string]composeService {
+	t.Helper()
 	src, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "compose.yaml"))
 	if err != nil {
 		t.Fatalf("reading deploy/compose.yaml: %v", err)
 	}
-	// depends_on is a list in one service and a map in another, so it is
-	// read loosely and each service's own form checked.
 	var compose struct {
-		Services map[string]struct {
-			DependsOn any `yaml:"depends_on"`
-		} `yaml:"services"`
+		Services map[string]composeService `yaml:"services"`
 	}
 	if err := yaml.Unmarshal(src, &compose); err != nil {
 		t.Fatalf("parsing deploy/compose.yaml: %v", err)
 	}
-	engine, ok := compose.Services["waxflow"]
+	return compose.Services
+}
+
+// The engine waits for a healthy server: the server writes the roots file
+// it reads, and the shared volume takes its mode from the server image.
+func TestComposeStartsTheEngineOnceWaxDeckIsHealthy(t *testing.T) {
+	engine, ok := loadComposeServices(t)["waxflow"]
 	if !ok {
 		t.Fatal("deploy/compose.yaml has no waxflow service")
 	}
@@ -116,5 +127,90 @@ func TestComposeStartsTheEngineOnceWaxDeckIsHealthy(t *testing.T) {
 	waxdeck, _ := deps["waxdeck"].(map[string]any)
 	if waxdeck["condition"] != "service_healthy" {
 		t.Errorf("waxflow depends_on = %v, want waxdeck with condition service_healthy", engine.DependsOn)
+	}
+}
+
+// A build block makes a copied compose file build from a missing context.
+func TestComposeShipsImagesOnly(t *testing.T) {
+	for name, svc := range loadComposeServices(t) {
+		if svc.Build != nil {
+			t.Errorf("%s has a build block; the shipped compose file carries images only", name)
+		}
+	}
+}
+
+// Discovery is multicast; ports on a host-networked service only warn.
+func TestComposeServerSharesTheHostNetwork(t *testing.T) {
+	server, ok := loadComposeServices(t)["waxdeck"]
+	if !ok {
+		t.Fatal("deploy/compose.yaml has no waxdeck service")
+	}
+	if server.NetworkMode != "host" {
+		t.Errorf("waxdeck network_mode = %q, want host", server.NetworkMode)
+	}
+	if server.Ports != nil {
+		t.Errorf("waxdeck publishes %v on the host network, where ports are discarded", server.Ports)
+	}
+}
+
+// make up pipes the same override the getting-started guide tells Docker
+// Desktop users to save, so the two copies must not drift.
+func TestDockerDesktopOverrideMatchesTheDocs(t *testing.T) {
+	mk, err := os.ReadFile(filepath.Join("..", "..", "..", "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	quoted := regexp.MustCompile(`'([^']*)'`)
+	inPrintf := false
+	for _, l := range strings.Split(string(mk), "\n") {
+		if strings.Contains(l, `printf '%s\n'`) {
+			inPrintf = true
+		}
+		if !inPrintf {
+			continue
+		}
+		for _, m := range quoted.FindAllStringSubmatch(l, -1) {
+			if m[1] != `%s\n` {
+				lines = append(lines, strings.ReplaceAll(m[1], "$$", "$"))
+			}
+		}
+		if strings.Contains(l, "| env") {
+			break
+		}
+	}
+	fromMake := strings.Join(lines, "\n")
+
+	doc, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", "getting-started.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rest := string(doc)[strings.Index(string(doc), "compose.override.yaml"):]
+	start := strings.Index(rest, "```yaml\n") + len("```yaml\n")
+	end := strings.Index(rest[start:], "```")
+	fromDoc := strings.TrimSpace(rest[start : start+end])
+	if fromMake == "" || fromMake != fromDoc {
+		t.Errorf("make up pipes:\n%s\n\nthe guide shows:\n%s", fromMake, fromDoc)
+	}
+}
+
+// The sidecars share the host network too and bind its loopback, so no
+// port is published anywhere: engines before Docker 28 let the LAN reach
+// ports published to 127.0.0.1.
+func TestComposeSidecarsBindTheHostLoopback(t *testing.T) {
+	services := loadComposeServices(t)
+	for name, svc := range services {
+		if svc.Ports != nil {
+			t.Errorf("%s publishes %v; nothing in the stack publishes a port", name, svc.Ports)
+		}
+		if svc.NetworkMode != "host" {
+			t.Errorf("%s network_mode = %q, want host", name, svc.NetworkMode)
+		}
+	}
+	if addr := services["waxflow"].Environment["WAXFLOW_ADDR"]; !strings.HasPrefix(addr, "127.0.0.1:") {
+		t.Errorf("waxflow binds %q, want the host loopback", addr)
+	}
+	if cmd := services["waxseal"].Command; !slices.Contains(cmd, "127.0.0.1") {
+		t.Errorf("waxseal command %v does not bind the host loopback", cmd)
 	}
 }

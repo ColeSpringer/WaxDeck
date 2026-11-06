@@ -31,8 +31,8 @@ Docker Compose stack and the fast single-binary path.
   review.
 - [Public share links](sharing.md): share a track, playlist, book, or
   episode with anyone, no account needed.
-- [The similarity worker](similarity-worker.md): the optional analysis
-  container behind sonic discovery, and the worker contract.
+- [The similarity worker](similarity-worker.md): sonic analysis, the
+  worker binary for another machine, and the worker contract.
 - [Custom enrichment providers](custom-provider-api/README.md): plug a
   self-hosted metadata service into enrichment, and the provider
   contract it implements.

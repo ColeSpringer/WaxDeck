@@ -23,6 +23,18 @@ Every entry carries a gate tag saying what actually blocks it:
 
 ## Playback and apps
 
+- `[decision]` **The engine is addressed by root-relative paths, not
+  pids** (2026-11-05). WaxFlow resolves `pid:` sources only in a build that injects a
+  catalog resolver; WaxDeck shipped one (`waxflow-catalog`) and never
+  sent a `pid:` reference, since the bridge spells every source as
+  `root/relative/path`, which the stock engine image serves. The build
+  went with the stack overhaul. Pids would buy location-free references,
+  the prerequisite for clients fetching from the engine directly rather
+  than through the server, and a transcode cache that survives a move;
+  neither is wanted while every stream is proxied through the one
+  origin. Taking them up needs an engine that resolves them without
+  reading the catalog database (the WaxFlow ask in upstream-requests.md)
+  or a WaxDeck engine image again.
 - `[third-party]` **The Linux tray icon does not come back when the
   panel restarts.** cnativeapi (under tray_manager 0.6+) registers the
   StatusNotifierItem with the watcher once, at creation, and never
@@ -327,6 +339,14 @@ Every entry carries a gate tag saying what actually blocks it:
 
 ## Infrastructure
 
+- `[decision]` **CI runs the engine at the go.mod pin, not the image
+  users pull** (2026-11-06). `deploy/compose.yaml` names WaxFlow's own
+  image, which does not exist yet, so the compose job builds the stock
+  CLI at the pin under that name and `make up` does the same. A change
+  in upstream's `latest` leaves CI green while users get an untested
+  pair. Moving the job and `make up` onto the published image, pinned
+  with `WAXFLOW_TAG`, waits on that image existing, and on the owner's
+  standing call to make no upstream release asks.
 - `[upstream]` **An item moved through a library between two of the
   library journal's reads is not tombstoned to an account granted that
   library but neither the one it left nor the one it reached.** The catalog delta sends an account granted some

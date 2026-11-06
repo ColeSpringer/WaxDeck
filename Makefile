@@ -1,5 +1,5 @@
 .PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-l10n gen-mirror lint spec-lint test test-server test-fixtures test-app test-app-chrome \
-        web build run up down reset logs drift-check oasdiff e2e e2e-desktop dist clean \
+        web build run images preflight up down reset logs drift-check oasdiff e2e e2e-desktop dist clean \
         path-doctor
 
 # Windows: run the POSIX recipes through Git's bash and userland, so
@@ -266,76 +266,74 @@ run: $(WEB_STAMP)
 ## --- run the full stack (Docker) ---------------------------------------------
 
 COMPOSE := docker compose -f deploy/compose.yaml
+# Dev images, tagged apart from the published ones.
+DEV_TAGS := WAXDECK_TAG=dev WAXFLOW_TAG=dev
 
-# The full stack; --wait returns only once the containers report
-# healthy. The preflight proves WAXDECK_LIBRARY writable first
-# (docker creates a missing bind source root-owned), resolving it the way
-# compose resolves it. id -u/-g are skipped only on Windows, where MSYS
-# ids are SID-derived noise; macOS keeps them so volumes stay readable.
-up: deploy/.env deploy/waxflow-config/waxflow.json
-	@lib="$${WAXDECK_LIBRARY-}"; \
-	 if [ -z "$$lib" ]; then \
-	   lib=$$(sed -n 's/^WAXDECK_LIBRARY=//p' deploy/.env | tail -n 1 | tr -d '\r' \
-	     | sed -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/"); \
-	 fi; \
-	 lib=$${lib:-./library}; \
-	 case "$$lib" in "~") lib="$$HOME" ;; "~/"*) lib="$$HOME/$${lib#\~/}" ;; /*|[A-Za-z]:*) ;; *) lib="deploy/$${lib#./}" ;; esac; \
-	 mkdir -p "$$lib" || { echo "make up: cannot create WAXDECK_LIBRARY=$$lib" >&2; exit 1; }; \
-	 if ! touch "$$lib/.write-probe" 2>/dev/null; then \
-	   echo "make up: WAXDECK_LIBRARY=$$lib is not writable by $$(id -un); imports in the container would fail. Fix its ownership or point deploy/.env at another path." >&2; \
-	   exit 1; \
-	 fi; \
-	 rm -f "$$lib/.write-probe"
-	@books="$${WAXDECK_AUDIOBOOKS-}"; \
-	 if [ -z "$$books" ]; then \
-	   books=$$(sed -n 's/^WAXDECK_AUDIOBOOKS=//p' deploy/.env | tail -n 1 | tr -d '\r' \
-	     | sed -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/"); \
-	 fi; \
-	 overlay=; \
-	 if [ -n "$$books" ]; then \
-	   case "$$books" in "~") dir="$$HOME" ;; "~/"*) dir="$$HOME/$${books#\~/}" ;; /*|[A-Za-z]:*) dir="$$books" ;; *) dir="deploy/$${books#./}" ;; esac; \
-	   if [ ! -d "$$dir" ]; then \
-	     echo "make up: WAXDECK_AUDIOBOOKS=$$dir does not exist; docker would create it empty and root-owned. Point deploy/.env at your audiobook folder." >&2; \
+# The server image and the engine at the version server/go.mod pins.
+images:
+	docker build -f deploy/Dockerfile -t ghcr.io/colespringer/waxdeck:dev .
+	docker build -f deploy/Dockerfile.waxflow -t ghcr.io/colespringer/waxflow:dev .
+
+dist: images
+
+# Both media folders, resolved the way compose resolves them: a default
+# folder is created, a configured one must exist (a typo would start an
+# empty library), and either must be writable by this user.
+preflight: deploy/.env
+	@folder() { \
+	   dir="$$2"; \
+	   if [ -z "$$dir" ]; then \
+	     dir=$$(sed -n "s/^$$1=//p" deploy/.env | tail -n 1 | tr -d '\r' \
+	       | sed -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/"); \
+	   fi; \
+	   given=$$dir; \
+	   dir=$${dir:-./$$3}; \
+	   case "$$dir" in "~") dir="$$HOME" ;; "~/"*) dir="$$HOME/$${dir#\~/}" ;; /*|[A-Za-z]:*) ;; *) dir="deploy/$${dir#./}" ;; esac; \
+	   if [ -z "$$given" ] || [ "$$given" = "./$$3" ]; then \
+	     mkdir -p "$$dir" || { echo "make up: cannot create $$1=$$dir" >&2; exit 1; }; \
+	   elif [ ! -d "$$dir" ]; then \
+	     echo "make up: $$1=$$dir does not exist; docker would create it empty and root-owned. Point deploy/.env at your folder." >&2; \
 	     exit 1; \
 	   fi; \
-	   overlay="-f deploy/compose.audiobooks.yaml"; \
-	 fi; \
-	 case "$$(uname -s)" in \
-	   MINGW*|MSYS*|CYGWIN*) $(COMPOSE) $$overlay up --build -d --wait ;; \
-	   *) WAXDECK_UID=$$(id -u) WAXDECK_GID=$$(id -g) $(COMPOSE) $$overlay up --build -d --wait ;; \
-	 esac
+	   if ! touch "$$dir/.write-probe" 2>/dev/null; then \
+	     echo "make up: $$1=$$dir is not writable by $$(id -un); imports in the container would fail. Fix its ownership or point deploy/.env at another path." >&2; \
+	     exit 1; \
+	   fi; \
+	   rm -f "$$dir/.write-probe"; \
+	 }; \
+	 folder WAXDECK_MUSIC "$${WAXDECK_MUSIC-}" music && folder WAXDECK_AUDIOBOOKS "$${WAXDECK_AUDIOBOOKS-}" audiobooks
+
+# The stack from this checkout's images. Docker Desktop, macOS runtimes,
+# rootless Docker and a userns-remapped daemon cannot share the host's
+# network: there the stdin override puts the stack on the project network.
+up: deploy/.env preflight images
+	@ids=; case "$$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) ids="WAXDECK_UID=$$(id -u) WAXDECK_GID=$$(id -g)" ;; esac; \
+	 if [ "$$(uname -s)" = Darwin ] || docker info --format '{{.OperatingSystem}} {{.SecurityOptions}}' 2>/dev/null | grep -q 'Docker Desktop\|name=rootless\|name=userns'; then \
+	   echo "make up: this Docker cannot share the host network; the stack runs on the project network (no cast discovery)"; \
+	   printf '%s\n' 'services:' '  waxdeck:' '    network_mode: !reset null' '    extra_hosts: !reset []' '    ports: ["4420:4420"]' \
+	     '  waxflow:' '    network_mode: !reset null' '    environment:' '      WAXFLOW_ADDR: 0.0.0.0:4418' \
+	     '  waxseal:' '    network_mode: !reset null' '    command: ["server", "--host", "0.0.0.0", "--tenant-keys", "$${WAXDECK_SEAL_KEY:-$${WAXDECK_INTERNAL_KEY:-}}"]' \
+	     | env $$ids $(DEV_TAGS) $(COMPOSE) -f - up -d --wait; \
+	 else \
+	   env $$ids $(DEV_TAGS) $(COMPOSE) up -d --wait; \
+	 fi
 	@echo "WaxDeck is up on http://localhost:4420  (make logs / make down)"
 
-# Seed the sidecar's roots from the example. A file rather than
-# WAXFLOW_ROOTS so runtime-created libraries reconcile without a restart;
-# deployment state, so untracked.
-deploy/waxflow-config/waxflow.json: deploy/waxflow-config.example.json
-	@mkdir -p $(@D)
-	@cp deploy/waxflow-config.example.json $@
-	@echo "wrote $@ (the sidecar's roots; WaxDeck merges runtime libraries into it)"
-
-# deploy/.env from the example, with matching generated internal keys.
+# deploy/.env from the example, with a generated internal key.
 deploy/.env:
 	@umask 077; \
 	 key=$$(openssl rand -hex 24); \
-	 worker=$$(openssl rand -hex 24); \
-	 seal=$$(openssl rand -hex 24); \
-	 sed -e "s|^WAXFLOW_API_KEYS=.*|WAXFLOW_API_KEYS=$$key|" \
-	     -e "s|^WAXDECK_FLOW_API_KEY=.*|WAXDECK_FLOW_API_KEY=$$key|" \
-	     -e "s|^WAXDECK_WORKER_TOKENS=.*|WAXDECK_WORKER_TOKENS=$$worker|" \
-	     -e "s|^WAXDECK_SEAL_API_KEY=.*|WAXDECK_SEAL_API_KEY=$$seal|" \
-	     deploy/.env.example > deploy/.env
-	@echo "wrote deploy/.env with generated keys; set WAXDECK_LIBRARY to your music path"
+	 sed -e "s|^WAXDECK_INTERNAL_KEY=.*|WAXDECK_INTERNAL_KEY=$$key|" deploy/.env.example > deploy/.env
+	@echo "wrote deploy/.env with a generated internal key; set WAXDECK_MUSIC and WAXDECK_AUDIOBOOKS to your folders"
 
 down:
 	$(COMPOSE) down
 
-# Down plus volumes: the first-run stack again. Your library is a bind
-# mount and untouched, as are deploy/.env and deploy/waxflow-config/.
+# Down plus volumes: a first-run stack again. Media folders and deploy/.env stay.
 reset:
 	$(COMPOSE) down -v
-	@echo "stack down and volumes dropped: catalog, accounts, episodes, sidecar cache"
-	@echo "kept: your library, deploy/.env, deploy/waxflow-config/  ->  make up"
+	@echo "stack down and volumes dropped: catalog, accounts, episodes, the engine's roots file and cache"
+	@echo "kept: your music and audiobooks, deploy/.env  ->  make up"
 
 logs:
 	$(COMPOSE) logs -f --tail=100
@@ -358,8 +356,6 @@ endif
 e2e-desktop:
 	bash e2e/run-desktop.sh
 
-dist:
-	docker build -f deploy/Dockerfile -t waxdeck:dev .
 
 clean:
 	rm -rf server/waxdeck $(WEB_DIST) app/app/build e2e/test-results e2e/playwright-report
