@@ -52,6 +52,13 @@ const (
 	minSamples    = Rate * MinDurationMs / 1000
 )
 
+// TooShort reports whether a duration the scan read is under the
+// analysis floor. Zero is one it could not read, which only the decode
+// can judge.
+func TooShort(durationMs int64) bool {
+	return durationMs > 0 && durationMs < MinDurationMs
+}
+
 // melBand holds one triangular filter as its first FFT bin plus the
 // weight per consecutive bin.
 type melBand struct {

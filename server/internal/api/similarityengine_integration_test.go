@@ -23,6 +23,42 @@ func pullWork(t *testing.T, h *harness) SimilarityWorkPage {
 	return SimilarityWorkPage(page)
 }
 
+// queueLibrary turns analysis on and sweeps, so every analyzable track
+// waits in the queue under its own key.
+func queueLibrary(t *testing.T, h *harness) {
+	t.Helper()
+	wantStatus(t, h.putJSON(t, "/api/v1/admin/settings", map[string]any{"sonicAnalysis": true}), 200, "turning analysis on")
+	if _, err := h.svc.SimilaritySweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// reportVectors leases the queue as a worker would and reports a vector
+// for each named track, leaving the rest queued.
+func reportVectors(t *testing.T, h *harness, pids ...string) {
+	t.Helper()
+	essence := map[string]string{}
+	for _, w := range pullWork(t, h).Items {
+		essence[w.Pid] = w.Essence
+	}
+	ups := make([]EmbeddingUpload, 0, len(pids))
+	for _, pid := range pids {
+		e, ok := essence[pid]
+		if !ok {
+			t.Fatalf("no work leased for %s", pid)
+		}
+		ups = append(ups, EmbeddingUpload{Pid: pid, Essence: e, Vector: []float32{1, 0, 0, 0, 0, 0, 0, 0}})
+	}
+	ctx := context.WithValue(context.Background(), ctxWorkerKey{}, true)
+	resp, err := h.srv.ReportEmbeddings(ctx, ReportEmbeddingsRequestObject{Body: &EmbeddingReport{Model: "test", Dims: 8, Embeddings: ups}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res, ok := resp.(ReportEmbeddings200JSONResponse); !ok || res.Accepted != len(ups) {
+		t.Fatalf("report = %#v, want all %d accepted", resp, len(ups))
+	}
+}
+
 // While a configured engine is away no analysis work is leased: a worker
 // pulling its audio could not fetch it, and every lease spends one of the
 // few attempts a track gets. The worker is told to ask again when the

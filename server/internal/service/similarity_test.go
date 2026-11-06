@@ -87,6 +87,13 @@ func leaseAll(t *testing.T, ctx context.Context, svc *Library) map[string]Simila
 	return leaseAllServing(t, ctx, svc, true)
 }
 
+// forgetSweep makes the next sweep walk the catalog afresh, as the first
+// after a restart does.
+func forgetSweep(svc *Library) {
+	svc.simSweepVersion.Store(0)
+	svc.simIndex.Store(nil)
+}
+
 // leaseAllServing leases as a worker for a server that can, or cannot,
 // serve a carved track's window.
 func leaseAllServing(t *testing.T, ctx context.Context, svc *Library, windows bool) map[string]SimilarityWorkItem {
@@ -151,7 +158,7 @@ func TestSweepKeepsWindowedVectors(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	svc.simSweepVersion.Store(0)
+	forgetSweep(svc)
 	if _, err := svc.SimilaritySweep(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +294,7 @@ func TestARefusedTrackIsNotQueuedAgain(t *testing.T) {
 		}
 	}
 	asked := an.asked
-	svc.simSweepVersion.Store(0)
+	forgetSweep(svc)
 	if _, err := svc.SimilaritySweep(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +358,7 @@ func TestTrashingACarvedRipKeepsEverySiblingsVector(t *testing.T) {
 	if _, err := svc.DeleteItems(ctx, uc, []string{one, two}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
-	svc.simSweepVersion.Store(0)
+	forgetSweep(svc)
 	if _, err := svc.SimilaritySweep(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +387,7 @@ func TestAFailedReadPrunesNothing(t *testing.T) {
 	svc.catalogFile = func(context.Context, model.PID) (*model.File, error) {
 		return nil, errors.New("database is locked")
 	}
-	svc.simSweepVersion.Store(0)
+	forgetSweep(svc)
 	if _, err := svc.SimilaritySweep(ctx); err == nil {
 		t.Error("a sweep that could not read the catalog reported success")
 	}

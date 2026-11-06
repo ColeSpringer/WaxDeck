@@ -6867,7 +6867,8 @@ class SimilarityStatus {
   /// Tracks with a stored embedding.
   final int embeddedTracks;
 
-  /// Tracks eligible for analysis.
+  /// Tracks eligible for analysis: music tracks, less those too short to
+  /// analyze and any whose audio the analyzer found it cannot read.
   final int totalTracks;
 
   /// [embeddedTracks] over [totalTracks], 0 to 100. Clients show

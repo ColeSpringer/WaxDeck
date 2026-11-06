@@ -130,6 +130,19 @@ note.
   `series_pid` item field (and a series facet group) like `album_pid`.
   Shipped workaround: WaxDeck reads the books per series and takes
   their tag verdicts for the whole page in one query.
+- **No item field reads the primary file's library.** The `library`
+  field places an item in every library holding a file of it, an
+  alternate copy's included, while `ItemView.LibraryPID` follows the
+  primary file, and that is the library WaxDeck's grants read
+  (`viewVisible`): a reader granted only the library holding a copy can
+  neither list nor open the item. A grant compiled from `library`
+  (`grantNode`) still selects it, so facet buckets and scoped counts
+  count it for that reader and a listing page can come back short.
+  Wanted: an item field reading the primary file's library, as
+  `QueryItemsByPrimary` already reads `library`. Shipped workaround:
+  listings drop such an item in their per-item check; facet and scoped
+  counts still count it; the similarity status reads grants off its own
+  walk of the catalog, by primary file.
 - **Book authors past the first and narrators have no facet group.** A
   book's co-authors and narrators are `item_contributor` rows, but the
   `artist` group files a book under its first author only and

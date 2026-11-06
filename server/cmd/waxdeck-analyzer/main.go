@@ -268,7 +268,7 @@ func (w *worker) runOnce(ctx context.Context) (time.Duration, error) {
 
 // analyze turns one work item into its embedding vector.
 func (w *worker) analyze(ctx context.Context, item workItem) ([]float32, error) {
-	if item.DurationMs > 0 && item.DurationMs < analyzer.MinDurationMs {
+	if analyzer.TooShort(item.DurationMs) {
 		return nil, fmt.Errorf("%d ms is under the %d ms analysis minimum", item.DurationMs, analyzer.MinDurationMs)
 	}
 	samples, err := w.decode(ctx, item)

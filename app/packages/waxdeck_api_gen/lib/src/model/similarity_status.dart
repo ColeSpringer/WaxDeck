@@ -15,7 +15,7 @@ part 'similarity_status.g.dart';
 /// * [model] - The embedding model the stored vectors carry. Absent before the first ingest. 
 /// * [dims] - Stored vector dimensionality. Absent before the first ingest.
 /// * [embeddedTracks] - Tracks with a stored embedding.
-/// * [totalTracks] - Tracks eligible for analysis.
+/// * [totalTracks] - Tracks eligible for analysis: music tracks, less those too short to analyze and any whose audio the analyzer found it cannot read. 
 /// * [coveragePct] - `embeddedTracks` over `totalTracks`, 0 to 100. Clients show sonic affordances when coverage is meaningful. 
 /// * [queueDepth] - Tracks awaiting analysis.
 /// * [lastIngestAt] - When a worker last posted embeddings. Absent before the first ingest. 
@@ -37,7 +37,7 @@ abstract class SimilarityStatus implements Built<SimilarityStatus, SimilaritySta
   @BuiltValueField(wireName: r'embeddedTracks')
   int get embeddedTracks;
 
-  /// Tracks eligible for analysis.
+  /// Tracks eligible for analysis: music tracks, less those too short to analyze and any whose audio the analyzer found it cannot read. 
   @BuiltValueField(wireName: r'totalTracks')
   int get totalTracks;
 

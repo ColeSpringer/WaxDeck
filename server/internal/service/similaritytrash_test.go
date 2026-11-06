@@ -131,11 +131,18 @@ func embeddingCount(t *testing.T, ctx context.Context, svc *Library) int {
 	return n
 }
 
+// queueDepth counts the queue rows waiting for analysis.
 func queueDepth(t *testing.T, ctx context.Context, svc *Library) int {
 	t.Helper()
-	n, err := svc.db.SimilarityQueueDepth(ctx)
+	states, err := svc.db.SimilarityQueueStates(ctx)
 	if err != nil {
-		t.Fatalf("reading queue depth: %v", err)
+		t.Fatalf("reading the queue: %v", err)
+	}
+	n := 0
+	for _, s := range states {
+		if s == wdb.QueueWaiting {
+			n++
+		}
 	}
 	return n
 }

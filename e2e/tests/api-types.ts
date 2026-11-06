@@ -11445,7 +11445,7 @@ export interface components {
             dims?: number;
             /** @description Tracks with a stored embedding. */
             embeddedTracks: number;
-            /** @description Tracks eligible for analysis. */
+            /** @description Tracks eligible for analysis: music tracks, less those too short to analyze and any whose audio the analyzer found it cannot read. */
             totalTracks: number;
             /** @description `embeddedTracks` over `totalTracks`, 0 to 100. Clients show sonic affordances when coverage is meaningful. */
             coveragePct: number;

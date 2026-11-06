@@ -696,13 +696,22 @@ type Library struct {
 	// posted embeddings). simSweepVersion remembers the catalog data
 	// version the last analysis sweep covered, so an unchanged catalog
 	// never re-walks. simWake nudges the sweep loop when tracks may have
-	// arrived; lossy, ticker-backstopped. workerLocalPaths mirrors
-	// Config.WorkerLocalPaths.
+	// arrived; lossy, ticker-backstopped. simIndex is the latest walk's
+	// analysisIndex, which the status counts from; simIndexMu keeps two
+	// walks of one catalog from running at once, and simIndexChecked is
+	// when the index was last walked or checked against the catalog, in
+	// unix nanoseconds. simWalk is the walk running off any request, under
+	// simWalkMu. workerLocalPaths mirrors Config.WorkerLocalPaths.
 	sim              *similarity.Engine
 	simWarm          sync.Once
 	simWarmErr       error
 	simSweepVersion  atomic.Int64
 	simWake          chan struct{}
+	simIndex         atomic.Pointer[analysisIndex]
+	simIndexMu       sync.Mutex
+	simIndexChecked  atomic.Int64
+	simWalkMu        sync.Mutex
+	simWalk          *analysisWalk
 	workerLocalPaths bool
 	// isrcResolver mirrors Config.ISRCResolver.
 	isrcResolver ISRCResolver

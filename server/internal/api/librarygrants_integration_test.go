@@ -17,7 +17,6 @@ import (
 
 	"github.com/colespringer/waxdeck/fixtures"
 	"github.com/colespringer/waxdeck/server/internal/connect"
-	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -257,38 +256,82 @@ func TestSimilarityStatusCountsTheCallersReach(t *testing.T) {
 	if len(tracks) < 2 {
 		t.Fatalf("the granted account sees %d tracks, want at least 2", len(tracks))
 	}
-	bare := func(pid string) string { return pid[strings.Index(pid, "-")+1:] }
-	ctx := context.Background()
-	for key, pid := range map[string]string{"embedded-hidden": s.hidden.Pid, "embedded-own": tracks[0].Pid} {
-		if _, err := s.h.store.UpsertEmbedding(ctx, db.Embedding{
-			Essence: key, ItemPID: bare(pid), Model: "test-model", Dims: 2,
-			Vector: make([]byte, 8), CreatedAt: time.Now(),
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for key, pid := range map[string]string{"queued-hidden": s.hidden.Pid, "queued-own": tracks[1].Pid} {
-		if err := s.h.store.EnqueueSimilarity(ctx, key, bare(pid)); err != nil {
-			t.Fatal(err)
-		}
-	}
+	// A vector for a track the account cannot see, one for a track it can,
+	// and the rest queued.
+	queueLibrary(t, s.h)
+	reportVectors(t, s.h, s.hidden.Pid, tracks[0].Pid)
 	status := func(token string) SimilarityStatus {
 		t.Helper()
 		return decodeStatus[SimilarityStatus](t, reqAs(t, s.h, http.MethodGet, "/api/v1/similarity/status", token, nil), 200, "the similarity status")
 	}
 	all := len(s.items(t, s.h.token, "&mediaType=music"))
-	if got := status(s.h.token); got.TotalTracks != all || got.EmbeddedTracks != 2 || got.QueueDepth != 2 {
-		t.Errorf("the administrator reads %d tracks, %d embedded, %d queued; want %d, 2, 2",
-			got.TotalTracks, got.EmbeddedTracks, got.QueueDepth, all)
+	if got := status(s.h.token); got.TotalTracks != all || got.EmbeddedTracks != 2 || got.QueueDepth != all-2 {
+		t.Errorf("the administrator reads %d tracks, %d embedded, %d queued; want %d, 2, %d",
+			got.TotalTracks, got.EmbeddedTracks, got.QueueDepth, all, all-2)
 	}
 	got := status(s.token)
-	if got.TotalTracks != len(tracks) || got.EmbeddedTracks != 1 || got.QueueDepth != 1 {
-		t.Errorf("the granted account reads %d tracks, %d embedded, %d queued; want %d, 1, 1",
-			got.TotalTracks, got.EmbeddedTracks, got.QueueDepth, len(tracks))
+	if got.TotalTracks != len(tracks) || got.EmbeddedTracks != 1 || got.QueueDepth != len(tracks)-1 {
+		t.Errorf("the granted account reads %d tracks, %d embedded, %d queued; want %d, 1, %d",
+			got.TotalTracks, got.EmbeddedTracks, got.QueueDepth, len(tracks), len(tracks)-1)
 	}
 	if want := float32(100) / float32(len(tracks)); math.Abs(float64(got.CoveragePct-want)) > 0.01 {
 		t.Errorf("the granted account reads %v%% coverage, want %v", got.CoveragePct, want)
 	}
+}
+
+// The status total is what the sweep queues, at either reach: a track
+// under the analysis floor is refused every time it is asked, so it is
+// no part of it, while one whose duration the scan could not read is
+// queued, and so counted.
+func TestSimilarityStatusCountsWhatTheSweepQueues(t *testing.T) {
+	t.Parallel()
+	extra := t.TempDir()
+	if _, err := fixtures.Generate(extra,
+		fixtures.Spec{Name: "blip", Codec: fixtures.CodecFLAC, Duration: time.Second},
+		fixtures.Spec{Name: "noise", Codec: fixtures.CodecFLAC, Duration: time.Second, Corrupt: fixtures.CorruptGarbage},
+	); err != nil {
+		t.Fatal(err)
+	}
+	s := grantsScene{h: newHarness(t, service.Root{Name: "extra", Path: extra})}
+	for _, lib := range decode[Libraries](t, get(t, s.h.ts, "/api/v1/libraries", s.h.token)).Libraries {
+		if lib.Path != nil && *lib.Path == extra {
+			s.libB = lib.Pid
+		}
+	}
+	if s.libB == "" {
+		t.Fatal("the extra library is not listed")
+	}
+	s.token = s.account(t, "extraonly", s.libB)
+	// The demo four beside the blip and the noise.
+	if all, own := len(s.items(t, s.h.token, "&mediaType=music")), len(s.items(t, s.token, "&mediaType=music")); all != 6 || own != 2 {
+		t.Fatalf("the catalog lists %d tracks and the extra library %d, want 6 and 2", all, own)
+	}
+	status := func(token string) SimilarityStatus {
+		t.Helper()
+		return decodeStatus[SimilarityStatus](t, reqAs(t, s.h, http.MethodGet, "/api/v1/similarity/status", token, nil), 200, "the similarity status")
+	}
+	// The blip is out of both totals, the noise in them; once swept, all
+	// of each total waits in the queue.
+	check := func(phase string, swept bool) {
+		t.Helper()
+		for _, who := range []struct {
+			name, token string
+			total       int
+		}{{"the administrator", s.h.token, 5}, {"the extra library's account", s.token, 1}} {
+			got := status(who.token)
+			queued := 0
+			if swept {
+				queued = who.total
+			}
+			if got.TotalTracks != who.total || got.QueueDepth != queued || got.EmbeddedTracks != 0 {
+				t.Errorf("%s, %s reads %d tracks, %d queued, %d embedded; want %d, %d, 0",
+					phase, who.name, got.TotalTracks, got.QueueDepth, got.EmbeddedTracks, who.total, queued)
+			}
+		}
+	}
+	check("before a sweep", false)
+	queueLibrary(t, s.h)
+	check("after the sweep", true)
 }
 
 // wantSlots checks a session's queue as a receiver granted the first

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -306,65 +307,99 @@ func (d *DB) RetireSimilarityWork(ctx context.Context, key, reason string) error
 	return nil
 }
 
-// SimilarityWorkKeys lists every queued key, resting ones included.
-func (d *DB) SimilarityWorkKeys(ctx context.Context) ([]string, error) {
-	rows, err := d.r.QueryContext(ctx, `SELECT essence FROM similarity_queue`)
-	if err != nil {
-		return nil, fmt.Errorf("db: listing analysis work: %w", err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key); err != nil {
-			return nil, fmt.Errorf("db: listing analysis work: %w", err)
-		}
-		out = append(out, key)
-	}
-	return out, rows.Err()
-}
-
-// SimilarityQueueDepth reports how many tracks await analysis.
-// Attempt-exhausted rows are excluded: they will not be offered
-// again, so counting them would show a backlog nothing drains.
-func (d *DB) SimilarityQueueDepth(ctx context.Context) (int, error) {
-	var n int
-	err := d.r.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM similarity_queue WHERE attempts < ?`,
-		maxAnalysisAttempts).Scan(&n)
-	if err != nil {
-		return 0, fmt.Errorf("db: analysis queue depth: %w", err)
-	}
-	return n, nil
-}
-
-// EmbeddedItems lists the items holding a vector, each once: what a
-// caller who sees part of the library counts its own share of.
-func (d *DB) EmbeddedItems(ctx context.Context) ([]string, error) {
-	return d.itemPIDs(ctx, `SELECT DISTINCT item_pid FROM embeddings`)
-}
-
-// QueuedItems lists the items awaiting analysis, each once, leaving out
-// the attempt-exhausted rows SimilarityQueueDepth leaves out.
-func (d *DB) QueuedItems(ctx context.Context) ([]string, error) {
-	return d.itemPIDs(ctx, `SELECT DISTINCT item_pid FROM similarity_queue WHERE attempts < ?`, maxAnalysisAttempts)
-}
-
-func (d *DB) itemPIDs(ctx context.Context, q string, args ...any) ([]string, error) {
+// scanRows runs q and hands each row to scan; a failure reads as what
+// was being read.
+func (d *DB) scanRows(ctx context.Context, what, q string, args []any, scan func(*sql.Rows) error) error {
 	rows, err := d.r.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("db: listing analysis items: %w", err)
+		return fmt.Errorf("db: %s: %w", what, err)
 	}
 	defer rows.Close()
-	var out []string
 	for rows.Next() {
-		var pid string
-		if err := rows.Scan(&pid); err != nil {
-			return nil, fmt.Errorf("db: listing analysis items: %w", err)
+		if err := scan(rows); err != nil {
+			return fmt.Errorf("db: %s: %w", what, err)
 		}
-		out = append(out, pid)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("db: %s: %w", what, err)
+	}
+	return nil
+}
+
+// QueueState is where one analysis queue row stands.
+type QueueState uint8
+
+const (
+	// QueueWaiting is a row a worker may lease, or one under a lease: a
+	// row's last attempt waits until its lease lapses.
+	QueueWaiting QueueState = iota
+	// QueueExhausted is a row out of attempts whose audio was never judged.
+	QueueExhausted
+	// QueueRetired is a row whose audio the analyzer judged it cannot read.
+	QueueRetired
+)
+
+// SimilarityQueueStates maps every queued key to where it stands.
+func (d *DB) SimilarityQueueStates(ctx context.Context) (map[string]QueueState, error) {
+	out := map[string]QueueState{}
+	err := d.scanRows(ctx, "reading the analysis queue", `
+		SELECT essence, CASE
+			WHEN attempts < ? OR lease_until_ns > ? THEN 0
+			WHEN last_error <> '' THEN 2
+			ELSE 1 END
+		FROM similarity_queue`, []any{maxAnalysisAttempts, time.Now().UnixNano()},
+		func(rows *sql.Rows) error {
+			var key string
+			var state QueueState
+			if err := rows.Scan(&key, &state); err != nil {
+				return err
+			}
+			out[key] = state
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// StoredVectors is the embeddings table as the coverage status reads it:
+// every key holding a vector, and the model and dims they share and when
+// the newest arrived.
+type StoredVectors struct {
+	Keys       map[string]bool
+	Model      string
+	Dims       int
+	LastIngest time.Time
+}
+
+// StoredVectors reads the stored keys in one pass.
+func (d *DB) StoredVectors(ctx context.Context) (StoredVectors, error) {
+	out := StoredVectors{Keys: map[string]bool{}}
+	var newest int64
+	err := d.scanRows(ctx, "reading stored vectors", `SELECT essence, created_at_ns FROM embeddings`, nil,
+		func(rows *sql.Rows) error {
+			var key string
+			var at int64
+			if err := rows.Scan(&key, &at); err != nil {
+				return err
+			}
+			out.Keys[key] = true
+			newest = max(newest, at)
+			return nil
+		})
+	if err != nil {
+		return StoredVectors{}, err
+	}
+	if newest > 0 {
+		out.LastIngest = time.Unix(0, newest).UTC()
+	}
+	// One model at a time: ingest drops the others on a switch.
+	err = d.r.QueryRowContext(ctx, `SELECT model, dims FROM embeddings LIMIT 1`).Scan(&out.Model, &out.Dims)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return StoredVectors{}, fmt.Errorf("db: reading stored vectors: %w", err)
+	}
+	return out, nil
 }
 
 // AddSimilarityBackfill records nodes that lost a neighbor edge.

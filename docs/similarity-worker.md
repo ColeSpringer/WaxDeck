@@ -14,10 +14,12 @@ waits on coverage.
 
 Watch progress in the app's settings, or at
 `GET /api/v1/similarity/status`: coverage percentage, queue depth,
-and the stored model. Administrators turn analysis on and off with
-the Sonic analysis switch in the server settings; it applies
-immediately, no restart. `WAXDECK_SONIC_ANALYSIS` only seeds the
-default before an administrator first touches the switch.
+and the stored model. Coverage is over music long enough to analyze,
+less any audio the analyzer found it cannot read, so it reaches 100%
+once every other track has its vector. Administrators turn analysis
+on and off with the Sonic analysis switch in the server settings; it
+applies immediately, no restart. `WAXDECK_SONIC_ANALYSIS` only seeds
+the default before an administrator first touches the switch.
 
 ## Offloading analysis to a worker
 

@@ -19,11 +19,18 @@ func testEmbedding(essence, itemPID string) Embedding {
 	}
 }
 
+// queueDepth counts the rows waiting for analysis.
 func queueDepth(t *testing.T, d *DB) int {
 	t.Helper()
-	n, err := d.SimilarityQueueDepth(context.Background())
+	states, err := d.SimilarityQueueStates(context.Background())
 	if err != nil {
 		t.Fatal(err)
+	}
+	n := 0
+	for _, s := range states {
+		if s == QueueWaiting {
+			n++
+		}
 	}
 	return n
 }
@@ -317,10 +324,34 @@ func TestARetiredKeyRests(t *testing.T) {
 	if work, err := d.LeaseSimilarityWork(ctx, 10, 0, true); err != nil || len(work) != 0 {
 		t.Fatalf("a retired key leased as %+v (%v)", work, err)
 	}
-	if n, err := d.SimilarityQueueDepth(ctx); err != nil || n != 0 {
-		t.Fatalf("depth = %d (%v), want the retired key uncounted", n, err)
+	if states, err := d.SimilarityQueueStates(ctx); err != nil || len(states) != 1 || states["rip@0-225"] != QueueRetired {
+		t.Fatalf("queue = %v (%v), want the row listed as retired", states, err)
 	}
-	if keys, err := d.SimilarityWorkKeys(ctx); err != nil || len(keys) != 1 {
-		t.Fatalf("keys = %v (%v), want the resting row listed", keys, err)
+}
+
+// A row out of attempts was never judged, so it is exhausted rather than
+// retired; its last attempt waits until that lease lapses.
+func TestARowOutOfAttemptsIsExhaustedOnceItsLastLeaseLapses(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	if err := d.EnqueueSimilarity(ctx, "e1", "it-1"); err != nil {
+		t.Fatal(err)
+	}
+	for range maxAnalysisAttempts - 1 {
+		if work, err := d.LeaseSimilarityWork(ctx, 10, 0, true); err != nil || len(work) != 1 {
+			t.Fatalf("lease = %+v (%v), want the row", work, err)
+		}
+	}
+	if work, err := d.LeaseSimilarityWork(ctx, 10, time.Hour, true); err != nil || len(work) != 1 {
+		t.Fatalf("last lease = %+v (%v), want the row", work, err)
+	}
+	if states, err := d.SimilarityQueueStates(ctx); err != nil || states["e1"] != QueueWaiting {
+		t.Fatalf("under its last lease = %v (%v), want waiting", states, err)
+	}
+	if _, err := d.w.ExecContext(ctx, `UPDATE similarity_queue SET lease_until_ns = 0`); err != nil {
+		t.Fatal(err)
+	}
+	if states, err := d.SimilarityQueueStates(ctx); err != nil || states["e1"] != QueueExhausted {
+		t.Fatalf("once it lapsed = %v (%v), want exhausted", states, err)
 	}
 }

@@ -244,71 +244,102 @@ func (l *Library) warmSimilarity(ctx context.Context) error {
 }
 
 // SimilarityStatusFor answers coverage. enabled reports whether an
-// analyzer can feed the surface: the embedded analyzer's runtime
-// setting, or a configured external worker token. The counts are the
-// whole library's for a caller of full reach and the caller's own
-// tracks' otherwise.
+// analyzer can feed the surface. The counts are the whole library's for
+// a caller of full reach and the caller's own tracks' otherwise, both
+// read off the latest analysisIndex, so they are the sweep's own reading
+// of the library: a vector kept for a trashed track counts nowhere, and
+// audio the analyzer judged unreadable leaves the total along with the
+// queue.
 func (l *Library) SimilarityStatusFor(ctx context.Context, uc *UserCtx) (SimilarityStatus, error) {
-	enabled := l.SonicAnalysisEnabled() || l.workerAPIConfigured
-	count, mdl, dims, lastIngest, err := l.db.EmbeddingStats(ctx)
+	idx, err := l.statusAnalysisIndex(ctx)
+	if err != nil {
+		return SimilarityStatus{}, err
+	}
+	stored, err := l.db.StoredVectors(ctx)
 	if err != nil {
 		return SimilarityStatus{}, &Error{Kind: KindInternal, Err: err}
 	}
-	var depth, total int
-	if fullReach(uc) {
-		if depth, err = l.db.SimilarityQueueDepth(ctx); err != nil {
-			return SimilarityStatus{}, &Error{Kind: KindInternal, Err: err}
-		}
-		if total, err = l.countAnalyzableTracks(ctx, uc.CatalogPID); err != nil {
-			return SimilarityStatus{}, err
-		}
-	} else if total, count, depth, err = l.analysisInReach(ctx, uc); err != nil {
+	queue, err := l.db.SimilarityQueueStates(ctx)
+	if err != nil {
+		return SimilarityStatus{}, &Error{Kind: KindInternal, Err: err}
+	}
+	cov, err := l.coverageOf(ctx, uc, idx, stored.Keys, queue)
+	if err != nil {
 		return SimilarityStatus{}, err
 	}
 	st := SimilarityStatus{
-		Enabled:        enabled,
-		Model:          mdl,
-		Dims:           dims,
-		EmbeddedTracks: count,
-		TotalTracks:    total,
-		QueueDepth:     depth,
-		LastIngestAt:   lastIngest,
+		Enabled:        l.analysisOn(),
+		Model:          stored.Model,
+		Dims:           stored.Dims,
+		EmbeddedTracks: cov.embedded,
+		TotalTracks:    cov.total(),
+		QueueDepth:     cov.queued,
+		LastIngestAt:   stored.LastIngest,
 	}
-	if total > 0 {
-		pct := float64(count) / float64(total) * 100
-		if pct > 100 {
-			pct = 100
-		}
-		st.CoveragePct = pct
+	if st.TotalTracks > 0 {
+		st.CoveragePct = float64(st.EmbeddedTracks) / float64(st.TotalTracks) * 100
 	}
 	return st, nil
 }
 
-// analysisInReach answers the status counts over the tracks the caller
-// may enumerate: how many there are, how many hold a vector, and how many
-// wait for one.
-func (l *Library) analysisInReach(ctx context.Context, uc *UserCtx) (total, embedded, queued int, err error) {
-	tracks := func() *query.Builder {
-		return l.facetScopeBuilder(ctx, uc).Where("kind", query.OpIs, string(model.KindTrack))
+// analysisOn reports whether an analyzer can feed the sonic surface: the
+// embedded one, or an external worker holding a token. Sweeps run only
+// then.
+func (l *Library) analysisOn() bool {
+	return l.SonicAnalysisEnabled() || l.workerAPIConfigured
+}
+
+// analysisCoverage is the status counts: tracks holding a vector, tracks
+// waiting in the queue, and the rest: tracks no sweep has queued yet,
+// and those out of attempts with their audio never judged, which stay
+// in the total so an outage shows.
+type analysisCoverage struct{ embedded, queued, pending int }
+
+func (c analysisCoverage) total() int { return c.embedded + c.queued + c.pending }
+
+// coverageOf counts the index's tracks the caller may enumerate against
+// the stored vectors and the queue, leaving out those the analyzer
+// judged it cannot read: nothing will ever drain them. Library grants are
+// read off the index; tag rules need the catalog, one count per chunk of
+// each class.
+func (l *Library) coverageOf(ctx context.Context, uc *UserCtx, idx *analysisIndex, stored map[string]bool, queue map[string]wdb.QueueState) (analysisCoverage, error) {
+	const embedded, queued, pending = 0, 1, 2
+	var counts [3]int
+	var pids [3][]string
+	ruled := tagRestricted(uc)
+	for _, t := range idx.tracks {
+		if !uc.AllLibraries && !uc.Libraries[t.library] {
+			continue
+		}
+		class := pending
+		if stored[t.key] {
+			class = embedded
+		} else if state, ok := queue[t.key]; ok {
+			switch state {
+			case wdb.QueueWaiting:
+				class = queued
+			case wdb.QueueRetired:
+				continue
+			}
+		}
+		if ruled {
+			pids[class] = append(pids[class], string(t.pid))
+		} else {
+			counts[class]++
+		}
 	}
-	if total, err = l.lib.Count(ctx, tracks().Build(), ""); err != nil {
-		return 0, 0, 0, classify(err)
+	if ruled {
+		rule := l.contentRuleNode(ctx, uc)
+		base := func() *query.Builder { return visibleItems().WhereNode(rule) }
+		for class := range pids {
+			n, err := l.countAmong(ctx, pids[class], base)
+			if err != nil {
+				return analysisCoverage{}, err
+			}
+			counts[class] = n
+		}
 	}
-	vectors, err := l.db.EmbeddedItems(ctx)
-	if err != nil {
-		return 0, 0, 0, &Error{Kind: KindInternal, Err: err}
-	}
-	if embedded, err = l.countAmong(ctx, vectors, tracks); err != nil {
-		return 0, 0, 0, err
-	}
-	waiting, err := l.db.QueuedItems(ctx)
-	if err != nil {
-		return 0, 0, 0, &Error{Kind: KindInternal, Err: err}
-	}
-	if queued, err = l.countAmong(ctx, waiting, tracks); err != nil {
-		return 0, 0, 0, err
-	}
-	return total, embedded, queued, nil
+	return analysisCoverage{embedded: counts[embedded], queued: counts[queued], pending: counts[pending]}, nil
 }
 
 // countAmong counts the items base selects among the bare pids, once per
@@ -326,15 +357,202 @@ func (l *Library) countAmong(ctx context.Context, pids []string, base func() *qu
 	return n, nil
 }
 
-// countAnalyzableTracks counts the catalog's music tracks, carved ones
-// included.
-func (l *Library) countAnalyzableTracks(ctx context.Context, catalogPID string) (int, error) {
-	q := visibleItems().Where("kind", query.OpIs, string(model.KindTrack)).Build()
-	n, err := l.lib.Count(ctx, q, model.PID(catalogPID))
-	if err != nil {
-		return 0, classify(err)
+// analysisIndex is one walk of the catalog, read for sonic analysis:
+// every visible music track the sweep queues, in title order, and the
+// keys only tracks under the analysis floor hold. Those stay live (a
+// vector one has is kept) but are never queued.
+type analysisIndex struct {
+	version int64
+	tracks  []analysisTrack
+	refused map[string]bool
+}
+
+// analysisTrack is one track the sweep queues: its bare pid, the key its
+// vector lives under, and the bare pid of the library its primary file
+// sits in, which is what a grant reaches it through (viewVisible's rule).
+type analysisTrack struct {
+	pid     model.PID
+	key     string
+	library string
+}
+
+// live is every key the walk found audio under, the refused included.
+func (x *analysisIndex) live() map[string]bool {
+	live := make(map[string]bool, len(x.tracks)+len(x.refused))
+	for _, t := range x.tracks {
+		live[t.key] = true
 	}
-	return n, nil
+	for key := range x.refused {
+		live[key] = true
+	}
+	return live
+}
+
+// walkAnalysis reads the catalog, as of version, into an analysisIndex.
+func (l *Library) walkAnalysis(ctx context.Context, version int64) (*analysisIndex, error) {
+	defaultUser, err := l.lib.DefaultUser(ctx)
+	if err != nil {
+		return nil, classify(err)
+	}
+	idx := &analysisIndex{version: version, refused: map[string]bool{}}
+	// Carved siblings share one file: read its essence once.
+	essences := map[model.PID]string{}
+	q := visibleItems().Where("kind", query.OpIs, string(model.KindTrack)).OrderBy("title", false).Build()
+	cursor := ""
+	for {
+		page, err := l.lib.QueryPage(ctx, q, read.Cursor(cursor), 500, false, defaultUser.PID)
+		if err != nil {
+			return nil, classify(err)
+		}
+		for _, it := range page.Items {
+			essence, ok := essences[it.FilePID]
+			if !ok {
+				f, err := l.catalogFile(ctx, it.FilePID)
+				switch {
+				case err == nil:
+					essence = f.EssenceHash
+				case waxerr.CodeOf(err) != waxerr.CodeNotFound:
+					// Unread is not gone: a walk that cannot read the
+					// catalog answers nothing, and runs again next time.
+					return nil, classify(err)
+				}
+				essences[it.FilePID] = essence
+			}
+			if essence == "" {
+				continue
+			}
+			key := analysisKey(essence, it)
+			// Under the floor the analyzer refuses it, every time it is asked.
+			if analyzer.TooShort(it.DurationMS) {
+				idx.refused[key] = true
+				continue
+			}
+			idx.tracks = append(idx.tracks, analysisTrack{pid: it.PID, key: key, library: string(it.LibraryPID)})
+		}
+		if !page.HasMore {
+			break
+		}
+		cursor = string(page.Next)
+	}
+	// A key a long enough track holds is queued, whatever another track
+	// of the audio reads, so the sweep must not drop its row.
+	for _, t := range idx.tracks {
+		delete(idx.refused, t.key)
+	}
+	return idx, nil
+}
+
+// analysisIndexAt answers the index of catalog version, walking one
+// unless the latest is of it. DataVersion is only ever compared for
+// equality.
+func (l *Library) analysisIndexAt(ctx context.Context, version int64) (*analysisIndex, error) {
+	l.simIndexMu.Lock()
+	defer l.simIndexMu.Unlock()
+	if cur := l.simIndex.Load(); cur != nil && cur.version == version {
+		return cur, nil
+	}
+	idx, err := l.walkAnalysis(ctx, version)
+	if err != nil {
+		return nil, err
+	}
+	l.simIndex.Store(idx)
+	l.simIndexChecked.Store(time.Now().UnixNano())
+	return idx, nil
+}
+
+// statusIndexReuse is how long the latest walk answers the status before
+// it is checked against the catalog again.
+const statusIndexReuse = 30 * time.Second
+
+// statusAnalysisIndex answers the index the status counts from. Before
+// the first walk it waits for one, run off the request so a caller that
+// gives up does not cancel it. After that it answers the latest walk at
+// once and has a fresh one start in the background, at most once a
+// statusIndexReuse and whether or not analysis is on: departures reach a
+// sweep only at its backstop, and a sweep that keeps failing never walks.
+func (l *Library) statusAnalysisIndex(ctx context.Context) (*analysisIndex, error) {
+	if cur := l.simIndex.Load(); cur != nil {
+		if !l.Maintenance() {
+			l.refreshAnalysisIndex()
+		}
+		return cur, nil
+	}
+	walk := l.walkInBackground()
+	if walk == nil {
+		// A Library with no supervisor to run it on walks here.
+		version, err := l.lib.DataVersion(ctx)
+		if err != nil {
+			return nil, classify(err)
+		}
+		return l.analysisIndexAt(ctx, version)
+	}
+	select {
+	case <-walk.done:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	if walk.err != nil {
+		return nil, walk.err
+	}
+	if cur := l.simIndex.Load(); cur != nil {
+		return cur, nil
+	}
+	return nil, &Error{Kind: KindInternal, Err: errors.New("walking the library for the analysis status failed")}
+}
+
+// refreshAnalysisIndex starts a walk in the background, which reads the
+// catalog only if it moved past the latest, unless one was checked
+// within statusIndexReuse.
+func (l *Library) refreshAnalysisIndex() {
+	now := time.Now().UnixNano()
+	last := l.simIndexChecked.Load()
+	if now-last < int64(statusIndexReuse) || !l.simIndexChecked.CompareAndSwap(last, now) {
+		return
+	}
+	l.walkInBackground()
+}
+
+// analysisWalk is a walk run off any request: done closes when it ends,
+// and err, set before that, is what it ended with.
+type analysisWalk struct {
+	done chan struct{}
+	err  error
+}
+
+// walkInBackground answers the walk in flight, starting one under the
+// supervisor when none is; nil when the Library has no supervisor.
+func (l *Library) walkInBackground() *analysisWalk {
+	if l.workers == nil || l.procCtx == nil {
+		return nil
+	}
+	l.simWalkMu.Lock()
+	if w := l.simWalk; w != nil {
+		l.simWalkMu.Unlock()
+		return w
+	}
+	w := &analysisWalk{done: make(chan struct{})}
+	l.simWalk = w
+	l.simWalkMu.Unlock()
+	end := func(err error) {
+		w.err = err
+		l.simWalkMu.Lock()
+		l.simWalk = nil
+		l.simWalkMu.Unlock()
+		close(w.done)
+	}
+	started := l.workers.GoOnce(l.procCtx, "analysis-index", func(ctx context.Context) (err error) {
+		defer func() { end(err) }()
+		version, err := l.lib.DataVersion(ctx)
+		if err != nil {
+			return classify(err)
+		}
+		_, err = l.analysisIndexAt(ctx, version)
+		return err
+	})
+	if !started {
+		end(context.Canceled)
+	}
+	return w
 }
 
 // LeaseSimilarityWork leases a work batch for a polling worker.
@@ -540,11 +758,12 @@ func (l *Library) similarityWakeup() {
 // SimilaritySweep reconciles the analysis queue with the catalog: new
 // music tracks enqueue, embeddings whose audio left the catalog prune
 // (edges removed, affected nodes queued for lazy recompute), and
-// pending backfills recompute. It short-circuits when the catalog data
-// version has not moved since the last sweep. Returns true when it did
-// meaningful work (the worker loop uses that to pace itself).
+// pending backfills recompute. Its walk is the analysisIndex the status
+// counts from. It short-circuits when the catalog data version has not
+// moved since the last sweep. Returns true when it did meaningful work
+// (the worker loop uses that to pace itself).
 func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
-	if (!l.SonicAnalysisEnabled() && !l.workerAPIConfigured) || l.Maintenance() {
+	if !l.analysisOn() || l.Maintenance() {
 		return false, nil
 	}
 	if err := l.warmSimilarity(ctx); err != nil {
@@ -561,62 +780,29 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 	if version == l.simSweepVersion.Load() {
 		return worked, nil
 	}
-	defaultUser, err := l.lib.DefaultUser(ctx)
+	// A walk that cannot read the catalog prunes nothing.
+	idx, err := l.analysisIndexAt(ctx, version)
 	if err != nil {
-		return worked, classify(err)
+		return worked, err
 	}
-	live := map[string]bool{}
-	// Carved siblings share one file: read it once.
-	essences := map[model.PID]string{}
-	q := visibleItems().Where("kind", query.OpIs, string(model.KindTrack)).OrderBy("title", false).Build()
-	cursor := ""
-	for {
-		page, err := l.lib.QueryPage(ctx, q, read.Cursor(cursor), 500, false, defaultUser.PID)
-		if err != nil {
-			return worked, classify(err)
+	for _, t := range idx.tracks {
+		if !l.sim.Has(t.key) {
+			if err := l.db.EnqueueSimilarity(ctx, t.key, string(t.pid)); err != nil {
+				return worked, &Error{Kind: KindInternal, Err: err}
+			}
+			worked = true
 		}
-		for _, it := range page.Items {
-			essence, ok := essences[it.FilePID]
-			if !ok {
-				f, err := l.catalogFile(ctx, it.FilePID)
-				switch {
-				case err == nil:
-					essence = f.EssenceHash
-				case waxerr.CodeOf(err) != waxerr.CodeNotFound:
-					// Unread is not gone: a sweep that cannot read the
-					// catalog prunes nothing, and runs again next time.
-					return worked, classify(err)
-				}
-				essences[it.FilePID] = essence
-			}
-			if essence == "" {
-				continue
-			}
-			key := analysisKey(essence, it)
-			live[key] = true
-			// Under the floor the analyzer refuses it, every time it is asked.
-			if it.DurationMS > 0 && it.DurationMS < analyzer.MinDurationMs {
-				continue
-			}
-			if !l.sim.Has(key) {
-				if err := l.db.EnqueueSimilarity(ctx, key, string(it.PID)); err != nil {
-					return worked, &Error{Kind: KindInternal, Err: err}
-				}
-				worked = true
-			}
-		}
-		if !page.HasMore {
-			break
-		}
-		cursor = string(page.Next)
 	}
-	// Rows whose audio left the catalog, resting ones included.
-	keys, err := l.db.SimilarityWorkKeys(ctx)
+	live := idx.live()
+	// Rows whose audio left the catalog, resting ones included, and rows
+	// of audio under the floor, queued before the scan read how short it
+	// is: neither is ever analyzed.
+	queue, err := l.db.SimilarityQueueStates(ctx)
 	if err != nil {
 		return worked, &Error{Kind: KindInternal, Err: err}
 	}
-	for _, key := range keys {
-		if !live[key] {
+	for key := range queue {
+		if !live[key] || idx.refused[key] {
 			l.completeAnalysis(ctx, key)
 		}
 	}

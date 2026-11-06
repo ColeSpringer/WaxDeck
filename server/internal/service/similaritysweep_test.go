@@ -20,15 +20,6 @@ func sweepWoken(svc *Library) bool {
 	}
 }
 
-func similarityQueueDepth(t *testing.T, ctx context.Context, svc *Library) int {
-	t.Helper()
-	depth, err := svc.db.SimilarityQueueDepth(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return depth
-}
-
 // startSweeps runs the sweep loop on schedule s for the rest of the test.
 func startSweeps(t *testing.T, ctx context.Context, svc *Library, s similaritySchedule) {
 	t.Helper()
@@ -51,7 +42,7 @@ func quietFixture(t *testing.T, analysis bool) (context.Context, *Library, *User
 	}
 	feedCaughtUp(t, ctx, svc)
 	sweepWoken(svc)
-	if depth := similarityQueueDepth(t, ctx, svc); depth != 0 {
+	if depth := queueDepth(t, ctx, svc); depth != 0 {
 		t.Fatalf("queue depth %d before any sweep", depth)
 	}
 	return ctx, svc, uc
@@ -101,7 +92,7 @@ func TestAScannedTrackIsQueuedWithoutWaitingForTheBackstop(t *testing.T) {
 	if _, err := svc.SimilaritySweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	queued := similarityQueueDepth(t, ctx, svc)
+	queued := queueDepth(t, ctx, svc)
 	feedCaughtUp(t, ctx, svc)
 	sweepWoken(svc)
 	// Neither the boot sweep nor the backstop comes due in the test.
@@ -116,7 +107,7 @@ func TestAScannedTrackIsQueuedWithoutWaitingForTheBackstop(t *testing.T) {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return similarityQueueDepth(t, ctx, svc) == queued+1 }, "the scanned track queued for analysis")
+	waitFor(t, func() bool { return queueDepth(t, ctx, svc) == queued+1 }, "the scanned track queued for analysis")
 }
 
 // Turning sonic analysis on queues a library scanned while it was off,
@@ -126,7 +117,7 @@ func TestTurningAnalysisOnQueuesTheLibraryWithoutTheBackstop(t *testing.T) {
 	ctx, svc, uc := quietFixture(t, false)
 	startSweeps(t, ctx, svc, similaritySchedule{first: time.Hour, settle: 20 * time.Millisecond, backstop: time.Hour})
 	enableSonicAnalysis(t, ctx, svc, uc)
-	waitFor(t, func() bool { return similarityQueueDepth(t, ctx, svc) > 0 }, "the library queued once analysis is on")
+	waitFor(t, func() bool { return queueDepth(t, ctx, svc) > 0 }, "the library queued once analysis is on")
 }
 
 // Arrivals that keep coming hold the sweep until they stop, so a long
@@ -138,10 +129,10 @@ func TestASweepWaitsForArrivalsToStop(t *testing.T) {
 	for end := time.Now().Add(1500 * time.Millisecond); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
 		svc.similarityWakeup()
 	}
-	if depth := similarityQueueDepth(t, ctx, svc); depth != 0 {
+	if depth := queueDepth(t, ctx, svc); depth != 0 {
 		t.Fatalf("queue depth %d while arrivals kept coming, want no sweep yet", depth)
 	}
-	waitFor(t, func() bool { return similarityQueueDepth(t, ctx, svc) > 0 }, "the sweep once the arrivals stopped")
+	waitFor(t, func() bool { return queueDepth(t, ctx, svc) > 0 }, "the sweep once the arrivals stopped")
 }
 
 // A scan that never goes quiet is still swept at the backstop.
@@ -163,7 +154,7 @@ func TestTheBackstopSweepsAScanThatNeverGoesQuiet(t *testing.T) {
 		}
 	}()
 	t.Cleanup(func() { close(stop); <-done })
-	waitFor(t, func() bool { return similarityQueueDepth(t, ctx, svc) > 0 }, "a backstop sweep while arrivals kept coming")
+	waitFor(t, func() bool { return queueDepth(t, ctx, svc) > 0 }, "a backstop sweep while arrivals kept coming")
 }
 
 // A sweep a catalog hand-off held off runs once the hand-off ends, not at
@@ -177,9 +168,9 @@ func TestASweepHeldOffByMaintenanceRunsWhenItEnds(t *testing.T) {
 	svc.similarityWakeup()
 	waitFor(t, func() bool { return len(svc.simWake) == 0 }, "the loop taking the wakeup")
 	time.Sleep(200 * time.Millisecond) // ten settles: its sweep has found the hand-off
-	if depth := similarityQueueDepth(t, ctx, svc); depth != 0 {
+	if depth := queueDepth(t, ctx, svc); depth != 0 {
 		t.Fatalf("queue depth %d during the hand-off, want none", depth)
 	}
 	svc.endMaintenance(gen)
-	waitFor(t, func() bool { return similarityQueueDepth(t, ctx, svc) > 0 }, "the held-off sweep once the hand-off ended")
+	waitFor(t, func() bool { return queueDepth(t, ctx, svc) > 0 }, "the held-off sweep once the hand-off ended")
 }
