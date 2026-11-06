@@ -68,6 +68,8 @@ func (l *Library) endMaintenance(gen uint64) {
 	defer l.maintenanceMu.Unlock()
 	if l.suspendGen.Load() == gen {
 		l.maintenance.Store(false)
+		// A sweep the hand-off held off runs now, not at the backstop.
+		l.similarityWakeup()
 	}
 }
 
@@ -220,6 +222,7 @@ func (l *Library) catalogReplaced(ctx context.Context, seq, ts int64) bool {
 	l.jobs.forget()
 	l.fireCatalogResync()
 	l.settleAfterReopen()
+	l.similarityWakeup()
 	return true
 }
 

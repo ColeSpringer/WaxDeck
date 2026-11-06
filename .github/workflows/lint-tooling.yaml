@@ -1,0 +1,97 @@
+# The local lint gate on every platform the Makefile supports. `make
+# workflow-lint` and `make shell-lint` fetch their pinned linters per
+# platform (tools/fetch-linter.sh), and CI's workflows job only runs them
+# on Linux; this runs them on Windows (Git's bash, and the native make
+# CONTRIBUTING.md installs) and on a stock Mac (Apple's make 3.81, bash
+# 3.2, BSD tar) whenever that tooling changes. A pass only counts if the
+# gate still fails a finding - actionlint silently skips a shellcheck it
+# cannot run - so each target is also handed a planted one, Linux
+# included.
+name: Lint tooling
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Makefile
+      - tools/fetch-linter.sh
+      - .github/workflows/lint-tooling.yaml
+  pull_request:
+    paths:
+      - Makefile
+      - tools/fetch-linter.sh
+      - .github/workflows/lint-tooling.yaml
+  workflow_dispatch:
+
+# As ci.yaml: a pull request's newer run cancels the older, and a push
+# to main keeps a run of its own.
+concurrency:
+  group: lint-tooling-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    # The backstop.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      # The command CONTRIBUTING.md gives Windows developers. winget comes
+      # with Windows Server 2025 itself, not the image, so the image
+      # readme does not list it. Its portable install links make into
+      # WinGet\Links, which only later steps see on PATH; winget runs last
+      # so that its exit status is the step's.
+      - name: Install GNU make
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "$env:LOCALAPPDATA\Microsoft\WinGet\Links" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          winget install --id ezwinports.make --exact --source winget --scope user --accept-source-agreements --accept-package-agreements --disable-interactivity
+      # The platform's own shell (PowerShell on Windows), since the
+      # Makefile promises make works from any shell.
+      - name: The gate passes the tree
+        run: make workflow-lint shell-lint
+      - name: The gate fails a finding
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/planted.log"
+          cat > .github/workflows/zz-planted.yaml <<'EOF'
+          on: push
+          jobs:
+            planted:
+              runs-on: ubuntu-latest
+              steps:
+                - run: |
+                    words="a b"
+                    echo $words
+          EOF
+          if make workflow-lint > "$log" 2>&1; then
+            cat "$log"
+            echo "::error::workflow-lint passed a planted SC2086"
+            exit 1
+          fi
+          grep -q 'zz-planted.yaml.*SC2086' "$log" ||
+            { cat "$log"; echo "::error::workflow-lint failed, but not on the planted SC2086"; exit 1; }
+          rm .github/workflows/zz-planted.yaml
+          cat > tools/zz-planted.sh <<'EOF'
+          #!/usr/bin/env bash
+          cd "$1"
+          EOF
+          if make shell-lint > "$log" 2>&1; then
+            cat "$log"
+            echo "::error::shell-lint passed a planted SC2164"
+            exit 1
+          fi
+          grep -q 'zz-planted.sh.*SC2164' "$log" ||
+            { cat "$log"; echo "::error::shell-lint failed, but not on the planted SC2164"; exit 1; }
+          rm tools/zz-planted.sh
+          echo "both targets failed their planted findings"

@@ -121,12 +121,12 @@ jobs:
               tags=
               name=waxdeck-analyzer
               if [ "$cmd" = waxdeck ]; then
-                tags="-tags withweb"
+                tags=withweb
                 name=waxdeck-server
               fi
               echo "building $cmd for $goos/$goarch"
               (cd server && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-                go build $tags -trimpath \
+                go build -tags "$tags" -trimpath \
                   -ldflags "-X main.version=${VERSION}" \
                   -o "../dist/stage/$bin" "./cmd/$cmd")
               name="${name}_${VERSION}_${goos}_${goarch}"

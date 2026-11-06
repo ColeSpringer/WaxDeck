@@ -1,4 +1,4 @@
-.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-l10n gen-mirror lint spec-lint test test-server test-fixtures test-app test-app-chrome \
+.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-l10n gen-mirror lint spec-lint workflow-lint shell-lint test test-server test-fixtures test-app test-app-chrome \
         web build run images preflight up down reset logs drift-check oasdiff e2e e2e-desktop dist clean \
         path-doctor
 
@@ -139,7 +139,7 @@ goldens-linux:
 
 ## --- quality gates -----------------------------------------------------------
 
-lint: spec-lint
+lint: spec-lint workflow-lint shell-lint
 	cd server && go vet ./... && test -z "$$(gofmt -l .)"
 	cd server && go run ./cmd/spawnlint ./...
 	cd server && go run ./cmd/querylint ./...
@@ -157,6 +157,26 @@ lint: spec-lint
 spec-lint:
 	cd e2e && { test -d node_modules || npm ci --no-audit --no-fund; }
 	e2e/node_modules/.bin/spectral lint --fail-severity=warn $(SPEC)
+
+# The workflows and the shell beside them, checked as CI's workflows job
+# checks them, since that job runs these two targets (and lint-tooling.yaml
+# runs them on Windows and macOS). actionlint reads the YAML, the
+# expressions and every run: block (through shellcheck); shellcheck reads
+# the repository's own scripts at warning severity, in the gcc format
+# CI's problem matcher parses. Each linter is the pinned build
+# tools/fetch-linter.sh caches per user, never one from PATH or a runner
+# image: those move on their own and would red a change that touched
+# nothing here, which is also why pyflakes stays off. Keep the && chain -
+# actionlint silently skips a shellcheck it cannot run, so a failed fetch
+# must stop it. The workflows are named rather than found: actionlint's
+# own search wants a git checkout, and a tree cut with git archive is not
+# one.
+WORKFLOWS := $(wildcard .github/workflows/*.yaml .github/workflows/*.yml)
+workflow-lint:
+	al=$$(tools/fetch-linter.sh actionlint) && sc=$$(tools/fetch-linter.sh shellcheck) && "$$al" -shellcheck="$$sc" -pyflakes= $(WORKFLOWS)
+
+shell-lint:
+	sc=$$(tools/fetch-linter.sh shellcheck) && "$$sc" -f gcc -S warning e2e/*.sh e2e/tools/*.sh tools/*.sh tools/ci/*.sh
 
 test: test-server test-fixtures test-app
 

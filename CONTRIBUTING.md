@@ -31,6 +31,10 @@ make run        # build and serve on http://localhost:4420
 make e2e        # Playwright suite against the compose stack
 ```
 
+`make lint` also checks the workflows and shell scripts, with the same
+pinned actionlint and shellcheck as CI; the first run on a machine
+fetches both into `~/.cache/waxdeck/linters/`.
+
 The API contract is the source of truth. Change the fragments in
 `api/spec/`, run `make generate`, and commit fragments, bundle, and
 regenerated code together; never hand-edit `api/openapi.yaml`,

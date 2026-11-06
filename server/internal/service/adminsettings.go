@@ -257,6 +257,7 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, c AdminS
 	now := time.Now().UnixNano()
 	wasRadioArt := l.RadioExternalArtEnabled()
 	wasReadOnly := l.ServerReadOnly()
+	wasSonic := l.SonicAnalysisEnabled()
 	for k, v := range writes {
 		if err := l.db.SettingSet(ctx, k, v, now); err != nil {
 			return AdminSettings{}, &Error{Kind: KindInternal, Err: err}
@@ -271,6 +272,11 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, c AdminS
 			// No managed root was probed while the server was read-only.
 			l.probeRoots()
 		}
+	}
+	if !wasSonic && l.SonicAnalysisEnabled() {
+		// A library scanned while analysis was off joins the queue now,
+		// not at the sweep's backstop.
+		l.similarityWakeup()
 	}
 	if wasRadioArt && !l.RadioExternalArtEnabled() {
 		// Switching the rung off drops what it fetched. The read path

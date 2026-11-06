@@ -575,30 +575,15 @@ func run() error {
 
 	// The similarity sweep keeps the analysis queue reconciled with the
 	// catalog (new tracks enqueue, deleted audio prunes and backfills),
-	// and the embedded analyzer drains that queue in process: sonic
+	// running once a scan goes quiet and on a ten-minute backstop, and the
+	// embedded analyzer drains that queue in process: sonic
 	// similarity with zero setup, no second container (the server
 	// already links the decoders through the catalog). Both loops
 	// self-gate on the runtime admin setting, so administrators flip
 	// analysis on and off without a restart; external workers remain
 	// the offload path for installs that want analysis off this
 	// machine.
-	group.Go(ctx, "similarity-sweep", func(ctx context.Context) error {
-		first := time.NewTimer(30 * time.Second)
-		defer first.Stop()
-		tick := time.NewTicker(10 * time.Minute)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-first.C:
-			case <-tick.C:
-			}
-			if _, err := svc.SimilaritySweep(ctx); err != nil {
-				log.Warn("similarity sweep", "err", err)
-			}
-		}
-	})
+	group.Go(ctx, "similarity-sweep", svc.RunSimilaritySweeps)
 	group.Go(ctx, "embedded-analysis", func(ctx context.Context) error {
 		an := analyzer.New()
 		first := time.NewTimer(45 * time.Second)

@@ -604,6 +604,14 @@ func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 	if ch.EntityType == "item" {
 		l.wakeLibraryJournal()
 	}
+	// New tracks are what the analysis queue waits on: an item created, or
+	// a library added or brought back. Departures (a file gone missing is
+	// an item update) and edits wait for the sweep's backstop, as reads
+	// already drop departed tracks; so do new file rows, which every
+	// episode download writes.
+	if !history && ((ch.EntityType == "item" && ch.Op == model.OpCreate) || ch.EntityType == "library") {
+		l.similarityWakeup()
+	}
 	// A root added or re-flagged elsewhere (the CLI, a restore) reaches
 	// the root table here; mid-hand-off the reopen hook rebuilds it. The
 	// podcast library is left out of that table, so its creation is

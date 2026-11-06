@@ -695,11 +695,14 @@ type Library struct {
 	// waxdeck.db on first use (it only holds data when a worker has
 	// posted embeddings). simSweepVersion remembers the catalog data
 	// version the last analysis sweep covered, so an unchanged catalog
-	// never re-walks. workerLocalPaths mirrors Config.WorkerLocalPaths.
+	// never re-walks. simWake nudges the sweep loop when tracks may have
+	// arrived; lossy, ticker-backstopped. workerLocalPaths mirrors
+	// Config.WorkerLocalPaths.
 	sim              *similarity.Engine
 	simWarm          sync.Once
 	simWarmErr       error
 	simSweepVersion  atomic.Int64
+	simWake          chan struct{}
 	workerLocalPaths bool
 	// isrcResolver mirrors Config.ISRCResolver.
 	isrcResolver ISRCResolver
@@ -933,6 +936,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		openedAtNS:               time.Now().UnixNano(),
 		startupScan:              cfg.ScanOnStart,
 		matchWake:                make(chan struct{}, 1),
+		simWake:                  make(chan struct{}, 1),
 		radioWrites:              make(chan radioWrite, radioWriteQueue),
 		sealer:                   cfg.Sealer,
 		cursorSealer:             cursorSealer,

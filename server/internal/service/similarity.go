@@ -468,6 +468,75 @@ func (l *Library) persistEdges(ctx context.Context, essence string, edges []simi
 	return nil
 }
 
+// similaritySchedule paces the sweep loop: a sweep shortly after boot,
+// one once arrivals have stopped for settle, and the backstop, which
+// also sweeps a scan that never goes quiet and covers what no wakeup
+// names (departures, and edits that swap a track's audio).
+type similaritySchedule struct {
+	first, settle, backstop time.Duration
+}
+
+var defaultSimilaritySchedule = similaritySchedule{
+	first:    30 * time.Second,
+	settle:   30 * time.Second,
+	backstop: 10 * time.Minute,
+}
+
+// RunSimilaritySweeps keeps the analysis queue reconciled with the
+// catalog until ctx ends.
+func (l *Library) RunSimilaritySweeps(ctx context.Context) error {
+	return l.runSimilaritySweeps(ctx, defaultSimilaritySchedule)
+}
+
+func (l *Library) runSimilaritySweeps(ctx context.Context, s similaritySchedule) error {
+	first := time.NewTimer(s.first)
+	defer first.Stop()
+	tick := time.NewTicker(s.backstop)
+	defer tick.Stop()
+	// Armed while a wakeup's sweep is owed, and restarted by every
+	// arrival, so a scan is walked once when it goes quiet rather than
+	// once per burst of it.
+	settle := time.NewTimer(s.settle)
+	settle.Stop()
+	defer settle.Stop()
+	retried := false
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-l.simWake:
+			settle.Reset(s.settle)
+			continue
+		case <-first.C:
+		case <-tick.C:
+		case <-settle.C:
+		}
+		settle.Stop() // whatever was owed, this walk covers
+		if _, err := l.SimilaritySweep(ctx); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			l.log.Warn("similarity sweep", "err", err)
+			// One prompt retry for a passing failure; a lasting one
+			// waits for the backstop rather than logging every settle.
+			if !retried {
+				settle.Reset(s.settle)
+			}
+			retried = true
+			continue
+		}
+		retried = false
+	}
+}
+
+// similarityWakeup tells the sweep loop that tracks may have arrived.
+func (l *Library) similarityWakeup() {
+	select {
+	case l.simWake <- struct{}{}:
+	default:
+	}
+}
+
 // SimilaritySweep reconciles the analysis queue with the catalog: new
 // music tracks enqueue, embeddings whose audio left the catalog prune
 // (edges removed, affected nodes queued for lazy recompute), and

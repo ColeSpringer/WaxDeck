@@ -4,12 +4,13 @@ Sonic discovery runs on per-track audio embeddings. By default the
 server computes them itself: the embedded analyzer works through the
 library in the background, paced so it never competes with playback,
 and there is nothing to install or configure. Analysis is
-incremental: new tracks queue as they are scanned, and identical
-audio never re-analyzes (embeddings are keyed by the audio essence
-hash, which survives retags and moves; a track carved out of a shared
-file by a cue sheet adds its window to that key). Until a track is analyzed,
-discovery answers with metadata heuristics, so nothing waits on
-coverage.
+incremental: new tracks join the queue half a minute after a scan goes
+quiet (a long scan is swept every ten minutes as it runs), and
+identical audio never re-analyzes (embeddings are keyed by the audio
+essence hash, which survives retags and moves; a track carved out of a
+shared file by a cue sheet adds its window to that key). Until a track
+is analyzed, discovery answers with metadata heuristics, so nothing
+waits on coverage.
 
 Watch progress in the app's settings, or at
 `GET /api/v1/similarity/status`: coverage percentage, queue depth,
