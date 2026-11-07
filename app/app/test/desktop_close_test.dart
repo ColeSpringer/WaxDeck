@@ -8,7 +8,6 @@ import 'package:waxdeck/src/desktop/mini_window.dart';
 import 'package:waxdeck/src/desktop/tray_binder.dart';
 import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
@@ -17,6 +16,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _a = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
@@ -122,16 +122,15 @@ class _Harness {
       window = _FakeWindow(),
       tray = _FakeTray(),
       store = _RecordingQueueStore() {
-    container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(engine),
+    container = appContainer(
+      repo: repo,
+      engine: engine,
+      extra: [
         miniWindowPortProvider.overrideWithValue(window),
         trayPortProvider.overrideWithValue(tray),
         queueStoreProvider.overrideWithValue(store),
       ],
     );
-    addTearDown(container.dispose);
   }
 
   final FakeRepository repo;

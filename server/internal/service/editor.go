@@ -1013,6 +1013,9 @@ func (l *Library) sidecarShared(ctx context.Context, item model.PID, path string
 func (l *Library) SetBookChapters(ctx context.Context, uc *UserCtx, apiPID string, chapters []ChapterMark, lock, force bool) (EditOutcomeDTO, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return EditOutcomeDTO{}, errNotFound("no book with pid " + apiPID)
+		}
 		return EditOutcomeDTO{}, err
 	}
 	if it.Kind != model.KindBook {
@@ -1195,7 +1198,8 @@ func (l *Library) EntityArtworkLock(ctx context.Context, uc *UserCtx, entityType
 	if err := l.showArtworkReached(ctx, uc, ent, pid, apiEntityPID); err != nil {
 		return ArtworkLockDTO{}, err
 	}
-	return l.artworkLockFor(ctx, ent, pid, artRole)
+	locked, err := l.artworkLockFor(ctx, ent, pid, artRole)
+	return locked, entityMiss(err, entityType, apiEntityPID)
 }
 
 // showArtworkReached refuses a show's artwork to a caller the show's
@@ -1251,7 +1255,7 @@ func (l *Library) SetEntityArtworkLock(ctx context.Context, uc *UserCtx, entityT
 	}
 	was, err := l.lib.ArtLocked(ctx, ent, pid, artRole)
 	if err != nil {
-		return ArtworkLockDTO{}, classify(err)
+		return ArtworkLockDTO{}, entityMiss(classify(err), entityType, apiEntityPID)
 	}
 	// The write reports the effective lock after it, so the response
 	// does not have to be a second read. That distinction matters on an
@@ -1262,7 +1266,7 @@ func (l *Library) SetEntityArtworkLock(ctx context.Context, uc *UserCtx, entityT
 	// requested value, since the write set exactly that pin.
 	change, err := l.lib.SetArtLock(ctx, ent, pid, artRole, lock)
 	if err != nil {
-		return ArtworkLockDTO{}, classify(err)
+		return ArtworkLockDTO{}, entityMiss(classify(err), entityType, apiEntityPID)
 	}
 	// Only on a change, and on a change in the effective lock, which is
 	// what both comparands are. The artwork epoch is what tells every
@@ -1407,6 +1411,15 @@ func editorEntityPID(entityType, apiEntityPID string) (model.PID, error) {
 	return pid, nil
 }
 
+// entityMiss words a not-found from an entity route's own reads and
+// writes as the route names the entity, passing any other error through.
+func entityMiss(err error, entityType, apiEntityPID string) error {
+	if KindOf(err) == KindNotFound {
+		return errNotFound("no " + entityType + " with pid " + apiEntityPID)
+	}
+	return err
+}
+
 // SetEntityArtwork stores durable front-cover art on an entity. Albums
 // may fan the cover into member files with writeBack; other entity
 // types are catalog-only (the facade treats their write-back as a
@@ -1425,7 +1438,8 @@ func (l *Library) SetEntityArtwork(ctx context.Context, uc *UserCtx, entityType,
 		return EditOutcomeDTO{}, err
 	}
 	if ent == model.ArtPlaylist {
-		return l.setPlaylistArtwork(ctx, uc, apiEntityPID, art, raw)
+		out, err := l.setPlaylistArtwork(ctx, uc, apiEntityPID, art, raw)
+		return out, entityMiss(err, entityType, apiEntityPID)
 	}
 	pid, err := editorEntityPID(entityType, apiEntityPID)
 	if err != nil {
@@ -1454,7 +1468,7 @@ func (l *Library) SetEntityArtwork(ctx context.Context, uc *UserCtx, entityType,
 		// carries none of its own, so this moves playlist covers too.
 		l.noteArtworkChanged(ctx)
 	}
-	return out, err
+	return out, entityMiss(err, entityType, apiEntityPID)
 }
 
 // ClearEntityArtwork removes one artwork slot from an entity. Files
@@ -1471,7 +1485,7 @@ func (l *Library) ClearEntityArtwork(ctx context.Context, uc *UserCtx, entityTyp
 		return errInvalid("unknown entity type " + entityType)
 	}
 	if ent == model.ArtPlaylist {
-		return l.clearPlaylistArtwork(ctx, uc, apiEntityPID, art)
+		return entityMiss(l.clearPlaylistArtwork(ctx, uc, apiEntityPID, art), entityType, apiEntityPID)
 	}
 	pid, err := editorEntityPID(entityType, apiEntityPID)
 	if err != nil {
@@ -1493,7 +1507,7 @@ func (l *Library) ClearEntityArtwork(ctx context.Context, uc *UserCtx, entityTyp
 	if err := l.lib.SetEntityArt(ctx, ent, pid, art, nil, waxbin.ArtEditOptions{
 		Lock: model.LockUnchanged, Force: true,
 	}); err != nil {
-		return classify(err)
+		return entityMiss(classify(err), entityType, apiEntityPID)
 	}
 	l.noteArtworkChanged(ctx)
 	return nil
@@ -1745,7 +1759,7 @@ func (l *Library) EditEntity(ctx context.Context, entityType, apiEntityPID strin
 	})
 	out, err := editOutcomeFromWriteBack(err)
 	if err != nil {
-		return EditOutcomeDTO{}, err
+		return EditOutcomeDTO{}, entityMiss(err, entityType, apiEntityPID)
 	}
 	// The report survives a write-back error: the catalog re-key
 	// committed, so a caller still following the old pid needs the
@@ -1811,7 +1825,7 @@ func (l *Library) RenameEntity(ctx context.Context, entityType, apiEntityPID str
 	// still the answer and the failed files ride along in it.
 	out, err := editOutcomeFromWriteBack(err)
 	if err != nil {
-		return EntityRenameOutcomeDTO{}, err
+		return EntityRenameOutcomeDTO{}, entityMiss(err, entityType, apiEntityPID)
 	}
 	if rep == nil {
 		return EntityRenameOutcomeDTO{}, &Error{Kind: KindInternal, Msg: "the rename committed without reporting what it did"}
@@ -1849,7 +1863,7 @@ func (l *Library) EntityCurationFor(ctx context.Context, uc *UserCtx, entityType
 	}
 	rows, err := l.lib.EntityCuration(ctx, et, pid)
 	if err != nil {
-		return nil, classify(err)
+		return nil, entityMiss(classify(err), entityType, apiEntityPID)
 	}
 	out := make([]EntityCuratedFieldDTO, 0, len(rows))
 	for _, r := range rows {

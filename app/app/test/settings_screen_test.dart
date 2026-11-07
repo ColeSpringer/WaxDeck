@@ -4,10 +4,8 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
@@ -17,8 +15,8 @@ import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'row_nodes.dart';
 import 'wax_finders.dart';
 
@@ -29,23 +27,36 @@ const _user = WaxDeckUser(
   roles: ['admin'],
 );
 
-/// [locale] reaches `routedHost`, which installs the delegates; pass it
-/// only where the copy is what the test is about, since every other
+/// [locale] only where the copy is what the test is about: every other
 /// assertion in this file reads English.
-Widget _host(
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
   FakeRepository repo,
   Widget screen, {
   Locale locale = const Locale('en'),
-}) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-  child: routedHost(screen, locale: locale),
+}) => pumpApp(
+  tester,
+  screen,
+  container: appContainer(repo: repo),
+  locale: locale,
 );
 
-Widget _section(FakeRepository repo, SettingsSection section) =>
-    _host(repo, SettingsSectionScreen(section: section));
+Future<ProviderContainer> _pumpSection(
+  WidgetTester tester,
+  FakeRepository repo,
+  SettingsSection section,
+) => _pump(tester, repo, SettingsSectionScreen(section: section));
+
+/// Mounted and not settled, for a test that pumps on its own clock.
+Future<void> _mountSection(
+  WidgetTester tester,
+  FakeRepository repo,
+  SettingsSection section,
+) => mountApp(
+  tester,
+  SettingsSectionScreen(section: section),
+  container: appContainer(repo: repo),
+);
 
 /// A write lost to a dropped connection, worded the way the client's
 /// transport words it: in English, whatever the app's language.
@@ -145,8 +156,7 @@ void main() {
           user: WaxDeckUser(id: 'us-2', username: 'sam'),
         ),
       );
-      await tester.pumpWidget(_host(repo, const SettingsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo, const SettingsScreen());
 
       // A section is its title and glyph; no sentence under the name.
       expect(
@@ -178,14 +188,12 @@ void main() {
       // the delegates resolve and the es bundle is compiled in. It says
       // nothing about date symbols - this screen formats none.
       _tallWindow(tester);
-      await tester.pumpWidget(
-        _host(
-          _signedInRepo(),
-          const SettingsScreen(),
-          locale: const Locale('es'),
-        ),
+      await _pump(
+        tester,
+        _signedInRepo(),
+        const SettingsScreen(),
+        locale: const Locale('es'),
       );
-      await tester.pumpAndSettle();
 
       expect(find.text('Ajustes'), findsOneWidget);
       expect(find.text('Apariencia'), findsOneWidget);
@@ -197,8 +205,7 @@ void main() {
       tester,
     ) async {
       _tallWindow(tester);
-      await tester.pumpWidget(_host(_signedInRepo(), const SettingsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, _signedInRepo(), const SettingsScreen());
 
       expect(
         find.bySemanticsIdentifier(SemanticsIds.settingsSection('server')),
@@ -210,8 +217,7 @@ void main() {
       tester,
     ) async {
       _tallWindow(tester);
-      await tester.pumpWidget(_host(_signedInRepo(), const SettingsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, _signedInRepo(), const SettingsScreen());
 
       // "Loudness" appears nowhere in "Level casting volume"; the
       // keyword is what makes arriving from another app's vocabulary
@@ -236,8 +242,7 @@ void main() {
 
     testWidgets('a query that matches nothing says so', (tester) async {
       _tallWindow(tester);
-      await tester.pumpWidget(_host(_signedInRepo(), const SettingsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, _signedInRepo(), const SettingsScreen());
 
       await tester.enterText(
         find.bySemanticsIdentifier(SemanticsIds.settingsSearch),
@@ -272,8 +277,7 @@ void main() {
           user: WaxDeckUser(id: 'us-2', username: 'sam'),
         ),
       );
-      await tester.pumpWidget(_host(repo, const SettingsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo, const SettingsScreen());
 
       await tester.enterText(
         find.bySemanticsIdentifier(SemanticsIds.settingsSearch),
@@ -304,8 +308,7 @@ void main() {
           testSession('se-2', deviceName: 'Pixel 9'),
         ],
       );
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
 
       expect(find.text('The Admin'), findsOneWidget);
       expect(find.text('admin'), findsOneWidget);
@@ -341,8 +344,7 @@ void main() {
           testSession('se-2', deviceName: 'Pixel 9'),
         ],
       );
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
 
       await _show(
         tester,
@@ -379,8 +381,7 @@ void main() {
           testSession('se-3', deviceName: 'Kitchen radio'),
         ],
       );
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
       final revoke = find.bySemanticsIdentifier(
         SemanticsIds.deviceRevoke('se-2'),
       );
@@ -407,8 +408,7 @@ void main() {
           testSession('se-2', deviceName: 'Pixel 9'),
         ],
       );
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
 
       await _show(
         tester,
@@ -438,8 +438,7 @@ void main() {
       final repo = _signedInRepo(
         sessions: [testSession('se-2', deviceName: 'Pixel 9')],
       );
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
       final rename = find.bySemanticsIdentifier(
         SemanticsIds.deviceRename('se-2'),
       );
@@ -463,8 +462,7 @@ void main() {
       final repo = _signedInRepo(
         sessions: [testSession('se-2', deviceName: 'Pixel 9')],
       );
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
 
       await _show(
         tester,
@@ -512,8 +510,7 @@ void main() {
       final repo = _signedInRepo(
         sessions: [testSession('se-2', deviceName: 'Pixel 9')],
       )..renameError = _dropped;
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
       final rename = find.bySemanticsIdentifier(
         SemanticsIds.deviceRename('se-2'),
       );
@@ -536,7 +533,7 @@ void main() {
         'it gives up reads it', (tester) async {
       _tallWindow(tester);
       final repo = _SessionsDown();
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
+      await _mountSection(tester, repo, SettingsSection.account);
       // Past the default ladder's ten attempts: the failure is final.
       await tester.pump(const Duration(seconds: 40));
       await tester.pump();
@@ -559,8 +556,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo(sessions: [testSession('se-2')]);
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
 
       await _show(
         tester,
@@ -585,8 +581,7 @@ void main() {
       final repo = _signedInRepo(
         sessions: [testSession('se-1', current: true, deviceName: 'This one')],
       );
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
       final container = _container(tester, SettingsSectionScreen);
 
       await _show(
@@ -608,8 +603,7 @@ void main() {
     testWidgets('sign out logs out and drops the session', (tester) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
       final container = _container(tester, SettingsSectionScreen);
 
       await _show(
@@ -629,8 +623,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.account));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.account);
 
       await _show(
         tester,
@@ -691,10 +684,11 @@ void main() {
     testWidgets("a password change lost to a dropped connection is said in "
         "the app's words, under the new password", (tester) async {
       _tallWindow(tester);
-      await tester.pumpWidget(
-        _section(_PasswordUnreachable(), SettingsSection.account),
+      await _pumpSection(
+        tester,
+        _PasswordUnreachable(),
+        SettingsSection.account,
       );
-      await tester.pumpAndSettle();
       await _show(
         tester,
         find.bySemanticsIdentifier(SemanticsIds.setting('password')),
@@ -724,10 +718,7 @@ void main() {
   group('the appearance section', () {
     test('an unset theme follows the system', () async {
       final repo = _signedInRepo();
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo);
       // Before the document loads, and after it loads with nothing
       // stored, the platform decides. Only a stored choice departs.
       expect(container.read(themeModeProvider), ThemeMode.system);
@@ -738,8 +729,7 @@ void main() {
     testWidgets('an unset theme shows System in the picker', (tester) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       final choice = tester.widget<WaxChoice<ThemePref>>(
         find.byWidgetPredicate((w) => w is WaxChoice<ThemePref>),
@@ -752,8 +742,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       await _show(tester, find.bySemanticsIdentifier(SemanticsIds.themeSelect));
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.themeSelect));
@@ -771,10 +760,7 @@ void main() {
 
     testWidgets('the theme sits under the This device heading', (tester) async {
       _tallWindow(tester);
-      await tester.pumpWidget(
-        _section(_signedInRepo(), SettingsSection.appearance),
-      );
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, _signedInRepo(), SettingsSection.appearance);
       final thisDevice = find
           .ancestor(
             of: find.byWidgetPredicate(
@@ -801,20 +787,14 @@ void main() {
       tester,
     ) async {
       _tallWindow(tester);
-      await tester.pumpWidget(
-        _section(_signedInRepo(), SettingsSection.appearance),
-      );
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, _signedInRepo(), SettingsSection.appearance);
       expect(infoTipHolding('Follows your account'), findsOneWidget);
     });
 
     testWidgets('theme and language are rows, not groups heading one row of '
         'the same name', (tester) async {
       _tallWindow(tester);
-      await tester.pumpWidget(
-        _section(_signedInRepo(), SettingsSection.appearance),
-      );
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, _signedInRepo(), SettingsSection.appearance);
       expect(find.text('Theme'), findsOneWidget);
       expect(find.text('Language'), findsOneWidget);
       expect(
@@ -832,8 +812,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo()..prefs = const Prefs(theme: ThemePref.oled);
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       // Without this, everybody who deliberately chose dark or OLED is
       // silently flipped to follow-the-system by the upgrade.
@@ -861,8 +840,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       final picker = find.bySemanticsIdentifier(
         SemanticsIds.setting('language'),
@@ -909,8 +887,7 @@ void main() {
       // answers it with Spanish - so the row must say Spanish rather
       // than claim the system is deciding.
       final repo = _signedInRepo()..prefs = const Prefs(locale: 'es-MX');
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       expect(
         tester
@@ -928,8 +905,7 @@ void main() {
       // French resolves only by falling back, so the interface is
       // English and no option stands for what is stored.
       final repo = _signedInRepo()..prefs = const Prefs(locale: 'fr');
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       expect(
         tester
@@ -961,8 +937,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       await _show(
         tester,
@@ -986,8 +961,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       final container = _container(tester, SettingsSectionScreen);
       expect(container.read(waxThemeSpecProvider).artworkGlow, isTrue);
@@ -1010,8 +984,7 @@ void main() {
         'them back', (tester) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       final container = _container(tester, SettingsSectionScreen);
       WaxChoice<WaxCaptionMode> picker() => tester.widget(
@@ -1061,7 +1034,7 @@ void main() {
       // row and told a machine with a mouse on it that it had none.
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await _mountSection(tester, repo, SettingsSection.appearance);
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await mouse.addPointer(location: Offset.zero);
       addTearDown(mouse.removePointer);
@@ -1097,8 +1070,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       // The device that stored it grew a mouse and lost it again, which
       // the picker cannot prevent. What the cards are built from is
@@ -1127,8 +1099,7 @@ void main() {
           code: 'read-only',
           message: 'the library is read-only',
         );
-      await tester.pumpWidget(_section(repo, SettingsSection.playback));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.playback);
 
       final leveling = find.bySemanticsIdentifier(
         SemanticsIds.setting('replay-gain'),
@@ -1155,8 +1126,7 @@ void main() {
           code: 'read-only',
           message: 'the library is read-only',
         );
-      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.appearance);
 
       final picker = find.bySemanticsIdentifier(
         SemanticsIds.setting('language'),
@@ -1183,8 +1153,7 @@ void main() {
     testWidgets('the skip intervals store and read back', (tester) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.playback));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.playback);
 
       expect(find.text('15 seconds'), findsOneWidget);
       expect(find.text('30 seconds'), findsOneWidget);
@@ -1211,8 +1180,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.playback));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.playback);
 
       await _show(
         tester,
@@ -1255,8 +1223,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo();
-      await tester.pumpWidget(_section(repo, SettingsSection.integrations));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.integrations);
 
       await _show(
         tester,
@@ -1288,8 +1255,7 @@ void main() {
       _tallWindow(tester);
       final repo = _signedInRepo()
         ..usersById[_user.id] = account(const LibraryAccess(mode: 'all'));
-      await tester.pumpWidget(_section(repo, SettingsSection.library));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.library);
       expect(find.text('What I can see'), findsOneWidget);
       expect(find.text('All libraries'), findsOneWidget);
       expect(find.textContaining('You can see'), findsNothing);
@@ -1303,8 +1269,7 @@ void main() {
       final repo = _signedInRepo()
         ..usersById[_user.id] = account(const LibraryAccess(mode: 'all'))
         ..getUserGate = gate;
-      await tester.pumpWidget(_section(repo, SettingsSection.library));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.library);
       // Loading: the row is drawn, its answer is not yet.
       expect(find.text('What I can see'), findsOneWidget);
       expect(find.text('All libraries'), findsNothing);
@@ -1324,18 +1289,18 @@ void main() {
       _tallWindow(tester);
       final repo = _signedInRepo()
         ..usersById[_user.id] = account(const LibraryAccess(mode: 'all'));
-      await tester.pumpWidget(_section(repo, SettingsSection.library));
-      await tester.pumpAndSettle();
+      final container = await _pumpSection(
+        tester,
+        repo,
+        SettingsSection.library,
+      );
       expect(find.text('All libraries'), findsOneWidget);
 
       final gate = Completer<void>();
       repo
         ..getUserGate = gate
         ..sessionState = SessionState(authenticated: true, user: _user);
-      final auth = _container(
-        tester,
-        SettingsSectionScreen,
-      ).read(authControllerProvider.notifier);
+      final auth = container.read(authControllerProvider.notifier);
       await auth.refreshSession();
       await tester.pump();
       expect(find.text('All libraries'), findsOneWidget);
@@ -1353,10 +1318,7 @@ void main() {
       tester,
     ) async {
       _tallWindow(tester);
-      await tester.pumpWidget(
-        _section(_signedInRepo(), SettingsSection.library),
-      );
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, _signedInRepo(), SettingsSection.library);
       // A third party contacted is a consequence the title hides, so it
       // is printed rather than held behind a tip.
       const sentence = 'Asks MusicBrainz; off files uploads unreviewed';
@@ -1372,8 +1334,7 @@ void main() {
         ..usersById[_user.id] = account(
           const LibraryAccess(mode: 'some', libraryPids: ['lb-1', 'lb-2']),
         );
-      await tester.pumpWidget(_section(repo, SettingsSection.library));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.library);
       expect(find.text('What I can see'), findsOneWidget);
       // The answer sits where the all-access one does: the row's value.
       expect(find.text('2 libraries'), findsOneWidget);
@@ -1385,10 +1346,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       // No such account in the fake: the read fails with not-found.
-      await tester.pumpWidget(
-        _section(_signedInRepo(), SettingsSection.library),
-      );
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, _signedInRepo(), SettingsSection.library);
       expect(find.text('What I can see'), findsOneWidget);
       expect(find.text('Could not read your access'), findsOneWidget);
       expect(find.text('All libraries'), findsNothing);
@@ -1396,10 +1354,11 @@ void main() {
 
     testWidgets('accessibility is the motion row alone', (tester) async {
       _tallWindow(tester);
-      await tester.pumpWidget(
-        _section(_signedInRepo(), SettingsSection.accessibility),
+      await _pumpSection(
+        tester,
+        _signedInRepo(),
+        SettingsSection.accessibility,
       );
-      await tester.pumpAndSettle();
       expect(find.text('Reduce motion'), findsOneWidget);
       expect(find.text('Screen readers'), findsNothing);
     });
@@ -1414,8 +1373,7 @@ void main() {
           user: WaxDeckUser(id: 'us-2', username: 'sam'),
         ),
       );
-      await tester.pumpWidget(_section(repo, SettingsSection.server));
-      await tester.pumpAndSettle();
+      await _pumpSection(tester, repo, SettingsSection.server);
 
       expect(find.text('Administrators only'), findsOneWidget);
     });
@@ -1425,7 +1383,7 @@ void main() {
     ) async {
       _tallWindow(tester);
       final repo = _signedInRepo()..getSessionGate = Completer<void>();
-      await tester.pumpWidget(_section(repo, SettingsSection.server));
+      await _mountSection(tester, repo, SettingsSection.server);
       await tester.pump();
 
       expect(find.text('Administrators only'), findsNothing);

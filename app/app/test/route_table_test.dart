@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/admin/admin_shares_screen.dart';
@@ -14,8 +13,6 @@ import 'package:waxdeck/src/admin/schedules_screen.dart';
 import 'package:waxdeck/src/admin/server_settings_screen.dart';
 import 'package:waxdeck/src/admin/trash_screen.dart';
 import 'package:waxdeck/src/admin/users_screen.dart';
-import 'package:waxdeck/src/app.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
@@ -45,7 +42,6 @@ import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_saved_screen.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
@@ -67,6 +63,7 @@ import 'package:waxdeck/src/uploads/uploads_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
@@ -300,21 +297,12 @@ String _usersView(WidgetTester tester) => tester
     .selected;
 
 Future<GoRouter> _pumpApp(WidgetTester tester) async {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(
-        FakeRepository(
-          sessionState: const SessionState(authenticated: true, user: _user),
-        ),
-      ),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
+  final container = appContainer(
+    repo: FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _user),
+    ),
   );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(container: container, child: const WaxDeckApp()),
-  );
-  await tester.pumpAndSettle();
+  await pumpWholeApp(tester, container: container);
   return container.read(routerProvider);
 }
 

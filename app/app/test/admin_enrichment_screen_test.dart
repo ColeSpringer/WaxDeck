@@ -4,14 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/enrichment_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
 const _coverage = EnrichmentCoverage(
@@ -62,10 +61,7 @@ EnrichmentStatus _status({
   EnrichmentStatus? status,
 }) {
   final repo = FakeRepository()..enrichmentStatus = status ?? _status();
-  final container = ProviderContainer(
-    overrides: [repositoryProvider.overrideWithValue(repo)],
-  );
-  addTearDown(container.dispose);
+  final container = appContainer(repo: repo);
   tester.view.physicalSize = const Size(1400, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -77,23 +73,17 @@ Future<FakeRepository> _pump(
   EnrichmentStatus? status,
 }) async {
   final (:repo, :container) = _setUp(tester, status: status);
-  await _host(tester, container, const EnrichmentScreen());
+  await _pumpScreen(tester, container);
   return repo;
 }
 
-Future<void> _host(
-  WidgetTester tester,
-  ProviderContainer container,
-  Widget child,
-) async {
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
+Future<void> _pumpScreen(WidgetTester tester, ProviderContainer container) =>
+    pumpApp(
+      tester,
+      const EnrichmentScreen(),
       container: container,
-      child: localizedHost(child),
-    ),
-  );
-  await tester.pumpAndSettle();
-}
+      routed: false,
+    );
 
 Finder _id(String id) => find.bySemanticsIdentifier(id);
 
@@ -224,7 +214,7 @@ void main() {
     tester,
   ) async {
     final (:repo, :container) = _setUp(tester);
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     await _tap(tester, SemanticsIds.enrichmentRunMode('phases'));
     await _tap(tester, SemanticsIds.enrichmentPhase('lyrics'));
 
@@ -268,14 +258,15 @@ void main() {
 
   testWidgets('a revisit reads the status and the cache again', (tester) async {
     final (:repo, :container) = _setUp(tester, status: _status(running: true));
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     expect(find.text('A pass is running now.'), findsOneWidget);
 
-    await _host(tester, container, const SizedBox());
+    await leaveScreen(tester, container);
+    await tester.pumpAndSettle();
     repo
       ..enrichmentStatus = _status()
       ..enrichmentCache = const EnrichmentCacheReport(rows: 4242, bytes: 0);
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     expect(find.text('A pass is running now.'), findsNothing);
     expect(find.text('4242'), findsOneWidget);
   });
@@ -332,7 +323,7 @@ void main() {
       removed: 1,
       freedBytes: 2048,
     );
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     await tester.enterText(_id(SemanticsIds.enrichmentCacheOlderThan), '30');
     await tester.pumpAndSettle();
     await _tap(tester, SemanticsIds.enrichmentCachePrune);
@@ -505,7 +496,7 @@ void main() {
     tester,
   ) async {
     final (:repo, :container) = _setUp(tester, status: _status(running: true));
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     await tester.enterText(_id(SemanticsIds.enrichmentCacheOlderThan), '30');
     await _tap(tester, SemanticsIds.enrichmentSourceDown('fanarttv'));
 
@@ -549,7 +540,7 @@ void main() {
 
   testWidgets('a save is not undone by a read already out', (tester) async {
     final (:repo, :container) = _setUp(tester, status: _status(running: true));
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     await _tap(tester, SemanticsIds.enrichmentSourceDown('fanarttv'));
     final gate = repo.enrichmentStatusGate = Completer<void>();
     await tester.pump(enrichmentRunningPoll);
@@ -567,7 +558,6 @@ void main() {
     // Nothing left unsaved to offer.
     await _tap(tester, SemanticsIds.enrichmentSourcesSave);
     expect(repo.putEnrichmentSourcesCalls, hasLength(1));
-    await _host(tester, container, const SizedBox());
   });
 
   testWidgets('a refused run reads the status and the jobs again', (
@@ -575,7 +565,7 @@ void main() {
   ) async {
     final (:repo, :container) = _setUp(tester);
     container.listen(adminJobsProvider, (_, _) {});
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     final reads = (status: repo.enrichmentStatusReads, jobs: repo.jobReads);
     repo.runEnrichmentError = const WaxDeckApiException(
       code: 'conflict',
@@ -596,7 +586,7 @@ void main() {
   testWidgets('a started run shows on the jobs too', (tester) async {
     final (:repo, :container) = _setUp(tester);
     container.listen(adminJobsProvider, (_, _) {});
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     final jobs = repo.jobReads;
 
     await _tap(tester, SemanticsIds.enrichmentRun);
@@ -632,7 +622,7 @@ void main() {
     tester,
   ) async {
     final (:repo, :container) = _setUp(tester);
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     await tester.enterText(_id(SemanticsIds.enrichmentCacheOlderThan), '30');
     await tester.pumpAndSettle();
     await _tap(tester, SemanticsIds.enrichmentCachePrune);
@@ -660,10 +650,8 @@ void main() {
       tester,
       status: _status(configured: false, running: true, phases: const []),
     );
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     expect(find.text('A pass is running now.'), findsOneWidget);
-    // Left, so the pass's poll goes with the screen.
-    await _host(tester, container, const SizedBox());
   });
 
   testWidgets('sources are read by name, not by id', (tester) async {
@@ -697,7 +685,7 @@ void main() {
       status: _status(running: true, runningJob: 'jb-1'),
     );
     repo.jobs = [const Job(pid: 'jb-1', kind: 'enrich', state: 'running')];
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     final reads = repo.enrichmentStatusReads;
 
     await tester.pump(enrichmentRunningPoll);
@@ -721,7 +709,7 @@ void main() {
       status: _status(running: true, runningJob: 'jb-1'),
     );
     repo.jobs = [const Job(pid: 'jb-1', kind: 'enrich', state: 'running')];
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     final reads = repo.enrichmentStatusReads;
 
     for (final passing in const [
@@ -755,7 +743,7 @@ void main() {
     tester,
   ) async {
     final (:repo, :container) = _setUp(tester);
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     await _tap(tester, SemanticsIds.enrichmentSourceDown('fanarttv'));
     repo.putEnrichmentSourcesError = const WaxDeckApiException(
       code: 'invalid-request',
@@ -779,11 +767,11 @@ void main() {
   ) async {
     final (:repo, :container) = _setUp(tester);
     repo.enrichmentStatusGate = Completer<void>();
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: localizedHost(const EnrichmentScreen()),
-      ),
+    await mountApp(
+      tester,
+      const EnrichmentScreen(),
+      container: container,
+      routed: false,
     );
     await tester.pump();
 
@@ -795,7 +783,7 @@ void main() {
 
   testWidgets('a save that fails on the way keeps the edit', (tester) async {
     final (:repo, :container) = _setUp(tester);
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     await _tap(tester, SemanticsIds.enrichmentSourceDown('fanarttv'));
     repo.putEnrichmentSourcesError = const WaxDeckApiException(
       code: 'transport',
@@ -827,7 +815,7 @@ void main() {
       status: _status(running: true, runningJob: 'jb-1'),
     );
     repo.jobs = [const Job(pid: 'jb-1', kind: 'enrich', state: 'running')];
-    await _host(tester, container, const EnrichmentScreen());
+    await _pumpScreen(tester, container);
     await _tap(tester, SemanticsIds.enrichmentSourceDown('fanarttv'));
 
     await _tap(tester, SemanticsIds.enrichmentSourcesSave);
@@ -837,8 +825,6 @@ void main() {
       'Source order saved. The pass running now keeps the order it started '
       'with.',
     );
-    // Left, so the pass's poll goes with the screen.
-    await _host(tester, container, const SizedBox());
   });
 
   testWidgets('a status rebuilt while it reads polls once', (tester) async {

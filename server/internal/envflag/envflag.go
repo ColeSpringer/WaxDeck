@@ -7,13 +7,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"os"
 	"strconv"
 )
 
 // Set defines flags on one FlagSet and keeps the variables it could not read.
 type Set struct {
 	fs     *flag.FlagSet
+	lookup func(string) (string, bool)
 	faults []fault
 }
 
@@ -22,12 +22,14 @@ type fault struct {
 	err  error
 }
 
-// New defines flags on fs.
-func New(fs *flag.FlagSet) *Set { return &Set{fs: fs} }
+// New defines flags on fs, reading their variables through lookupEnv.
+func New(fs *flag.FlagSet, lookupEnv func(string) (string, bool)) *Set {
+	return &Set{fs: fs, lookup: lookupEnv}
+}
 
 // Bool reads key with the spellings the flag's own parser takes.
 func (s *Set) Bool(name, key string, def bool, usage string) *bool {
-	if v := os.Getenv(key); v != "" {
+	if v, _ := s.lookup(key); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			def = b
 		} else {
@@ -48,7 +50,7 @@ func (s *Set) Int64(name, key string, def int64, usage string) *int64 {
 }
 
 func (s *Set) number(name, key string, def int64, bits int) int64 {
-	v := os.Getenv(key)
+	v, _ := s.lookup(key)
 	if v == "" {
 		return def
 	}

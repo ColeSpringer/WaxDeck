@@ -2,10 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/diagnostics/defect_log.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/sharing/shares_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// A server whose second page is not the shape the client was promised.
@@ -191,10 +191,7 @@ void main() {
   test(
     'a controller rethrow reaches the log, and paging is not wedged',
     () async {
-      final c = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(_MiscastRepository())],
-      );
-      addTearDown(c.dispose);
+      final c = appContainer(repo: _MiscastRepository());
       installDefectHandlers(c, forwardToConsole: false);
 
       final provider = AsyncNotifierProvider<SharesController, SharesState>(

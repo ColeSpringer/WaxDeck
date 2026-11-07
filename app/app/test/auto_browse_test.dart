@@ -7,12 +7,13 @@ import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
+import 'app_host.dart';
+
 /// A container whose off-tree copy follows [system] alone.
 ProviderContainer _copy([List<Locale> system = const [Locale('en')]]) {
-  final container = ProviderContainer(
-    overrides: [localeOverrideProvider.overrideWithValue(null)],
+  final container = appContainer(
+    extra: [localeOverrideProvider.overrideWithValue(null)],
   );
-  addTearDown(container.dispose);
   container.read(systemLocalesProvider.notifier).locales = system;
   return container;
 }

@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
@@ -14,7 +12,6 @@ import 'package:waxdeck/src/library/page_walk.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/review/review_controller.dart';
@@ -27,9 +24,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
-import 'routed_host.dart';
 import 'secondary_click.dart';
 
 const _uploader = WaxDeckUser(
@@ -142,18 +139,6 @@ String? _coverLabel(WidgetTester tester, String shelf, String pid) {
   return row.playLabelAt?.call(_shelfOrder(tester, shelf).indexOf(pid));
 }
 
-/// [bus] stands in for the user stream, fed by hand.
-Widget _host(FakeRepository repo, {ServerEventBus? bus}) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    audioEngineProvider.overrideWithValue(FakeEngine()),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-    if (bus != null) serverEventBusProvider.overrideWithValue(bus),
-  ],
-  child: routedHost(const HomeScreen()),
-);
-
 /// How far round [shelf]'s card for [pid] draws its ring.
 double? _ring(WidgetTester tester, String shelf, String pid) => tester
     .widgetList<MediaCard>(find.byType(MediaCard))
@@ -163,7 +148,8 @@ double? _ring(WidgetTester tester, String shelf, String pid) => tester
     .data
     .progress;
 
-/// Mounts home in a window tall enough to build every shelf.
+/// Mounts home in a window tall enough to build every shelf. [bus] stands
+/// in for the user stream, fed by hand.
 ///
 /// The scaffold's scroll view is lazy, which is the whole point of it:
 /// off-screen slivers are not built, so a default 800x600 test window
@@ -177,8 +163,14 @@ Future<void> _pumpHome(
   tester.view.physicalSize = const Size(1200, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(_host(repo, bus: bus));
-  await tester.pumpAndSettle();
+  await pumpApp(
+    tester,
+    const HomeScreen(),
+    container: appContainer(
+      repo: repo,
+      extra: [if (bus != null) serverEventBusProvider.overrideWithValue(bus)],
+    ),
+  );
 }
 
 /// [_pumpHome] over a container the test holds, for what a press starts.
@@ -189,15 +181,11 @@ Future<ProviderContainer> _pumpPlaying(
   tester.view.physicalSize = const Size(1200, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = playbackContainer(repo: repo, engine: FakeEngine());
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const HomeScreen()),
-    ),
+  return pumpApp(
+    tester,
+    const HomeScreen(),
+    container: playbackContainer(repo: repo, engine: FakeEngine()),
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 void main() {
@@ -409,7 +397,6 @@ void main() {
     expect(<String>[for (final e in queue.entries) e.pid], <String>[_book]);
     expect(queue.source.kind, QueueSourceKind.book);
     expect(find.byType(BookScreen), findsNothing);
-    await PlayerHarness(container).endPlayback(tester);
 
     await tester.longPress(_byId(SemanticsIds.shelfCard('continue', _book)));
     await tester.pumpAndSettle();
@@ -445,7 +432,6 @@ void main() {
       <String>[episode],
     );
     expect(find.byType(EpisodeScreen), findsNothing);
-    await PlayerHarness(container).endPlayback(tester);
 
     await tester.longPress(_byId(SemanticsIds.shelfCard('continue', episode)));
     await tester.pumpAndSettle();
@@ -840,10 +826,7 @@ void main() {
             readShelf(ref, DiscoveryList.recentlyAdded, withProgress: true),
         retry: (_, _) => null,
       );
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo);
       final held = <ProviderSubscription<Object?>>[
         container.listen(recent, (_, _) {}),
         container.listen(continuing, (_, _) {}),
@@ -880,10 +863,7 @@ void main() {
       final shelf = FutureProvider.autoDispose<HomeShelfItems>(
         (ref) => readShelf(ref, DiscoveryList.random),
       );
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo);
       final held = container.listen(shelf, (_, _) {});
       addTearDown(held.close);
 
@@ -1170,13 +1150,7 @@ void main() {
       ..reviewEntries = <ReviewEntry>[
         for (var i = 0; i < 5; i++) _pendingEntry('rv-$i'),
       ];
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final held = container.listen(pendingReviewCountProvider, (_, _) {});
     addTearDown(held.close);
     await container.read(authControllerProvider.future);

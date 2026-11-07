@@ -7,10 +7,10 @@ import 'package:waxdeck/src/player/playback_session.dart';
 import 'package:waxdeck/src/player/stream_quality.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 class _FakeConnectivity implements ConnectivityPort {
@@ -32,20 +32,14 @@ class _FakeConnectivity implements ConnectivityPort {
 ProviderContainer _container({
   required bool mobile,
   ConnectivityPort? connectivity,
-}) {
-  final container = ProviderContainer(
-    overrides: [
-      mobileProvider.overrideWithValue(mobile),
-      if (connectivity != null)
-        connectivityProvider.overrideWithValue(connectivity),
-      clientSettingsStoreProvider.overrideWithValue(
-        MemoryClientSettingsStore(),
-      ),
-    ],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
+}) => appContainer(
+  settings: MemoryClientSettingsStore(),
+  extra: [
+    mobileProvider.overrideWithValue(mobile),
+    if (connectivity != null)
+      connectivityProvider.overrideWithValue(connectivity),
+  ],
+);
 
 void main() {
   test('the quality words map to their caps, and Auto to none', () {

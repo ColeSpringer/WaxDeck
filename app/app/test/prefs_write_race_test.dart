@@ -3,17 +3,15 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/pinned_controller.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
@@ -76,14 +74,6 @@ _LaggingRepository _repo({
     pinned: pinned,
   );
 
-ProviderContainer _container(FakeRepository repo) {
-  final container = ProviderContainer(
-    overrides: [repositoryProvider.overrideWithValue(repo)],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
-
 /// An engine whose preference entry can be held or made to fail.
 class _HeldEngine extends SyncEngine {
   _HeldEngine({required super.db, required super.repository})
@@ -123,14 +113,10 @@ class _HeldEngine extends SyncEngine {
   final db = inMemoryMirrorDatabase();
   // The account the binder names as a session begins.
   final engine = _HeldEngine(db: db, repository: repo)..account = _user.id;
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      syncEngineProvider.overrideWithValue(engine),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
-  );
+  final container = appContainer(repo: repo, sync: engine);
   addTearDown(() async {
+    // Disposed here, ahead of the helper's teardown, so the container goes
+    // before the engine and the mirror.
     container.dispose();
     engine.dispose();
     await db.close();
@@ -171,7 +157,7 @@ Future<void> _pinOffline(
 void main() {
   test('three radio pins in a row all reach the document', () async {
     final repo = _repo(radioFavorites: _stations);
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     // Listened rather than read: the fan-out's invalidations have to
     // reach the dial the way they do in the app.
     container.listen(radioFavoritesProvider, (_, _) {});
@@ -210,7 +196,7 @@ void main() {
     // in the same place: both notifiers replace their list with
     // whatever the document says.
     final repo = _repo(pinned: _entities);
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     container.listen(pinnedEntitiesProvider, (_, _) {});
     await container.read(prefsControllerProvider.future);
 
@@ -234,7 +220,7 @@ void main() {
     // took them off - and a tap landing in that window computes from
     // the rewound list, which is the lost write this path closes.
     final repo = _repo(radioFavorites: _stations);
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     final seen = <List<String>>[];
     container.listen(radioFavoritesProvider, (_, next) => seen.add(next));
     await container.read(prefsControllerProvider.future);
@@ -271,7 +257,7 @@ void main() {
       // account's change to another's document and PUTting it is somebody
       // else's pin appearing in your prefs.
       final repo = _repo(radioFavorites: const <String>['rs-1']);
-      final container = _container(repo);
+      final container = appContainer(repo: repo);
       await container.read(prefsControllerProvider.future);
 
       // Fired, not awaited: the body has not started.
@@ -306,7 +292,7 @@ void main() {
     // one's is read. A change built on it and sent would put the last
     // account's settings into this one's.
     final repo = _repo(radioFavorites: const <String>['rs-1']);
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     container.listen(prefsControllerProvider, (_, _) {});
     await container.read(prefsControllerProvider.future);
 
@@ -330,7 +316,7 @@ void main() {
     // rebuilt for it: the document on hand, and the account it is kept
     // for, are still the last one's.
     final repo = _repo(radioFavorites: const <String>['rs-1']);
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     container.listen(prefsControllerProvider, (_, _) {});
     await container.read(prefsControllerProvider.future);
 
@@ -354,7 +340,7 @@ void main() {
     // one's document has landed. Taken as confirmed, it is what the next
     // refused write would put back on this account's screen.
     final repo = _repo(radioFavorites: const <String>['rs-1']);
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     container.listen(prefsControllerProvider, (_, _) {});
     await container.read(prefsControllerProvider.future);
     final gate = repo.putGate = Completer<void>();
@@ -388,7 +374,7 @@ void main() {
     // flag were never cleared this provider would stop reading, and a
     // pin made elsewhere would never arrive.
     final repo = _repo(radioFavorites: const <String>['rs-1']);
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     container.listen(radioFavoritesProvider, (_, _) {});
     await container.read(prefsControllerProvider.future);
 
@@ -419,7 +405,7 @@ void main() {
     'signing in as someone else never answers with the last account',
     () async {
       final repo = _repo(radioFavorites: const <String>['rs-1']);
-      final container = _container(repo);
+      final container = appContainer(repo: repo);
       await container.read(prefsControllerProvider.future);
       await container.read(radioFavoritesProvider.notifier).toggle('rs-2');
       expect(repo.prefs.radioFavorites, <String>['rs-1', 'rs-2']);

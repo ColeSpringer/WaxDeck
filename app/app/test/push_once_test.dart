@@ -1,14 +1,9 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import 'fakes.dart';
-import 'routed_host.dart';
+import 'app_host.dart';
 
 /// The pushes on the stack, however deep the shells nest them.
 int _pushes(List<RouteMatchBase> matches) => <int>[
@@ -20,17 +15,7 @@ int _pushes(List<RouteMatchBase> matches) => <int>[
 ].fold(0, (sum, n) => sum + n);
 
 Future<GoRouter> _mount(WidgetTester tester) async {
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(FakeRepository()),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-      child: routedHost(const SizedBox()),
-    ),
-  );
-  await tester.pumpAndSettle();
+  await pumpApp(tester, const SizedBox());
   return tester.widget<MaterialApp>(find.byType(MaterialApp)).routerConfig!
       as GoRouter;
 }

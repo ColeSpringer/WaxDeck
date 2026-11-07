@@ -1,14 +1,11 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/playlists/playlist_create.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import 'fakes.dart';
+import 'app_host.dart';
 import 'localized_host.dart';
-import 'routed_host.dart';
 
 /// What a name field holds once 201 characters are typed into it.
 Future<String> _typed(WidgetTester tester, String id) async {
@@ -20,17 +17,11 @@ Future<String> _typed(WidgetTester tester, String id) async {
   return tester.widget<TextField>(field).controller!.text;
 }
 
-Widget _playlists() => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
-  child: routedHost(const PlaylistsScreen(), pushed: true),
-);
-
 // Every field that names a playlist stops at the 200 characters the
 // server takes, so its refusal is never the first a person hears of it.
 void main() {
   testWidgets('the new playlist dialog, smart or static', (tester) async {
-    await tester.pumpWidget(_playlists());
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const PlaylistsScreen(), pushed: true);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistAdd));
     await tester.pumpAndSettle();
 
@@ -64,8 +55,7 @@ void main() {
   });
 
   testWidgets('the import dialog', (tester) async {
-    await tester.pumpWidget(_playlists());
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const PlaylistsScreen(), pushed: true);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistImport));
     await tester.pumpAndSettle();
     await tester.tap(find.text('M3U file'));

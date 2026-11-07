@@ -2,11 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/account_binder.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _plain = WaxDeckUser(
@@ -30,13 +30,10 @@ void main() {
       sessionState: const SessionState(authenticated: true, user: _plain),
     );
     bus = ServerEventBus();
-    container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        serverEventBusProvider.overrideWith((ref) => bus),
-      ],
+    container = appContainer(
+      repo: repo,
+      extra: [serverEventBusProvider.overrideWith((ref) => bus)],
     );
-    addTearDown(container.dispose);
     addTearDown(bus.dispose);
     await container.read(authControllerProvider.future);
   });

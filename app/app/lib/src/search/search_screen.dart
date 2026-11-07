@@ -9,6 +9,7 @@ import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../podcasts/add_podcast.dart';
+import '../presenters/media_tiles.dart';
 import '../radio/add_station.dart';
 import '../radio/radio_screen.dart';
 import '../shell/adaptive_shell.dart';
@@ -506,8 +507,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           children: <Widget>[
             Expanded(
               child: MediaListRow(
-                data: MediaTileData(
-                  title: recents[index],
+                data: recentSearchTile(
+                  recents[index],
                   semanticsId: SemanticsIds.searchRecent(index),
                 ),
                 onTap: () => _runRecent(recents[index]),
@@ -686,19 +687,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     };
     return MediaListRow(
       key: ValueKey(hit.pid),
-      data: MediaTileData(
-        title: hit.title,
-        subtitle: hit.subtitle,
-        shape: kind == SearchHitKind.artists
-            ? ArtworkShape.circle
-            : ArtworkShape.square,
-        domain: switch (kind) {
-          SearchHitKind.episodes => WaxDomain.podcasts,
-          SearchHitKind.books => WaxDomain.audiobooks,
-          _ => WaxDomain.music,
-        },
-        semanticsId: semanticsId,
-      ),
+      data: searchHitTile(hit, kind, semanticsId: semanticsId),
       onTap: () => _open(hit),
       onMore: onMore,
       moreSemanticsId: moreSemanticsId,

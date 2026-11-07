@@ -4,18 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_continuation.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _a = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
@@ -45,16 +44,11 @@ const _album = QueueSource(
           testItem(_book, mediaType: MediaType.audiobook),
         ],
   );
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(engine ?? FakeEngine()),
-      clientSettingsStoreProvider.overrideWithValue(
-        MemoryClientSettingsStore(),
-      ),
-    ],
+  final container = appContainer(
+    repo: repo,
+    engine: engine,
+    settings: MemoryClientSettingsStore(),
   );
-  addTearDown(container.dispose);
   final sub = container.listen(queueContinuationProvider, (_, _) {});
   addTearDown(sub.close);
   return (container: container, repo: repo);

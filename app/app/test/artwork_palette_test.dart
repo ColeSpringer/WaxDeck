@@ -1,14 +1,10 @@
-import 'localized_host.dart';
-
 import 'dart:typed_data';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_palette.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import 'fakes.dart';
+import 'app_host.dart';
 
 const _red = WaxPalette(
   glow: Color(0xFFB4321E),
@@ -97,25 +93,22 @@ void main() {
       required ArtworkPaletteCache cache,
     }) async {
       late WaxPalette seen;
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            paletteCacheProvider.overrideWithValue(cache),
-            artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-          ],
-          child: localizedHost(
-            ArtworkAccent(
-              artUrl: artUrl,
-              domain: WaxDomain.music,
-              child: Builder(
-                builder: (context) {
-                  seen = WaxAccent.of(context);
-                  return const SizedBox.shrink();
-                },
-              ),
-            ),
+      await mountApp(
+        tester,
+        ArtworkAccent(
+          artUrl: artUrl,
+          domain: WaxDomain.music,
+          child: Builder(
+            builder: (context) {
+              seen = WaxAccent.of(context);
+              return const SizedBox.shrink();
+            },
           ),
         ),
+        container: appContainer(
+          extra: [paletteCacheProvider.overrideWithValue(cache)],
+        ),
+        routed: false,
       );
       return seen;
     }
@@ -149,28 +142,28 @@ void main() {
       // rather than dropping to the domain hue and coming back.
       final cache = ArtworkPaletteCache()..remember('/art/a', _red);
       late WaxPalette seen;
-      Widget host(String artUrl) => ProviderScope(
-        overrides: [
-          paletteCacheProvider.overrideWithValue(cache),
-          artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-        ],
-        child: localizedHost(
-          ArtworkAccent(
-            artUrl: artUrl,
-            domain: WaxDomain.music,
-            child: Builder(
-              builder: (context) {
-                seen = WaxAccent.of(context);
-                return const SizedBox.shrink();
-              },
-            ),
+      final container = appContainer(
+        extra: [paletteCacheProvider.overrideWithValue(cache)],
+      );
+      Future<void> host(String artUrl) => mountApp(
+        tester,
+        ArtworkAccent(
+          artUrl: artUrl,
+          domain: WaxDomain.music,
+          child: Builder(
+            builder: (context) {
+              seen = WaxAccent.of(context);
+              return const SizedBox.shrink();
+            },
           ),
         ),
+        container: container,
+        routed: false,
       );
 
-      await tester.pumpWidget(host('/art/a'));
+      await host('/art/a');
       expect(seen, _red);
-      await tester.pumpWidget(host('/art/cold'));
+      await host('/art/cold');
       expect(seen, _red);
     });
 
@@ -183,37 +176,37 @@ void main() {
       // the holding exists to stop, coming in by the other door.
       final cache = ArtworkPaletteCache()..remember('/art/a', _red);
       late WaxPalette seen;
-      Widget host({required String? artUrl, required bool resolving}) =>
-          ProviderScope(
-            overrides: [
-              paletteCacheProvider.overrideWithValue(cache),
-              artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-            ],
-            child: localizedHost(
-              ArtworkAccent(
-                artUrl: artUrl,
-                resolving: resolving,
-                domain: WaxDomain.music,
-                child: Builder(
-                  builder: (context) {
-                    seen = WaxAccent.of(context);
-                    return const SizedBox.shrink();
-                  },
-                ),
+      final container = appContainer(
+        extra: [paletteCacheProvider.overrideWithValue(cache)],
+      );
+      Future<void> host({required String? artUrl, required bool resolving}) =>
+          mountApp(
+            tester,
+            ArtworkAccent(
+              artUrl: artUrl,
+              resolving: resolving,
+              domain: WaxDomain.music,
+              child: Builder(
+                builder: (context) {
+                  seen = WaxAccent.of(context);
+                  return const SizedBox.shrink();
+                },
               ),
             ),
+            container: container,
+            routed: false,
           );
 
-      await tester.pumpWidget(host(artUrl: '/art/a', resolving: false));
+      await host(artUrl: '/art/a', resolving: false);
       expect(seen, _red);
-      await tester.pumpWidget(host(artUrl: null, resolving: true));
+      await host(artUrl: null, resolving: true);
       expect(seen, _red);
 
       // And an item that really has no cover still settles on the
       // domain hue, which is what makes the two different. Settled
       // rather than pumped once: letting go is a crossfade, so one
       // frame into it is still mostly the colour it is leaving.
-      await tester.pumpWidget(host(artUrl: null, resolving: false));
+      await host(artUrl: null, resolving: false);
       await tester.pumpAndSettle();
       expect(seen.isFallback, isTrue);
     });

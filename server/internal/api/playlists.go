@@ -3,19 +3,17 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 func (s *Server) ListPlaylists(ctx context.Context, req ListPlaylistsRequestObject) (ListPlaylistsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
 	if err != nil {
 		return nil, err
-	}
-	limit := 100
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
 	}
 	cursor := ""
 	if req.Params.Cursor != nil {
@@ -41,12 +39,9 @@ func (s *Server) ListPlaylists(ctx context.Context, req ListPlaylistsRequestObje
 
 func (s *Server) CreatePlaylist(ctx context.Context, req CreatePlaylistRequestObject) (CreatePlaylistResponseObject, error) {
 	if req.Body == nil {
-		return CreatePlaylist400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	create := service.PlaylistCreate{
 		Name: req.Body.Name,
 		Kind: req.Body.Kind,
@@ -69,10 +64,7 @@ func (s *Server) CreatePlaylist(ctx context.Context, req CreatePlaylistRequestOb
 }
 
 func (s *Server) GetPlaylist(ctx context.Context, req GetPlaylistRequestObject) (GetPlaylistResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	pl, err := s.svc.PlaylistByPID(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
@@ -82,12 +74,9 @@ func (s *Server) GetPlaylist(ctx context.Context, req GetPlaylistRequestObject) 
 
 func (s *Server) UpdatePlaylist(ctx context.Context, req UpdatePlaylistRequestObject) (UpdatePlaylistResponseObject, error) {
 	if req.Body == nil {
-		return UpdatePlaylist400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	upd := service.PlaylistUpdate{
 		Name:       req.Body.Name,
 		Visibility: req.Body.Visibility,
@@ -104,10 +93,7 @@ func (s *Server) UpdatePlaylist(ctx context.Context, req UpdatePlaylistRequestOb
 }
 
 func (s *Server) DeletePlaylist(ctx context.Context, req DeletePlaylistRequestObject) (DeletePlaylistResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DeletePlaylist(ctx, uc, req.Pid); err != nil {
 		return nil, err
 	}
@@ -115,13 +101,10 @@ func (s *Server) DeletePlaylist(ctx context.Context, req DeletePlaylistRequestOb
 }
 
 func (s *Server) ListPlaylistItems(ctx context.Context, req ListPlaylistItemsRequestObject) (ListPlaylistItemsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
 	if err != nil {
 		return nil, err
-	}
-	limit := 100
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
 	}
 	cursor := ""
 	if req.Params.Cursor != nil {
@@ -143,12 +126,9 @@ func (s *Server) ListPlaylistItems(ctx context.Context, req ListPlaylistItemsReq
 
 func (s *Server) ReplacePlaylistItems(ctx context.Context, req ReplacePlaylistItemsRequestObject) (ReplacePlaylistItemsResponseObject, error) {
 	if req.Body == nil {
-		return ReplacePlaylistItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.ReplacePlaylistItems(ctx, uc, req.Pid, req.Body.ItemPids, req.Body.BaseUpdatedAt); err != nil {
 		return nil, err
 	}
@@ -157,12 +137,9 @@ func (s *Server) ReplacePlaylistItems(ctx context.Context, req ReplacePlaylistIt
 
 func (s *Server) AddPlaylistItems(ctx context.Context, req AddPlaylistItemsRequestObject) (AddPlaylistItemsResponseObject, error) {
 	if req.Body == nil {
-		return AddPlaylistItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.AddPlaylistItems(ctx, uc, req.Pid, req.Body.ItemPids); err != nil {
 		return nil, err
 	}
@@ -170,10 +147,7 @@ func (s *Server) AddPlaylistItems(ctx context.Context, req AddPlaylistItemsReque
 }
 
 func (s *Server) RemovePlaylistItemAt(ctx context.Context, req RemovePlaylistItemAtRequestObject) (RemovePlaylistItemAtResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.RemovePlaylistItemAt(ctx, uc, req.Pid, req.Position, deref(req.Params.ItemPid)); err != nil {
 		return nil, err
 	}
@@ -182,15 +156,12 @@ func (s *Server) RemovePlaylistItemAt(ctx context.Context, req RemovePlaylistIte
 
 func (s *Server) PreviewSmartRule(ctx context.Context, req PreviewSmartRuleRequestObject) (PreviewSmartRuleResponseObject, error) {
 	if req.Body == nil {
-		return PreviewSmartRule400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 50, 200)
 	if err != nil {
 		return nil, err
-	}
-	limit := 50
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
 	}
 	prev, err := s.svc.PreviewRule(ctx, uc, ruleFromWire(*req.Body), limit)
 	if err != nil {
@@ -204,10 +175,7 @@ func (s *Server) PreviewSmartRule(ctx context.Context, req PreviewSmartRuleReque
 }
 
 func (s *Server) GetRuleFields(ctx context.Context, _ GetRuleFieldsRequestObject) (GetRuleFieldsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	vocab, err := s.svc.RuleVocabulary(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -236,10 +204,7 @@ func (s *Server) GetRuleFields(ctx context.Context, _ GetRuleFieldsRequestObject
 }
 
 func (s *Server) ExportPlaylistM3u(ctx context.Context, req ExportPlaylistM3uRequestObject) (ExportPlaylistM3uResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	doc, err := s.svc.ExportPlaylistM3U(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
@@ -252,12 +217,9 @@ func (s *Server) ExportPlaylistM3u(ctx context.Context, req ExportPlaylistM3uReq
 
 func (s *Server) ImportPlaylistM3u(ctx context.Context, req ImportPlaylistM3uRequestObject) (ImportPlaylistM3uResponseObject, error) {
 	if req.Body == nil {
-		return ImportPlaylistM3u400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	vis := ""
 	if req.Body.Visibility != nil {
 		vis = *req.Body.Visibility
@@ -279,12 +241,9 @@ func (s *Server) ImportPlaylistM3u(ctx context.Context, req ImportPlaylistM3uReq
 
 func (s *Server) PreviewPlaylistM3u(ctx context.Context, req PreviewPlaylistM3uRequestObject) (PreviewPlaylistM3uResponseObject, error) {
 	if req.Body == nil {
-		return PreviewPlaylistM3u400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	prev, err := s.svc.PreviewPlaylistM3U(ctx, uc, req.Body.Content)
 	if err != nil {
 		return nil, err
@@ -305,18 +264,15 @@ func (s *Server) PreviewPlaylistM3u(ctx context.Context, req PreviewPlaylistM3uR
 
 func (s *Server) ImportPlaylistNsp(ctx context.Context, req ImportPlaylistNspRequestObject) (ImportPlaylistNspResponseObject, error) {
 	if req.Body == nil {
-		return ImportPlaylistNsp400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	// The body arrives decoded, so it goes back to bytes for the
 	// converter, which parses the grammar's one-key clauses out of raw
 	// JSON rather than walking an any tree.
 	doc, err := json.Marshal(*req.Body)
 	if err != nil {
-		return ImportPlaylistNsp400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "the NSP document could not be read"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "the NSP document could not be read")
 	}
 	name := ""
 	if req.Params.Name != nil {
@@ -331,14 +287,11 @@ func (s *Server) ImportPlaylistNsp(ctx context.Context, req ImportPlaylistNspReq
 
 func (s *Server) ReportPlaylistNspImport(ctx context.Context, req ReportPlaylistNspImportRequestObject) (ReportPlaylistNspImportResponseObject, error) {
 	if req.Body == nil {
-		return ReportPlaylistNspImport400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
-	}
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
+		return nil, errNoBody()
 	}
 	doc, err := json.Marshal(*req.Body)
 	if err != nil {
-		return ReportPlaylistNspImport400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "the NSP document could not be read"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "the NSP document could not be read")
 	}
 	rep, err := s.svc.ReportPlaylistNSPImport(doc)
 	if err != nil {
@@ -348,10 +301,7 @@ func (s *Server) ReportPlaylistNspImport(ctx context.Context, req ReportPlaylist
 }
 
 func (s *Server) ExportPlaylistNsp(ctx context.Context, req ExportPlaylistNspRequestObject) (ExportPlaylistNspResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	doc, err := s.svc.ExportPlaylistNSP(ctx, uc, req.Pid, derefBool(req.Params.Partial), deref(req.Params.RuleHash))
 	if err != nil {
 		return nil, err
@@ -360,10 +310,7 @@ func (s *Server) ExportPlaylistNsp(ctx context.Context, req ExportPlaylistNspReq
 }
 
 func (s *Server) ReportPlaylistNspExport(ctx context.Context, req ReportPlaylistNspExportRequestObject) (ReportPlaylistNspExportResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	rep, err := s.svc.ReportPlaylistNSPExport(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err

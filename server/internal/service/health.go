@@ -1246,6 +1246,10 @@ func (l *Library) MergeDuplicates(ctx context.Context, uc *UserCtx, entityType, 
 	}
 	reports, err := l.lib.MergeMany(ctx, met, survivor, losers)
 	if err != nil {
+		// The catalog's miss names the entity by its bare catalog pid.
+		if KindOf(err) == KindNotFound {
+			return MergeResultDTO{}, errNotFound("no such entity")
+		}
 		return MergeResultDTO{}, classify(err)
 	}
 	res := MergeResultDTO{Merged: len(reports), Folds: []string{}}

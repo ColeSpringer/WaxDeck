@@ -20,6 +20,7 @@ import '../player/item_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../player/play_state_controller.dart';
+import '../presenters/media_tiles.dart';
 import '../podcasts/episode_screen.dart' show formatCueTimestamp;
 import '../podcasts/show_notes.dart';
 import '../podcasts/speed_slider.dart';
@@ -447,11 +448,10 @@ class _Chapters extends ConsumerWidget {
           ),
           for (var i = 0; i < book.chapters.length; i++)
             MediaListRow(
-              data: MediaTileData(
-                title:
-                    book.chapters[i].title ??
-                    l10n.bookChapterFallback(book.chapters[i].index + 1),
-                trailingText: _chapterLength(book, i),
+              data: chapterRowTile(
+                book,
+                i,
+                l10n: l10n,
                 semanticsId: SemanticsIds.chapter(book.chapters[i].index),
               ),
               // The timecode where a track number would be: it is what
@@ -471,19 +471,6 @@ class _Chapters extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  /// How long chapter [at] runs: to the next chapter's start, or to the
-  /// end of the book for the last one.
-  static String? _chapterLength(BookDetail book, int at) {
-    final chapter = book.chapters[at];
-    final endMs =
-        chapter.endMs ??
-        (at + 1 < book.chapters.length
-            ? book.chapters[at + 1].startMs
-            : book.durationMs);
-    final length = endMs - chapter.startMs;
-    return length > 0 ? formatTimecode(Duration(milliseconds: length)) : null;
   }
 }
 

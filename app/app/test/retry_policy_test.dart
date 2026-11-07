@@ -7,6 +7,7 @@ import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// Every administrator's list refused, as for an account whose role was
@@ -49,10 +50,7 @@ void main() {
     tester,
   ) async {
     final repo = _ListsRefused();
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     container
       ..listen(backupsProvider, (_, _) {})
       ..listen(signupRequestsProvider, (_, _) {})

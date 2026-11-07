@@ -2,19 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Override lives here rather than in the root library.
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart' hide QueueEntry;
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'secondary_click.dart';
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
@@ -69,16 +65,14 @@ void main() {
     addTearDown(engine.dispose);
     await engine.start();
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          mirrorDatabaseProvider.overrideWithValue(db),
-          downloadManagerProvider.overrideWithValue(downloads),
-          artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-          syncEngineProvider.overrideWithValue(engine),
-        ],
-        child: routedHost(const HomeScreen()),
+    await mountApp(
+      tester,
+      const HomeScreen(),
+      container: appContainer(
+        repo: repo,
+        mirror: db,
+        downloads: downloads,
+        sync: engine,
       ),
     );
     // Let the failed connect settle into offline status.
@@ -148,18 +142,17 @@ void main() {
     await engine.start();
 
     final queue = <({String pid, int? positionMs})>[];
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          mirrorDatabaseProvider.overrideWithValue(db),
-          downloadManagerProvider.overrideWithValue(downloads),
-          artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-          syncEngineProvider.overrideWithValue(engine),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
+    await mountApp(
+      tester,
+      const HomeScreen(),
+      container: appContainer(
+        repo: repo,
+        mirror: db,
+        downloads: downloads,
+        sync: engine,
+        extra: [
           nowPlayingProvider.overrideWith(() => _RecordingNowPlaying(queue)),
         ],
-        child: routedHost(const HomeScreen()),
       ),
     );
     for (var i = 0; i < 4; i++) {
@@ -303,19 +296,18 @@ Future<SyncEngine> _pumpOfflineEpisode(
   addTearDown(engine.dispose);
   await engine.start();
 
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        mirrorDatabaseProvider.overrideWithValue(db),
-        downloadManagerProvider.overrideWithValue(downloads),
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-        syncEngineProvider.overrideWithValue(engine),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
+  await mountApp(
+    tester,
+    const HomeScreen(),
+    container: appContainer(
+      repo: repo,
+      mirror: db,
+      downloads: downloads,
+      sync: engine,
+      extra: [
         nowPlayingProvider.overrideWith(() => _RecordingNowPlaying(queue)),
         ...extra,
       ],
-      child: routedHost(const HomeScreen()),
     ),
   );
   for (var i = 0; i < 4; i++) {

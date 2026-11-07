@@ -1,21 +1,17 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/music/index_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _dune = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 const _messiah = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK02';
@@ -36,17 +32,7 @@ Future<void> _pump(
   tester.view.physicalSize = const Size(900, 1200);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repository),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-      child: routedHost(screen),
-    ),
-  );
-  await tester.pumpAndSettle();
+  await pumpApp(tester, screen, container: appContainer(repo: repository));
 }
 
 List<String> _covers(WidgetTester tester) => <String>[
@@ -271,31 +257,19 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final location = WaxRoute.bookBucket(BookDimension.genres, '01JZXG');
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(
-              FakeRepository()
-                ..facetItems['genre 01JZXG'] = <ItemSummary>[
-                  _book(_dune, 'Dune'),
-                ],
-            ),
-            audioEngineProvider.overrideWithValue(FakeEngine()),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-          ],
-          child: routedHost(
-            const BookBucketScreen(
-              dimension: BookDimension.genres,
-              segment: '01JZXG',
-              label: 'Science Fiction',
-            ),
-            at: location,
-          ),
+      await pumpApp(
+        tester,
+        const BookBucketScreen(
+          dimension: BookDimension.genres,
+          segment: '01JZXG',
+          label: 'Science Fiction',
         ),
+        container: appContainer(
+          repo: FakeRepository()
+            ..facetItems['genre 01JZXG'] = <ItemSummary>[_book(_dune, 'Dune')],
+        ),
+        at: location,
       );
-      await tester.pumpAndSettle();
 
       await tester.tap(find.bySemanticsLabel('Back'));
       await tester.pumpAndSettle();

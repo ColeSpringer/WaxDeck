@@ -3,17 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
 
@@ -70,24 +67,16 @@ ProviderContainer _container(
   MirrorDatabase? db,
   FakeRepository? repository,
 }) {
-  final container = ProviderContainer(
-    overrides: [
+  return appContainer(
+    repo:
+        repository ??
+        FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]),
+    mirror: db,
+    extra: [
       queueStoreProvider.overrideWithValue(store),
       queueSaveDebounceProvider.overrideWithValue(_tick),
-      repositoryProvider.overrideWithValue(
-        repository ??
-            FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]),
-      ),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      // Accepting a restore offer hands the queue to playback, which
-      // reaches for the engine: without this the real one is built and
-      // asks for a platform binding no unit test has.
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-      if (db != null) mirrorDatabaseProvider.overrideWithValue(db),
     ],
   );
-  addTearDown(container.dispose);
-  return container;
 }
 
 /// Mounts the persister the way the signed-in scope does: watched, so

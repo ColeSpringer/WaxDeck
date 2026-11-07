@@ -21,8 +21,10 @@ import (
 )
 
 // While the CLI holds the catalog, a failure the service could not class
-// answers maintenance like the rest; outside a hand-off it stays internal.
-// A handler's own refusal is classed, so it keeps its answer either way.
+// answers maintenance like the rest, over REST, over the socket, as a
+// bulk edit's part refusal and on a raw route; outside a hand-off it stays
+// internal. A handler's own refusal is classed, so it keeps its answer
+// either way.
 func TestAnUnclassedFailureInAHandOffAnswersMaintenance(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.DiscardHandler)
@@ -60,6 +62,20 @@ func TestAnUnclassedFailureInAHandOffAnswersMaintenance(t *testing.T) {
 	if status, code := answer(failure); status != http.StatusInternalServerError || code != "internal" {
 		t.Fatalf("outside a hand-off: %d %s, want 500 internal", status, code)
 	}
+	if code, _, _ := srv.wsRefusal(failure); code != "internal" {
+		t.Fatalf("outside a hand-off, the socket answers %s, want internal", code)
+	}
+	if part := srv.partRefusal(failure); part.Code != "internal" {
+		t.Fatalf("outside a hand-off, a part refusal answers %s, want internal", part.Code)
+	}
+	raw := func() int {
+		rec := httptest.NewRecorder()
+		writeDownloadSourceError(rec, srv.kindOf(failure))
+		return rec.Code
+	}
+	if status := raw(); status != http.StatusInternalServerError {
+		t.Fatalf("outside a hand-off, a raw route answers %d, want 500", status)
+	}
 
 	var c *proxy.Client
 	for deadline := time.Now().Add(5 * time.Second); ; {
@@ -77,11 +93,23 @@ func TestAnUnclassedFailureInAHandOffAnswersMaintenance(t *testing.T) {
 	}
 	status, code := answer(failure)
 	refusedStatus, refusedCode := answer(errNoBody())
+	socketCode, socketWords, _ := srv.wsRefusal(failure)
+	part := srv.partRefusal(failure)
+	rawStatus := raw()
 	if err := c.MaintenanceEnd(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if status != http.StatusServiceUnavailable || code != "catalog-maintenance" {
 		t.Fatalf("inside a hand-off: %d %s, want 503 catalog-maintenance", status, code)
+	}
+	if want := maintenanceAnswer(); socketCode != want.Code || socketWords != want.Message {
+		t.Fatalf("inside a hand-off, the socket answers %s %q, want %s %q", socketCode, socketWords, want.Code, want.Message)
+	}
+	if part.Code != "catalog-maintenance" {
+		t.Fatalf("inside a hand-off, a part refusal answers %s, want catalog-maintenance", part.Code)
+	}
+	if rawStatus != http.StatusServiceUnavailable {
+		t.Fatalf("inside a hand-off, a raw route answers %d, want 503", rawStatus)
 	}
 	if refusedStatus != http.StatusBadRequest || refusedCode != "invalid-request" {
 		t.Fatalf("a refusal inside a hand-off: %d %s, want 400 invalid-request", refusedStatus, refusedCode)

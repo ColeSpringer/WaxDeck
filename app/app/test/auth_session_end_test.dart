@@ -2,22 +2,20 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck/src/auth/account_binder.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// However a session ends, what it left on this client goes with it: the
@@ -132,21 +130,18 @@ _Client _client({
   final engine = FakeEngine();
   final store = _Disk(disk);
   final credentials = InMemoryCredentialStore()..token = storedToken;
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(server),
-      credentialStoreProvider.overrideWithValue(credentials),
+  final container = appContainer(
+    repo: server,
+    engine: engine,
+    credentials: credentials,
+    artwork: artwork,
+    settings: MemoryClientSettingsStore(),
+    extra: [
       serverEventBusProvider.overrideWith((ref) => bus),
-      audioEngineProvider.overrideWithValue(engine),
-      clientSettingsStoreProvider.overrideWithValue(
-        MemoryClientSettingsStore(),
-      ),
       queueStoreProvider.overrideWithValue(store),
       queueSaveDebounceProvider.overrideWithValue(Duration.zero),
-      if (artwork != null) artworkStoreProvider.overrideWithValue(artwork),
     ],
   );
-  addTearDown(container.dispose);
   addTearDown(bus.dispose);
   final binder = container.listen(accountBinderProvider, (_, _) {});
   addTearDown(binder.close);

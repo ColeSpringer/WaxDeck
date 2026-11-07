@@ -7,8 +7,8 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
-import '../media_view.dart';
 import '../music/music_controllers.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -80,24 +80,11 @@ class PinnedShelf extends ConsumerWidget {
     final repository = ref.watch(repositoryProvider);
     final tiles = <MediaTileData>[
       for (final card in cards)
-        MediaTileData(
-          title: card.title,
-          subtitle: _caption(l10n, card),
-          // The card clamps every line, so the full name lives on the
-          // hover tooltip, as on every other home shelf.
-          tooltip: <String?>[
-            card.title,
-            _caption(l10n, card),
-          ].nonNulls.join('\n'),
-          // A release group statically holds no artwork of its own, so it
-          // draws a monogram rather than asking for a cover that 404s.
-          artwork: card.kind == EntityCardKind.releaseGroup
-              ? null
-              : waxArtwork(store, repository.artUrlFor(card.pid)),
-          domain: _domain(card.kind),
-          shape: card.kind == EntityCardKind.artist
-              ? ArtworkShape.circle
-              : ArtworkShape.square,
+        pinnedCardTile(
+          card,
+          l10n: l10n,
+          store: store,
+          repository: repository,
           semanticsId: SemanticsIds.shelfCard(_shelf, card.pid),
         ),
     ];
@@ -167,7 +154,7 @@ class PinnedShelf extends ConsumerWidget {
             children: <Widget>[
               SectionHeader(
                 title: card.title,
-                overline: _caption(sheetContext.l10n, card),
+                overline: pinnedCardCaption(sheetContext.l10n, card),
               ),
               WaxOptionRow(
                 title: sheetContext.l10n.homeUnpinAction,
@@ -183,29 +170,6 @@ class PinnedShelf extends ConsumerWidget {
     if (chosen != true || !context.mounted) return;
     await togglePin(context, ref, card.pid, label: card.title);
   }
-
-  /// The line under the title: what the thing is, plus whose it is where
-  /// that is not the title itself.
-  static String _caption(AppLocalizations l10n, EntityCard card) {
-    final kind = switch (card.kind) {
-      EntityCardKind.album => l10n.homePinnedKindAlbum,
-      EntityCardKind.artist => l10n.homePinnedKindArtist,
-      EntityCardKind.releaseGroup => l10n.homePinnedKindReleaseGroup,
-      EntityCardKind.playlist => l10n.homePinnedKindPlaylist,
-      EntityCardKind.podcast => l10n.homePinnedKindPodcast,
-      EntityCardKind.book => l10n.homePinnedKindBook,
-    };
-    final artist = card.artist;
-    return artist == null || artist.isEmpty
-        ? kind
-        : l10n.homePinnedCaption(kind, artist);
-  }
-
-  static WaxDomain _domain(EntityCardKind kind) => switch (kind) {
-    EntityCardKind.podcast => WaxDomain.podcasts,
-    EntityCardKind.book => WaxDomain.audiobooks,
-    _ => WaxDomain.music,
-  };
 
   /// Where a card opens. All pushed: every one of these is declared
   /// under its own domain, so `go` would rebuild that ancestry and throw

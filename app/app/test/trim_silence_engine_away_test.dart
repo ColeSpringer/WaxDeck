@@ -44,7 +44,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -64,6 +64,5 @@ void main() {
       await tester.pump();
     }
     expect(engine.position, const Duration(seconds: 15));
-    await harness.endPlayback(tester);
   });
 }

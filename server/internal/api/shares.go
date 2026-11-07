@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -41,22 +42,13 @@ func barePID(apiPID string) string {
 }
 
 func (s *Server) ListShares(ctx context.Context, req ListSharesRequestObject) (ListSharesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 50, 200)
 	if err != nil {
 		return nil, err
 	}
-	limit, ok := pageLimit(req.Params.Limit, 50, 200)
-	if !ok {
-		return ListShares400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 200"))}, nil
-	}
 	res, err := s.svc.Shares(ctx, uc, derefBool(req.Params.All), deref(req.Params.Cursor), limit)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		return ListShares400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	case service.KindForbidden:
-		return ListShares403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	out := SharePage{Shares: []Share{}}
@@ -71,50 +63,27 @@ func (s *Server) ListShares(ctx context.Context, req ListSharesRequestObject) (L
 
 func (s *Server) CreateShare(ctx context.Context, req CreateShareRequestObject) (CreateShareResponseObject, error) {
 	if req.Body == nil {
-		return CreateShare400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a request body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	var expiresIn time.Duration
 	if req.Body.ExpiresInHours != nil {
 		if *req.Body.ExpiresInHours < 1 || *req.Body.ExpiresInHours > 8760 {
-			return CreateShare400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "expiresInHours must be between 1 and 8760"))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", "expiresInHours must be between 1 and 8760")
 		}
 		expiresIn = time.Duration(*req.Body.ExpiresInHours) * time.Hour
 	}
 	info, err := s.svc.CreateShare(ctx, uc, req.Body.Pid, expiresIn,
 		derefBool(req.Body.AllowDownload), derefInt64(req.Body.PositionMs))
-	switch service.KindOf(err) {
-	case "":
-	case service.KindNotFound:
-		return CreateShare404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-	case service.KindInvalid:
-		return CreateShare400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	case service.KindForbidden:
-		return CreateShare403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-	case service.KindConflict:
-		return CreateShare409JSONResponse(errObj("conflict", err.Error())), nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	return CreateShare201JSONResponse(s.shareJSON(info)), nil
 }
 
 func (s *Server) RevokeShare(ctx context.Context, req RevokeShareRequestObject) (RevokeShareResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	err = s.svc.RevokeShare(ctx, uc, req.ShareId)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindNotFound:
-		return RevokeShare404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-	case service.KindForbidden:
-		return RevokeShare403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-	default:
+	uc := userCtx(ctx)
+	if err := s.svc.RevokeShare(ctx, uc, req.ShareId); err != nil {
 		return nil, err
 	}
 	s.shareTransfers.end(barePID(req.ShareId))

@@ -3,14 +3,12 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/podcasts/add_podcast.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_actions.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
@@ -20,37 +18,26 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'disclosure_glyph.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'player_host.dart';
-import 'routed_host.dart';
 import 'secondary_click.dart';
 import 'wax_finders.dart';
 
-/// Pass [credentials] for a session that answers: the real store never does
-/// under test, and the session stays loading.
 Future<void> _pump(
   WidgetTester tester,
   FakeRepository repo, {
   Size size = const Size(900, 1600),
-  CredentialStorePort? credentials,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        if (credentials != null)
-          credentialStoreProvider.overrideWithValue(credentials),
-      ],
-      child: routedHost(const PodcastsScreen()),
-    ),
+  await pumpApp(
+    tester,
+    const PodcastsScreen(),
+    container: appContainer(repo: repo),
   );
-  await tester.pumpAndSettle();
 }
 
 /// Opens the add dialog's expert path: pasting a feed URL is a
@@ -350,7 +337,7 @@ void main() {
   ) async {
     final repo = FakeRepository(sessionState: testListenerSession())
       ..addSubscription(testShow('pc-A', title: 'Alpha Show'));
-    await _pump(tester, repo, credentials: InMemoryCredentialStore());
+    await _pump(tester, repo);
 
     await rightClick(
       tester,
@@ -380,7 +367,7 @@ void main() {
         ),
       ),
     )..addSubscription(testShow('pc-A', title: 'Alpha Show'));
-    await _pump(tester, repo, credentials: InMemoryCredentialStore());
+    await _pump(tester, repo);
 
     await rightClick(
       tester,
@@ -409,18 +396,14 @@ void main() {
     tester.view.physicalSize = const Size(900, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-          serverEventBusProvider.overrideWithValue(bus),
-        ],
-        child: routedHost(const PodcastsScreen()),
+    await pumpApp(
+      tester,
+      const PodcastsScreen(),
+      container: appContainer(
+        repo: repo,
+        extra: [serverEventBusProvider.overrideWithValue(bus)],
       ),
     );
-    await tester.pumpAndSettle();
     final binder = ProviderScope.containerOf(
       tester.element(find.byType(PodcastsScreen)),
     ).listen(syncBinderProvider, (_, _) {});
@@ -542,13 +525,7 @@ void main() {
     tester.view.physicalSize = const Size(900, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const PodcastsScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const PodcastsScreen(), container: container);
 
     await hoverPlay(
       tester,
@@ -559,7 +536,6 @@ void main() {
     );
     final queue = container.read(queueControllerProvider);
     expect(<String>[for (final e in queue.entries) e.pid], <String>['tr-mid']);
-    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('a show heard through starts its newest over', (tester) async {
@@ -580,13 +556,7 @@ void main() {
     tester.view.physicalSize = const Size(900, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const PodcastsScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const PodcastsScreen(), container: container);
 
     await hoverPlay(
       tester,
@@ -597,7 +567,6 @@ void main() {
     );
     expect(engine.loadedUrl, contains('tr-new'));
     expect(engine.position, Duration.zero);
-    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('a show whose next episode needs fetching reads its list once', (
@@ -618,13 +587,7 @@ void main() {
     tester.view.physicalSize = const Size(900, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const PodcastsScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const PodcastsScreen(), container: container);
     repo.listEpisodesCalls.clear();
 
     await hoverPlay(
@@ -896,31 +859,26 @@ void main() {
     WidgetTester tester,
     FakeRepository repo,
   ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-        child: localizedHost(
-          Builder(
-            builder: (context) => WaxButton(
-              label: 'Open',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (context) => WaxButton(
-                    label: 'Add one',
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => const SubscribeDialog(),
-                    ),
-                  ),
+    await mountApp(
+      tester,
+      Builder(
+        builder: (context) => WaxButton(
+          label: 'Open',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => WaxButton(
+                label: 'Add one',
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const SubscribeDialog(),
                 ),
               ),
             ),
           ),
         ),
       ),
+      container: appContainer(repo: repo),
+      routed: false,
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();

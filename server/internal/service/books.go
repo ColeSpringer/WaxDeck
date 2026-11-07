@@ -312,15 +312,10 @@ func (l *Library) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID str
 	}
 	bd, err := l.lib.Book(ctx, pid)
 	if err != nil {
-		// A catalog miss becomes this layer's own sentence rather than
-		// the store's. Every other book route constructs that message in
-		// its handler and never looks at this one, so the difference has
-		// never shown; a handler that answers with the error it was
-		// given - which the bookmark delete does, having two things that
-		// can be missing - would otherwise put "store.ItemByPID: no such
-		// item" on the wire.
-		// An item that is no longer a book (its kind changed) is no
-		// book under this pid either; the catalog calls that invalid.
+		// A catalog miss becomes this layer's own sentence, naming the
+		// API pid, rather than the store's, which names a bare one. An
+		// item that is no longer a book (its kind changed) is no book
+		// under this pid either; the catalog calls that invalid.
 		if k := KindOf(err); k == KindNotFound || k == KindInvalid {
 			return nil, errNotFound("no book with pid " + apiBookPID)
 		}

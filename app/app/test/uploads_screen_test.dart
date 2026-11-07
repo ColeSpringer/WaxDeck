@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -15,9 +14,9 @@ import 'package:waxdeck/src/uploads/uploads_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'direction_glyph.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'row_nodes.dart';
 import 'wax_finders.dart';
 
@@ -220,21 +219,24 @@ class _Monotonic {
   Duration call() => now;
 }
 
-Widget _host(
+ProviderContainer _container(
   FakeRepository repo, {
   FilePickerPort? picker,
   Duration backoff = Duration.zero,
   Duration Function()? monotonic,
-}) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
+}) => appContainer(
+  repo: repo,
+  extra: [
     uploadRetryBackoffProvider.overrideWithValue((_) => backoff),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
     filePickerProvider.overrideWithValue(picker),
     if (monotonic != null) monotonicClockProvider.overrideWithValue(monotonic),
   ],
-  child: routedHost(const UploadsScreen()),
 );
+
+/// The uploads screen over [container], settled.
+Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
+  await pumpApp(tester, const UploadsScreen(), container: container);
+}
 
 /// The server refusing a session its allowance cannot take.
 const _quotaRefusal = WaxDeckApiException(
@@ -258,8 +260,7 @@ void main() {
   ) async {
     final repo = FakeRepository()..uploadsNextCursor = 'more';
     repo.uploadsById['up-1'] = testUpload('up-1', fileName: 'one.flac');
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
     expectPointing(
       tester,
       find.bySemanticsIdentifier(SemanticsIds.uploadsMore),
@@ -272,8 +273,7 @@ void main() {
   ) async {
     final repo = FakeRepository()..uploadsNextCursor = 'more';
     repo.uploadsById['up-1'] = testUpload('up-1', fileName: 'one.flac');
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     repo.listUploadsGate = Completer<void>();
     await expectLoadMoreHolds(
@@ -291,8 +291,7 @@ void main() {
     // state's runtime type blanks the screen the reader was reading.
     final repo = FakeRepository();
     repo.uploadsById['up-1'] = testUpload('up-1', fileName: 'one.flac');
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
     expect(find.byType(AsyncBoxFace<UploadsState>), findsOneWidget);
     expect(find.text('one.flac'), findsWidgets);
 
@@ -341,8 +340,7 @@ void main() {
       fileName: 'meridian-3.flac',
       state: 'imported',
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadRow('up-1')),
@@ -373,8 +371,7 @@ void main() {
       receivedBytes: 1048576,
       sizeBytes: 4194304,
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     final row = find.bySemanticsIdentifier(SemanticsIds.uploadRow('up-1'));
     expect(
@@ -412,8 +409,7 @@ void main() {
       sizeBytes: 4194304,
       idle: const Duration(seconds: 30),
     );
-    await tester.pumpWidget(_host(repo, monotonic: clock.call));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, monotonic: clock.call));
     final listed = repo.listUploadsCalls;
 
     final row = find.bySemanticsIdentifier(SemanticsIds.uploadRow('up-1'));
@@ -504,8 +500,7 @@ void main() {
       sizeBytes: 4194304,
       idle: const Duration(seconds: 5),
     );
-    await tester.pumpWidget(_host(repo, monotonic: clock.call));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, monotonic: clock.call));
     final discard = find.bySemanticsIdentifier(
       SemanticsIds.uploadDelete('up-1'),
     );
@@ -548,8 +543,7 @@ void main() {
       readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
       readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
     final container = ProviderScope.containerOf(
       tester.element(find.byType(UploadsScreen)),
     );
@@ -596,7 +590,11 @@ void main() {
     final repo = _HeldCreates()..listUploadsGate = Completer<void>();
     repo.uploadsById['up-old'] = testUpload('up-old', sizeBytes: 64);
     final picker = _FakePicker([readerFile('fresh.flac', Uint8List(64))]);
-    await tester.pumpWidget(_host(repo, picker: picker));
+    await mountApp(
+      tester,
+      const UploadsScreen(),
+      container: _container(repo, picker: picker),
+    );
     await tester.pump();
     // Frames by hand: the list's loading face animates while it waits.
     Future<void> frames() async {
@@ -649,8 +647,7 @@ void main() {
     final picker = _FakePicker([
       readerFile('long-take.flac', Uint8List(2621440)),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -704,8 +701,7 @@ void main() {
     final picker = _FakePicker([
       readerFile('long-take.flac', Uint8List(2621440)),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -766,10 +762,10 @@ void main() {
     final picker = _FakePicker([
       readerFile('long-take.flac', Uint8List(2621440)),
     ]);
-    await tester.pumpWidget(
-      _host(repo, picker: picker, backoff: const Duration(seconds: 1)),
+    await _pump(
+      tester,
+      _container(repo, picker: picker, backoff: const Duration(seconds: 1)),
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -813,8 +809,7 @@ void main() {
     final picker = _FakePicker([
       readerFile('long-take.flac', Uint8List(2621440)),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -864,8 +859,7 @@ void main() {
       state: 'staged',
       duplicate: const DuplicateWarning(kind: 'id'),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     expect(
       find.descendant(
@@ -912,8 +906,7 @@ void main() {
       batchId: 'ub-1',
       state: 'staged',
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadBatch('ub-1')),
@@ -935,8 +928,7 @@ void main() {
     repo.uploadsById
       ..['up-1'] = staged('up-1', 'ub-1')
       ..['up-2'] = staged('up-2', 'ub-1');
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     // Both headers read "2 files" and every discard button the same, so
     // nothing but the identifier tells the rows apart.
@@ -974,8 +966,7 @@ void main() {
       bytesInUse: 512 * 1024,
       quotaBytes: 1024 * 1024,
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadQuota),
@@ -988,8 +979,7 @@ void main() {
   testWidgets('hides upload affordances without upload rights', (tester) async {
     final repo = FakeRepository();
     final picker = _FakePicker([readerFile('cut.flac', Uint8List(10))]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     expect(find.bySemanticsIdentifier(SemanticsIds.uploadPick), findsNothing);
     expect(
@@ -1003,8 +993,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository(sessionState: testUploaderSession());
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     expect(find.bySemanticsIdentifier(SemanticsIds.uploadPick), findsNothing);
     // URL acquisition needs no picker, only rights.
@@ -1016,8 +1005,7 @@ void main() {
 
   testWidgets('add from URL queues an acquisition', (tester) async {
     final repo = FakeRepository(sessionState: testUploaderSession());
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadFromUrl));
     await tester.pumpAndSettle();
@@ -1045,8 +1033,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository(sessionState: testUploaderSession());
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadFromUrl));
     await tester.pumpAndSettle();
@@ -1067,8 +1054,7 @@ void main() {
 
   testWidgets('acquiring can pick a download format', (tester) async {
     final repo = FakeRepository(sessionState: testUploaderSession());
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadFromUrl));
     await tester.pumpAndSettle();
@@ -1096,8 +1082,7 @@ void main() {
     final picker = _FakePicker([
       readerFile('fresh-cut.flac', Uint8List(2621440)),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1131,8 +1116,7 @@ void main() {
       readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
       readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1164,8 +1148,7 @@ void main() {
       readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
       readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1186,8 +1169,7 @@ void main() {
       readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
       readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1223,8 +1205,7 @@ void main() {
       readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
       readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1269,8 +1250,7 @@ void main() {
       readerFile('long-take.flac', Uint8List(2621440)),
       readerFile('short.flac', Uint8List(64)),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
     final shown = <String?>[];
     ProviderScope.containerOf(
       tester.element(find.byType(UploadsScreen)),
@@ -1316,8 +1296,7 @@ void main() {
       'question', (tester) async {
     final repo = FakeRepository(sessionState: testUploaderSession());
     final picker = _FakePicker([readerFile('book.aax', Uint8List(32))]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1342,8 +1321,7 @@ void main() {
       ..uploadPageQuota = const UploadQuota(bytesInUse: 1000, quotaBytes: 1024)
       ..createUploadRefusal = _quotaRefusal;
     final picker = _FakePicker([readerFile('big.flac', Uint8List(32))]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1365,8 +1343,7 @@ void main() {
       ..uploadPageQuota = const UploadQuota(bytesInUse: 0, quotaBytes: 1024)
       ..createUploadRefusal = _quotaRefusal;
     final picker = _FakePicker([readerFile('big.flac', Uint8List(2048))]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1389,8 +1366,7 @@ void main() {
     final repo = FakeRepository(sessionState: testUploaderSession())
       ..createUploadRefusal = _quotaRefusal;
     final picker = _FakePicker([readerFile('big.flac', Uint8List(32))]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1411,8 +1387,7 @@ void main() {
       readerFile('silence.flac', Uint8List(0)),
       readerFile('sound.flac', Uint8List(32)),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
@@ -1460,8 +1435,7 @@ void main() {
       readerFile('broken.flac', Uint8List(32)),
       readerFile('ok-two.flac', Uint8List(32)),
     ]);
-    await tester.pumpWidget(_host(repo, picker: picker));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo, picker: picker));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();

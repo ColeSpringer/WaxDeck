@@ -2,17 +2,21 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 func (s *Server) Signup(ctx context.Context, req SignupRequestObject) (SignupResponseObject, error) {
-	if req.Body == nil || req.Body.Username == "" || req.Body.Password == "" {
-		return Signup400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "username and password are required"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
+	}
+	if req.Body.Username == "" || req.Body.Password == "" {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "username and password are required")
 	}
 	if msg := passwordPolicy(req.Body.Password); msg != "" {
-		return Signup400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", msg))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", msg)
 	}
 	// One shared per-address budget covers open signups and invite
 	// probes alike. What burns it is every outcome the caller controls:
@@ -25,21 +29,20 @@ func (s *Server) Signup(ctx context.Context, req SignupRequestObject) (SignupRes
 	ip := remoteIPFromContext(ctx)
 	ipKey := "signup-ip:" + ip
 	if !s.limiter.Allowed(ipKey) {
-		return Signup429JSONResponse{RateLimitedJSONResponse(errObj("rate-limited", "too many signup attempts; retry later"))}, nil
+		return nil, refuse(http.StatusTooManyRequests, "rate-limited", "too many signup attempts; retry later")
 	}
 	_, state, err := s.svc.Signup(ctx, req.Body.Username, req.Body.Password,
 		deref(req.Body.DisplayName), deref(req.Body.InviteToken))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindForbidden:
+		kind := service.KindOf(err)
+		if kind == service.KindForbidden {
+			// Charged and logged here; the table answers the 403.
 			s.limiter.Failure(ipKey)
 			s.log.Warn(authFailureLog, "user", req.Body.Username, "ip", ip, "path", "signup")
-			return Signup403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindConflict:
+		}
+		if kind == service.KindConflict {
 			s.limiter.Failure(ipKey)
-			return Signup409JSONResponse{ConflictJSONResponse(errObj("conflict", "username is taken"))}, nil
-		case service.KindInvalid:
-			return Signup400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+			return nil, refuse(http.StatusConflict, "conflict", "username is taken")
 		}
 		return nil, err
 	}
@@ -52,19 +55,15 @@ func (s *Server) Signup(ctx context.Context, req SignupRequestObject) (SignupRes
 }
 
 func (s *Server) ListSignupRequests(ctx context.Context, req ListSignupRequestsRequestObject) (ListSignupRequestsResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return ListSignupRequests403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
-	limit, okLimit := pageLimit(req.Params.Limit, 100, 500)
-	if !okLimit {
-		return ListSignupRequests400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
+	if err != nil {
+		return nil, err
 	}
 	page, err := s.svc.PendingAccounts(ctx, deref(req.Params.Cursor), limit)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ListSignupRequests400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := UserPage{Users: make([]UserAccount, 0, len(page.Accounts))}
@@ -78,12 +77,9 @@ func (s *Server) ListSignupRequests(ctx context.Context, req ListSignupRequestsR
 }
 
 func (s *Server) ApproveSignupRequest(ctx context.Context, req ApproveSignupRequestRequestObject) (ApproveSignupRequestResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return ApproveSignupRequest403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	ap := service.SignupApproval{}
 	if req.Body != nil {
@@ -103,43 +99,25 @@ func (s *Server) ApproveSignupRequest(ctx context.Context, req ApproveSignupRequ
 	}
 	acct, err := s.svc.ApproveSignup(ctx, uc, req.UserId, ap)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return ApproveSignupRequest404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no user with id "+req.UserId))}, nil
-		case service.KindConflict:
-			return ApproveSignupRequest409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		case service.KindInvalid:
-			return ApproveSignupRequest400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return ApproveSignupRequest200JSONResponse(userAccountJSON(*acct)), nil
 }
 
 func (s *Server) RejectSignupRequest(ctx context.Context, req RejectSignupRequestRequestObject) (RejectSignupRequestResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return RejectSignupRequest403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if err := s.svc.RejectSignup(ctx, uc, req.UserId); err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return RejectSignupRequest404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no user with id "+req.UserId))}, nil
-		case service.KindConflict:
-			return RejectSignupRequest409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return RejectSignupRequest204Response{}, nil
 }
 
 func (s *Server) ListInvites(ctx context.Context, _ ListInvitesRequestObject) (ListInvitesResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return ListInvites403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	invites, err := s.svc.Invites(ctx)
 	if err != nil {
@@ -153,12 +131,9 @@ func (s *Server) ListInvites(ctx context.Context, _ ListInvitesRequestObject) (L
 }
 
 func (s *Server) CreateInvite(ctx context.Context, req CreateInviteRequestObject) (CreateInviteResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return CreateInvite403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	in := service.InviteCreate{MaxUses: 1}
 	if req.Body != nil {
@@ -186,9 +161,6 @@ func (s *Server) CreateInvite(ctx context.Context, req CreateInviteRequestObject
 	}
 	iv, err := s.svc.CreateInvite(ctx, uc, in)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return CreateInvite400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := InviteCreated{Token: iv.Token}
@@ -209,17 +181,11 @@ func (s *Server) CreateInvite(ctx context.Context, req CreateInviteRequestObject
 }
 
 func (s *Server) RevokeInvite(ctx context.Context, req RevokeInviteRequestObject) (RevokeInviteResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return RevokeInvite403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if err := s.svc.RevokeInvite(ctx, uc, req.InviteId); err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return RevokeInvite404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no invite with id "+req.InviteId))}, nil
-		}
 		return nil, err
 	}
 	return RevokeInvite204Response{}, nil

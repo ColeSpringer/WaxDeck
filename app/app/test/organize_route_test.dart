@@ -1,31 +1,21 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/app.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _admin = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
 
 /// The whole app over [repo], answering its router.
 Future<GoRouter> _pumpApp(WidgetTester tester, FakeRepository repo) async {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
+  final container = await pumpWholeApp(
+    tester,
+    container: appContainer(repo: repo),
   );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(container: container, child: const WaxDeckApp()),
-  );
-  await tester.pumpAndSettle();
   return container.read(routerProvider);
 }
 

@@ -1,18 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/series_merge.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// Who is signed in, for the cases that change account mid-test.
@@ -59,13 +55,12 @@ Future<void> _read(ProviderContainer container) async {
 void main() {
   test('another account reads its own counts', () async {
     final repo = FakeRepository();
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
+    final container = appContainer(
+      repo: repo,
+      extra: [
         signedInAccountProvider.overrideWith((ref) => ref.watch(_account)),
       ],
     );
-    addTearDown(container.dispose);
     _hold(container);
     await _read(container);
     final facets = repo.facetReads.length;
@@ -92,20 +87,14 @@ void main() {
       channelFactory: deadChannelFactory(),
     );
     addTearDown(sync.dispose);
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        mirrorDatabaseProvider.overrideWithValue(db),
-        downloadManagerProvider.overrideWithValue(downloads),
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-        syncEngineProvider.overrideWithValue(sync),
-      ],
+    // Disposed by hand below, before the last pump flushes the binder's
+    // timers; the helper's teardown covers a failed assertion.
+    final container = appContainer(
+      repo: repo,
+      mirror: db,
+      downloads: downloads,
+      sync: sync,
     );
-    // Also disposed by hand below, before the last pump flushes the
-    // binder's timers; this one covers a failed assertion.
-    addTearDown(container.dispose);
     container.listen(syncBinderProvider, (_, _) {});
     _hold(container);
     await tester.runAsync(() => _read(container));
@@ -139,15 +128,14 @@ void main() {
           const FacetBucket(key: '01C', label: 'Cyd', count: 1),
           const FacetBucket(key: '', label: '', count: 1, unknown: true),
         ];
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
+      final container = appContainer(
+        repo: repo,
+        extra: [
           prefsControllerProvider.overrideWith(
             () => _StubPrefs(Prefs(browseShowUnknown: shown)),
           ),
         ],
       );
-      addTearDown(container.dispose);
       container.listen(musicIndexCountProvider(_authors), (_, _) {});
       await container.read(prefsControllerProvider.future);
 
@@ -170,9 +158,7 @@ void main() {
         message: 'no',
         statusCode: 403,
       );
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
+    final container = appContainer(repo: repo);
     final held = container.listen(musicIndexCountProvider(_artists), (_, _) {});
     await tester.pump(const Duration(seconds: 5));
 

@@ -26,10 +26,10 @@ import (
 // a way to disable the limiter from inside the product, and the value
 // belongs with the deployment rather than with the library.
 
-// trustedProxies is a parsed CIDR list; the zero value trusts nothing
+// TrustedProxies is a parsed CIDR list; the zero value trusts nothing
 // and answers the socket address, which is what an instance with no
 // proxy in front of it wants.
-type trustedProxies struct {
+type TrustedProxies struct {
 	nets []*net.IPNet
 }
 
@@ -39,8 +39,8 @@ type trustedProxies struct {
 // anything unparseable is an error, because a typo that silently trusted
 // nothing would look exactly like a working configuration until the day
 // somebody was locked out.
-func ParseTrustedProxies(list string) (trustedProxies, error) {
-	var out trustedProxies
+func ParseTrustedProxies(list string) (TrustedProxies, error) {
+	var out TrustedProxies
 	for _, raw := range strings.Split(list, ",") {
 		entry := strings.TrimSpace(raw)
 		if entry == "" {
@@ -52,7 +52,7 @@ func ParseTrustedProxies(list string) (trustedProxies, error) {
 		}
 		ip := net.ParseIP(entry)
 		if ip == nil {
-			return trustedProxies{}, &net.ParseError{Type: "trusted proxy CIDR or address", Text: entry}
+			return TrustedProxies{}, &net.ParseError{Type: "trusted proxy CIDR or address", Text: entry}
 		}
 		bits := 32
 		if ip.To4() == nil {
@@ -66,9 +66,9 @@ func ParseTrustedProxies(list string) (trustedProxies, error) {
 	return out, nil
 }
 
-func (t trustedProxies) empty() bool { return len(t.nets) == 0 }
+func (t TrustedProxies) empty() bool { return len(t.nets) == 0 }
 
-func (t trustedProxies) trusts(ip net.IP) bool {
+func (t TrustedProxies) trusts(ip net.IP) bool {
 	if ip == nil {
 		return false
 	}
@@ -100,7 +100,7 @@ func (t trustedProxies) trusts(ip net.IP) bool {
 //   - a list longer than the number of hops the operator configured is
 //     not special-cased, because it cannot be: the trust check already
 //     bounds how far left the walk can reach.
-func (t trustedProxies) clientIP(r *http.Request) string {
+func (t TrustedProxies) clientIP(r *http.Request) string {
 	socket := remoteIP(r)
 	if t.empty() {
 		return socket

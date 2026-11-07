@@ -29,7 +29,8 @@ ProviderContainer playbackContainer({
 
 /// A test's grip on playback, which lives in the container rather than
 /// in any screen: what is playing survives the player being mounted,
-/// unmounted, or never mounted at all.
+/// left ([leaveScreen]), or never mounted at all. A mounted player's tree
+/// owns the container, so unmounting it ends playback with the container.
 class PlayerHarness {
   PlayerHarness(this.container);
 
@@ -55,26 +56,16 @@ class PlayerHarness {
   /// the session lets go after flushing its last checkpoint and listen
   /// report.
   ///
-  /// Every test that starts playback ends it, because playback no longer
-  /// belongs to the widget tree: unmounting the player leaves the item
-  /// playing, its checkpoint timer running, and Connect still reporting
-  /// it, which is the whole point of the phase and a hung test otherwise.
+  /// Playback belongs to the container, not to the player: leaving the
+  /// player leaves the item playing, its checkpoint timer and Connect's
+  /// heartbeat running. A container a tree owns stops them when the tree
+  /// goes, at the end of the test at the latest; any other (never mounted,
+  /// or under a scope mounted by hand) keeps them past it, and the test
+  /// fails on the timers unless it ends playback here.
   Future<void> endPlayback(WidgetTester tester) async {
     container.read(queueControllerProvider.notifier).clear();
     await tester.pumpAndSettle();
   }
-}
-
-/// [PlayerHarness.endPlayback] for a test that edited the queue under
-/// playback: Connect holds an edit until it settles, and that timer has
-/// to run out before the test may end.
-Future<void> endEditedPlayback(
-  WidgetTester tester,
-  ProviderContainer container,
-) async {
-  container.read(queueControllerProvider.notifier).clear();
-  await tester.pump(const Duration(seconds: 1));
-  await tester.pumpAndSettle();
 }
 
 /// Starts [item] playing and mounts the player over it, the state a
@@ -101,7 +92,8 @@ Future<PlayerHarness> pumpPlayer(
   return harness;
 }
 
-/// Mounts the player over a queue a test built itself.
+/// Mounts the player over a queue a test built itself, through [mountHost]:
+/// the tree owns the harness's container from then on.
 ///
 /// For the cases where one item played on its own is the wrong setup: an
 /// up-next peek needs something after the current entry, and a
@@ -112,11 +104,10 @@ Future<void> pumpPlayerInto(
   Widget Function(Widget player)? host,
 }) async {
   const player = PlayerScreen();
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: harness.container,
-      child: host?.call(player) ?? localizedHost(player),
-    ),
+  await mountHost(
+    tester,
+    host?.call(player) ?? localizedHost(player),
+    container: harness.container,
   );
   await tester.pumpAndSettle();
 }

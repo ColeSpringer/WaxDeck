@@ -17,16 +17,13 @@ func enumStr[T ~string](p *T) string {
 }
 
 func (s *Server) ListFileDiagnostics(ctx context.Context, req ListFileDiagnosticsRequestObject) (ListFileDiagnosticsResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return ListFileDiagnostics403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
-	limit, ok := pageLimit(req.Params.Limit, 100, 500)
-	if !ok {
-		return ListFileDiagnostics400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit out of range"))}, nil
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
+	if err != nil {
+		return nil, err
 	}
 	in := service.DiagnosticFilterInput{
 		Origin:     enumStr(req.Params.Origin),
@@ -36,12 +33,6 @@ func (s *Server) ListFileDiagnostics(ctx context.Context, req ListFileDiagnostic
 	}
 	rows, next, err := s.svc.FileDiagnostics(ctx, uc, in, deref(req.Params.Cursor), limit)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return ListFileDiagnostics400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return ListFileDiagnostics404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := FileDiagnosticPage{Diagnostics: make([]FileDiagnostic, 0, len(rows))}
@@ -55,12 +46,9 @@ func (s *Server) ListFileDiagnostics(ctx context.Context, req ListFileDiagnostic
 }
 
 func (s *Server) GetDiagnosticSummary(ctx context.Context, req GetDiagnosticSummaryRequestObject) (GetDiagnosticSummaryResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return GetDiagnosticSummary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	in := service.DiagnosticFilterInput{
 		Origin:     enumStr(req.Params.Origin),
@@ -70,12 +58,6 @@ func (s *Server) GetDiagnosticSummary(ctx context.Context, req GetDiagnosticSumm
 	}
 	counts, err := s.svc.DiagnosticSummary(ctx, uc, in)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return GetDiagnosticSummary400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return GetDiagnosticSummary404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := DiagnosticSummary{Counts: make([]DiagnosticCount, 0, len(counts))}

@@ -2,16 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/downloads/downloads_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// A downloads store that decides and frees as the real one does: whether
@@ -184,16 +180,12 @@ void main() {
       repository: repository,
       channelFactory: deadChannelFactory(),
     );
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repository),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        mirrorDatabaseProvider.overrideWithValue(db),
-        downloadManagerProvider.overrideWithValue(store),
-        artworkStoreProvider.overrideWithValue(covers),
-        syncEngineProvider.overrideWithValue(engine),
-      ],
+    final container = appContainer(
+      repo: repository,
+      downloads: store,
+      artwork: covers,
+      sync: engine,
+      mirror: db,
     );
     // Listened, not read: the binder is autoDispose, and the signed-in
     // shell is what holds it open in the app. A bare read would let it

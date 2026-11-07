@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/url"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
@@ -12,27 +13,18 @@ import (
 // --- delta sync --------------------------------------------------------------
 
 func (s *Server) SyncCatalog(ctx context.Context, req SyncCatalogRequestObject) (SyncCatalogResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 500, 1000)
 	if err != nil {
 		return nil, err
 	}
-	limit, ok := pageLimit(req.Params.Limit, 500, 1000)
-	if !ok {
-		return SyncCatalog400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 1000"))}, nil
-	}
 	if req.Params.Since != nil && req.Params.Cursor != nil {
-		return SyncCatalog400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "since and cursor are mutually exclusive"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "since and cursor are mutually exclusive")
 	}
 
 	if req.Params.Since != nil {
 		delta, err := s.svc.SyncCatalogDelta(ctx, uc, *req.Params.Since, limit)
 		if err != nil {
-			switch service.KindOf(err) {
-			case service.KindGone:
-				return SyncCatalog410JSONResponse{SyncResetJSONResponse(errObj("sync-reset", err.Error()))}, nil
-			case service.KindInvalid:
-				return SyncCatalog400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-			}
 			return nil, err
 		}
 		out := CatalogSyncPage{
@@ -48,9 +40,6 @@ func (s *Server) SyncCatalog(ctx context.Context, req SyncCatalogRequestObject) 
 	cursor := deref(req.Params.Cursor)
 	page, err := s.svc.SyncCatalogSnapshot(ctx, uc, cursor, limit)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return SyncCatalog400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := CatalogSyncPage{
@@ -64,18 +53,12 @@ func (s *Server) SyncCatalog(ctx context.Context, req SyncCatalogRequestObject) 
 }
 
 func (s *Server) SyncCatalogRemoved(ctx context.Context, req SyncCatalogRemovedRequestObject) (SyncCatalogRemovedResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
-	}
 	var asked []string
 	if req.Body != nil {
 		asked = req.Body.Pids
 	}
 	pids, err := s.svc.RemovedItems(ctx, asked)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return SyncCatalogRemoved400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SyncCatalogRemoved200JSONResponse(RemovedItemList{Pids: pids}), nil
@@ -107,13 +90,10 @@ func catalogEntriesJSON(entries []service.CatalogSyncEntry) []CatalogSyncEntry {
 }
 
 func (s *Server) SyncServer(ctx context.Context, req SyncServerRequestObject) (SyncServerResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 500, 1000)
 	if err != nil {
 		return nil, err
-	}
-	limit, ok := pageLimit(req.Params.Limit, 500, 1000)
-	if !ok {
-		return SyncServer400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 1000"))}, nil
 	}
 
 	if req.Params.Since == nil {
@@ -128,12 +108,6 @@ func (s *Server) SyncServer(ctx context.Context, req SyncServerRequestObject) (S
 
 	delta, err := s.svc.SyncServerDelta(ctx, uc, *req.Params.Since, limit)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindGone:
-			return SyncServer410JSONResponse{SyncResetJSONResponse(errObj("sync-reset", err.Error()))}, nil
-		case service.KindInvalid:
-			return SyncServer400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := ServerSyncPage{Events: make([]ServerSyncEvent, 0, len(delta.Events)), NextSince: delta.NextSince}
@@ -180,16 +154,16 @@ func (s *Server) SyncServer(ctx context.Context, req SyncServerRequestObject) (S
 // --- batch play states -------------------------------------------------------
 
 func (s *Server) ListPlayStates(ctx context.Context, req ListPlayStatesRequestObject) (ListPlayStatesResponseObject, error) {
-	if req.Body == nil || len(req.Body.Pids) == 0 {
-		return ListPlayStates400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "pids must not be empty"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
+	}
+	if len(req.Body.Pids) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "pids must not be empty")
 	}
 	if len(req.Body.Pids) > 500 {
-		return ListPlayStates400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "at most 500 pids per request"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "at most 500 pids per request")
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	states, err := s.svc.PlayStates(ctx, uc, req.Body.Pids)
 	if err != nil {
 		return nil, err
@@ -204,21 +178,15 @@ func (s *Server) ListPlayStates(ctx context.Context, req ListPlayStatesRequestOb
 // --- download info -----------------------------------------------------------
 
 func (s *Server) GetDownloadInfo(ctx context.Context, req GetDownloadInfoRequestObject) (GetDownloadInfoResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
+	p, _ := principalFromContext(ctx)
 	if s.media == nil {
 		return nil, errStreamingUnavailable
 	}
 	res, err := s.svc.DownloadInfo(ctx, uc, req.Pid)
 	if err != nil {
 		if errors.Is(err, service.ErrEpisodeNotFetched) {
-			return GetDownloadInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found",
-				"the episode's audio is not on this server; fetch it before downloading"))}, nil
-		}
-		if service.KindOf(err) == service.KindNotFound {
-			return GetDownloadInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+			return nil, refuse(http.StatusNotFound, "not-found", "the episode's audio is not on this server; fetch it before downloading")
 		}
 		return nil, err
 	}
@@ -257,10 +225,7 @@ func (s *Server) GetDownloadInfo(ctx context.Context, req GetDownloadInfoRequest
 // --- app passwords -----------------------------------------------------------
 
 func (s *Server) ListAppPasswords(ctx context.Context, _ ListAppPasswordsRequestObject) (ListAppPasswordsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	rows, err := s.svc.AppPasswords(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -274,20 +239,11 @@ func (s *Server) ListAppPasswords(ctx context.Context, _ ListAppPasswordsRequest
 
 func (s *Server) CreateAppPassword(ctx context.Context, req CreateAppPasswordRequestObject) (CreateAppPasswordResponseObject, error) {
 	if req.Body == nil {
-		return CreateAppPassword400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	created, err := s.svc.CreateAppPassword(ctx, uc, req.Body.Label)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return CreateAppPassword400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindConflict:
-			return CreateAppPassword409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	base := appPasswordJSON(created.AppPassword)
@@ -298,14 +254,8 @@ func (s *Server) CreateAppPassword(ctx context.Context, req CreateAppPasswordReq
 }
 
 func (s *Server) RevokeAppPassword(ctx context.Context, req RevokeAppPasswordRequestObject) (RevokeAppPasswordResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.RevokeAppPassword(ctx, uc, req.AppPasswordId); err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return RevokeAppPassword404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no app password with id "+req.AppPasswordId))}, nil
-		}
 		return nil, err
 	}
 	return RevokeAppPassword204Response{}, nil

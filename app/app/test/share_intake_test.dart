@@ -1,9 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -15,8 +13,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 /// Hands out one queued payload, like MainActivity's share queue.
 class FakeShareIntake implements ShareIntakePort {
@@ -34,22 +32,17 @@ class FakeShareIntake implements ShareIntakePort {
   }
 }
 
-Widget _host(
+Future<void> _mount(
+  WidgetTester tester,
   FakeRepository repo,
   FakeShareIntake port, {
   List<Override> extra = const [],
-}) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    shareIntakeProvider.overrideWithValue(port),
-    // The gate is a signed-in surface and the acquire sheet reads the
-    // account's own identification default, so the session has to
-    // resolve against something rather than the platform keychain.
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ...extra,
-  ],
-  child: routedHost(
-    const ShareIntakeGate(child: Scaffold(body: Text('library'))),
+}) => mountApp(
+  tester,
+  const ShareIntakeGate(child: Scaffold(body: Text('library'))),
+  container: appContainer(
+    repo: repo,
+    extra: [shareIntakeProvider.overrideWithValue(port), ...extra],
   ),
 );
 
@@ -61,7 +54,7 @@ void main() {
     final port = FakeShareIntake(
       intake: const SharedUrlIntake('https://tube.example/watch?v=pony'),
     );
-    await tester.pumpWidget(_host(repo, port));
+    await _mount(tester, repo, port);
     await tester.pumpAndSettle();
 
     expect(port.consumeCalls, 1);
@@ -106,7 +99,7 @@ void main() {
       ]),
     );
     await tester.runAsync(() async {
-      await tester.pumpWidget(_host(repo, port));
+      await _mount(tester, repo, port);
       for (var waited = 0; waited < 5000; waited += 10) {
         if (repo.uploadsById.length == 2 &&
             repo.uploadsById.values.every((u) => u.state == 'staged')) {
@@ -146,7 +139,7 @@ void main() {
     ];
     final port = FakeShareIntake(intake: SharedFilesIntake(files));
     await tester.runAsync(() async {
-      await tester.pumpWidget(_host(repo, port, extra: overrides));
+      await _mount(tester, repo, port, extra: overrides);
       for (var waited = 0; waited < 5000; waited += 10) {
         if (repo.uploadsById.length == names.length &&
             repo.uploadsById.values.every((u) => u.state == 'staged')) {
@@ -252,24 +245,17 @@ void main() {
         SharedFile(path: book.path, name: 'book.flac'),
       ]),
     );
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        shareIntakeProvider.overrideWithValue(port),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
+    final container = appContainer(
+      repo: repo,
+      extra: [shareIntakeProvider.overrideWithValue(port)],
     );
-    addTearDown(container.dispose);
     // The allowance as the session list last read it.
     await tester.runAsync(() => container.read(uploadsProvider.future));
     await tester.runAsync(() async {
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(
-            const ShareIntakeGate(child: Scaffold(body: Text('library'))),
-          ),
-        ),
+      await mountApp(
+        tester,
+        const ShareIntakeGate(child: Scaffold(body: Text('library'))),
+        container: container,
       );
       for (var waited = 0; waited < 5000; waited += 10) {
         if (container.read(shellMessengerProvider) != null) break;

@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/library/item_kind.dart';
 import 'package:waxdeck/src/metadata/artwork_manager.dart';
@@ -13,7 +12,6 @@ import 'package:waxdeck/src/metadata/metadata_form.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -21,9 +19,8 @@ import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 /// Hands back one in-memory image whatever is asked for.
@@ -62,39 +59,33 @@ PickedAudioFile _png({int size = 64}) => PickedAudioFile(
       Stream<List<int>>.value(Uint8List(size)),
 );
 
-ProviderContainer _container(FakeRepository repo, {FilePickerPort? picker}) {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      filePickerProvider.overrideWithValue(picker),
-      // The session gate: without a working store the auth probe never
-      // settles, and the admin-only reads (the genre vocabulary) gate
-      // on the role that probe reports.
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
+ProviderContainer _container(FakeRepository repo, {FilePickerPort? picker}) =>
+    appContainer(
+      repo: repo,
+      extra: [filePickerProvider.overrideWithValue(picker)],
+    );
 
-Widget _host(ProviderContainer container) => UncontrolledProviderScope(
-  container: container,
-  child: localizedHost(const MetadataScreen(pid: 'tr-1')),
-);
-
-Widget _routed(ProviderContainer container) => UncontrolledProviderScope(
-  container: container,
-  child: routedHost(const MetadataScreen(pid: 'tr-1')),
-);
-
+/// The metadata screen of [pid] over [container], settled. Unrouted by
+/// default, the inverse of [mountApp]; pass `routed: true` for a door the
+/// screen takes.
+///
 /// Tall and narrow: the single-column arrangement puts every section on
 /// one scroll, which is what the sections tests reach into.
-Future<void> _pump(WidgetTester tester, Widget host) async {
+Future<void> _pump(
+  WidgetTester tester,
+  ProviderContainer container, {
+  String pid = 'tr-1',
+  bool routed = false,
+}) async {
   tester.view.physicalSize = const Size(800, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(host);
-  await tester.pumpAndSettle();
+  await pumpApp(
+    tester,
+    MetadataScreen(pid: pid),
+    container: container,
+    routed: routed,
+  );
 }
 
 FakeRepository _repo({bool admin = false}) {
@@ -172,7 +163,7 @@ void main() {
           height: 600,
         ),
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     for (final slot in ArtSlot.values) {
       expect(
@@ -189,7 +180,7 @@ void main() {
   testWidgets('the origin row is one ink press that opens the sheet', (
     tester,
   ) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
 
     final row = find.ancestor(
       of: find.textContaining('Origin: '),
@@ -223,7 +214,7 @@ void main() {
           source: 'tag',
         ),
       ]);
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('From Cover Art Archive'), findsOneWidget);
     expect(find.text('Art from the file'), findsOneWidget);
@@ -241,7 +232,7 @@ void main() {
         level: 'album',
         derived: true,
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Inherited'), findsOneWidget);
     // One borrowed-form sentence, not two glued with a separator.
@@ -254,7 +245,7 @@ void main() {
     // upstream lock report exists to end.
     final repo = _repo()
       ..artRoles.add(const ArtRoleInfo(role: 'front', locked: true));
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Pinned, no image'), findsOneWidget);
     expect(find.text('Empty'), findsNWidgets(4));
@@ -267,7 +258,7 @@ void main() {
     // called "2morrow (Remix)" was a grid of "2(".
     final repo = _repo();
     repo.itemFieldsByPid['tr-1']!['title'] = '2morrow (Remix)';
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     for (final slot in ArtSlot.values) {
       final tile = find.bySemanticsIdentifier(SemanticsIds.artSlot(slot.role));
@@ -290,13 +281,7 @@ void main() {
 
   testWidgets("a book's empty slots draw the book glyph", (tester) async {
     final container = _container(_bookRepo());
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: container,
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, container, pid: 'bk-1');
 
     for (final slot in ArtSlot.values) {
       final art = find.descendant(
@@ -336,7 +321,7 @@ void main() {
         FieldProvenance(field: 'art', source: 'tag', locked: false),
         FieldProvenance(field: 'lyrics', source: 'sidecar', locked: false),
       ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.textContaining('Artwork · '), findsNothing);
     expect(find.text('Art from the file'), findsOneWidget);
@@ -351,7 +336,7 @@ void main() {
   testWidgets('a field read from the file says so', (tester) async {
     // No provenance row is the scan's own value: title, artist, album and
     // year are all filled and untouched.
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
 
     expect(find.text('Source unknown'), findsNothing);
     expect(find.text('tags'), findsNWidgets(4));
@@ -360,7 +345,7 @@ void main() {
   testWidgets('an edited field read from the file marks its chip', (
     tester,
   ) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
     final tags = find.widgetWithText(CodecChip, 'tags');
     expect(
       tester.widgetList<CodecChip>(tags).where((c) => c.emphasis),
@@ -378,7 +363,7 @@ void main() {
 
   testWidgets('an empty field says nothing', (tester) async {
     final repo = _repo()..metadataFields = _vocabulary(['title', 'genre']);
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('tags'), findsOneWidget);
     expect(find.text('Source unknown'), findsNothing);
@@ -389,7 +374,7 @@ void main() {
   ) async {
     final repo = _repo()..metadataFields = _vocabulary(['title', 'album']);
     repo.itemFieldsByPid['tr-1']!.remove('album');
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
     expect(find.text('tags'), findsOneWidget);
 
     await tester.enterText(_field('album'), 'Prancing Pony Blues');
@@ -415,14 +400,7 @@ void main() {
     );
     repo.itemFieldsByPid['ep-1'] = {'title': 'An Episode'};
     final container = _container(repo);
-    addTearDown(container.dispose);
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: container,
-        child: localizedHost(const MetadataScreen(pid: 'ep-1')),
-      ),
-    );
+    await _pump(tester, container, pid: 'ep-1');
 
     expect(find.text('the feed'), findsOneWidget);
     expect(find.text('tags'), findsNothing);
@@ -437,7 +415,7 @@ void main() {
         FieldProvenance(field: 'genre', source: 'normalize', locked: false),
       ];
     repo.itemFieldsByPid['tr-1']!['genre'] = 'Rock';
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('the clean-up pass'), findsOneWidget);
     expect(find.textContaining(RegExp(r'\d+ from ')), findsNothing);
@@ -447,7 +425,7 @@ void main() {
     tester,
   ) async {
     final l10n = AppLocalizationsEn();
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
 
     expect(infoTipHolding(l10n.metadataLockHelp), findsOneWidget);
     expect(infoTipHolding(l10n.metadataForceHelp), findsOneWidget);
@@ -477,7 +455,7 @@ void main() {
         FieldProvenance(field: 'title', source: 'tag', locked: false),
         FieldProvenance(field: 'album', source: 'tag', locked: false),
       ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.textContaining('from you'), findsNothing);
     expect(find.text('Music, pinned'), findsOneWidget);
@@ -499,7 +477,7 @@ void main() {
         ),
         FieldProvenance(field: 'artist', source: 'tag', locked: false),
       ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('MusicBrainz'), findsOneWidget);
     // The artist row, and album and year, which no row covers.
@@ -517,7 +495,7 @@ void main() {
         sourceUrl: 'https://feeds.example.test/show/ep-12.mp3',
         acquiredAt: DateTime.utc(2026, 8, 25),
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(
       find.text(
@@ -554,7 +532,7 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final repo = _repo()
       ..itemAcquisition['tr-1'] = ItemAcquisition(sourceType: 'rss');
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final glyph = find.descendant(
       of: find.ancestor(
@@ -578,7 +556,7 @@ void main() {
     final repo = _repo()
       ..mayCurateItems = null
       ..itemAcquisition['tr-1'] = ItemAcquisition(sourceType: 'rss');
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Origin: a podcast feed'), findsOneWidget);
     expect(find.textContaining('Recorded evidence'), findsNothing);
@@ -614,7 +592,7 @@ void main() {
         sourceType: 'rss',
         acquiredAt: DateTime.utc(2026, 8, 25),
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Origin: a podcast feed'), findsOneWidget);
   });
@@ -625,7 +603,7 @@ void main() {
     // Stating an origin is the same write as correcting one, and there
     // is nowhere else to say where a file came from - so the row is
     // drawn, reading as the local file the absent row means.
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
 
     expect(find.text('Origin: a local file'), findsOneWidget);
   });
@@ -633,7 +611,7 @@ void main() {
   testWidgets('no origin and no curate permission draws no origin line', (
     tester,
   ) async {
-    await _pump(tester, _host(_container(_repo()..mayCurateItems = null)));
+    await _pump(tester, _container(_repo()..mayCurateItems = null));
 
     expect(find.textContaining('Origin: '), findsNothing);
   });
@@ -646,7 +624,7 @@ void main() {
         sourceType: 'manual',
         sourceUrl: 'https://feeds.example.test/ep-1.mp3',
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.tap(find.textContaining('Origin: '));
     await tester.pumpAndSettle();
@@ -667,7 +645,7 @@ void main() {
         sourceId: 'ep-99',
       );
     final container = _container(repo);
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.tap(
       find.text(
@@ -717,7 +695,7 @@ void main() {
         sourceUrl: 'https://www.youtube.test/watch',
         sourceId: 'XYZ',
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.tap(
       find.text('Origin: YouTube - https://www.youtube.test/watch'),
@@ -740,7 +718,7 @@ void main() {
         sourceType: 'rss',
         sourceUrl: 'https://feeds.example.test/ep.mp3',
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.tap(
       find.text('Origin: a podcast feed - https://feeds.example.test/ep.mp3'),
@@ -760,7 +738,7 @@ void main() {
     final repo = _repo()
       ..itemAcquisition['tr-1'] = ItemAcquisition(sourceType: 'rss');
     final container = _container(repo);
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.tap(find.text('Origin: a podcast feed'));
     await tester.pumpAndSettle();
@@ -783,7 +761,7 @@ void main() {
       ..itemProvenance['tr-1'] = const <FieldProvenance>[
         FieldProvenance(field: 'lyrics', source: 'tag', locked: false),
       ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Lyrics · From the file'), findsOneWidget);
     expect(find.text('Lyrics · Art from the file'), findsNothing);
@@ -800,7 +778,7 @@ void main() {
         FieldProvenance(field: 'art', source: 'tag', locked: true),
         FieldProvenance(field: 'lyrics', source: 'user', locked: true),
       ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.textContaining('Artwork · '), findsNothing);
     expect(find.textContaining('Lyrics · '), findsNothing);
@@ -810,7 +788,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo()..artworkPids.add('tr-1');
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Inherited'), findsOneWidget);
     // And there is nothing of its own to clear: an inherited cover
@@ -829,7 +807,7 @@ void main() {
   ) async {
     final repo = _repo();
     final container = _container(repo, picker: _ImagePicker(_png()));
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.artSlotSet('booklet')),
@@ -850,7 +828,7 @@ void main() {
   ) async {
     final repo = _repo();
     final container = _container(repo, picker: _ImagePicker(_png()));
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     final writeBack = find.bySemanticsIdentifier(
       SemanticsIds.metadataWriteback,
@@ -881,7 +859,7 @@ void main() {
         WriteBackFailure(filePid: 'f-1', reason: 'read-only file'),
       ];
     final container = _container(repo, picker: _ImagePicker(_png()));
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.artSlotSet('booklet')),
@@ -903,7 +881,7 @@ void main() {
     final repo = _repo()
       ..ownArtworkPids.add('tr-1')
       ..artRoles.add(const ArtRoleInfo(role: 'front', format: 'tiff'));
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('tiff, Size unknown'), findsOneWidget);
   });
@@ -922,7 +900,7 @@ void main() {
         ),
       ),
     );
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.artSlotSet('front')),
@@ -939,7 +917,7 @@ void main() {
   testWidgets('clearing a slot confirms first', (tester) async {
     final repo = _repo()
       ..artRoles.add(const ArtRoleInfo(role: 'disc', format: 'png'));
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.artSlotClear('disc')),
@@ -971,7 +949,7 @@ void main() {
       albumPid: 'al-01JZX5N8QW3F4V9T2B7KDBLUES',
       releaseGroupPid: 'rg-01JZX5N8QW3F4V9T2B7KDBWORK',
     );
-    await _pump(tester, _routed(_container(repo)));
+    await _pump(tester, _container(repo), routed: true);
 
     expect(find.text('Open artist'), findsOneWidget);
     expect(find.text('Open album'), findsOneWidget);
@@ -993,7 +971,7 @@ void main() {
       albumPid: null,
       releaseGroupPid: 'rg-01JZX5N8QW3F4V9T2B7KDBWORK',
     );
-    await _pump(tester, _routed(_container(repo)));
+    await _pump(tester, _container(repo), routed: true);
 
     // Alone: the outer gate opens on any one of the three.
     expect(find.text('Open artist'), findsNothing);
@@ -1022,7 +1000,7 @@ void main() {
         albumPid: null,
         releaseGroupPid: 'rg-01JZX5N8QW3F4V9T2B7KDBWORK',
       );
-      await _pump(tester, _routed(_container(repo)));
+      await _pump(tester, _container(repo), routed: true);
 
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.metadataOpenReleaseGroup),
@@ -1038,14 +1016,14 @@ void main() {
   }
 
   testWidgets('no entity doors without pids to open', (tester) async {
-    await _pump(tester, _routed(_container(_repo())));
+    await _pump(tester, _container(_repo()), routed: true);
     expect(find.text('Open artist'), findsNothing);
     expect(find.text('Open album'), findsNothing);
     expect(find.text('Open release group'), findsNothing);
   });
 
   testWidgets('builds the field form from the kind vocabulary', (tester) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
 
     // The fake vocabulary defines exactly these music fields.
     for (final field in [
@@ -1078,7 +1056,7 @@ void main() {
 
   testWidgets('save sends only the dirty fields', (tester) async {
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.enterText(_field('title'), 'Neon Meridian');
     await tester.pump();
@@ -1097,7 +1075,7 @@ void main() {
 
   testWidgets('the lock toggle calls setItemLocks', (tester) async {
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final lock = find.bySemanticsIdentifier(SemanticsIds.fieldLock('album'));
     await tester.ensureVisible(lock);
@@ -1113,7 +1091,7 @@ void main() {
 
   testWidgets('the unofficial switch stages; the save commits', (tester) async {
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final unofficial = find.bySemanticsIdentifier(
       SemanticsIds.unofficialSwitch,
@@ -1141,7 +1119,7 @@ void main() {
     final repo = _repo();
     repo.lockedFieldsByPid['tr-1'] = {'title'};
     final container = _container(repo);
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.enterText(_field('title'), 'Neon Meridian');
     await tester.pump();
@@ -1167,7 +1145,7 @@ void main() {
     repo.onEnrich = () =>
         repo.itemFieldsByPid['tr-1']!['title'] = 'Neon Meridian';
     final container = _container(repo);
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     final enrich = find.bySemanticsIdentifier(SemanticsIds.metadataEnrich);
     await tester.ensureVisible(enrich);
@@ -1208,7 +1186,7 @@ void main() {
     repo.onEnrich = () =>
         repo.itemFieldsByPid['tr-1']!['title'] = 'Fetched Title';
     final container = _container(repo);
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.enterText(_field('title'), 'Mine');
     await tester.pump();
@@ -1234,7 +1212,7 @@ void main() {
   });
 
   testWidgets('the lyrics preview counts what is timed', (tester) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.lyricsField),
@@ -1252,7 +1230,7 @@ void main() {
     final container = _container(repo);
     // Routed: the message offers a jump to the entry, which needs the
     // router the app always has.
-    await _pump(tester, _routed(container));
+    await _pump(tester, container, routed: true);
 
     final rematch = find.bySemanticsIdentifier(SemanticsIds.metadataRematch);
     await tester.ensureVisible(rematch);
@@ -1268,7 +1246,7 @@ void main() {
 
   testWidgets("a track's editor turns it into an audiobook", (tester) async {
     final repo = _repo();
-    await _pump(tester, _routed(_container(repo)));
+    await _pump(tester, _container(repo), routed: true);
 
     final kind = find.bySemanticsIdentifier(SemanticsIds.itemMenuKindBook);
     await tester.ensureVisible(kind);
@@ -1286,7 +1264,7 @@ void main() {
 
   testWidgets('the kind change waits for a draft to be saved', (tester) async {
     final repo = _repo();
-    await _pump(tester, _routed(_container(repo)));
+    await _pump(tester, _container(repo), routed: true);
 
     await tester.enterText(_field('title'), 'Retitled');
     await tester.pumpAndSettle();
@@ -1301,7 +1279,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo()..mayCurateItems = false;
-    await _pump(tester, _routed(_container(repo)));
+    await _pump(tester, _container(repo), routed: true);
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.metadataForbidden),
@@ -1343,19 +1321,16 @@ void main() {
       final repo = FakeRepository(items: [testItem('tr-1', mediaType: kind)])
         ..mayCurateItems = false;
       final container = _container(repo);
-      await _pump(tester, _routed(container));
+      await _pump(tester, container, routed: true);
       expect(find.text(refusal), findsOneWidget);
 
       // The pane's own refusal, for a host that mounts it beside a list.
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: localizedHost(
-            const Scaffold(body: MetadataPane(pid: 'tr-1', embedded: true)),
-          ),
-        ),
+      await pumpApp(
+        tester,
+        const Scaffold(body: MetadataPane(pid: 'tr-1', embedded: true)),
+        container: container,
+        routed: false,
       );
-      await tester.pumpAndSettle();
       expect(find.text(refusal), findsOneWidget);
     });
   }
@@ -1368,7 +1343,7 @@ void main() {
     // a "not yours" page for an item that server would save, and there
     // is nothing to retry: the read answered 200.
     final repo = _repo()..mayCurateItems = null;
-    await _pump(tester, _routed(_container(repo)));
+    await _pump(tester, _container(repo), routed: true);
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.metadataForbidden),
@@ -1380,7 +1355,7 @@ void main() {
   testWidgets('field names are drawn in words rather than in wire keys', (
     tester,
   ) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
 
     // The vocabulary arrives as wire keys, which were only ever an
     // accessible name until the label started being drawn.
@@ -1390,7 +1365,7 @@ void main() {
   });
 
   testWidgets('a count field refuses everything but digits', (tester) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
 
     await tester.enterText(_field('year'), '19x9');
     await tester.pump();
@@ -1414,7 +1389,7 @@ void main() {
   ) async {
     final repo = _repo()
       ..metadataFields = _vocabulary(['title', 'compilation']);
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final toggle = _field('compilation');
     await tester.ensureVisible(toggle);
@@ -1432,7 +1407,7 @@ void main() {
   ) async {
     final repo = _repo()..metadataFields = _vocabulary(['title', 'genre']);
     repo.itemFieldsByPid['tr-1']!['genre'] = 'Rock; Jazz';
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final chip = find.bySemanticsIdentifier(
       SemanticsIds.metadataGenreRemove('Jazz'),
@@ -1456,7 +1431,7 @@ void main() {
       GenreNode(name: 'Electronic'),
       GenreNode(name: 'House', parent: 'Electronic'),
     ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final add = find.bySemanticsIdentifier(SemanticsIds.metadataGenreAdd);
     await tester.ensureVisible(add);
@@ -1493,7 +1468,7 @@ void main() {
     // is what every session may store.
     final repo = _repo()..metadataFields = _vocabulary(['title', 'genre']);
     repo.itemFieldsByPid['tr-1']!['genre'] = 'Rock';
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final add = find.bySemanticsIdentifier(SemanticsIds.metadataGenreAdd);
     await tester.ensureVisible(add);
@@ -1526,7 +1501,7 @@ void main() {
       Credit(role: 'artist', names: ['The Bree Trio']),
       Credit(role: 'composer', names: ['Ann Lee', 'Bob Ray']),
     ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     // The vocabulary's role is chips; the artist credit is not - its
     // sanctioned edit path is the artist field that resolves it.
@@ -1577,7 +1552,7 @@ void main() {
     repo.tagsByPid['tr-1'] = {
       'MOOD': ['calm'],
     };
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final remove = find.bySemanticsIdentifier(SemanticsIds.tagRemove('MOOD'));
     await tester.ensureVisible(remove);
@@ -1620,7 +1595,7 @@ void main() {
 
   testWidgets('a reserved key is refused at the tag field', (tester) async {
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.tagKey),
@@ -1663,7 +1638,7 @@ void main() {
   testWidgets('a narrator tag is refused with the way to a book', (
     tester,
   ) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, _container(_repo()));
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.tagKey),
       'narrator',
@@ -1717,13 +1692,7 @@ void main() {
     testWidgets('$typed on a ${mediaType.wireName} is refused with its own '
         'way', (tester) async {
       final repo = FakeRepository(items: [testItem(pid, mediaType: mediaType)]);
-      await _pump(
-        tester,
-        UncontrolledProviderScope(
-          container: _container(repo),
-          child: localizedHost(MetadataScreen(pid: pid)),
-        ),
-      );
+      await _pump(tester, _container(repo), pid: pid);
       await tester.enterText(
         find.bySemanticsIdentifier(SemanticsIds.tagKey),
         typed,
@@ -1747,7 +1716,7 @@ void main() {
     repo.tagsByPid['tr-1'] = {
       'MOOD': ['calm'],
     };
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final remove = find.bySemanticsIdentifier(SemanticsIds.tagRemove('MOOD'));
     await tester.ensureVisible(remove);
@@ -1776,7 +1745,7 @@ void main() {
       source: 'user',
       lrc: 'la la la',
     );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.lyricsField),
@@ -1791,7 +1760,7 @@ void main() {
 
   testWidgets('the save bar counts everything staged', (tester) async {
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.enterText(_field('title'), 'Neon Meridian');
     await tester.pump();
@@ -1816,7 +1785,7 @@ void main() {
     final repo = _repo();
     repo.libraryItems.add(testItem('tr-2', title: 'Second Title'));
     repo.itemFieldsByPid['tr-2'] = {'title': 'Second Title'};
-    await _pump(tester, _routed(_container(repo)));
+    await _pump(tester, _container(repo), routed: true);
 
     final router = GoRouter.of(tester.element(find.byType(MetadataScreen)));
     router.go(WaxRoute.metadata('tr-2'));
@@ -1852,7 +1821,7 @@ void main() {
       source: 'enrichment',
       lrc: 'la la la',
     );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.lyricsField),
@@ -1899,7 +1868,7 @@ void main() {
     // would come back split and read as dirty for ever.
     final repo = _repo()..metadataFields = _vocabulary(['title', 'genre']);
     repo.itemFieldsByPid['tr-1']!['genre'] = 'Rock';
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final add = find.bySemanticsIdentifier(SemanticsIds.metadataGenreAdd);
     await tester.ensureVisible(add);
@@ -1941,7 +1910,7 @@ void main() {
     // would never match the row it comes back as, and the draft would
     // offer the identical write for ever.
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.tagKey),
@@ -1972,7 +1941,7 @@ void main() {
     // Staged, it would be a row the change count cannot see: an
     // "Unsaved" chip over a save bar that stays off.
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.tagKey),
@@ -2003,7 +1972,7 @@ void main() {
     final repo = _repo();
     repo.lockedFieldsByPid['tr-1'] = {'title'};
     final container = _container(repo);
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.enterText(_field('title'), 'Neon Meridian');
     await tester.enterText(
@@ -2038,7 +2007,7 @@ void main() {
     // one per staged part.
     final repo = _repo();
     final container = _container(repo);
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.enterText(_field('title'), 'Neon Meridian');
     await tester.enterText(
@@ -2079,7 +2048,7 @@ void main() {
         statusCode: 404,
       );
     final container = _container(repo);
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     await tester.enterText(_field('title'), 'Neon Meridian');
     await _saveNow(tester);
@@ -2120,7 +2089,7 @@ void main() {
           statusCode: 404,
         );
       final container = _container(repo);
-      await _pump(tester, _host(container));
+      await _pump(tester, container);
 
       await tester.enterText(_field('title'), 'Neon Meridian');
       await _saveNow(tester);
@@ -2149,7 +2118,7 @@ void main() {
       );
     }
     final container = _container(repo);
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
     await tester.enterText(_field('title'), 'Neon Meridian');
     await _saveNow(tester);
     expect(
@@ -2232,7 +2201,7 @@ void main() {
     // The LRC parser drops unstamped lines and refuses the empty
     // result, so text with no stamps must say what it is.
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.lyricsField),
@@ -2253,7 +2222,7 @@ void main() {
         message: 'boom',
         statusCode: 500,
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Could not load the metadata'), findsOneWidget);
     expect(find.bySemanticsIdentifier(SemanticsIds.metadataSave), findsNothing);
@@ -2281,14 +2250,7 @@ void main() {
     );
     repo.itemFieldsByPid['ep-1'] = {'title': 'An Episode'};
     final container = _container(repo);
-    addTearDown(container.dispose);
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: container,
-        child: localizedHost(const MetadataScreen(pid: 'ep-1')),
-      ),
-    );
+    await _pump(tester, container, pid: 'ep-1');
 
     final choice = _field('episode_type');
     await tester.ensureVisible(choice);
@@ -2344,7 +2306,7 @@ void main() {
       ..artRoles.add(
         const ArtRoleInfo(role: 'back', locked: true, roleLocked: false),
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Held by the cover pin'), findsOneWidget);
 
@@ -2376,7 +2338,7 @@ void main() {
       ..artRoles.add(
         const ArtRoleInfo(role: 'front', locked: true, roleLocked: true),
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     // One per auxiliary slot; the front's own pin is not "held by" it.
     expect(find.text('Held by the cover pin'), findsNWidgets(4));
@@ -2392,7 +2354,7 @@ void main() {
     // that server's reading meant.
     final repo = _repo()
       ..artRoles.add(const ArtRoleInfo(role: 'back', locked: true));
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Held by the cover pin'), findsNothing);
 
@@ -2419,7 +2381,7 @@ void main() {
       ..artRoles.add(
         const ArtRoleInfo(role: 'back', locked: true, roleLocked: true),
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     expect(find.text('Held by the cover pin'), findsNothing);
 
@@ -2478,7 +2440,7 @@ void main() {
       cover: EnrichCoverProposal(provider: 'coverfake', data: _onePixelPng),
       skipped: const ['lyrics: no provider'],
     );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final enrich = find.bySemanticsIdentifier(SemanticsIds.metadataEnrich);
     await tester.ensureVisible(enrich);
@@ -2523,7 +2485,7 @@ void main() {
 
   testWidgets('cancelling the preview fetches nothing', (tester) async {
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final enrich = find.bySemanticsIdentifier(SemanticsIds.metadataEnrich);
     await tester.ensureVisible(enrich);
@@ -2559,7 +2521,7 @@ void main() {
           locked: true,
         ),
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final lock = find.bySemanticsIdentifier(SemanticsIds.artLock);
     await tester.ensureVisible(lock);
@@ -2587,13 +2549,7 @@ void main() {
     tester,
   ) async {
     final l10n = AppLocalizationsEn();
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(_bookRepo()),
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, _container(_bookRepo()), pid: 'bk-1');
 
     expect(find.text(l10n.bookChapterEditorHelp), findsNothing);
     expect(infoTipHolding(l10n.bookChapterEditorHelp), findsOneWidget);
@@ -2603,13 +2559,7 @@ void main() {
     tester,
   ) async {
     final repo = _bookRepo();
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, _container(repo), pid: 'bk-1');
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.bookChapterEditor),
@@ -2636,13 +2586,7 @@ void main() {
 
   testWidgets('restoring hands the marks back to the file', (tester) async {
     final repo = _bookRepo();
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, _container(repo), pid: 'bk-1');
 
     final restore = find.bySemanticsIdentifier(
       SemanticsIds.bookChapterEditorRestore,
@@ -2661,13 +2605,7 @@ void main() {
     tester,
   ) async {
     final repo = _bookRepo();
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, _container(repo), pid: 'bk-1');
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.bookChapterEditorStart(1)),
@@ -2691,13 +2629,7 @@ void main() {
         BookPart(index: 1, startMs: 100000, durationMs: 100000),
       ],
     );
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, _container(repo), pid: 'bk-1');
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.bookChapterEditor),
@@ -2709,13 +2641,7 @@ void main() {
     tester,
   ) async {
     final repo = _bookRepo();
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, _container(repo), pid: 'bk-1');
 
     final add = find.bySemanticsIdentifier(SemanticsIds.bookChapterEditorAdd);
     await tester.ensureVisible(add);
@@ -2745,13 +2671,7 @@ void main() {
 
   testWidgets('removing a chapter drops it from the save', (tester) async {
     final repo = _bookRepo();
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, _container(repo), pid: 'bk-1');
 
     final remove = find.bySemanticsIdentifier(
       SemanticsIds.bookChapterEditorRemove(0),
@@ -2772,13 +2692,7 @@ void main() {
     // only door is the global Force switch.
     final repo = _bookRepo();
     repo.lockedFieldsByPid['bk-1'] = {'chapters'};
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, _container(repo), pid: 'bk-1');
 
     final lock = find.bySemanticsIdentifier(SemanticsIds.fieldLock('chapters'));
     await tester.ensureVisible(lock);
@@ -2798,13 +2712,7 @@ void main() {
     repo.lockedFieldsByPid['bk-1'] = {'chapters'};
     final gate = Completer<void>();
     repo.setItemLocksGate = gate;
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
-      ),
-    );
+    await _pump(tester, _container(repo), pid: 'bk-1');
 
     final lock = find.bySemanticsIdentifier(SemanticsIds.fieldLock('chapters'));
     await tester.ensureVisible(lock);
@@ -2834,7 +2742,7 @@ void main() {
       );
     final gate = Completer<void>();
     repo.setItemLocksGate = gate;
-    await _pump(tester, _host(_container(repo, picker: _ImagePicker(_png()))));
+    await _pump(tester, _container(repo, picker: _ImagePicker(_png())));
 
     final slot = find.bySemanticsIdentifier(SemanticsIds.artSlot('back'));
     final pin = find.bySemanticsIdentifier(SemanticsIds.artLockRole('back'));
@@ -2873,7 +2781,7 @@ void main() {
     // "Fetch anyway" promises the one-shot: an empty-but-present
     // proposal would commit nothing and swallow the skip reasons.
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, _container(repo));
 
     final enrich = find.bySemanticsIdentifier(SemanticsIds.metadataEnrich);
     await tester.ensureVisible(enrich);
@@ -2961,7 +2869,7 @@ void main() {
   group('the save bar while a write runs', () {
     Future<FakeRepository> edited(WidgetTester tester) async {
       final repo = _repo();
-      await _pump(tester, _host(_container(repo)));
+      await _pump(tester, _container(repo));
       final title = find.descendant(
         of: find.bySemanticsIdentifier(SemanticsIds.metadataField('title')),
         matching: find.byType(EditableText),

@@ -1,20 +1,22 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/stats/stats_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: routedHost(const StatsScreen()),
-);
+/// The stats screen over [repo], settled.
+Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
+  await pumpApp(
+    tester,
+    const StatsScreen(),
+    container: appContainer(repo: repo),
+  );
+}
 
 FakeRepository _statsRepo() => FakeRepository()
   ..listeningStats = ListeningStats(
@@ -77,8 +79,7 @@ FakeRepository _statsRepo() => FakeRepository()
 void main() {
   testWidgets('renders totals, chart, heatmap, and streaks', (tester) async {
     final repo = _statsRepo();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(
       find.descendant(
@@ -116,8 +117,7 @@ void main() {
     tester,
   ) async {
     final repo = _statsRepo();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(repo.listeningStatsCalls.last, (range: '30d', bucket: 'day'));
     expect(repo.topListCalls.last.range, '30d');
@@ -133,8 +133,7 @@ void main() {
     tester,
   ) async {
     final repo = _statsRepo();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     // The bucket is a picker rather than a segmented row: three values
     // on the trailing edge of a chart, not a filter over the page.
@@ -150,8 +149,7 @@ void main() {
     tester,
   ) async {
     final repo = _statsRepo();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final gate = Completer<void>();
     repo.statsGate = gate;
@@ -178,8 +176,7 @@ void main() {
     tester,
   ) async {
     final repo = _statsRepo();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
     expect(find.text('2h 34m'), findsOneWidget);
 
     repo.statsError = WaxDeckApiException(
@@ -219,8 +216,7 @@ void main() {
           ),
         ],
       );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(find.byKey(const Key('stats-media-split')), findsOneWidget);
     expect(find.text('Music'), findsOneWidget);
@@ -253,16 +249,14 @@ void main() {
           ),
         ],
       );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(find.byKey(const Key('stats-media-split')), findsNothing);
   });
 
   testWidgets('top list tabs switch the kind', (tester) async {
     final repo = _statsRepo();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.scrollUntilVisible(
       find.bySemanticsIdentifier(SemanticsIds.top('albums')),
@@ -283,8 +277,7 @@ void main() {
     // Radio time used to be invisible: nothing wrote a listen row for a
     // station, so no total counted it and no list could rank it.
     final repo = _statsRepo();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.scrollUntilVisible(
       find.bySemanticsIdentifier(SemanticsIds.top('stations')),
@@ -324,8 +317,7 @@ void main() {
           source: 'live',
         ),
       ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.scrollUntilVisible(
       find.bySemanticsIdentifier(SemanticsIds.openListenLog),
@@ -368,8 +360,7 @@ void main() {
           source: 'radio',
         ),
       ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.scrollUntilVisible(
       find.bySemanticsIdentifier(SemanticsIds.openListenLog),

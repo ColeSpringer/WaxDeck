@@ -4,8 +4,6 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_controller.dart';
@@ -14,9 +12,7 @@ import 'package:waxdeck/src/books/series_screen.dart';
 import 'package:waxdeck/src/l10n/formats.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
 import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -24,22 +20,32 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'entity_header_bar.dart';
 import 'fakes.dart';
-import 'player_host.dart';
-import 'routed_host.dart';
 import 'row_finders.dart';
 import 'wax_finders.dart';
 
 const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 
-Widget _host(FakeRepository repo, FakeEngine engine) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    audioEngineProvider.overrideWithValue(engine),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-  child: routedHost(const BookScreen(pid: bookPid)),
+Future<ProviderContainer> _mount(
+  WidgetTester tester,
+  FakeRepository repo, {
+  FakeEngine? engine,
+}) async {
+  final container = appContainer(repo: repo, engine: engine);
+  await mountApp(tester, const BookScreen(pid: bookPid), container: container);
+  return container;
+}
+
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  FakeRepository repo, {
+  FakeEngine? engine,
+}) => pumpApp(
+  tester,
+  const BookScreen(pid: bookPid),
+  container: appContainer(repo: repo, engine: engine),
 );
 
 FakeRepository _repo() => FakeRepository()
@@ -111,10 +117,7 @@ Finder _byId(String id) => find.byWidgetPredicate(
 
 void main() {
   test('a pid that is no longer a book settles at once', () async {
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer();
     final sub = container.listen(bookDetailProvider('bk-gone'), (_, _) {});
     addTearDown(sub.close);
     await expectLater(
@@ -132,7 +135,7 @@ void main() {
       // A pid that stopped being a book answers 404 every time. The
       // backoff ladder held this screen on a skeleton for half a minute
       // and then offered to ask again.
-      await tester.pumpWidget(_host(FakeRepository(), FakeEngine()));
+      await _mount(tester, FakeRepository());
       await tester.pump();
       await tester.pump();
 
@@ -144,7 +147,7 @@ void main() {
 
     testWidgets('a slow read shows the skeleton, not an error', (tester) async {
       final repo = _repo()..getBookGate = Completer<void>();
-      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await _mount(tester, repo);
       await tester.pump();
 
       expect(find.byType(SkeletonShapes), findsOneWidget);
@@ -156,7 +159,7 @@ void main() {
 
     testWidgets('a transport failure offers Try again', (tester) async {
       // Unlike a refusal, a dropped connection is worth asking again.
-      await tester.pumpWidget(_host(_UnreachableBooks(), FakeEngine()));
+      await _mount(tester, _UnreachableBooks());
       await tester.pump();
       await tester.pump();
 
@@ -171,8 +174,7 @@ void main() {
   testWidgets('renders the header, the people, and the chapters', (
     tester,
   ) async {
-    await tester.pumpWidget(_host(_repo(), FakeEngine()));
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo());
 
     expect(find.text('There And Back Again'), findsWidgets);
     expect(
@@ -197,8 +199,7 @@ void main() {
         seriesPid: 'sr-01JZX5N8QW3F4V9T2B7KDSERIE1',
         seriesSequence: '2',
       );
-    await tester.pumpWidget(_host(repo, FakeEngine()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expectHeaderOnActionBar();
     for (final id in <String>[
@@ -231,10 +232,7 @@ void main() {
     }
 
     Future<void> pumpBook(WidgetTester tester, BookDetail book) async {
-      await tester.pumpWidget(
-        _host(FakeRepository()..books[bookPid] = book, FakeEngine()),
-      );
-      await tester.pumpAndSettle();
+      await _pump(tester, FakeRepository()..books[bookPid] = book);
     }
 
     testWidgets('the author line goes to the author\'s page', (tester) async {
@@ -381,21 +379,16 @@ void main() {
     final downloads = FakeDownloads();
     addTearDown(downloads.dispose);
     final artwork = FakeArtworkStore();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(
-            FakeRepository()..books[bookPid] = testBook(bookPid, artUrl: cover),
-          ),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-          downloadManagerProvider.overrideWithValue(downloads),
-          artworkStoreProvider.overrideWithValue(artwork),
-        ],
-        child: routedHost(const BookScreen(pid: bookPid)),
+    await pumpApp(
+      tester,
+      const BookScreen(pid: bookPid),
+      container: appContainer(
+        repo: FakeRepository()
+          ..books[bookPid] = testBook(bookPid, artUrl: cover),
+        downloads: downloads,
+        artwork: artwork,
       ),
     );
-    await tester.pumpAndSettle();
 
     expectHeaderOnActionBar();
     final pill = find.descendant(
@@ -427,8 +420,7 @@ void main() {
   });
 
   testWidgets('the header says how long the book is', (tester) async {
-    await tester.pumpWidget(_host(_repo(), FakeEngine()));
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo());
     expect(find.textContaining('1 hour'), findsOneWidget);
   });
 
@@ -439,8 +431,7 @@ void main() {
         chapter: ChapterMark(index: 1, title: 'Roast Mutton', startMs: 600000),
       );
     final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-    await tester.pumpWidget(_host(repo, engine));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, engine: engine);
 
     expect(find.text('Resume Roast Mutton'), findsOneWidget);
     // And the caption says how far in, so the verb is not the only clue.
@@ -452,8 +443,7 @@ void main() {
   });
 
   testWidgets('an unstarted book offers Play, not Resume', (tester) async {
-    await tester.pumpWidget(_host(_repo(), FakeEngine()));
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo());
     expect(find.text('Play'), findsOneWidget);
     expect(find.textContaining('Resume'), findsNothing);
   });
@@ -466,8 +456,7 @@ void main() {
       ..finishedPids.add(bookPid)
       ..bookResumes[bookPid] = const BookResume(positionMs: 3600000);
     final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-    await tester.pumpWidget(_host(repo, engine));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, engine: engine);
 
     expect(find.text('Play'), findsOneWidget);
     await _tap(tester, SemanticsIds.bookResume);
@@ -478,8 +467,7 @@ void main() {
     tester,
   ) async {
     final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-    await tester.pumpWidget(_host(_repo(), engine));
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo(), engine: engine);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(BookScreen)),
     );
@@ -493,13 +481,11 @@ void main() {
     await _tap(tester, SemanticsIds.bookResume);
     expect(playback.startGeneration, starts, reason: 'no new start');
     expect(engine.playing, isTrue);
-    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('tapping a chapter starts playback at its start', (tester) async {
     final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-    await tester.pumpWidget(_host(_repo(), engine));
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo(), engine: engine);
 
     await _tapChapter(tester, 1);
 
@@ -517,8 +503,7 @@ void main() {
         (tester.widget(_byId(id).first) as Semantics).properties.selected ??
         false;
     final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-    await tester.pumpWidget(_host(_repo(), engine));
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo(), engine: engine);
 
     expect(selectedOf(SemanticsIds.chapter(1)), isFalse);
 
@@ -530,8 +515,7 @@ void main() {
 
   testWidgets('the settings sheet PUTs the per-book settings', (tester) async {
     final repo = _repo();
-    await tester.pumpWidget(_host(repo, FakeEngine()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final semantics = tester.ensureSemantics();
     await _tap(tester, SemanticsIds.bookSettingsOpen);
@@ -578,13 +562,10 @@ void main() {
   testWidgets(
     'a multi-file book counts its parts, and a single-file one does not',
     (tester) async {
-      await tester.pumpWidget(
-        _host(
-          FakeRepository()..books[bookPid] = testBook(bookPid, partCount: 3),
-          FakeEngine(),
-        ),
+      await _pump(
+        tester,
+        FakeRepository()..books[bookPid] = testBook(bookPid, partCount: 3),
       );
-      await tester.pumpAndSettle();
       expect(find.textContaining('3 parts'), findsOneWidget);
       // Read where it is drawn: inside the header's own words, after the
       // title, which is also where the e2e driver reads it.
@@ -597,25 +578,21 @@ void main() {
         greaterThan(header.indexOf(testBook(bookPid).title)),
       );
 
-      await tester.pumpWidget(_host(_repo(), FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, _repo());
       expect(find.textContaining(' parts'), findsNothing);
     },
   );
 
   testWidgets('the edition rows are behind an expander', (tester) async {
-    await tester.pumpWidget(
-      _host(
-        FakeRepository()
-          ..books[bookPid] = testBook(
-            bookPid,
-            publisher: 'Bree Press',
-            isbn: '9780000000001',
-          ),
-        FakeEngine(),
-      ),
+    await _pump(
+      tester,
+      FakeRepository()
+        ..books[bookPid] = testBook(
+          bookPid,
+          publisher: 'Bree Press',
+          isbn: '9780000000001',
+        ),
     );
-    await tester.pumpAndSettle();
 
     expect(find.text('Bree Press'), findsNothing);
     expect(find.byType(WaxDisclosure), findsOneWidget);
@@ -632,8 +609,7 @@ void main() {
       tester,
     ) async {
       final repo = _repo()..playPositions[bookPid] = 600000;
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMarkFinished);
@@ -678,8 +654,7 @@ void main() {
       final repo = _repo()
         ..playPositions[bookPid] = 600000
         ..setPlayedIgnoresPosition = true;
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMarkFinished);
@@ -706,8 +681,7 @@ void main() {
       // nothing moved at all, where before this verb existed the
       // position at least went back.
       final repo = _repo()..playPositions[bookPid] = 600000;
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMarkFinished);
@@ -730,8 +704,7 @@ void main() {
       final repo = _repo()
         ..playPositions[bookPid] = 600000
         ..finishedPids.add(bookPid);
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMarkFinished);
@@ -749,27 +722,18 @@ void main() {
       // dead the moment its element is disposed. The comment said so
       // before the code did.
       final repo = _repo()..playPositions[bookPid] = 600000;
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      final container = await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMarkFinished);
       expect(repo.putPlayStateCalls.last.positionMs, 3600000);
 
       // Replace the screen; the shell's toast stays up.
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(repo),
-            audioEngineProvider.overrideWithValue(FakeEngine()),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-          ],
-          child: routedHost(const BookScreen(pid: 'bk-somewhere-else')),
-        ),
+      await pumpApp(
+        tester,
+        const BookScreen(pid: 'bk-somewhere-else'),
+        container: container,
       );
-      await tester.pumpAndSettle();
 
       // Whatever is on screen, the write still lands.
       await pressRaisedAction(tester);
@@ -780,8 +744,7 @@ void main() {
 
     testWidgets('starts the book over from zero', (tester) async {
       final repo = _repo()..playPositions[bookPid] = 600000;
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookStartOver);
@@ -794,8 +757,7 @@ void main() {
       tester,
     ) async {
       final repo = _adminRepo(testBook(bookPid, partCount: 3));
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       expect(_byId(SemanticsIds.bookSplit), findsNothing);
@@ -815,8 +777,7 @@ void main() {
 
     testWidgets('a merge left alone trashes the parts', (tester) async {
       final repo = _adminRepo(testBook(bookPid, partCount: 2));
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMerge);
@@ -882,8 +843,7 @@ void main() {
         tester,
       ) async {
         final repo = _adminRepo(testBook(bookPid, partCount: 2));
-        await tester.pumpWidget(_host(repo, FakeEngine()));
-        await tester.pumpAndSettle();
+        await _pump(tester, repo);
 
         await openOverflow(tester);
         await _tap(tester, SemanticsIds.bookMerge);
@@ -899,8 +859,7 @@ void main() {
     testWidgets('a merge refused while another is at work leads to the '
         'Tasks screen; other refusals offer nothing', (tester) async {
       final repo = _adminRepo(testBook(bookPid, partCount: 2));
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMerge);
@@ -936,8 +895,7 @@ void main() {
       tester,
     ) async {
       final repo = _adminRepo(testBook(bookPid, partCount: 2));
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMerge);
@@ -967,8 +925,7 @@ void main() {
           ],
         ),
       );
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       expect(_byId(SemanticsIds.bookMerge), findsNothing);
@@ -990,8 +947,7 @@ void main() {
           chapters: const [ChapterMark(index: 0, title: 'One', startMs: 0)],
         ),
       );
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       // A split needs a mark inside the book to cut at.
@@ -1006,8 +962,7 @@ void main() {
         tester,
       ) async {
         final repo = _adminRepo(testBook(bookPid, partCount: 3));
-        await tester.pumpWidget(_host(repo, FakeEngine()));
-        await tester.pumpAndSettle();
+        await _pump(tester, repo);
         expect(find.textContaining('3 parts'), findsOneWidget);
 
         await openOverflow(tester);
@@ -1041,8 +996,7 @@ void main() {
     testWidgets('the book is read again when its merge leaves the task list '
         'unfinished', (tester) async {
       final repo = _adminRepo(testBook(bookPid, partCount: 3));
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
       expect(find.textContaining('3 parts'), findsOneWidget);
 
       await openOverflow(tester);
@@ -1065,26 +1019,15 @@ void main() {
       final repo = _TaskListings(testBook(bookPid, partCount: 3));
       final showing = ValueNotifier(true);
       addTearDown(showing.dispose);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(repo),
-            audioEngineProvider.overrideWithValue(FakeEngine()),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-          ],
-          child: routedHost(
-            ValueListenableBuilder<bool>(
-              valueListenable: showing,
-              builder: (context, show, _) => show
-                  ? const BookScreen(pid: bookPid)
-                  : const SizedBox.shrink(),
-            ),
-          ),
+      await pumpApp(
+        tester,
+        ValueListenableBuilder<bool>(
+          valueListenable: showing,
+          builder: (context, show, _) =>
+              show ? const BookScreen(pid: bookPid) : const SizedBox.shrink(),
         ),
+        container: appContainer(repo: repo),
       );
-      await tester.pumpAndSettle();
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMerge);
       await _tap(tester, SemanticsIds.bookMergeConfirm);
@@ -1112,8 +1055,7 @@ void main() {
     ) async {
       final repo = _adminRepo(testBook(bookPid, partCount: 2))
         ..libraryItems.add(testItem(bookPid));
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.itemMenuDelete);
@@ -1138,8 +1080,7 @@ void main() {
       final repo = _adminRepo(testBook(bookPid, partCount: 2))
         ..libraryItems.add(testItem(bookPid))
         ..deleteItemsFailed = 1;
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.itemMenuDelete);
@@ -1173,8 +1114,7 @@ void main() {
                 bookCount: 4,
               ),
             ]);
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.seriesMerge);
@@ -1194,8 +1134,7 @@ void main() {
       tester,
     ) async {
       final repo = _repo();
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await tester.tap(find.text('Treat as music').last);
@@ -1218,15 +1157,12 @@ void main() {
     testWidgets('a listener who may not edit it is not offered music', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        _host(
-          _repo()
-            ..sessionState = testListenerSession()
-            ..mayCurateItems = false,
-          FakeEngine(),
-        ),
+      await _pump(
+        tester,
+        _repo()
+          ..sessionState = testListenerSession()
+          ..mayCurateItems = false,
       );
-      await tester.pumpAndSettle();
       await openOverflow(tester);
       expect(find.text('Treat as music'), findsNothing);
     });
@@ -1244,8 +1180,7 @@ void main() {
       testWidgets('merge is hidden while the server $name', (tester) async {
         final repo = _adminRepo(testBook(bookPid, partCount: 3))
           ..serverStreaming = streaming;
-        await tester.pumpWidget(_host(repo, FakeEngine()));
-        await tester.pumpAndSettle();
+        await _pump(tester, repo);
 
         await openOverflow(tester);
         expect(_byId(SemanticsIds.bookMerge), findsNothing);
@@ -1254,8 +1189,7 @@ void main() {
 
       testWidgets('split is hidden while the server $name', (tester) async {
         final repo = _adminRepo(_splittableBook())..serverStreaming = streaming;
-        await tester.pumpWidget(_host(repo, FakeEngine()));
-        await tester.pumpAndSettle();
+        await _pump(tester, repo);
 
         await openOverflow(tester);
         expect(_byId(SemanticsIds.bookSplit), findsNothing);
@@ -1274,8 +1208,7 @@ void main() {
     ) async {
       final repo = _adminRepo(testBook(bookPid, partCount: 3))
         ..serverStreaming = runsFileTools;
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       expect(_byId(SemanticsIds.bookMerge), findsOneWidget);
@@ -1286,8 +1219,7 @@ void main() {
     ) async {
       final repo = _adminRepo(_splittableBook())
         ..serverStreaming = runsFileTools;
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       expect(_byId(SemanticsIds.bookSplit), findsOneWidget);
@@ -1297,8 +1229,7 @@ void main() {
       tester,
     ) async {
       final repo = _adminRepo(testBook(bookPid, partCount: 2));
-      await tester.pumpWidget(_host(repo, FakeEngine()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMerge);
@@ -1322,15 +1253,12 @@ void main() {
     });
 
     testWidgets('the file tools are hidden from a listener', (tester) async {
-      await tester.pumpWidget(
-        _host(
-          _repo()
-            ..sessionState = testListenerSession()
-            ..books[bookPid] = testBook(bookPid, partCount: 3),
-          FakeEngine(),
-        ),
+      await _pump(
+        tester,
+        _repo()
+          ..sessionState = testListenerSession()
+          ..books[bookPid] = testBook(bookPid, partCount: 3),
       );
-      await tester.pumpAndSettle();
 
       await openOverflow(tester);
       expect(find.text('Merge into one chaptered file'), findsNothing);

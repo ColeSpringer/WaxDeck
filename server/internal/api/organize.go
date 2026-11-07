@@ -9,15 +9,9 @@ import (
 // Organize handlers: profile listing, dry-run previews, and applies.
 
 func (s *Server) ListOrganizeProfiles(ctx context.Context, _ ListOrganizeProfilesRequestObject) (ListOrganizeProfilesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	profiles, err := s.svc.OrganizeProfilesFor(ctx, uc)
 	if err != nil {
-		if service.KindOf(err) == service.KindForbidden {
-			return ListOrganizeProfiles403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := OrganizeProfiles{
@@ -47,12 +41,9 @@ func organizeSampleJSON(s service.OrganizeSampleDTO) OrganizeSample {
 }
 
 func (s *Server) PutOrganizeProfile(ctx context.Context, req PutOrganizeProfileRequestObject) (PutOrganizeProfileResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return PutOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a profile body is required"))}, nil
+		return nil, errNoBody()
 	}
 	in := service.OrganizeProfileInput{
 		Music: deref(req.Body.MusicTemplate), Audiobook: deref(req.Body.AudiobookTemplate),
@@ -61,45 +52,23 @@ func (s *Server) PutOrganizeProfile(ctx context.Context, req PutOrganizeProfileR
 	}
 	p, err := s.svc.PutOrganizeProfile(ctx, uc, req.Name, in)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return PutOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return PutOrganizeProfile403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PutOrganizeProfile200JSONResponse(organizeProfileJSON(p)), nil
 }
 
 func (s *Server) DeleteOrganizeProfile(ctx context.Context, req DeleteOrganizeProfileRequestObject) (DeleteOrganizeProfileResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DeleteOrganizeProfile(ctx, uc, req.Name); err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return DeleteOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return DeleteOrganizeProfile403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return DeleteOrganizeProfile404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		case service.KindConflict:
-			return DeleteOrganizeProfile409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return DeleteOrganizeProfile204Response{}, nil
 }
 
 func (s *Server) PreviewOrganizeProfile(ctx context.Context, req PreviewOrganizeProfileRequestObject) (PreviewOrganizeProfileResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return PreviewOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a profile body is required"))}, nil
+		return nil, errNoBody()
 	}
 	in := service.OrganizeProfileInput{
 		Music: deref(req.Body.MusicTemplate), Audiobook: deref(req.Body.AudiobookTemplate),
@@ -108,24 +77,15 @@ func (s *Server) PreviewOrganizeProfile(ctx context.Context, req PreviewOrganize
 	}
 	sample, err := s.svc.PreviewOrganizeProfile(ctx, uc, deref(req.Body.Name), in)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return PreviewOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return PreviewOrganizeProfile403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PreviewOrganizeProfile200JSONResponse(organizeSampleJSON(sample)), nil
 }
 
 func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequestObject) (PreviewOrganizeResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return PreviewOrganize400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an organize body is required"))}, nil
+		return nil, errNoBody()
 	}
 	var pids []string
 	if req.Body.ItemPids != nil {
@@ -133,12 +93,6 @@ func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequest
 	}
 	plan, err := s.svc.PreviewOrganize(ctx, uc, deref(req.Body.Profile), pids)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return PreviewOrganize400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return PreviewOrganize403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := OrganizePlan{
@@ -177,12 +131,9 @@ func organizeHoldsJSON(holds []service.OrganizeHoldDTO) *[]OrganizeHold {
 }
 
 func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObject) (ApplyOrganizeResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return ApplyOrganize400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an organize body is required"))}, nil
+		return nil, errNoBody()
 	}
 	var pids []string
 	if req.Body.ItemPids != nil {
@@ -190,14 +141,6 @@ func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObje
 	}
 	rep, err := s.svc.ApplyOrganize(ctx, uc, deref(req.Body.Profile), pids)
 	if err != nil {
-		switch k := service.KindOf(err); k {
-		case service.KindInvalid:
-			return ApplyOrganize400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return ApplyOrganize403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindReadOnly, service.KindCatalogBusy:
-			return ApplyOrganize409JSONResponse(errObj(string(k), err.Error())), nil
-		}
 		return nil, err
 	}
 	return ApplyOrganize200JSONResponse(organizeReportJSON(rep)), nil
@@ -218,22 +161,13 @@ func organizeReportJSON(rep service.OrganizeReportDTO) OrganizeReport {
 }
 
 func (s *Server) ListOrganizeHistory(ctx context.Context, req ListOrganizeHistoryRequestObject) (ListOrganizeHistoryResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 20, 100)
 	if err != nil {
 		return nil, err
 	}
-	limit, ok := pageLimit(req.Params.Limit, 20, 100)
-	if !ok {
-		return ListOrganizeHistory400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 100"))}, nil
-	}
 	runs, next, err := s.svc.OrganizeHistory(ctx, uc, deref(req.Params.Cursor), limit)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindForbidden:
-			return ListOrganizeHistory403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindInvalid:
-			return ListOrganizeHistory400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := OrganizeHistory{Batches: make([]OrganizeBatch, 0, len(runs))}
@@ -252,25 +186,12 @@ func (s *Server) ListOrganizeHistory(ctx context.Context, req ListOrganizeHistor
 }
 
 func (s *Server) UndoOrganize(ctx context.Context, req UndoOrganizeRequestObject) (UndoOrganizeResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return UndoOrganize400JSONResponse(errObj("invalid-request", "an undo body is required")), nil
+		return nil, errNoBody()
 	}
 	rep, err := s.svc.UndoOrganize(ctx, uc, req.Body.JobPid)
 	if err != nil {
-		switch k := service.KindOf(err); k {
-		case service.KindInvalid:
-			return UndoOrganize400JSONResponse(errObj("invalid-request", err.Error())), nil
-		case service.KindForbidden:
-			return UndoOrganize403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return UndoOrganize404JSONResponse(errObj("not-found", err.Error())), nil
-		case service.KindReadOnly, service.KindCatalogBusy:
-			return UndoOrganize409JSONResponse(errObj(string(k), err.Error())), nil
-		}
 		return nil, err
 	}
 	return UndoOrganize200JSONResponse(organizeReportJSON(rep)), nil

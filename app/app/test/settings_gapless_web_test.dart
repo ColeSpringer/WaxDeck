@@ -2,19 +2,16 @@
 library;
 
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/setting_anchor.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 /// The web half of the registry's drawn-and-anchored assertion.
 ///
@@ -40,31 +37,22 @@ void main() {
     );
 
     for (final entry in webOnly) {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(
-              FakeRepository(
-                sessionState: const SessionState(
-                  authenticated: true,
-                  user: WaxDeckUser(
-                    id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
-                    username: 'listener',
-                    roles: ['user'],
-                  ),
-                ),
+      await pumpApp(
+        tester,
+        SettingsSectionScreen(section: entry.section, setting: entry.id),
+        container: appContainer(
+          repo: FakeRepository(
+            sessionState: const SessionState(
+              authenticated: true,
+              user: WaxDeckUser(
+                id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
+                username: 'listener',
+                roles: ['user'],
               ),
             ),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-          ],
-          child: routedHost(
-            SettingsSectionScreen(section: entry.section, setting: entry.id),
           ),
         ),
       );
-      await tester.pumpAndSettle();
 
       final row = find.bySemanticsIdentifier(entry.semanticsId);
       expect(
@@ -111,18 +99,11 @@ void main() {
             voiceBoost: true,
             fileTools: true,
           );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-        child: routedHost(
-          const SettingsSectionScreen(section: SettingsSection.playback),
-        ),
-      ),
+    await pumpApp(
+      tester,
+      const SettingsSectionScreen(section: SettingsSection.playback),
+      container: appContainer(repo: repo),
     );
-    await tester.pumpAndSettle();
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.setting('web-gapless')),

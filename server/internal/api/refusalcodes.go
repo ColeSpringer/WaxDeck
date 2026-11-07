@@ -4,8 +4,8 @@ import "net/http"
 
 // refusalCodes is the vocabulary a refused player command may carry
 // out to a controller, mapped onto the HTTP status each code answers
-// with. Both transports read it: the REST handlers for their typed
-// responses, and the command socket for its error frame.
+// with. Both transports read it: the REST handlers for their refusals,
+// and the command socket for its error frame.
 //
 // It is a whitelist on purpose, and a short one. The code on a routed
 // refusal arrives from a client endpoint, which is free to send
@@ -57,4 +57,16 @@ func refusalStatus(code string) (int, string) {
 		return status, code
 	}
 	return http.StatusBadRequest, "invalid-request"
+}
+
+// keptParams is the params a refusal sent under code may carry: its own
+// where the code survived the whitelist, none where it degraded. Params
+// keys are documented per code, so a set minted for a rejected one would
+// arrive describing the `invalid-request` it degraded to, and the
+// whitelist is what it would be walking around.
+func keptParams(code string, params map[string]string) map[string]string {
+	if _, resolved := refusalStatus(code); resolved != code {
+		return nil
+	}
+	return params
 }

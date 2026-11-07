@@ -1,16 +1,13 @@
 import 'package:flutter/rendering.dart' show RenderParagraph;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/integrations_sections.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'bundled_type.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 
 /// A field's hint goes at the first keystroke, so it holds a format or
 /// an example and nothing else, and on a phone it has to fit the lines
@@ -29,19 +26,13 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-        child: localizedHost(
-          Scaffold(body: ListView(children: [child])),
-          locale: locale,
-        ),
-      ),
+    await pumpApp(
+      tester,
+      Scaffold(body: ListView(children: [child])),
+      container: appContainer(repo: repo),
+      routed: false,
+      locale: locale,
     );
-    await tester.pumpAndSettle();
   }
 
   /// Every hint on screen fits the lines its field gives it, in the

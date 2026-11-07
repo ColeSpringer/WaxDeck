@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
@@ -13,9 +12,9 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'player_host.dart';
 
 const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
@@ -71,12 +70,7 @@ void main() {
     final repo = FakeRepository()
       ..books[bookPid] = testBook(bookPid, durationMs: 120000, partCount: 2);
     final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: _bookItem(),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: _bookItem());
     expect(engine.loadedUrl, contains('part=0'));
 
     // Seek to 90s on the book timeline (part 1 at 30s in) through the
@@ -93,12 +87,11 @@ void main() {
     expect(engine.loadedUrl, contains('part=1'));
     expect(engine.position, const Duration(seconds: 30));
     expect(repo.playInfoCalls.last.positionMs, 90000);
-    await harness.endPlayback(tester);
   });
 
   // The second chapter runs from 30s to the end of the book, over the
   // join between the two files.
-  Future<(PlayerHarness, FakeRepository, FakeEngine)> deckOverChapters(
+  Future<(FakeRepository, FakeEngine)> deckOverChapters(
     WidgetTester tester,
     BookTimelineScope scope,
   ) async {
@@ -121,17 +114,14 @@ void main() {
     );
     harness.container.read(bookTimelineScopeProvider.notifier).set(scope);
     harness.play([_bookItem()], positionMs: 40000);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: harness.container,
-        child: localizedHost(
-          const Align(alignment: Alignment.bottomCenter, child: DeckBarHost()),
-        ),
-      ),
+    await pumpApp(
+      tester,
+      const Align(alignment: Alignment.bottomCenter, child: DeckBarHost()),
+      container: harness.container,
+      routed: false,
     );
-    await tester.pumpAndSettle();
     expect(engine.loadedUrl, contains('part=0'));
-    return (harness, repo, engine);
+    return (repo, engine);
   }
 
   Future<void> tapDeckSeek(WidgetTester tester, double fraction) async {
@@ -144,7 +134,7 @@ void main() {
 
   testWidgets('a deck seek inside a chapter lands on the book timeline, '
       'across a part boundary', (tester) async {
-    final (harness, repo, engine) = await deckOverChapters(
+    final (repo, engine) = await deckOverChapters(
       tester,
       BookTimelineScope.chapter,
     );
@@ -156,12 +146,11 @@ void main() {
     expect(engine.loadedUrl, contains('part=1'));
     expect(engine.position, const Duration(seconds: 15));
     expect(repo.playInfoCalls.last.positionMs, 75000);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a deck seek over the whole book crosses the part join on '
       'the book\'s own scale', (tester) async {
-    final (harness, repo, engine) = await deckOverChapters(
+    final (repo, engine) = await deckOverChapters(
       tester,
       BookTimelineScope.book,
     );
@@ -173,7 +162,6 @@ void main() {
     expect(engine.loadedUrl, contains('part=1'));
     expect(engine.position, const Duration(seconds: 30));
     expect(repo.playInfoCalls.last.positionMs, 90000);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a chapter jump never writes a part-shifted checkpoint', (
@@ -190,12 +178,7 @@ void main() {
     final repo = FakeRepository()
       ..books[bookPid] = testBook(bookPid, durationMs: 120000, partCount: 2);
     final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: _bookItem(),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: _bookItem());
     expect(engine.loadedUrl, contains('part=0'));
 
     for (var i = 0; i < 5; i++) {
@@ -226,7 +209,6 @@ void main() {
       isNot(contains(30000)),
       reason: 'nor part 0\'s start with part 1\'s position',
     );
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a part that will not open surfaces the error and stops', (
@@ -266,7 +248,6 @@ void main() {
       // listen reported unfinished, because the book is not over.
       expect(repo.putPlayStateCalls.last.positionMs, 60000);
       expect(repo.reportedSessions.last.finished, isFalse);
-      await harness.endPlayback(tester);
     });
   });
 
@@ -324,7 +305,6 @@ void main() {
       reason: 'the stale part load must not start what a newer session loaded',
     );
     expect(engine.loadedUrl, contains('tr-A'));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a multi-part book resumes into the right part', (tester) async {
@@ -332,16 +312,10 @@ void main() {
       ..books[bookPid] = testBook(bookPid, durationMs: 120000, partCount: 2)
       ..playPositions[bookPid] = 75000;
     final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: _bookItem(),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: _bookItem());
 
     expect(engine.loadedUrl, contains('part=1'));
     expect(engine.position, const Duration(seconds: 15));
-    await harness.endPlayback(tester);
   });
 
   group('a session over a three-part book', () {

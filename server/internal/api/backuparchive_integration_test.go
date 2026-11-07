@@ -104,6 +104,38 @@ func TestBackupArchiveServesRanges(t *testing.T) {
 	}
 }
 
+// The archive is administrators' alone: a signed-in member asking for a
+// finished backup is refused 403, in the Error schema, and gets no bytes.
+func TestBackupArchiveRefusesAMember(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+
+	row, err := h.backups.Create(ctx, nil, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.backups.Run(ctx, row.ID); err != nil {
+		t.Fatal(err)
+	}
+	wantStatus(t, h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "sam", "password": testPassword,
+	}), 201, "create sam")
+	sam := loginAs(t, h.ts, "sam", testPassword).Token
+
+	resp := get(t, h.ts, "/api/v1/admin/backups/"+row.ID+"/archive", sam)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("member's archive status = %d, want 403", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("member's archive content type = %q, want application/json", ct)
+	}
+	if e := decode[Error](t, resp); e.Code != "forbidden" || e.Message != "administrators only" {
+		t.Fatalf("member's archive refusal = %+v, want forbidden: administrators only", e)
+	}
+}
+
 // A backup another schema baseline made is refused with a reason the app
 // words itself, since the server's sentence is English.
 func TestStagingAnArchiveFromAnotherSchemaSaysWhy(t *testing.T) {

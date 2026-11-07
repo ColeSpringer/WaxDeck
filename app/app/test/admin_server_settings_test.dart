@@ -4,35 +4,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/server_settings_screen.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
-ProviderContainer _container(FakeRepository repo) {
-  final container = ProviderContainer(
-    overrides: [repositoryProvider.overrideWithValue(repo)],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
-
-Widget _host(ProviderContainer container) => UncontrolledProviderScope(
-  container: container,
-  child: localizedHost(const ServerSettingsScreen()),
-);
-
-Future<void> _pump(WidgetTester tester, Widget host) async {
+Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
   tester.view.physicalSize = const Size(1200, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(host);
-  await tester.pumpAndSettle();
+  await pumpApp(
+    tester,
+    const ServerSettingsScreen(),
+    container: container,
+    routed: false,
+  );
 }
 
 /// Holds every settings write until the test lets it through, so two can
@@ -91,7 +81,7 @@ void main() {
     tester,
   ) async {
     final repo = _ParkedWrites();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.settingSignupEnabled),
@@ -122,7 +112,7 @@ void main() {
     tester,
   ) async {
     final repo = _ParkedWrites();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     expect(repo.adminSettingsReads, 1, reason: 'the screen reads once');
 
     await tester.tap(
@@ -151,7 +141,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     // Stored behind the open screen: it still draws read-only off.
     repo.adminSettings = repo.adminSettings.copyWith(
@@ -174,7 +164,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.settingSignupEnabled),
@@ -199,7 +189,7 @@ void main() {
   testWidgets('limits that fail to load say so in place of the group, and '
       'asking again reads them', (tester) async {
     final repo = _LimitsDown();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     expect(find.text('Could not load the transcoding limits'), findsOneWidget);
     expect(
@@ -219,8 +209,8 @@ void main() {
 
   testWidgets('saves transcoding limits', (tester) async {
     final repo = FakeRepository();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.transcodingMaxConcurrent),
@@ -250,7 +240,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository()..activeTranscodeSessions = 3;
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.transcodingActivity),
@@ -283,7 +273,7 @@ void main() {
     final repo = FakeRepository()
       ..activeTranscodeSessions = 3
       ..activeTranscodeTimelines = 2;
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     final line = find.text(
       '3 engine-backed sessions right now. 2 of them are gapless queues.',
@@ -338,7 +328,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository()..activeTranscodeSessions = 1;
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     expect(find.text('1 engine-backed session right now.'), findsOneWidget);
 
     repo.activeTranscodeSessions = 5;
@@ -364,8 +354,8 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.trashRetentionDays),
@@ -404,8 +394,8 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     // The trash field is fine; the message has to name the other one.
     await tester.enterText(
@@ -432,7 +422,7 @@ void main() {
     tester,
   ) async {
     final repo = _RecordedWrites();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     Future<void> save({String? trash, String? task}) async {
       if (trash != null) {
         await tester.enterText(
@@ -476,7 +466,7 @@ void main() {
   testWidgets('an untouched retention box takes what the server stored, and '
       'a typed one keeps the typing', (tester) async {
     final repo = _RecordedWrites();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     // Another administrator moves both windows while this one types in
     // the trash box, and the answer to this one's next write carries them.
@@ -501,7 +491,7 @@ void main() {
     tester,
   ) async {
     final repo = _RecordedWrites();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     Future<void> save({String? trash, String? task}) async {
       if (trash != null) {
         await tester.enterText(
@@ -544,8 +534,8 @@ void main() {
 
   testWidgets('the task window saves beside the trash one', (tester) async {
     final repo = FakeRepository();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.taskRetentionDays),

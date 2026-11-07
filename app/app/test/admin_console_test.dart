@@ -6,9 +6,6 @@ import 'package:waxdeck/src/admin/admin_console.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/dashboard_screen.dart';
 import 'package:waxdeck/src/admin/genres_screen.dart';
-import 'package:waxdeck/src/app.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -16,8 +13,8 @@ import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 /// An administrator's session, which is what the console frame asks for
@@ -52,14 +49,7 @@ ProviderContainer _container(FakeRepository repo, {WaxDeckUser? user}) {
   if (user != null) {
     repo.sessionState = SessionState(authenticated: true, user: user);
   }
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
-  );
-  addTearDown(container.dispose);
-  return container;
+  return appContainer(repo: repo);
 }
 
 Future<void> _pump(
@@ -72,13 +62,7 @@ Future<void> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(screen, at: at),
-    ),
-  );
-  await tester.pumpAndSettle();
+  await pumpApp(tester, screen, container: container, at: at);
 }
 
 void main() {
@@ -177,16 +161,10 @@ void main() {
     tester.view.physicalSize = const Size(1280, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(
-          const AdminConsole(
-            location: WaxRoute.trash,
-            child: SizedBox.shrink(),
-          ),
-        ),
-      ),
+    await mountApp(
+      tester,
+      const AdminConsole(location: WaxRoute.trash, child: SizedBox.shrink()),
+      container: container,
     );
     await tester.pump();
 
@@ -209,36 +187,20 @@ void main() {
   testWidgets('the section list is exposed beside a routed page', (
     tester,
   ) async {
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(
-          FakeRepository(
-            sessionState: const SessionState(
-              authenticated: true,
-              user: WaxDeckUser(
-                id: 'us-1',
-                username: 'admin',
-                roles: ['admin'],
-              ),
-            ),
-          ),
+    final container = appContainer(
+      repo: FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
         ),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
+      ),
     );
-    addTearDown(container.dispose);
     // The e2e viewport.
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const WaxDeckApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: container);
     container.read(routerProvider).go(WaxRoute.admin);
     await tester.pumpAndSettle();
 

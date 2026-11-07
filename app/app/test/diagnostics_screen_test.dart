@@ -3,33 +3,40 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/health/diagnostics_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'direction_glyph.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: localizedHost(const DiagnosticsScreen()),
-);
-
 /// Wide enough for the table to be a table rather than a card list.
-Future<void> _pump(WidgetTester tester, Widget host) async {
+///
+/// A test that mounts again over the same world passes [container], which
+/// must serve [repo].
+Future<void> _pump(
+  WidgetTester tester,
+  FakeRepository repo, {
+  Locale locale = const Locale('en'),
+  ProviderContainer? container,
+}) async {
   tester.view.physicalSize = const Size(1200, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(host);
-  await tester.pumpAndSettle();
+  await pumpApp(
+    tester,
+    const DiagnosticsScreen(),
+    container: container ?? appContainer(repo: repo),
+    routed: false,
+    locale: locale,
+  );
 }
 
 void main() {
   testWidgets('an empty list says so in its title alone', (tester) async {
-    await _pump(tester, _host(FakeRepository()));
+    await _pump(tester, FakeRepository());
 
     expect(find.text('No diagnostics recorded'), findsOneWidget);
     expect(
@@ -51,7 +58,7 @@ void main() {
         seenAt: DateTime.utc(2026, 7, 20),
       ),
     );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     expectPointing(
       tester,
       find.bySemanticsIdentifier(SemanticsIds.diagnosticsMore),
@@ -72,7 +79,7 @@ void main() {
         seenAt: DateTime.utc(2026, 7, 20),
       ),
     );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
 
     repo.listFileDiagnosticsGate = Completer<void>();
     await expectLoadMoreHolds(
@@ -118,7 +125,7 @@ void main() {
         seenAt: now,
       ),
     ]);
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
 
     // Both codes show as chips and both rows render.
     expect(
@@ -174,32 +181,26 @@ void main() {
   });
 
   testWidgets('names each writer in the reader\'s words', (tester) async {
-    Future<void> show(Locale locale) async {
-      final repo = FakeRepository();
-      repo.fileDiagnostics.addAll([
-        FileDiagnostic(
-          path: '/music/damaged.flac',
-          origin: 'analyze',
-          code: 'corrupt_audio',
-          severity: 'warn',
-          seenAt: DateTime.utc(2026, 9, 29),
-        ),
-        FileDiagnostic(
-          path: '/music/future.flac',
-          origin: 'holograph',
-          code: 'corrupt_audio',
-          severity: 'warn',
-          seenAt: DateTime.utc(2026, 9, 29),
-        ),
-      ]);
-      await _pump(
-        tester,
-        ProviderScope(
-          overrides: [repositoryProvider.overrideWithValue(repo)],
-          child: localizedHost(const DiagnosticsScreen(), locale: locale),
-        ),
-      );
-    }
+    final repo = FakeRepository();
+    repo.fileDiagnostics.addAll([
+      FileDiagnostic(
+        path: '/music/damaged.flac',
+        origin: 'analyze',
+        code: 'corrupt_audio',
+        severity: 'warn',
+        seenAt: DateTime.utc(2026, 9, 29),
+      ),
+      FileDiagnostic(
+        path: '/music/future.flac',
+        origin: 'holograph',
+        code: 'corrupt_audio',
+        severity: 'warn',
+        seenAt: DateTime.utc(2026, 9, 29),
+      ),
+    ]);
+    final container = appContainer(repo: repo);
+    Future<void> show(Locale locale) =>
+        _pump(tester, repo, locale: locale, container: container);
 
     await show(const Locale('en'));
     expect(find.text('Analysis'), findsOneWidget);

@@ -2,18 +2,16 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
 import 'package:waxdeck/src/health/health_screen.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'row_nodes.dart';
 import 'wax_finders.dart';
 
@@ -23,30 +21,25 @@ const _admin = WaxDeckUser(
   roles: ['admin'],
 );
 
-ProviderContainer _container(FakeRepository repo) {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
-
-Widget _host(ProviderContainer container) => UncontrolledProviderScope(
-  container: container,
-  child: routedHost(const HealthScreen()),
-);
-
 /// Wide enough for the console tables to be tables.
-Future<void> _pump(WidgetTester tester, Widget host) async {
+Future<void> _pump(
+  WidgetTester tester,
+  ProviderContainer container, {
+  Widget screen = const HealthScreen(),
+}) async {
   tester.view.physicalSize = const Size(1280, 2000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(host);
-  await tester.pumpAndSettle();
+  await pumpApp(tester, screen, container: container);
 }
+
+/// [_pump] for the issues one rule lists.
+Future<void> _pumpIssues(WidgetTester tester, ProviderContainer container) =>
+    _pump(
+      tester,
+      container,
+      screen: const HealthIssuesScreen(rule: 'path-mismatch'),
+    );
 
 /// The stock summary, with missing art's fix under way or not.
 HealthSummary _summary({bool fixing = false, int failing = 5}) => HealthSummary(
@@ -113,7 +106,7 @@ Future<void> _confirm(WidgetTester tester, String word) async {
 
 void main() {
   testWidgets('renders the score and rule counts', (tester) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, appContainer(repo: _repo()));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.healthScore),
@@ -137,7 +130,7 @@ void main() {
   });
 
   testWidgets('an empty section says so once, in its title', (tester) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, appContainer(repo: _repo()));
 
     expect(find.text('No duplicates detected'), findsOneWidget);
     expect(find.text('No duplicate qualities detected'), findsOneWidget);
@@ -161,13 +154,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo()..healthIssues = const [];
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
-      ),
-    );
+    await _pumpIssues(tester, appContainer(repo: repo));
 
     expect(find.text('Nothing failing this rule'), findsOneWidget);
     expect(
@@ -186,7 +173,7 @@ void main() {
       evaluatedItems: 48,
       warmingUp: true,
     );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.healthWarmingUp),
@@ -203,8 +190,8 @@ void main() {
     final repo = _repo()
       ..fixHealthGate = Completer<void>()
       ..fixHealthStart = const HealthFixStart(queued: 5, taskId: 'tk-fix');
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.healthFix('missing-art')),
@@ -249,8 +236,8 @@ void main() {
       ..fixHealthStart = const HealthFixStart(queued: 5, jobPid: 'jb-fix')
       // The pass itself has ended; its re-check has not landed.
       ..jobs = [const Job(pid: 'jb-fix', kind: 'enrich', state: 'done')];
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     repo.healthSummary = _summary(fixing: true);
     await tester.tap(
@@ -271,8 +258,8 @@ void main() {
 
   testWidgets('a fix refused while a pass runs says so', (tester) async {
     final repo = _repo();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     repo.fixHealthError = const WaxDeckApiException(
       code: 'conflict',
       message: 'an enrichment pass is already running',
@@ -293,8 +280,8 @@ void main() {
 
   testWidgets('a fix a read-only library refuses says so', (tester) async {
     final repo = _repo();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     repo.fixHealthError = const WaxDeckApiException(
       code: 'read-only',
       message: 'the library is read-only on this server',
@@ -318,8 +305,8 @@ void main() {
   ) async {
     _reducedMotion(tester);
     final repo = _repo();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     // Another session started it; this screen has not heard yet.
     repo
       ..fixHealthError = const WaxDeckApiException(
@@ -347,7 +334,7 @@ void main() {
       // A transport failure is retried with backoff, about thirteen seconds
       // of it, and the summary's future does not settle meanwhile.
       final repo = _repo();
-      final container = _container(repo);
+      final container = appContainer(repo: repo);
       container.listen(healthProvider, (_, _) {});
       await container.read(healthProvider.future);
       repo.healthError = const WaxDeckApiException(
@@ -366,7 +353,7 @@ void main() {
     'a sweep request does not wait out a summary read being retried',
     () async {
       final repo = _repo();
-      final container = _container(repo);
+      final container = appContainer(repo: repo);
       container.listen(healthProvider, (_, _) {});
       await container.read(healthProvider.future);
       repo.healthError = const WaxDeckApiException(
@@ -392,7 +379,7 @@ void main() {
       sweepFailed: true,
       rules: _summary().rules,
     );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     expect(
       find.text(
         'The last sweep failed, so these numbers are from an earlier one',
@@ -418,7 +405,7 @@ void main() {
           ),
         ],
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.healthFix('missing-lyrics')),
@@ -454,7 +441,7 @@ void main() {
           ),
         ],
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.healthFix('path-mismatch')),
@@ -486,7 +473,7 @@ void main() {
           ),
         ],
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     expect(find.text('Missing cover art'), findsOneWidget);
     expect(
@@ -508,7 +495,7 @@ void main() {
         const FakeAccessibilityFeatures(disableAnimations: true);
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     final repo = _repo();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     WaxIconButton sweep() => tester.widget<WaxIconButton>(
       waxControl<WaxIconButton>(SemanticsIds.healthSweep),
     );
@@ -545,7 +532,7 @@ void main() {
         evaluatedItems: 4,
         sweeping: true,
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     final sweep = tester.widget<WaxIconButton>(
       waxControl<WaxIconButton>(SemanticsIds.healthSweep),
@@ -554,7 +541,7 @@ void main() {
   });
 
   testWidgets('a rule opens its paginated issue list', (tester) async {
-    await _pump(tester, _host(_container(_repo())));
+    await _pump(tester, appContainer(repo: _repo()));
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.health('missing-art')),
@@ -592,7 +579,7 @@ void main() {
           detail: HealthIssueDetail(headerMs: 221000, decodedMs: 192000),
         ),
       ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.health('duration-mismatch')),
@@ -641,7 +628,7 @@ void main() {
           ),
         ),
       ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.health('duration-mismatch')),
@@ -666,7 +653,7 @@ void main() {
         losers: [DuplicateEntity(pid: 'ar-2', name: 'Cardinal Waves')],
       ),
     ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     final merge = find.bySemanticsIdentifier(
       SemanticsIds.duplicateMerge('ar-1'),
@@ -711,7 +698,7 @@ void main() {
         ],
       ),
     ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     for (final key in ['f-flac+f-mp3', 'f-flac+f-ogg']) {
       expect(
@@ -752,7 +739,7 @@ void main() {
         ],
       ),
     ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     expect(find.text('mp3, 192 kbps'), findsOneWidget);
     final resolve = find.bySemanticsIdentifier(
@@ -798,8 +785,8 @@ void main() {
         message: '1 of 2 could not be moved to the trash: permission denied',
         statusCode: 409,
       );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     final resolve = find.bySemanticsIdentifier(
       SemanticsIds.upgradeResolve('f-flac+f-mp3+f-vorbis'),
     );
@@ -828,8 +815,8 @@ void main() {
           losers: [DuplicateEntity(pid: 'ar-2', name: 'Cardinal Waves')],
         ),
       ];
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     final merge = find.bySemanticsIdentifier(
       SemanticsIds.duplicateMerge('ar-1'),
     );
@@ -880,7 +867,7 @@ void main() {
         ],
       ),
     ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     // A lossless keeper says how fine it is.
     expect(find.text('flac, lossless, 96 kHz'), findsOneWidget);
@@ -931,7 +918,7 @@ void main() {
         ],
       ),
     ];
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     expect(find.text('vorbis, 320 kbps in one (1).ogg'), findsOneWidget);
   });
@@ -945,7 +932,7 @@ void main() {
         code: 'conflict',
         message: 'the catalog is busy',
       );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     final retry = find.bySemanticsIdentifier(SemanticsIds.upgradesRetry);
     expect(retry, findsOneWidget);
@@ -963,7 +950,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo()..healthSummary = _pathSummary();
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     expect(
       find.bySemanticsIdentifier(SemanticsIds.healthFix('path-mismatch')),
       findsNothing,
@@ -1009,13 +996,7 @@ void main() {
           rules: ['path-mismatch'],
         ),
       ];
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
-      ),
-    );
+    await _pumpIssues(tester, appContainer(repo: repo));
     expect(find.text('Stray'), findsOneWidget);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.healthIssueFix('tr-5')),
@@ -1038,14 +1019,8 @@ void main() {
             rules: const ['path-mismatch'],
           ),
       ];
-    final container = _container(repo);
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
-      ),
-    );
+    final container = appContainer(repo: repo);
+    await _pumpIssues(tester, container);
 
     final row = tester
         .getTopLeft(
@@ -1097,14 +1072,8 @@ void main() {
           ),
         ],
       );
-    final container = _container(repo);
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
-      ),
-    );
+    final container = appContainer(repo: repo);
+    await _pumpIssues(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.healthIssueFix('tr-5')),
@@ -1154,13 +1123,7 @@ void main() {
             ),
           ],
         );
-      await _pump(
-        tester,
-        UncontrolledProviderScope(
-          container: _container(repo),
-          child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
-        ),
-      );
+      await _pumpIssues(tester, appContainer(repo: repo));
       final move = find.bySemanticsIdentifier(
         SemanticsIds.healthIssueFix('tr-5'),
       );
@@ -1200,13 +1163,7 @@ void main() {
         profile: 'waxbin-native',
         totalActions: 0,
       );
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
-      ),
-    );
+    await _pumpIssues(tester, appContainer(repo: repo));
     final move = find.bySemanticsIdentifier(
       SemanticsIds.healthIssueFix('tr-5'),
     );
@@ -1260,13 +1217,7 @@ void main() {
           ),
         ],
       );
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
-      ),
-    );
+    await _pumpIssues(tester, appContainer(repo: repo));
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.healthIssueFix('tr-6')),
     );
@@ -1294,14 +1245,8 @@ void main() {
     final repo = _repo()
       ..healthSummary = _pathSummary()
       ..healthIssues = [issue('A'), issue('B'), issue('C')];
-    final container = _container(repo);
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
-      ),
-    );
+    final container = appContainer(repo: repo);
+    await _pumpIssues(tester, container);
     await expectRowsKeepTheirNodes(
       tester,
       [
@@ -1336,13 +1281,7 @@ void main() {
               rules: ['path-mismatch'],
             ),
           ];
-    await _pump(
-      tester,
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: routedHost(const HealthIssuesScreen(rule: 'path-mismatch')),
-      ),
-    );
+    await _pumpIssues(tester, appContainer(repo: repo));
     expect(
       find.bySemanticsIdentifier(SemanticsIds.healthIssue('tr-5')),
       findsOneWidget,

@@ -1,30 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/off_tree.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-
-// The credential store must be faked wherever the auth controller builds:
-// the real one talks to a platform channel no test host answers.
-Widget _app(FakeRepository repo) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-  child: const WaxDeckApp(),
-);
 
 void main() {
   testWidgets('boots to the login screen when unauthenticated', (tester) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_app(repo));
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: appContainer(repo: repo));
 
     expect(find.text('WaxDeck'), findsOneWidget);
     expect(find.text('Music, podcasts, and audiobooks'), findsOneWidget);
@@ -52,8 +40,7 @@ void main() {
       ),
       items: [testItem('tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE')],
     );
-    await tester.pumpWidget(_app(repo));
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: appContainer(repo: repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.loginUsername),
@@ -70,8 +57,7 @@ void main() {
   testWidgets('copy drawn off the tree follows the device language', (
     tester,
   ) async {
-    await tester.pumpWidget(_app(FakeRepository()));
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(WaxDeckApp)),
     );

@@ -1,11 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/discovery/track_list_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
@@ -25,7 +24,7 @@ void main() {
         items: [testItem(_similarPid, title: 'Kindred Groove')],
       );
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -53,29 +52,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(engine.loadedUrl, contains(_similarPid));
     expect(engine.playing, isTrue);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a row of the answer opens the item menu', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository()),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-        child: routedHost(
-          TrackListScreen(
-            title: 'More like this',
-            basis: MixBasis.sonic,
-            items: <ItemSummary>[
-              testItem(_similarPid, title: 'Kindred Groove'),
-            ],
-            idPrefix: 'similar',
-          ),
-        ),
+    await pumpApp(
+      tester,
+      TrackListScreen(
+        title: 'More like this',
+        basis: MixBasis.sonic,
+        items: <ItemSummary>[testItem(_similarPid, title: 'Kindred Groove')],
+        idPrefix: 'similar',
       ),
     );
-    await tester.pumpAndSettle();
 
     await rightClick(
       tester,
@@ -91,7 +79,7 @@ void main() {
     final repo = FakeRepository(items: [testItem(_seedPid)])
       ..similarTracksResult = const SimilarTracks(basis: MixBasis.metadata);
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -112,6 +100,5 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Nothing found'), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 }

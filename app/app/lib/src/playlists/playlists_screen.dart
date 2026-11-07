@@ -7,7 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
-import '../media_view.dart';
+import '../presenters/media_tiles.dart';
 import '../search/search_chrome.dart';
 import '../settings/client_prefs.dart';
 import '../shell/async_sliver_face.dart';
@@ -151,12 +151,10 @@ class _PlaylistGrid extends ConsumerWidget {
             final playlist = playlists[index];
             return MediaCard(
               key: _playlistKey(playlist),
-              data: MediaTileData(
-                title: playlist.name,
-                subtitle: playlistByline(l10n, playlist),
-                trailingText: playlistSize(l10n, playlist),
-                artwork: waxArtwork(store, playlist.artUrl),
-                badge: playlist.isSmart ? l10n.playlistSmart : null,
+              data: playlistTile(
+                playlist,
+                l10n: l10n,
+                store: store,
                 semanticsId: SemanticsIds.playlist(playlist.pid),
               ),
               width: grid.width,
@@ -172,20 +170,4 @@ class _PlaylistGrid extends ConsumerWidget {
       },
     );
   }
-}
-
-/// Whose playlist this is, where that is not the person looking. Null on
-/// your own, where it would be a column of noise.
-String? playlistByline(AppLocalizations l10n, Playlist playlist) {
-  if (playlist.isOwner) {
-    return playlist.isShared ? l10n.playlistSharedByYou : null;
-  }
-  return l10n.playlistSharedBy(playlist.ownerName);
-}
-
-/// How much is in a playlist. A smart list's count is omitted from list
-/// pages, so its card carries no number rather than a wrong one.
-String? playlistSize(AppLocalizations l10n, Playlist playlist) {
-  final count = playlist.itemCount;
-  return count == null ? null : l10n.playlistItemCount(count);
 }

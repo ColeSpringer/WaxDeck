@@ -1,17 +1,13 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/series_index_screen.dart';
 import 'package:waxdeck/src/books/series_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _series = 'sr-01JZX5N8QW3F4V9T2B7KDSERIE1';
 const _other = 'sr-01JZX5N8QW3F4V9T2B7KDSERIE2';
@@ -55,14 +51,8 @@ FakeRepository _repo() {
   return repo;
 }
 
-Widget _host(FakeRepository repo, Widget screen) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    audioEngineProvider.overrideWithValue(FakeEngine()),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-  child: routedHost(screen),
-);
+Future<void> _pump(WidgetTester tester, FakeRepository repo, Widget screen) =>
+    pumpApp(tester, screen, container: appContainer(repo: repo));
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
 
@@ -87,10 +77,7 @@ void main() {
   testWidgets('the series lists its books in the catalog order', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _host(_repo(), const BookSeriesScreen(pid: _series)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo(), const BookSeriesScreen(pid: _series));
 
     expect(_byId(SemanticsIds.bookSeriesScreen(_series)), findsOneWidget);
     // By row index, which is the handle the screen mints so order can
@@ -112,10 +99,7 @@ void main() {
   testWidgets('the header is an entity header with no actions yet', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _host(_repo(), const BookSeriesScreen(pid: _series)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo(), const BookSeriesScreen(pid: _series));
 
     final header = tester.widget<EntityHeader>(find.byType(EntityHeader));
     expect(header.title, 'Tidewater');
@@ -152,17 +136,13 @@ void main() {
         ...books.skip(1),
       ],
     );
-    await tester.pumpWidget(_host(repo, const BookSeriesScreen(pid: _series)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const BookSeriesScreen(pid: _series));
     expect(
       tester.widget<EntityHeader>(find.byType(EntityHeader)).artwork,
       isNotNull,
     );
 
-    await tester.pumpWidget(
-      _host(_repo(), const BookSeriesScreen(pid: _series)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo(), const BookSeriesScreen(pid: _series));
     expect(
       tester.widget<EntityHeader>(find.byType(EntityHeader)).artwork,
       isNull,
@@ -173,8 +153,7 @@ void main() {
   testWidgets('the header counts the catalog where it was told, the rows '
       'where it was not', (tester) async {
     final repo = _repo();
-    await tester.pumpWidget(_host(repo, const BookSeriesScreen(pid: _series)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const BookSeriesScreen(pid: _series));
     // Answered, so the catalog's number stands even though it is larger
     // than the list: the account can see the whole series.
     expect(find.textContaining('4 books'), findsOneWidget);
@@ -188,10 +167,7 @@ void main() {
       name: 'Tidewater',
       books: restricted.bookSeriesDetails[_series]!.books,
     );
-    await tester.pumpWidget(
-      _host(restricted, const BookSeriesScreen(pid: _series)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, restricted, const BookSeriesScreen(pid: _series));
     expect(find.textContaining('3 books'), findsOneWidget);
   });
 
@@ -203,8 +179,7 @@ void main() {
       pid: _series,
       name: 'Tidewater',
     );
-    await tester.pumpWidget(_host(repo, const BookSeriesScreen(pid: _series)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const BookSeriesScreen(pid: _series));
 
     expect(find.text('Nothing to show here'), findsOneWidget);
   });
@@ -212,10 +187,11 @@ void main() {
   testWidgets('a series nobody has says so rather than sitting blank', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _host(_repo(), const BookSeriesScreen(pid: 'sr-nothing-here')),
+    await _pump(
+      tester,
+      _repo(),
+      const BookSeriesScreen(pid: 'sr-nothing-here'),
     );
-    await tester.pumpAndSettle();
 
     expect(find.text('Could not open this series'), findsOneWidget);
   });
@@ -224,8 +200,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo();
-    await tester.pumpWidget(_host(repo, const BookSeriesIndexScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const BookSeriesIndexScreen());
 
     expect(_byId(SemanticsIds.bookSeriesIndex), findsOneWidget);
     expect(_byId(SemanticsIds.bookSeriesCard(_series)), findsOneWidget);
@@ -242,8 +217,7 @@ void main() {
 
   testWidgets('an empty index says where a series comes from', (tester) async {
     final repo = FakeRepository(items: <ItemSummary>[]);
-    await tester.pumpWidget(_host(repo, const BookSeriesIndexScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const BookSeriesIndexScreen());
 
     expect(find.text('No series yet'), findsOneWidget);
   });

@@ -4,12 +4,9 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 // Override lives here rather than in the root library.
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    show UncontrolledProviderScope;
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/artwork/artwork_palette.dart';
 import 'package:waxdeck/src/desktop/desktop_ports.dart';
 import 'package:waxdeck/src/desktop/tray_binder.dart';
@@ -81,7 +78,7 @@ String _caption(WidgetTester tester) =>
 
 /// Plays [track] and opens the player over it, with [artwork] as the
 /// artwork store and [extra] overrides.
-Future<PlayerHarness> _pumpAlbumTrack(
+Future<void> _pumpAlbumTrack(
   WidgetTester tester, {
   FakeRepository? repo,
   FakeArtworkStore? artwork,
@@ -168,7 +165,7 @@ void main() {
       tester,
     ) async {
       final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -184,7 +181,6 @@ void main() {
       ]) {
         expect(find.bySemanticsIdentifier(id), findsOneWidget, reason: id);
       }
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a stream reopened where it stood reads Pause, as the deck '
@@ -218,7 +214,6 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(toggle(), 'Pause');
-      await harness.endPlayback(tester);
     });
 
     testWidgets('shuffle and repeat drive the queue, not the engine', (
@@ -242,7 +237,6 @@ void main() {
         harness.container.read(queueControllerProvider).repeat,
         QueueRepeat.all,
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('an advance keeps the same face rather than flashing one', (
@@ -301,7 +295,6 @@ void main() {
 
       expect(tester.state(face), same(before));
       expect(find.text('Gullwing'), findsWidgets);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the up-next peek names what plays next', (tester) async {
@@ -354,7 +347,6 @@ void main() {
               .dx,
         ),
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a queue of one greys next here too, not just on the bar', (
@@ -388,7 +380,6 @@ void main() {
       ]);
       await tester.pumpAndSettle();
       expect(live(), isTrue);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('repeat-one has no next, and the peek says so', (tester) async {
@@ -413,7 +404,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerUpNext),
         findsNothing,
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('repeat-all wraps, and the peek names the wrap', (
@@ -446,12 +436,11 @@ void main() {
       // And no count beside it: nothing is left unplayed, which is not
       // the same as nothing being next.
       expect(find.textContaining('left'), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('nothing next means no peek at all', (tester) async {
       final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(),
@@ -462,7 +451,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerUpNext),
         findsNothing,
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the provenance line says where the queue came from', (
@@ -483,7 +471,6 @@ void main() {
       await pumpPlayerInto(tester, harness);
 
       expect(find.text('Playing from Salt Harbour'), findsOneWidget);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a fetched cover names its provider under the hero', (
@@ -503,7 +490,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('From Cover Art Archive'), findsOneWidget);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a cover the tags carried draws no borrowed note', (
@@ -526,7 +512,6 @@ void main() {
         find.byType(ArtworkCaption),
       );
       expect(caption.text, isNot(matches(RegExp(r'\p{L}', unicode: true))));
-      await harness.endPlayback(tester);
     });
   });
 
@@ -570,7 +555,6 @@ void main() {
       gate.complete();
       await advancing;
       await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     // Narrow enough that the chips wrap: their landing is what moved a
@@ -629,7 +613,6 @@ void main() {
       await advancing;
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(transport).dy, settledTop);
-      await harness.endPlayback(tester);
     }
 
     testWidgets('holds its rows still while the session resolves', (
@@ -648,7 +631,7 @@ void main() {
         'tr-01JZX5N8QW3F4V9T2B7KDEP0001',
         mediaType: MediaType.podcast,
       );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(minutes: 30)),
@@ -680,7 +663,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerTrim),
         findsOneWidget,
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('an episode names its show once, not twice', (tester) async {
@@ -696,7 +678,7 @@ void main() {
         // show it came from.
         artist: 'The Prancing Pony Hour',
       );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(minutes: 30)),
@@ -709,7 +691,6 @@ void main() {
         findsOneWidget,
         reason: 'the one that survives is the tappable one',
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a track still names its artist under the title', (
@@ -718,7 +699,7 @@ void main() {
       // The other half of the same rule: a track's maker is named
       // nowhere else on the face, so the subtitle is where it lives.
       final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(minutes: 4)),
@@ -726,7 +707,6 @@ void main() {
       );
 
       expect(find.text('Nightjar'), findsOneWidget);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a book reaches its chapters', (tester) async {
@@ -739,7 +719,7 @@ void main() {
             ChapterMark(index: 1, title: 'Roast Mutton', startMs: 60000),
           ],
         );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(minutes: 2)),
@@ -750,7 +730,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerChapters),
         findsOneWidget,
       );
-      await harness.endPlayback(tester);
     });
   });
 
@@ -758,7 +737,7 @@ void main() {
     testWidgets('a tap turns to the next picture and the last wraps', (
       tester,
     ) async {
-      final harness = await _pumpAlbumTrack(tester);
+      await _pumpAlbumTrack(tester);
 
       expect(_caption(tester), 'Front cover: From Cover Art Archive');
       expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
@@ -778,14 +757,13 @@ void main() {
         tester.widget<ArtworkAccent>(find.byType(ArtworkAccent)).artUrl,
         '/api/v1/items/$_first/art',
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the next picture is fetched before it is shown', (
       tester,
     ) async {
       final store = FakeArtworkStore();
-      final harness = await _pumpAlbumTrack(
+      await _pumpAlbumTrack(
         tester,
         artwork: store,
         extra: [desktopProvider.overrideWithValue(true)],
@@ -805,7 +783,6 @@ void main() {
         url: '/api/v1/items/$_albumPid/art?role=booklet',
         px: px,
       ));
-      await harness.endPlayback(tester);
     });
 
     testWidgets('an album front beside the track\'s own is the album\'s', (
@@ -818,13 +795,12 @@ void main() {
         ..artRolesByPid[_albumPid] = const [
           ArtRoleInfo(role: 'front', format: 'jpeg', source: 'user'),
         ];
-      final harness = await _pumpAlbumTrack(tester, repo: repo);
+      await _pumpAlbumTrack(tester, repo: repo);
 
       expect(_caption(tester), startsWith('Front cover'));
       await tester.tap(_artwork);
       await tester.pumpAndSettle();
       expect(_caption(tester), 'Album cover: Set by hand');
-      await harness.endPlayback(tester);
     });
 
     testWidgets('an album the server refuses is asked about once', (
@@ -836,19 +812,18 @@ void main() {
           message: 'no such album',
           statusCode: 404,
         );
-      final harness = await _pumpAlbumTrack(tester, repo: repo);
+      await _pumpAlbumTrack(tester, repo: repo);
 
       await tester.pump(const Duration(seconds: 15));
       expect(repo.artRolesReads.where((pid) => pid == _albumPid), hasLength(1));
       expect(_artwork, findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a phone fetches the next picture only once one is turned', (
       tester,
     ) async {
       final store = FakeArtworkStore();
-      final harness = await _pumpAlbumTrack(tester, artwork: store);
+      await _pumpAlbumTrack(tester, artwork: store);
       expect(store.warmed, isEmpty);
 
       await tester.tap(_artwork);
@@ -857,13 +832,12 @@ void main() {
         store.warmed.map((w) => w.url),
         contains('/api/v1/items/$_albumPid/art?role=booklet'),
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a narrow caption keeps where the picture came from', (
       tester,
     ) async {
-      final harness = await _pumpAlbumTrack(tester);
+      await _pumpAlbumTrack(tester);
       ArtworkCaption caption() =>
           tester.widget<ArtworkCaption>(find.byType(ArtworkCaption));
 
@@ -871,7 +845,6 @@ void main() {
       await tester.tap(_artwork);
       await tester.pumpAndSettle();
       expect(caption().fallback, 'From a folder image');
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a track with no cover opens on the picture it has', (
@@ -883,7 +856,7 @@ void main() {
           ArtRoleInfo(role: 'back', format: 'jpeg', source: 'user'),
         ];
       final store = FakeArtworkStore();
-      final harness = await _pumpAlbumTrack(tester, repo: repo, artwork: store);
+      await _pumpAlbumTrack(tester, repo: repo, artwork: store);
 
       expect(_artwork, findsNothing);
       expect(_caption(tester), 'Back cover: Set by hand');
@@ -891,7 +864,6 @@ void main() {
         store.requested,
         contains('/api/v1/items/$_albumPid/art?role=back'),
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('one picture is a picture, not a control', (tester) async {
@@ -904,7 +876,7 @@ void main() {
             provider: 'coverartarchive',
           ),
         ];
-      final harness = await _pumpAlbumTrack(
+      await _pumpAlbumTrack(
         tester,
         repo: repo,
         extra: [desktopProvider.overrideWithValue(true)],
@@ -915,13 +887,12 @@ void main() {
       expect(_caption(tester), 'From Cover Art Archive');
       await tester.pump(const Duration(seconds: 30));
       expect(_caption(tester), 'From Cover Art Archive');
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a desktop turns them itself, and a tap restarts the wait', (
       tester,
     ) async {
-      final harness = await _pumpAlbumTrack(
+      await _pumpAlbumTrack(
         tester,
         extra: [desktopProvider.overrideWithValue(true)],
       );
@@ -937,11 +908,10 @@ void main() {
       expect(_caption(tester), startsWith('Booklet'));
       await tester.pump(const Duration(seconds: 1));
       expect(_caption(tester), startsWith('Front cover'));
-      await harness.endPlayback(tester);
     });
 
     testWidgets('switched off, it waits for a tap', (tester) async {
-      final harness = await _pumpAlbumTrack(
+      await _pumpAlbumTrack(
         tester,
         extra: [desktopProvider.overrideWithValue(true)],
         cycle: false,
@@ -952,11 +922,10 @@ void main() {
       await tester.tap(_artwork);
       await tester.pump();
       expect(_caption(tester), startsWith('Back cover'));
-      await harness.endPlayback(tester);
     });
 
     testWidgets('under reduced motion, it waits for a tap', (tester) async {
-      final harness = await _pumpAlbumTrack(
+      await _pumpAlbumTrack(
         tester,
         extra: [desktopProvider.overrideWithValue(true)],
         reducedMotion: true,
@@ -967,13 +936,12 @@ void main() {
       await tester.tap(_artwork);
       await tester.pump();
       expect(_caption(tester), startsWith('Back cover'));
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a player nobody can see holds its picture', (tester) async {
       final ticking = ValueNotifier(true);
       addTearDown(ticking.dispose);
-      final harness = await _pumpAlbumTrack(
+      await _pumpAlbumTrack(
         tester,
         extra: [desktopProvider.overrideWithValue(true)],
         ticking: ticking,
@@ -989,15 +957,13 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 15));
       expect(_caption(tester), startsWith('Back cover'));
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a phone never turns them itself', (tester) async {
-      final harness = await _pumpAlbumTrack(tester);
+      await _pumpAlbumTrack(tester);
 
       await tester.pump(const Duration(seconds: 30));
       expect(_caption(tester), startsWith('Front cover'));
-      await harness.endPlayback(tester);
     });
 
     // Through the app's own navigators: the player is pushed onto the
@@ -1022,14 +988,8 @@ void main() {
           trayPortProvider.overrideWithValue(const NoTray()),
         ],
       );
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const WaxDeckApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final harness = PlayerHarness(container)..play([track]);
+      await pumpWholeApp(tester, container: container);
+      PlayerHarness(container).play([track]);
       unawaited(container.read(routerProvider).push(WaxRoute.nowPlaying));
       await tester.pumpAndSettle();
       expect(_caption(tester), startsWith('Front cover'));
@@ -1054,9 +1014,6 @@ void main() {
 
       await tester.pump(const Duration(seconds: 15));
       expect(_caption(tester), startsWith('Back cover'));
-      await harness.endPlayback(tester);
-      // The app's own queue-save debounce, which the test outlives.
-      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('the control stays put while the next track answers', (
@@ -1085,7 +1042,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.state(control), same(before));
       expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
-      await harness.endPlayback(tester);
     });
 
     testWidgets('nothing turns while the next set is unknown', (tester) async {
@@ -1112,7 +1068,6 @@ void main() {
       await tester.pump();
       expect(_caption(tester), startsWith('Front cover'));
       expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a tap before the next set answers is not kept', (
@@ -1138,7 +1093,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(_caption(tester), startsWith('Front cover'));
       expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a new album starts its pictures again at the front', (
@@ -1162,13 +1116,12 @@ void main() {
         ];
       final container = playbackContainer(repo: repo, engine: FakeEngine());
       Future<void> show(ItemSummary item) async {
-        await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: localizedHost(PlayerFace(session: null, item: item)),
-          ),
+        await pumpApp(
+          tester,
+          PlayerFace(session: null, item: item),
+          container: container,
+          routed: false,
         );
-        await tester.pumpAndSettle();
       }
 
       await show(onFirst);
@@ -1190,13 +1143,11 @@ void main() {
         repo: _albumRepo([_albumTrack(_first, 'Salt Harbour')]),
         engine: FakeEngine(),
       );
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: localizedHost(
-            const Scaffold(body: PlayerFace(session: null, item: null)),
-          ),
-        ),
+      await mountApp(
+        tester,
+        const Scaffold(body: PlayerFace(session: null, item: null)),
+        container: container,
+        routed: false,
       );
       await tester.pump();
 
@@ -1225,7 +1176,6 @@ void main() {
       expect(find.text('Gullwing'), findsWidgets);
       expect(_caption(tester), startsWith('Front cover'));
       expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
-      await harness.endPlayback(tester);
     });
   });
 
@@ -1234,7 +1184,7 @@ void main() {
       tester,
     ) async {
       final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(),
@@ -1245,7 +1195,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen),
         findsOneWidget,
       );
-      await harness.endPlayback(tester);
     });
   });
 
@@ -1272,12 +1221,11 @@ void main() {
         harness.container.read(commandRegistryProvider).map((c) => c.id),
         contains('player-collapse'),
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('Escape takes it back down', (tester) async {
       final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(),
@@ -1289,7 +1237,6 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.byType(PlayerScreen), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a click leaves the states that have no scaffold', (
@@ -1361,7 +1308,6 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byType(PlayerScreen), findsNothing);
       expect(engine.playing, isFalse);
-      await harness.endPlayback(tester);
     }
 
     testWidgets('a station stopped over a parked queue leaves it', (

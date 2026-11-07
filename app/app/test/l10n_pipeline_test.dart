@@ -1,13 +1,12 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart' show Intl;
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/l10n/locale_warmup.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 
@@ -82,10 +81,7 @@ void main() {
       final repo = FakeRepository()
         ..sessionState = const SessionState(authenticated: true, user: _user)
         ..prefs = stored;
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo);
       await container.read(prefsControllerProvider.future);
       return container.read(localeOverrideProvider);
     }

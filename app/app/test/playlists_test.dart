@@ -8,14 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/playlists/add_to_playlist_sheet.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/playlists/rule_editor_screen.dart';
 import 'package:waxdeck/src/playlists/rule_vocabulary.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/playlists/playlists_controller.dart';
@@ -27,10 +25,10 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'entity_header_bar.dart';
 import 'fakes.dart';
 import 'player_host.dart';
-import 'routed_host.dart';
 import 'secondary_click.dart';
 import 'wax_finders.dart';
 
@@ -58,18 +56,33 @@ const _third = ItemSummary(
   durationMs: 150000,
 );
 
-Widget _host(FakeRepository repo, Widget home, {FilePickerPort? picker}) =>
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        // The port is real on the host running these tests, so pin it:
-        // null hides every pick affordance, a fake proves one shows.
-        filePickerProvider.overrideWithValue(picker),
-      ],
-      // Every one of these screens is pushed in the app, and some pop
-      // themselves on save or delete.
-      child: routedHost(home, pushed: true),
-    );
+/// The port is real on the host running these tests, so pin it: null hides
+/// every pick affordance, a fake proves one shows.
+ProviderContainer _container(
+  FakeRepository repo, {
+  FilePickerPort? picker,
+  FakeArtworkStore? artwork,
+}) => appContainer(
+  repo: repo,
+  artwork: artwork,
+  extra: [filePickerProvider.overrideWithValue(picker)],
+);
+
+/// Mounts [screen] over [repo] and settles. Every screen here is pushed in
+/// the app, and some pop themselves on save or delete, so it mounts with
+/// `pushed: true`.
+Future<void> _pump(
+  WidgetTester tester,
+  FakeRepository repo,
+  Widget screen, {
+  FilePickerPort? picker,
+  FakeArtworkStore? artwork,
+}) => pumpApp(
+  tester,
+  screen,
+  container: _container(repo, picker: picker, artwork: artwork),
+  pushed: true,
+);
 
 /// Playlist listings that fail as a restarting server's do while [down].
 class _ListsDown extends FakeRepository {
@@ -171,8 +184,7 @@ void main() {
     // switch on the type blanks the screen the reader was reading.
     final repo = FakeRepository(items: const [_track]);
     await repo.createPlaylist(name: 'Road Trip', kind: 'static');
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
     expect(find.byType(AsyncSliverFace<List<Playlist>>), findsOneWidget);
     expect(find.text('Road Trip'), findsOneWidget);
 
@@ -202,8 +214,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: playlist.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: playlist.pid));
     expect(find.byType(AsyncSliverFace<PlaylistView>), findsOneWidget);
     expect(find.text('Prancing Pony Blues'), findsOneWidget);
 
@@ -229,8 +240,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: playlist.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: playlist.pid));
 
     expectHeaderOnActionBar();
     for (final id in <String>[
@@ -249,8 +259,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     expect(find.text('Road Trip'), findsOneWidget);
     await tester.tap(find.text('Road Trip'));
@@ -276,8 +285,7 @@ void main() {
     );
     repo.playlistsByPid['pl-THEIRS'] = _theirs();
     repo.playlistMembers['pl-THEIRS'] = [_track.pid];
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await rightClick(
       tester,
@@ -312,8 +320,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await rightClick(
       tester,
@@ -348,8 +355,7 @@ void main() {
       message: 'not yours',
       statusCode: 403,
     );
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await rightClick(
       tester,
@@ -378,13 +384,12 @@ void main() {
       itemPids: [_track.pid, _second.pid],
     );
     final container = playbackContainer(repo: repo, engine: FakeEngine());
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const PlaylistsScreen(), pushed: true),
-      ),
+    await pumpApp(
+      tester,
+      const PlaylistsScreen(),
+      container: container,
+      pushed: true,
     );
-    await tester.pumpAndSettle();
 
     await hoverPlay(tester, find.byType(MediaCard), label: 'Play Road Trip');
     final queue = container.read(queueControllerProvider);
@@ -394,13 +399,11 @@ void main() {
       <String>[for (final e in queue.entries) e.pid],
       <String>[_track.pid, _second.pid],
     );
-    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('the empty state invites the first playlist', (tester) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     expect(find.text('No playlists yet'), findsOneWidget);
     expect(find.textContaining('Make one'), findsNothing);
@@ -419,8 +422,7 @@ void main() {
     await repo.createPlaylist(name: 'Mine', kind: 'static');
     repo.playlistsByPid['pl-THEIRS'] = _theirs();
     repo.playlistMembers['pl-THEIRS'] = [_track.pid];
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     expect(find.text('Yours'), findsOneWidget);
     expect(find.text('Shared with the server'), findsOneWidget);
@@ -430,8 +432,7 @@ void main() {
   testWidgets('one section on its own carries no header', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     await repo.createPlaylist(name: 'Mine', kind: 'static');
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     // A header over the whole screen names nothing.
     expect(find.text('Yours'), findsNothing);
@@ -449,16 +450,14 @@ void main() {
         ]),
       ),
     );
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     expect(find.text('Smart'), findsOneWidget);
   });
 
   testWidgets('creates a manual playlist through the dialog', (tester) async {
     final repo = FakeRepository(items: const [_track]);
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistAdd));
     await tester.pumpAndSettle();
@@ -481,8 +480,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(0)),
@@ -501,8 +499,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid, _second.pid, _track.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     for (var i = 0; i < 2; i++) {
       await tester.tap(
@@ -527,8 +524,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid, _second.pid, _third.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
     // Another device took the first member out after this screen read
     // the list, so the last row here is past the server's end.
     repo.playlistMembers[created.pid]!.removeAt(0);
@@ -559,34 +555,25 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid, _second.pid],
     );
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final keepAlive = container.listen(
       playlistDetailProvider(created.pid),
       (_, _) {},
     );
     addTearDown(keepAlive.close);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(PlaylistScreen(pid: created.pid), pushed: true),
-      ),
+    await pumpApp(
+      tester,
+      PlaylistScreen(pid: created.pid),
+      container: container,
+      pushed: true,
     );
-    await tester.pumpAndSettle();
     final gate = repo.removePlaylistItemGate = Completer<void>();
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(0)),
     );
     await tester.pump();
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const SizedBox.shrink(),
-      ),
-    );
+    await leaveScreen(tester, container);
     repo.playlistMembers[created.pid]!.removeAt(0);
     gate.complete();
     await tester.pumpAndSettle();
@@ -604,8 +591,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.playlistEntryMore(0)),
@@ -627,8 +613,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid, _second.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     // The row has to leave the tree with the gesture rather than with the
     // round trip: a Dismissible still built after its own dismissal
@@ -650,8 +635,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid, _second.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await _dragUp(tester, 1);
 
@@ -666,8 +650,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid, _second.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     // SliverReorderableList adds none of the move actions
     // ReorderableListView gives itself, so the rows declare them: a
@@ -685,8 +668,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid, _second.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await _dragUp(tester, 1);
 
@@ -720,8 +702,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.playlistAddField),
@@ -752,8 +733,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.playlistAddField),
@@ -776,20 +756,12 @@ void main() {
     repo.playlistsByPid['pl-COVERED'] = _covered();
     repo.playlistMembers['pl-COVERED'] = [_track.pid, _second.pid];
     final store = FakeArtworkStore();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          filePickerProvider.overrideWithValue(null),
-          artworkStoreProvider.overrideWithValue(store),
-        ],
-        child: routedHost(
-          const PlaylistScreen(pid: 'pl-COVERED'),
-          pushed: true,
-        ),
-      ),
+    await _pump(
+      tester,
+      repo,
+      const PlaylistScreen(pid: 'pl-COVERED'),
+      artwork: store,
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(0)),
@@ -820,17 +792,12 @@ void main() {
       updatedAt: DateTime.utc(2026),
     );
     final store = FakeArtworkStore();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          filePickerProvider.overrideWithValue(null),
-          artworkStoreProvider.overrideWithValue(store),
-        ],
-        child: routedHost(const AddToPlaylistSheet(item: _track), pushed: true),
-      ),
+    await _pump(
+      tester,
+      repo,
+      const AddToPlaylistSheet(item: _track),
+      artwork: store,
     );
-    await tester.pumpAndSettle();
     repo.playlistItemPageCalls.clear();
 
     await tester.tap(
@@ -863,8 +830,7 @@ void main() {
         limit: 50,
       ),
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     expect(find.text('Genre is Rock'), findsOneWidget);
     expect(find.text('Added at is in the last 90 days'), findsOneWidget);
@@ -899,8 +865,7 @@ void main() {
         ]),
       ),
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     expect(find.text('Nothing matches yet'), findsOneWidget);
     expect(
@@ -915,10 +880,7 @@ void main() {
     final repo = FakeRepository(items: const [_track]);
     repo.playlistsByPid['pl-THEIRS'] = _theirs();
     repo.playlistMembers['pl-THEIRS'] = [_track.pid];
-    await tester.pumpWidget(
-      _host(repo, const PlaylistScreen(pid: 'pl-THEIRS')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistScreen(pid: 'pl-THEIRS'));
 
     expect(find.text('Shared by Rosie'), findsOneWidget);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
@@ -943,10 +905,7 @@ void main() {
   testWidgets('rule editor builds a rule, previews, and saves', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 42);
-    await tester.pumpWidget(
-      _host(repo, const RuleEditorScreen(createName: 'Best of')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Best of'));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
     await tester.pumpAndSettle();
@@ -992,27 +951,24 @@ void main() {
       ),
     );
     Playlist? popped;
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: routedHost(
-          Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: ElevatedButton(
-                  onPressed: () async {
-                    popped = await context.push<Playlist>(
-                      WaxRoute.playlistEdit(created.pid),
-                      extra: created,
-                    );
-                  },
-                  child: const Text('edit'),
-                ),
-              ),
+    await mountApp(
+      tester,
+      Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: ElevatedButton(
+              onPressed: () async {
+                popped = await context.push<Playlist>(
+                  WaxRoute.playlistEdit(created.pid),
+                  extra: created,
+                );
+              },
+              child: const Text('edit'),
             ),
           ),
         ),
       ),
+      container: appContainer(repo: repo),
     );
     await tester.tap(find.text('edit'));
     await tester.pumpAndSettle();
@@ -1052,8 +1008,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpWidget(_host(repo, RuleEditorScreen(editing: created)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, RuleEditorScreen(editing: created));
 
     // It opens as an editable group rather than read-only, which is what
     // a `not` used to get.
@@ -1072,10 +1027,7 @@ void main() {
   testWidgets('rule editor sets a random limit mode', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 5);
-    await tester.pumpWidget(
-      _host(repo, const RuleEditorScreen(createName: 'Shuffle')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Shuffle'));
 
     await _pick(tester, SemanticsIds.ruleLimitMode, 'at random');
     await tester.enterText(
@@ -1100,10 +1052,7 @@ void main() {
   testWidgets('pinning a budget limit drops its sort order', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 3);
-    await tester.pumpWidget(
-      _host(repo, const RuleEditorScreen(createName: 'Hour')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Hour'));
 
     await _pick(tester, SemanticsIds.ruleLimitMode, 'by minutes');
     await tester.enterText(
@@ -1147,10 +1096,7 @@ void main() {
   testWidgets('the rule editor\'s save spins while it saves', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
-    await tester.pumpWidget(
-      _host(repo, const RuleEditorScreen(createName: 'Saving')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Saving'));
     final gate = repo.createPlaylistGate = Completer<void>();
     final save = waxControl<WaxButton>(SemanticsIds.ruleSave);
     await tester.tap(save);
@@ -1164,10 +1110,7 @@ void main() {
   testWidgets('a random limit with no count disables save', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
-    await tester.pumpWidget(
-      _host(repo, const RuleEditorScreen(createName: 'Blank')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Blank'));
 
     await _pick(tester, SemanticsIds.ruleLimitMode, 'at random');
 
@@ -1215,8 +1158,7 @@ void main() {
         sorts: [RuleSort(field: 'title', desc: false)],
       ),
     );
-    await tester.pumpWidget(_host(repo, RuleEditorScreen(editing: stale)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, RuleEditorScreen(editing: stale));
 
     expect(tester.takeException(), isNull);
     final picker = find.bySemanticsIdentifier(SemanticsIds.ruleSortField(0));
@@ -1239,8 +1181,7 @@ void main() {
         limitMode: 'weekly-rotation',
       ),
     );
-    await tester.pumpWidget(_host(repo, RuleEditorScreen(editing: future)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, RuleEditorScreen(editing: future));
 
     // The condition tree is representable, but the future limit mode is
     // not, so the whole rule opens read-only instead of crashing the
@@ -1263,10 +1204,7 @@ void main() {
         ]),
       ),
     );
-    await tester.pumpWidget(
-      _host(repo, const RuleEditorScreen(createName: 'The rest')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'The rest'));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
     await tester.pumpAndSettle();
@@ -1316,8 +1254,7 @@ void main() {
         ]),
       ),
     );
-    await tester.pumpWidget(_host(repo, RuleEditorScreen(editing: orphan)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, RuleEditorScreen(editing: orphan));
 
     expect(find.text('Unavailable list'), findsOneWidget);
 
@@ -1332,10 +1269,7 @@ void main() {
   testWidgets('rule editor builds a relative-date condition', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 7);
-    await tester.pumpWidget(
-      _host(repo, const RuleEditorScreen(createName: 'Recent')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Recent'));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
     await tester.pumpAndSettle();
@@ -1364,10 +1298,7 @@ void main() {
   ) async {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
-    await tester.pumpWidget(
-      _host(repo, const RuleEditorScreen(createName: 'Segments')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Segments'));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
     await tester.pumpAndSettle();
@@ -1408,8 +1339,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     // Clipboard rides the platform channel, which has no host in widget
     // tests; without a mock the copy await never completes.
@@ -1455,8 +1385,7 @@ void main() {
         ]),
       ),
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async => null,
@@ -1534,8 +1463,7 @@ void main() {
         ]),
       ),
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     Future<void> openMenu() async {
       await tester.tap(
@@ -1635,8 +1563,7 @@ void main() {
         ]),
       ),
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
@@ -1717,8 +1644,7 @@ void main() {
         ],
       );
     final created = await lossyPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async => null,
@@ -1745,8 +1671,7 @@ void main() {
     final repo = FakeRepository(items: const [_track])
       ..nspReport = lossyReport('00000000000000aa', 'Rock');
     final created = await lossyPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async => null,
@@ -1780,8 +1705,7 @@ void main() {
     final repo = FakeRepository(items: const [_track])
       ..nspReport = lossyReport('00000000000000aa', 'Rock').copyTruncated();
     final created = await lossyPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await exportAsNsp(tester);
 
@@ -1809,8 +1733,7 @@ void main() {
         ],
       );
     final created = await lossyPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await exportAsNsp(tester);
 
@@ -1849,8 +1772,7 @@ void main() {
       ])
       ..nspExportFailures.add(stale);
     final created = await lossyPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async => null,
@@ -1906,8 +1828,7 @@ void main() {
       ])
       ..nspExportFailures.addAll([stale, stale]);
     final created = await lossyPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await exportAsNsp(tester);
     for (var i = 0; i < 2; i++) {
@@ -1946,8 +1867,7 @@ void main() {
         ]),
       ),
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
@@ -1974,8 +1894,7 @@ void main() {
       kind: 'static',
       itemPids: [_track.pid],
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
@@ -1996,8 +1915,7 @@ void main() {
     final repo = FakeRepository(items: const [_track]);
     repo.playlistsByPid['pl-BARE'] = _covered(pid: 'pl-BARE', artUrl: null);
     repo.playlistMembers['pl-BARE'] = [_track.pid];
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     // The card is handed no artwork at all, which is what draws the
     // monogram rather than a broken image.
@@ -2011,10 +1929,7 @@ void main() {
     final repo = FakeRepository(items: const [_track]);
     repo.playlistsByPid['pl-COVERED'] = _covered();
     repo.playlistMembers['pl-COVERED'] = [_track.pid];
-    await tester.pumpWidget(
-      _host(repo, const PlaylistScreen(pid: 'pl-COVERED')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistScreen(pid: 'pl-COVERED'));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
@@ -2035,10 +1950,7 @@ void main() {
     final repo = FakeRepository(items: const [_track]);
     repo.playlistsByPid['pl-COVERED'] = _covered();
     repo.playlistMembers['pl-COVERED'] = [_track.pid];
-    await tester.pumpWidget(
-      _host(repo, const PlaylistScreen(pid: 'pl-COVERED')),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistScreen(pid: 'pl-COVERED'));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
@@ -2069,10 +1981,12 @@ void main() {
         openRead: ([int? start, int? end]) => Stream.value(bytes),
       ),
     );
-    await tester.pumpWidget(
-      _host(repo, const PlaylistScreen(pid: 'pl-COVERED'), picker: picker),
+    await _pump(
+      tester,
+      repo,
+      const PlaylistScreen(pid: 'pl-COVERED'),
+      picker: picker,
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
@@ -2105,10 +2019,12 @@ void main() {
             Stream<List<int>>.error(const FileSystemException('no such file')),
       ),
     );
-    await tester.pumpWidget(
-      _host(repo, const PlaylistScreen(pid: 'pl-COVERED'), picker: picker),
+    await _pump(
+      tester,
+      repo,
+      const PlaylistScreen(pid: 'pl-COVERED'),
+      picker: picker,
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
@@ -2133,21 +2049,19 @@ void main() {
       ..listPlaylistsGate = gate;
     // Opened as the app opens it, so the sheet's own height bound and
     // its transition are what the wait has to fit.
-    await tester.pumpWidget(
-      _host(
-        repo,
-        Builder(
-          builder: (context) => Center(
-            child: WaxButton(
-              label: 'Open',
-              onPressed: () =>
-                  unawaited(showAddToPlaylistSheet(context, item: _track)),
-            ),
+    await _pump(
+      tester,
+      repo,
+      Builder(
+        builder: (context) => Center(
+          child: WaxButton(
+            label: 'Open',
+            onPressed: () =>
+                unawaited(showAddToPlaylistSheet(context, item: _track)),
           ),
         ),
       ),
     );
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Open'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -2169,10 +2083,7 @@ void main() {
       itemPids: [_track.pid],
     );
     final empty = await repo.createPlaylist(name: 'Empty', kind: 'static');
-    await tester.pumpWidget(
-      _host(repo, const AddToPlaylistSheet(item: _track)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const AddToPlaylistSheet(item: _track));
 
     expect(find.text('Already in this list'), findsOneWidget);
 
@@ -2188,8 +2099,11 @@ void main() {
       'lists them', (tester) async {
     final repo = _ListsDown();
     await repo.createPlaylist(name: 'Empty', kind: 'static');
-    await tester.pumpWidget(
-      _host(repo, const AddToPlaylistSheet(item: _track)),
+    await mountApp(
+      tester,
+      const AddToPlaylistSheet(item: _track),
+      container: _container(repo),
+      pushed: true,
     );
     // Past the default ladder's ten attempts: the failure is final.
     await tester.pump(const Duration(seconds: 40));
@@ -2209,10 +2123,7 @@ void main() {
   testWidgets('a refused add is said inside the sheet', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     final gone = await repo.createPlaylist(name: 'Gone', kind: 'static');
-    await tester.pumpWidget(
-      _host(repo, const AddToPlaylistSheet(item: _track)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const AddToPlaylistSheet(item: _track));
     repo.playlistsByPid.remove(gone.pid);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.addToPlaylistTarget(gone.pid)),
@@ -2231,10 +2142,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository(items: const [_track]);
-    await tester.pumpWidget(
-      _host(repo, const AddToPlaylistSheet(item: _track)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const AddToPlaylistSheet(item: _track));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addToPlaylistNew));
     await tester.pumpAndSettle();
@@ -2264,10 +2172,7 @@ void main() {
         kind: 'static',
         itemPids: [_track.pid, _second.pid],
       );
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo);
       await container.read(playlistDetailProvider(created.pid).future);
 
       await expectLater(

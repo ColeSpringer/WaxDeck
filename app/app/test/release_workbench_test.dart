@@ -3,18 +3,15 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/metadata/release_workbench.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'row_finders.dart';
 
 const _album = 'al-01JZX5N8QW3F4V9T2B7KDALBUM';
@@ -106,17 +103,14 @@ Future<void> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(_bench(repo));
+  await _mount(tester, repo);
   await tester.pumpAndSettle();
 }
 
-Widget _bench(FakeRepository repo) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    audioEngineProvider.overrideWithValue(FakeEngine()),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-  child: routedHost(const ReleaseWorkbench(pid: _album)),
+Future<void> _mount(WidgetTester tester, FakeRepository repo) => mountApp(
+  tester,
+  const ReleaseWorkbench(pid: _album),
+  container: appContainer(repo: repo),
 );
 
 void main() {
@@ -128,7 +122,7 @@ void main() {
         tester.view.physicalSize = Size(width, height);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
-        await tester.pumpWidget(_bench(_repo()));
+        await _mount(tester, _repo());
         expect(tester.takeException(), isNull, reason: 'first frame');
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: 'settled');
@@ -141,7 +135,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repo = _repo()..getSessionGate = Completer<void>();
-    await tester.pumpWidget(_bench(repo));
+    await _mount(tester, repo);
     await tester.pump();
 
     expect(find.text('Only administrators can edit a release'), findsNothing);
@@ -159,7 +153,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final repo = _repo()..listItemsGate = Completer<void>();
-      await tester.pumpWidget(_bench(repo));
+      await _mount(tester, repo);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -181,7 +175,7 @@ void main() {
     repo.facetItems['album ${_album.substring(3)}'] = <ItemSummary>[
       for (var i = 0; i <= kQueueCap; i++) testItem('tr-$i', title: 'Track $i'),
     ];
-    await tester.pumpWidget(_bench(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     final container = ProviderScope.containerOf(
@@ -311,7 +305,7 @@ void main() {
     addTearDown(tester.view.reset);
     // Not settled: a retrying card's busy Try again keeps frames coming
     // for the whole backoff, so settling would sit through it.
-    await tester.pumpWidget(_bench(repo));
+    await _mount(tester, repo);
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();

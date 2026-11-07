@@ -156,11 +156,11 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 	}
 	src, err := s.svc.EnclosureStreamSource(r.Context(), user, pid)
 	if err != nil {
-		switch service.KindOf(err) {
+		switch s.kindOf(err) {
 		case service.KindNotFound, service.KindInvalid:
 			writeError(w, http.StatusNotFound, "not-found", "no streamable enclosure for "+pid)
 		case service.KindForbidden:
-			writeError(w, http.StatusForbidden, "forbidden", err.Error())
+			writeError(w, http.StatusForbidden, "forbidden", serviceMessage(err))
 		case service.KindMaintenance:
 			writeError(w, http.StatusServiceUnavailable, "catalog-maintenance", "the catalog is in maintenance; retry shortly")
 		default:

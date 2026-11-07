@@ -11,6 +11,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
@@ -48,7 +49,7 @@ void main() {
       final repo = FakeRepository()
         ..addSubscription(testShow(_showPid))
         ..episodesByShow[_showPid] = [testEpisode(_episodePid)];
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -78,7 +79,6 @@ void main() {
       await tester.tap(overline);
       await tester.pumpAndSettle();
       expect(find.byType(ShowScreen), findsOneWidget);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a long show name keeps to one line, and is spoken whole', (
@@ -94,7 +94,7 @@ void main() {
       final repo = FakeRepository()
         ..addSubscription(testShow(_showPid, title: name))
         ..episodesByShow[_showPid] = [testEpisode(_episodePid, artist: name)];
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -110,7 +110,6 @@ void main() {
       expect(line.didExceedMaxLines, isTrue);
       expect(tester.getSize(overline).height, WaxSpace.touchTarget);
       expect(tester.getSemantics(overline).label, contains(name));
-      await harness.endPlayback(tester);
     });
 
     testWidgets('names its regions in the reader\'s language', (tester) async {
@@ -133,7 +132,7 @@ void main() {
             ChapterMark(index: 0, title: 'Cold open', startMs: 0),
           ],
         );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(minutes: 4)),
@@ -144,7 +143,6 @@ void main() {
       for (final label in const ['Capítulos', 'Notas', 'Transcripción']) {
         expect(find.text(label), findsOneWidget, reason: label);
       }
-      await harness.endPlayback(tester);
     });
 
     testWidgets('numbers an untitled chapter in the reader\'s language', (
@@ -163,7 +161,7 @@ void main() {
           downloaded: true,
           chapters: const <ChapterMark>[ChapterMark(index: 0, startMs: 0)],
         );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(minutes: 4)),
@@ -173,7 +171,6 @@ void main() {
 
       expect(find.text('Capítulo 1'), findsWidgets);
       expect(find.text('Chapter 1'), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('offers notes, chapters, and a transcript as regions', (
@@ -209,7 +206,7 @@ void main() {
       final engine = FakeEngine(
         mediaDuration: const Duration(milliseconds: 214000),
       );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: engine,
@@ -248,7 +245,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(engine.position, const Duration(milliseconds: 12000));
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the bottom slot holds its height while the episode loads', (
@@ -260,7 +256,7 @@ void main() {
         ..episodesByShow[_showPid] = [testEpisode(_episodePid)]
         ..episodeDetails[_episodePid] = _detail(notes: '<p>Pipeweed.</p>')
         ..getEpisodeGate = gate;
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -275,7 +271,6 @@ void main() {
       // Width too: a slot that widens when the panel lands is a resize,
       // which the player reads as the column moving.
       expect(tester.getSize(region), loading);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('several regions keep the slot the load held', (tester) async {
@@ -297,7 +292,7 @@ void main() {
           ],
         )
         ..getEpisodeGate = gate;
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -313,7 +308,6 @@ void main() {
         findsOneWidget,
       );
       expect(tester.getSize(region).height, loading);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('an episode with nothing to show gives the slot up', (
@@ -325,7 +319,7 @@ void main() {
         ..episodesByShow[_showPid] = [testEpisode(_episodePid)]
         ..episodeDetails[_episodePid] = _detail()
         ..getEpisodeGate = gate;
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -337,7 +331,6 @@ void main() {
       gate.complete();
       await tester.pumpAndSettle();
       expect(tester.getSize(region).height, 0);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the transcript marks where a paused episode stands', (
@@ -401,7 +394,6 @@ void main() {
         ),
         isSemantics(isSelected: true),
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('voice boost persists per show and reopens the stream', (
@@ -413,7 +405,7 @@ void main() {
       final engine = FakeEngine(
         mediaDuration: const Duration(milliseconds: 214000),
       );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: engine,
@@ -435,7 +427,6 @@ void main() {
       // toggle is only honest if what is playing is reopened: a fresh
       // play-info is the request that carries it.
       expect(repo.playInfoCalls.length, mintsBefore + 1);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('voice boost spins while its change is in flight', (
@@ -446,7 +437,7 @@ void main() {
         ..addSubscription(testShow(_showPid))
         ..episodesByShow[_showPid] = [testEpisode(_episodePid)]
         ..putSubscriptionSettingsGate = gate;
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -466,7 +457,6 @@ void main() {
       gate.complete();
       await tester.pumpAndSettle();
       expect(tester.widget<WaxPill>(pill).busy, isFalse);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('voice boost explains itself once, and trimming says nothing', (
@@ -501,7 +491,6 @@ void main() {
       // message so a double press cannot say it twice.
       expect(harness.container.read(voiceBoostExplainedProvider), isTrue);
       await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
   });
 
@@ -510,7 +499,7 @@ void main() {
         'listener\'s language', (tester) async {
       final repo = FakeRepository()
         ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
@@ -520,7 +509,6 @@ void main() {
 
       expect(find.text('0 por ciento, quedan 1 h'), findsOneWidget);
       expect(find.textContaining('percent'), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('spans the chapter by default and the book on request', (
@@ -564,7 +552,7 @@ void main() {
 
       // The choice outlives the face: the next open of the player draws
       // the book again.
-      await tester.pumpWidget(const SizedBox.shrink());
+      await leaveScreen(tester, harness.container);
       await pumpPlayerInto(tester, harness);
       expect(
         tester.getSemantics(
@@ -572,7 +560,6 @@ void main() {
         ),
         isSemantics(isSelected: true),
       );
-      await harness.endPlayback(tester);
     });
 
     // A book's bar spans the book, so the envelope under it has to as
@@ -593,7 +580,7 @@ void main() {
           resolution: 8,
           peaks: List<int>.generate(8, (i) => 32 * (i + 1)),
         );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
@@ -612,7 +599,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(repo.waveformCalls, <String>[_bookPid]);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('reads zero, not a wrapped clock, before chapter one', (
@@ -629,7 +615,7 @@ void main() {
             ChapterMark(index: 1, title: 'Roast Mutton', startMs: 1800000),
           ],
         );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
@@ -642,7 +628,6 @@ void main() {
       // the bar has to hold the position inside the span it draws.
       expect(find.text('0:55'), findsNothing);
       expect(find.text('0:00'), findsWidgets);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a chaptered book keeps the slot held while it loads', (
@@ -678,14 +663,13 @@ void main() {
         findsOneWidget,
       );
       expect(tester.getSize(find.byType(SpokenBottomRegion)), held);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a start at its end begins the book again', (tester) async {
       final repo = FakeRepository()
         ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
       final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: engine,
@@ -693,7 +677,6 @@ void main() {
         positionMs: 3600000,
       );
       expect(engine.position, Duration.zero);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('lists its chapters with the one playing marked', (
@@ -709,12 +692,7 @@ void main() {
           ],
         );
       final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-      final harness = await pumpPlayer(
-        tester,
-        repo: repo,
-        engine: engine,
-        item: _book(),
-      );
+      await pumpPlayer(tester, repo: repo, engine: engine, item: _book());
 
       final playing = find.bySemanticsIdentifier(SemanticsIds.playerChapter(0));
       expect(tester.getSemantics(playing).label, contains('playing'));
@@ -724,7 +702,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(engine.position, const Duration(milliseconds: 1800000));
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a chapter jump the server cannot answer is said, and the '
@@ -782,7 +759,7 @@ void main() {
     ) async {
       final repo = FakeRepository()
         ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
@@ -809,7 +786,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerBookmarkSheet),
         findsOneWidget,
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the bookmark sheet waits within a short window', (
@@ -819,7 +795,7 @@ void main() {
       final repo = FakeRepository()
         ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000)
         ..listBookmarksGate = gate;
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
@@ -839,7 +815,6 @@ void main() {
       expect(tester.takeException(), isNull);
       gate.complete();
       await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the transcript waits within a short window', (tester) async {
@@ -868,7 +843,7 @@ void main() {
           cues: <TranscriptCue>[TranscriptCue(startMs: 0, text: 'Welcome.')],
         )
         ..getTranscriptGate = gate;
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -892,7 +867,6 @@ void main() {
       gate.complete();
       await tester.pumpAndSettle();
       expect(find.byType(SkeletonShapes), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     for (final height in const [390.0, 300.0]) {
@@ -918,7 +892,7 @@ void main() {
             hasTranscript: true,
             descriptionHtml: '<p>What the pipeweed trade was worth.</p>',
           );
-        final harness = await pumpPlayer(
+        await pumpPlayer(
           tester,
           repo: repo,
           engine: FakeEngine(
@@ -935,7 +909,6 @@ void main() {
           final rect = tester.getRect(find.bySemanticsIdentifier(id));
           expect(window.contains(rect.center), isTrue, reason: id);
         }
-        await harness.endPlayback(tester);
       });
     }
 
@@ -943,7 +916,7 @@ void main() {
       final repo = FakeRepository()
         ..addSubscription(testShow(_showPid))
         ..episodesByShow[_showPid] = [testEpisode(_episodePid)];
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -955,7 +928,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerBookmarks),
         findsNothing,
       );
-      await harness.endPlayback(tester);
     });
   });
 
@@ -966,12 +938,7 @@ void main() {
       final repo = FakeRepository()
         ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
       final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-      final harness = await pumpPlayer(
-        tester,
-        repo: repo,
-        engine: engine,
-        item: _book(),
-      );
+      await pumpPlayer(tester, repo: repo, engine: engine, item: _book());
       engine.advance(const Duration(minutes: 12));
       await tester.pump();
 
@@ -1017,7 +984,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerBookmark(0)),
         findsNothing,
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a new mark lands in timeline order, not at the end', (
@@ -1026,12 +992,7 @@ void main() {
       final repo = FakeRepository()
         ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
       final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-      final harness = await pumpPlayer(
-        tester,
-        repo: repo,
-        engine: engine,
-        item: _book(),
-      );
+      await pumpPlayer(tester, repo: repo, engine: engine, item: _book());
 
       var stood = Duration.zero;
       Future<void> markAt(Duration at) async {
@@ -1069,7 +1030,6 @@ void main() {
             .label,
         contains('5:00'),
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a mark made before the first read lands survives it', (
@@ -1078,12 +1038,7 @@ void main() {
       final repo = _SlowListRepo()
         ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
       final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-      final harness = await pumpPlayer(
-        tester,
-        repo: repo,
-        engine: engine,
-        item: _book(),
-      );
+      await pumpPlayer(tester, repo: repo, engine: engine, item: _book());
 
       // The button is drawn while the listing is still in flight, so a
       // quick tap-and-mark reaches the controller first. Pumped by hand
@@ -1113,7 +1068,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerBookmark(0)),
         findsOneWidget,
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a sheet dismissed mid-flight does not touch its field', (
@@ -1121,7 +1075,7 @@ void main() {
     ) async {
       final repo = _SlowCreateRepo()
         ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
@@ -1147,7 +1101,6 @@ void main() {
       // Clearing a disposed controller throws where the field is simply
       // no longer there to clear.
       expect(tester.takeException(), isNull);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a refused mark says why rather than appearing to land', (
@@ -1160,7 +1113,7 @@ void main() {
           message: 'this book already holds as many bookmarks as it can',
           statusCode: 400,
         );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
@@ -1184,7 +1137,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerBookmark(0)),
         findsNothing,
       );
-      await harness.endPlayback(tester);
     });
   });
 }

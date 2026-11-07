@@ -11,6 +11,7 @@ import '../l10n/l10n.dart';
 import '../music/album_detail.dart';
 import '../music/entity_facts.dart';
 import '../music/music_controllers.dart';
+import '../presenters/media_tiles.dart';
 import '../settings/client_prefs.dart';
 import '../settings/settings_registry.dart';
 import '../shell/async_box_face.dart';
@@ -644,12 +645,10 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
     return _cursorTint(
       cursor: _cursor == 0,
       child: MediaListRow(
-        data: MediaTileData(
-          title: album?.title ?? l10n.musicAlbumTitle,
-          subtitle: <String>[
-            if (album?.year case final year?) '$year',
-            l10n.musicTrackCount(album?.itemCount ?? trackCount),
-          ].join(' · '),
+        data: workbenchAlbumTile(
+          album,
+          trackCount: trackCount,
+          l10n: l10n,
           semanticsId: SemanticsIds.workbenchAlbumRow,
         ),
         selected: _twoPane && !_selecting && _open == null,
@@ -662,11 +661,8 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
     return _cursorTint(
       cursor: index == _cursor,
       child: MediaListRow(
-        data: MediaTileData(
-          title: track.title,
-          trailingText: formatTimecode(
-            Duration(milliseconds: track.durationMs),
-          ),
+        data: workbenchTrackTile(
+          track,
           semanticsId: SemanticsIds.workbenchRow(track.pid),
         ),
         leadingIndex: track.trackNumber ?? index,

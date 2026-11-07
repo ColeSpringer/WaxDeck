@@ -5,37 +5,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/libraries_screen.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
-ProviderContainer _container(FakeRepository repo) {
-  final container = ProviderContainer(
-    overrides: [repositoryProvider.overrideWithValue(repo)],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
-
-Widget _host(ProviderContainer container) => UncontrolledProviderScope(
-  container: container,
-  child: localizedHost(const LibrariesScreen()),
-);
+Future<void> _pumpScreen(WidgetTester tester, ProviderContainer container) =>
+    pumpApp(
+      tester,
+      const LibrariesScreen(),
+      container: container,
+      routed: false,
+    );
 
 /// Wide enough for the table to be a table rather than a card list, which
 /// the table test below holds it to.
-Future<void> _pump(WidgetTester tester, Widget host) async {
+Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
   tester.view.physicalSize = const Size(1300, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(host);
-  await tester.pumpAndSettle();
+  await _pumpScreen(tester, container);
 }
 
 void main() {
@@ -52,8 +45,8 @@ void main() {
         itemCount: 4210,
       ),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     expect(find.text('music'), findsWidgets);
     // findsWidgets: the add form's own path field hints with an example
@@ -78,8 +71,8 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.libraryName),
@@ -107,8 +100,8 @@ void main() {
   testWidgets('the managed switch says it lets WaxDeck move files there', (
     tester,
   ) async {
-    final container = _container(FakeRepository());
-    await _pump(tester, _host(container));
+    final container = appContainer();
+    await _pump(tester, container);
     // Chosen once, here: the table offers no switch for it afterwards.
     expect(find.bySemanticsIdentifier(SemanticsIds.libraryManaged), findsOne);
     expect(
@@ -121,13 +114,13 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository()..organizeManagedLibraries = 0;
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     container.listen(organizeProfilesProvider, (_, _) {});
     expect(
       (await container.read(organizeProfilesProvider.future)).managedLibraries,
       0,
     );
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
 
     repo.organizeManagedLibraries = 1;
     await tester.enterText(
@@ -154,8 +147,8 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.ensureVisible(
       find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
@@ -179,8 +172,8 @@ void main() {
     final repo = FakeRepository()
       ..createLibraryWarning =
           'streaming from this library is not available yet: sidecar refused';
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.libraryName),
@@ -211,8 +204,8 @@ void main() {
         readOnly: true,
       ),
     ]);
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     WaxSwitch readOnlySwitch(String pid) => tester.widget<WaxSwitch>(
       find.ancestor(
         of: find.bySemanticsIdentifier(SemanticsIds.libraryReadOnly(pid)),
@@ -267,8 +260,8 @@ void main() {
         managed: true,
       ),
     ]);
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.libraryFolderFallback('lb-2')),
@@ -298,8 +291,8 @@ void main() {
     repo.libraries.add(
       const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryFolderFallback('lb-1')),
     );
@@ -307,11 +300,8 @@ void main() {
 
     // Away and back: a fresh switch holds no value of its own, so what
     // it draws is the table's listing.
-    await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const SizedBox()),
-    );
-    await tester.pumpWidget(_host(container));
-    await tester.pumpAndSettle();
+    await leaveScreen(tester, container);
+    await _pumpScreen(tester, container);
     final folders = tester.widget<WaxSwitch>(
       find.ancestor(
         of: find.bySemanticsIdentifier(
@@ -336,8 +326,8 @@ void main() {
       ),
       LibraryInfo(pid: 'lb-p', name: 'podcasts', media: 'podcast'),
     ]);
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-p')),
       findsNothing,
@@ -406,7 +396,7 @@ void main() {
       ),
       LibraryInfo(pid: 'lb-m', name: 'music', path: '/srv/music'),
     ]);
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-b')),
@@ -442,8 +432,8 @@ void main() {
         media: 'mixed',
       ),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-1')),
     );
@@ -474,8 +464,8 @@ void main() {
         media: 'mixed',
       ),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-1')),
     );
@@ -511,7 +501,7 @@ void main() {
         path: '/srv/podcasts',
       ),
     );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     expect(
       find.bySemanticsIdentifier(SemanticsIds.libraryRow('lb-9')),
       findsOneWidget,
@@ -541,7 +531,7 @@ void main() {
         path: '/srv/podcasts',
       ),
     ]);
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     expect(
       find.bySemanticsIdentifier(SemanticsIds.libraryMatching('lb-9')),
       findsNothing,
@@ -570,15 +560,13 @@ void main() {
     repo.libraries.add(
       const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryReadOnly('lb-1')),
     );
     await tester.pump();
-    await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const SizedBox()),
-    );
+    await leaveScreen(tester, container);
     final reads = repo.listLibrariesCalls.length;
 
     gate.complete();
@@ -605,8 +593,8 @@ void main() {
       ),
       LibraryInfo(pid: 'lb-2', name: 'vinyl', path: '/srv/vinyl'),
     ]);
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.libraryProfile('lb-2')),
       findsNothing,
@@ -644,8 +632,8 @@ void main() {
     repo.libraries.add(
       const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-1')),
@@ -666,8 +654,8 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository()..createLibraryScanStarted = false;
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.libraryName),
@@ -700,8 +688,8 @@ void main() {
     repo.libraries.add(
       const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-1')),
@@ -727,7 +715,7 @@ void main() {
     repo.libraries.add(
       const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
     );
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
 
     final rescan = tester.widget<WaxIconButton>(
       waxControl<WaxIconButton>(SemanticsIds.libraryRescan('lb-1')),
@@ -743,8 +731,8 @@ void main() {
       LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
       LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
     ]);
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-2')),
@@ -794,8 +782,8 @@ void main() {
         configured: true,
       ),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     expect(find.text('Configured on the server'), findsOneWidget);
 
     await tester.tap(
@@ -821,8 +809,8 @@ void main() {
     repo.libraries.add(
       const LibraryInfo(pid: 'lb-p', name: 'podcasts', media: 'podcast'),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.libraryMenu('lb-p')),
       findsNothing,
@@ -863,8 +851,8 @@ void main() {
         readOnly: true,
       ),
     ]);
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     expect(find.text('Folder not reachable'), findsOneWidget);
     expect(
       find.text('Not writable by the server'),
@@ -881,8 +869,8 @@ void main() {
         message: 'the library path must be absolute',
         statusCode: 400,
       );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.libraryName),
       'shelf',
@@ -907,8 +895,8 @@ void main() {
 
   testWidgets('the absent-folder switch reaches the request', (tester) async {
     final repo = FakeRepository();
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.libraryName),
       'later',
@@ -952,8 +940,8 @@ void main() {
     repo.libraries.add(
       const LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
     );
-    final container = _container(repo);
-    await _pump(tester, _host(container));
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
     final countsRead = repo.listLibrariesCalls.where((c) => c).length;
     final jobsRead = repo.jobReads;
 
@@ -1007,10 +995,10 @@ void main() {
     repo.libraries.add(
       const LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
     );
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     // Read by the screens that list libraries without their counts.
     container.listen(librariesProvider, (_, _) {});
-    await _pump(tester, _host(container));
+    await _pump(tester, container);
     final listed = repo.listLibrariesCalls.where((c) => !c).length;
 
     await tester.tap(
@@ -1051,7 +1039,7 @@ void main() {
       LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
       LibraryInfo(pid: 'lb-3', name: 'tapes', path: '/srv/tapes'),
     ]);
-    await _pump(tester, _host(_container(repo)));
+    await _pump(tester, appContainer(repo: repo));
     expect(
       find.text('Actions'),
       findsOneWidget,
@@ -1073,12 +1061,11 @@ void main() {
       LibraryInfo(pid: 'lb-2', name: 'spare', path: '/srv/spare'),
       LibraryInfo(pid: 'lb-3', name: 'tapes', path: '/srv/tapes'),
     ]);
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(_host(container));
-    await tester.pumpAndSettle();
+    await _pumpScreen(tester, container);
 
     final trigger = find.bySemanticsIdentifier(
       SemanticsIds.libraryMenu('lb-2'),

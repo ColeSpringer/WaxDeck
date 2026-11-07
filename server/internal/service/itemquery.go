@@ -59,6 +59,16 @@ func archived(it *model.ItemView) bool {
 	return it != nil && it.State == model.StateArchived
 }
 
+// inTrash answers an item in the trash as missing to the paths that read
+// its bytes: its row stays and its files do not, so the catalog would
+// answer for a file pid the caller never named. Nil for any other item.
+func inTrash(it *model.ItemView, apiItemPID string) error {
+	if archived(it) {
+		return errNotFound("no item with pid " + apiItemPID)
+	}
+	return nil
+}
+
 // listableStates is the same rule as an allow-list, for the one
 // surface that takes states rather than a predicate:
 // read.SearchOptions.States. The fourth encoding named in `unarchived`

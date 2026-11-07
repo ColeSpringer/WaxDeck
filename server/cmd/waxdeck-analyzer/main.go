@@ -62,7 +62,7 @@ func main() {
 }
 
 func run() error {
-	env := envflag.New(flag.CommandLine)
+	env := envflag.New(flag.CommandLine, os.LookupEnv)
 	var (
 		baseURL = flag.String("url", envOr("WAXDECK_ANALYZER_URL", "http://localhost:4420"), "WaxDeck server base URL")
 		token   = flag.String("token", envOr("WAXDECK_ANALYZER_TOKEN", ""), "worker token (required; one of the server's WAXDECK_WORKER_TOKENS)")

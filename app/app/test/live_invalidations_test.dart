@@ -3,23 +3,20 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
 import 'package:waxdeck/src/player/entity_play_state_controller.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/player/play_state_controller.dart';
 import 'package:waxdeck/src/playlists/playlists_controller.dart';
 import 'package:waxdeck/src/podcasts/podcast_shelves.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/sync/live_invalidations.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// A channel whose connect resolves only when the test says so, which
@@ -89,16 +86,10 @@ _bindWeb() async {
     ..playPositions['tr-A'] = 1000
     ..playStateLastPlayedAt['tr-A'] = DateTime.utc(2026, 9, 30);
   final bus = ServerEventBus();
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-      serverEventBusProvider.overrideWithValue(bus),
-    ],
+  final container = appContainer(
+    repo: repo,
+    extra: [serverEventBusProvider.overrideWithValue(bus)],
   );
-  addTearDown(container.dispose);
   container
     ..listen(syncBinderProvider, (_, _) {})
     ..listen(prefsControllerProvider, (_, _) {})

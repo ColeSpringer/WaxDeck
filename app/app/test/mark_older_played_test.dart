@@ -5,14 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/podcasts/mark_older_played_dialog.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 
@@ -39,20 +37,11 @@ Future<ProviderContainer> _open(
   tester.view.physicalSize = const Size(900, 1800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-    ],
+  final container = await pumpApp(
+    tester,
+    const ShowScreen(pid: showPid),
+    container: appContainer(repo: repo),
   );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const ShowScreen(pid: showPid)),
-    ),
-  );
-  await tester.pumpAndSettle();
 
   await tester.tap(find.bySemanticsIdentifier(SemanticsIds.showOverflow));
   await tester.pumpAndSettle();

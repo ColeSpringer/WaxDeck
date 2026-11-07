@@ -1,18 +1,15 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 
@@ -53,17 +50,16 @@ void main() {
     tester.view.physicalSize = const Size(900, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
+    await pumpApp(
+      tester,
+      screen,
+      container: appContainer(
+        repo: repo,
+        extra: [
           if (picker != null) filePickerProvider.overrideWithValue(picker),
         ],
-        child: routedHost(screen),
       ),
     );
-    await tester.pumpAndSettle();
   }
 
   for (final on in <bool>[true, false]) {

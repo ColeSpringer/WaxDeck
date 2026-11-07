@@ -1,21 +1,14 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/connect_server_screen.dart';
 import 'package:waxdeck/src/auth/login_screen.dart';
 import 'package:waxdeck/src/auth/setup_screen.dart';
 import 'package:waxdeck/src/auth/signup_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
-
-Widget _host(Widget screen) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
-  child: routedHost(screen),
-);
 
 Finder _id(String id) => find.bySemanticsIdentifier(id);
 
@@ -27,7 +20,7 @@ Finder _under(String id, String message) => find.descendant(
 
 void main() {
   testWidgets('the login form is made of Wax controls', (tester) async {
-    await tester.pumpWidget(_host(const LoginScreen()));
+    await mountApp(tester, const LoginScreen());
     await tester.pump();
     for (final id in [SemanticsIds.loginUsername, SemanticsIds.loginPassword]) {
       expect(
@@ -41,11 +34,10 @@ void main() {
 
   testWidgets('the login button shows busy while signing in', (tester) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: routedHost(const LoginScreen()),
-      ),
+    await mountApp(
+      tester,
+      const LoginScreen(),
+      container: appContainer(repo: repo),
     );
     await tester.enterText(_id(SemanticsIds.loginUsername), 'admin');
     await tester.enterText(_id(SemanticsIds.loginPassword), 'nope');
@@ -62,7 +54,7 @@ void main() {
   testWidgets('the setup form flags each bad field on the field itself', (
     tester,
   ) async {
-    await tester.pumpWidget(_host(const SetupScreen()));
+    await mountApp(tester, const SetupScreen());
     await tester.pump();
     expect(waxControl<WaxButton>(SemanticsIds.setupSubmit), findsOneWidget);
     expect(
@@ -98,7 +90,7 @@ void main() {
   testWidgets('the signup form flags each bad field on the field itself', (
     tester,
   ) async {
-    await tester.pumpWidget(_host(const SignupScreen()));
+    await mountApp(tester, const SignupScreen());
     await tester.pump();
     expect(waxControl<WaxButton>(SemanticsIds.signupSubmit), findsOneWidget);
     expect(
@@ -128,7 +120,7 @@ void main() {
   });
 
   testWidgets('the connect screen is made of Wax controls', (tester) async {
-    await tester.pumpWidget(_host(const ConnectServerScreen()));
+    await mountApp(tester, const ConnectServerScreen());
     await tester.pump();
     expect(
       waxControl<WaxTextField>(SemanticsIds.connectServerAddress),

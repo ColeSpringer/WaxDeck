@@ -7,17 +7,15 @@ import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'player_host.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
@@ -35,14 +33,34 @@ FakeRepository _repo() => FakeRepository()
     ],
   );
 
-Widget _host(FakeRepository repo, FakeEngine engine, Widget home) =>
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(engine),
-      ],
-      child: localizedHost(home),
-    );
+/// The episode screen over [repo], one frame in. [show] opens it at
+/// its show's location. Unrouted unless [routed], the reverse of
+/// [mountApp]'s default: [routed] hosts it over the app's route table, for
+/// the cases that navigate.
+Future<void> _mount(
+  WidgetTester tester,
+  FakeRepository repo, {
+  String? show,
+  bool routed = false,
+}) => mountApp(
+  tester,
+  EpisodeScreen(pid: episodePid, showPid: show),
+  container: appContainer(repo: repo),
+  routed: routed,
+);
+
+/// [_mount], then settled. Returns the container the screen runs over.
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  FakeRepository repo, {
+  String? show,
+  bool routed = false,
+}) => pumpApp(
+  tester,
+  EpisodeScreen(pid: episodePid, showPid: show),
+  container: appContainer(repo: repo),
+  routed: routed,
+);
 
 void main() {
   group('a failed episode read', () {
@@ -52,9 +70,7 @@ void main() {
       tester,
     ) async {
       final repo = FakeRepository();
-      await tester.pumpWidget(
-        _host(repo, FakeEngine(), const EpisodeScreen(pid: episodePid)),
-      );
+      await _mount(tester, repo);
       await tester.pump();
       await tester.pump();
 
@@ -66,9 +82,7 @@ void main() {
 
     testWidgets('a dropped read still retries, drawn busy', (tester) async {
       final repo = _EpisodeDown();
-      await tester.pumpWidget(
-        _host(repo, FakeEngine(), const EpisodeScreen(pid: episodePid)),
-      );
+      await _mount(tester, repo);
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       await tester.pump();
@@ -84,10 +98,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo()..getTranscriptGate = Completer<void>();
-    await tester.pumpWidget(
-      _host(repo, FakeEngine(), const EpisodeScreen(pid: episodePid)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.tap(find.text('Transcript'));
     await tester.pump();
@@ -104,10 +115,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo();
-    await tester.pumpWidget(
-      _host(repo, FakeEngine(), const EpisodeScreen(pid: episodePid)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     // Nothing fetched until the section expands.
     expect(find.text('Welcome back to the inn'), findsNothing);
@@ -131,21 +139,14 @@ void main() {
         message: 'the transcript host did not answer',
         statusCode: 502,
       );
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     Future<void> openTranscript() async {
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: localizedHost(const EpisodeScreen(pid: episodePid)),
-        ),
+      await pumpApp(
+        tester,
+        const EpisodeScreen(pid: episodePid),
+        container: container,
+        routed: false,
       );
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Transcript'));
       await tester.pumpAndSettle();
       expect(find.text('Welcome back to the inn'), findsOneWidget);
@@ -153,12 +154,7 @@ void main() {
 
     await openTranscript();
     // Left and opened again: a screen of its own each time.
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: localizedHost(const SizedBox.shrink()),
-      ),
-    );
+    await leaveScreen(tester, container);
     await openTranscript();
 
     expect(repo.captureTranscriptCalls, <String>[episodePid]);
@@ -167,10 +163,7 @@ void main() {
   testWidgets('a cue tap without a matching player shows the timestamp', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _host(_repo(), FakeEngine(), const EpisodeScreen(pid: episodePid)),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo());
     await tester.tap(find.text('Transcript'));
     await tester.pumpAndSettle();
 
@@ -187,7 +180,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -210,7 +203,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(engine.position, const Duration(seconds: 30));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('leaving an episode opened from a link lands on the hub', (
@@ -218,16 +210,7 @@ void main() {
   ) async {
     // Nothing to pop, and the show-less location names no show to return
     // to, so the hub is the nearest real place.
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(_repo()),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-        child: routedHost(const EpisodeScreen(pid: episodePid)),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo(), routed: true);
 
     await tester.tap(find.bySemanticsLabel('Back'));
     await tester.pumpAndSettle();
@@ -239,18 +222,7 @@ void main() {
       'show', (tester) async {
     // The canonical location carries the show, so a stranger opening the
     // link gets the same back behaviour a tap from the list does.
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(_repo()),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-        child: routedHost(
-          const EpisodeScreen(pid: episodePid, showPid: showPid),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo(), show: showPid, routed: true);
 
     await tester.tap(find.bySemanticsLabel('Back'));
     await tester.pumpAndSettle();
@@ -270,14 +242,7 @@ void main() {
       ..episodesByShow[showPid] = <EpisodeSummary>[
         testEpisode(episodePid, artist: name),
       ];
-    await tester.pumpWidget(
-      _host(
-        repo,
-        FakeEngine(),
-        const EpisodeScreen(pid: episodePid, showPid: showPid),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, show: showPid);
 
     final link = find.ancestor(
       of: find.text(name),
@@ -295,22 +260,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repo = _repo();
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(
-          const EpisodeScreen(pid: episodePid, showPid: showPid),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+    final container = await _pump(tester, repo, show: showPid, routed: true);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.episodeQueue));
     await tester.pumpAndSettle();
@@ -366,18 +316,7 @@ void main() {
       ..episodesByShow[showPid] = <EpisodeSummary>[
         testEpisode(episodePid, downloaded: false, hasEnclosure: false),
       ];
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-        child: routedHost(
-          const EpisodeScreen(pid: episodePid, showPid: showPid),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, show: showPid, routed: true);
 
     expect(find.text('Fetch to play'), findsOneWidget);
     // Queueing something that cannot play is refused rather than
@@ -406,14 +345,7 @@ void main() {
       ..episodesByShow[showPid] = <EpisodeSummary>[
         testEpisode(episodePid, downloaded: false, fetchState: 'queued'),
       ];
-    await tester.pumpWidget(
-      _host(
-        repo,
-        FakeEngine(),
-        const EpisodeScreen(pid: episodePid, showPid: showPid),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, show: showPid);
 
     expect(find.byType(CodecChip), findsNothing);
     Finder pill(String label) =>
@@ -453,14 +385,7 @@ void main() {
           fetchError: 'the host refused',
         ),
       ];
-    await tester.pumpWidget(
-      _host(
-        repo,
-        FakeEngine(),
-        const EpisodeScreen(pid: episodePid, showPid: showPid),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, show: showPid);
 
     expect(find.byType(CodecChip), findsNothing);
     expect(find.text('Retry download'), findsOneWidget);
@@ -490,14 +415,7 @@ void main() {
           fetchError: 'the host refused',
         ),
       ];
-    await tester.pumpWidget(
-      _host(
-        repo,
-        FakeEngine(),
-        const EpisodeScreen(pid: episodePid, showPid: showPid),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, show: showPid);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.episodeFetch(episodePid)),
@@ -510,18 +428,7 @@ void main() {
   });
 
   testWidgets('tapping the show name goes to the show', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(_repo()),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-        child: routedHost(
-          const EpisodeScreen(pid: episodePid, showPid: showPid),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pump(tester, _repo(), show: showPid, routed: true);
 
     final link = find.ancestor(
       of: find.text('Barliman Butterbur'),

@@ -5,7 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
-import '../media_view.dart';
+import '../presenters/media_tiles.dart';
 import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -352,30 +352,13 @@ class TopEntryRow extends ConsumerWidget {
   final TopEntry entry;
   final String kind;
 
-  static WaxDomain _domain(String kind) => switch (kind) {
-    'shows' => WaxDomain.podcasts,
-    'stations' => WaxDomain.radio,
-    _ => WaxDomain.music,
-  };
-
   @override
   Widget build(BuildContext context, WidgetRef ref) => MediaListRow(
-    data: MediaTileData(
-      // An entry outlives the thing it counted: a track deleted since,
-      // a station taken out of the library. The time it holds is real
-      // and stays in the ranking, so it needs a name to stand under -
-      // the same one the listen log gives a row in the same state,
-      // rather than a blank line where a title goes.
-      title: entry.name.isEmpty ? context.l10n.statsLogRemovedItem : entry.name,
-      subtitle: context.l10n.statsPlays(entry.plays),
-      artwork: waxArtwork(ref.watch(artworkStoreProvider), entry.artUrl),
-      domain: _domain(kind),
-      // An artist reads as a disc, the way every other artist row in the
-      // app does; an album and a show are square by nature.
-      shape: kind == 'artists' || kind == 'genres'
-          ? ArtworkShape.circle
-          : ArtworkShape.square,
-      trailingText: context.l10n.formatListenTime(entry.ms),
+    data: topEntryTile(
+      entry,
+      kind,
+      l10n: context.l10n,
+      store: ref.watch(artworkStoreProvider),
       semanticsId: SemanticsIds.topEntry(index),
     ),
     // The rank, in the slot the row already has for one, so it lines up

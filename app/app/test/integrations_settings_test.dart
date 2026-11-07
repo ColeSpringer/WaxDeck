@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// Override lives here rather than in the root library.
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/auth/oidc_flow.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/settings/integrations_sections.dart';
@@ -12,8 +13,8 @@ import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
 /// The switch inside one event row. The key names the row; the control
@@ -30,12 +31,16 @@ const _admin = WaxDeckUser(
   roles: ['admin'],
 );
 
-Widget _host(FakeRepository repo, Widget child) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-  child: localizedHost(Scaffold(body: ListView(children: [child]))),
+Future<void> _mount(
+  WidgetTester tester,
+  FakeRepository repo,
+  Widget child, {
+  List<Override> extra = const <Override>[],
+}) => mountApp(
+  tester,
+  Scaffold(body: ListView(children: [child])),
+  container: appContainer(repo: repo, extra: extra),
+  routed: false,
 );
 
 FakeRepository _adminRepo() => FakeRepository(
@@ -73,7 +78,11 @@ class _ReadsDown extends FakeRepository {
 
   final Set<String> down;
 
+  /// How many times each read has been asked, failed or not.
+  final reads = <String, int>{};
+
   Future<T> _read<T>(String name, Future<T> Function() read) async {
+    reads[name] = (reads[name] ?? 0) + 1;
     if (down.contains(name)) {
       throw const WaxDeckApiException(
         code: 'internal',
@@ -230,7 +239,7 @@ void main() {
     ) async {
       useShortWindow(tester);
       final repo = _Holding()..holdScrobblers = true;
-      await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+      await _mount(tester, repo, const ScrobblingSection());
       await tester.pump();
       expectSkeletonNotSpinner();
     });
@@ -240,7 +249,7 @@ void main() {
     ) async {
       useShortWindow(tester);
       final repo = _Holding()..holdAppPasswords = true;
-      await tester.pumpWidget(_host(repo, const AppPasswordsSection()));
+      await _mount(tester, repo, const AppPasswordsSection());
       await tester.pump();
       expectSkeletonNotSpinner();
     });
@@ -250,9 +259,7 @@ void main() {
     ) async {
       useShortWindow(tester);
       final repo = _Holding()..holdTargets = true;
-      await tester.pumpWidget(
-        _host(repo, const PersonalNotificationTargetsSection()),
-      );
+      await _mount(tester, repo, const PersonalNotificationTargetsSection());
       await tester.pump();
       expectSkeletonNotSpinner();
     });
@@ -262,9 +269,7 @@ void main() {
     ) async {
       useShortWindow(tester);
       final repo = _Holding()..holdCatalog = true;
-      await tester.pumpWidget(
-        _host(repo, const PersonalNotificationTargetsSection()),
-      );
+      await _mount(tester, repo, const PersonalNotificationTargetsSection());
       await tester.pumpAndSettle();
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd),
@@ -280,7 +285,7 @@ void main() {
       final repo = _Holding(
         sessionState: const SessionState(authenticated: true, user: _admin),
       )..holdLastfmConfig = true;
-      await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+      await _mount(tester, repo, const ScrobblingSection());
       await tester.pumpAndSettle();
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
@@ -292,7 +297,7 @@ void main() {
 
   testWidgets('connects ListenBrainz through the token dialog', (tester) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await _mount(tester, repo, const ScrobblingSection());
     await tester.pumpAndSettle();
 
     expect(find.text('Needs server API credentials'), findsOneWidget);
@@ -335,7 +340,7 @@ void main() {
         code: 'invalid-request',
         message: 'the service did not accept this token',
       );
-    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await _mount(tester, repo, const ScrobblingSection());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -366,7 +371,7 @@ void main() {
         code: 'service-unreachable',
         message: 'listenbrainz: dial tcp: i/o timeout',
       );
-    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await _mount(tester, repo, const ScrobblingSection());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -392,7 +397,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo, const AppPasswordsSection()));
+    await _mount(tester, repo, const AppPasswordsSection());
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.appPasswordAdd));
@@ -415,9 +420,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(
-      _host(repo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     expect(find.text('No notification targets yet'), findsOneWidget);
 
@@ -471,9 +474,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(
-      _host(repo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
@@ -528,9 +529,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(
-      _host(repo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
@@ -558,9 +557,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(
-      _host(repo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
@@ -579,9 +576,7 @@ void main() {
         code: 'invalid-request',
         message: 'the destination resolves to a private address',
       );
-    await tester.pumpWidget(
-      _host(repo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
@@ -607,9 +602,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(
-      _host(repo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
@@ -625,9 +618,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final adminRepo = _adminRepo();
-    await tester.pumpWidget(
-      _host(adminRepo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, adminRepo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
@@ -651,9 +642,7 @@ void main() {
     );
     final repo = FakeRepository()
       ..notifyEvents = [...FakeRepository().notifyEvents, work];
-    await tester.pumpWidget(
-      _host(repo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
@@ -666,9 +655,7 @@ void main() {
 
     final adminRepo = _adminRepo()
       ..notifyEvents = [...FakeRepository().notifyEvents, work];
-    await tester.pumpWidget(
-      _host(adminRepo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, adminRepo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
@@ -687,9 +674,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repo = _adminRepo();
-    await tester.pumpWidget(
-      _host(repo, const ServerNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const ServerNotificationTargetsSection());
     await tester.pumpAndSettle();
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.notifyServerTargetAdd),
@@ -743,9 +728,7 @@ void main() {
           createdAt: DateTime.utc(2026),
         ),
       );
-    await tester.pumpWidget(
-      _host(repo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('notify-target-test-nt-SEED')));
@@ -785,9 +768,7 @@ void main() {
           lastErrorAt: DateTime.utc(2026, 7, 22),
         ),
       );
-    await tester.pumpWidget(
-      _host(repo, const PersonalNotificationTargetsSection()),
-    );
+    await _mount(tester, repo, const PersonalNotificationTargetsSection());
     await tester.pumpAndSettle();
     expect(find.textContaining('delivery answered status 401'), findsOneWidget);
   });
@@ -808,7 +789,7 @@ void main() {
           lastErrorAt: DateTime.utc(2026, 7, 19),
         ),
       ];
-    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await _mount(tester, repo, const ScrobblingSection());
     await tester.pumpAndSettle();
 
     expect(
@@ -828,7 +809,7 @@ void main() {
           lastSuccessAt: DateTime.utc(2026, 7, 19),
         ),
       ];
-    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await _mount(tester, repo, const ScrobblingSection());
     await tester.pumpAndSettle();
     expect(find.text('Connected as listener, delivering'), findsOneWidget);
   });
@@ -837,7 +818,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await _mount(tester, repo, const ScrobblingSection());
     await tester.pumpAndSettle();
 
     expect(
@@ -854,7 +835,7 @@ void main() {
     tester,
   ) async {
     final repo = _adminRepo();
-    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await _mount(tester, repo, const ScrobblingSection());
     await tester.pumpAndSettle();
 
     // No credentials yet: the dead Connect gives way to the setup entry.
@@ -902,7 +883,7 @@ void main() {
     tester,
   ) async {
     final repo = _adminRepo();
-    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await _mount(tester, repo, const ScrobblingSection());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -948,7 +929,7 @@ void main() {
           connected: false,
         ),
       ];
-    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await _mount(tester, repo, const ScrobblingSection());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -999,9 +980,7 @@ void main() {
       addTearDown(
         tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
       );
-      await tester.pumpWidget(
-        _host(repo, const PersonalNotificationTargetsSection()),
-      );
+      await _mount(tester, repo, const PersonalNotificationTargetsSection());
       await tester.pumpAndSettle();
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.notifyTargetTest('nt-T')),
@@ -1076,7 +1055,7 @@ void main() {
       'retries', (tester) async {
     // The app's own retry left on: while an attempt runs the read is
     // loading and still carries the last error.
-    await tester.pumpWidget(_host(_ConfigDown(), const ScrobblingSection()));
+    await _mount(tester, _ConfigDown(), const ScrobblingSection());
     await tester.pumpAndSettle();
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
@@ -1098,6 +1077,23 @@ void main() {
 
   group('a read that fails for good says why and asks again', () {
     final en = AppLocalizationsEn();
+
+    // A retry is a timer that re-reads on the next frame, so the ladder
+    // (0.2 s doubling to 6.4 s, ten retries) takes one pump per rung. Each
+    // pump here outlasts the longest delay: one that draws no new read
+    // means no retry is pending.
+    Future<void> spendRetries(
+      WidgetTester tester,
+      _ReadsDown repo,
+      String read,
+    ) async {
+      for (var i = 0; i < 30; i++) {
+        final before = repo.reads[read];
+        await tester.pump(const Duration(seconds: 7));
+        if (repo.reads[read] == before) return;
+      }
+      fail('the retries of $read never ran out');
+    }
 
     for (final (read, section, title, after) in [
       (
@@ -1121,10 +1117,9 @@ void main() {
     ]) {
       testWidgets(read, (tester) async {
         final repo = _ReadsDown({read});
-        await tester.pumpWidget(_host(repo, section));
-        // Past the default ladder's ten attempts: the failure is final.
-        await tester.pump(const Duration(seconds: 40));
-        await tester.pump();
+        await _mount(tester, repo, section);
+        await spendRetries(tester, repo, read);
+        final spent = repo.reads[read];
 
         expect(find.text(title), findsOneWidget);
         expect(find.text(en.errorInternal), findsOneWidget);
@@ -1135,6 +1130,7 @@ void main() {
         await tester.tap(retry);
         await tester.pumpAndSettle();
         expect(find.text(after), findsOneWidget);
+        expect(repo.reads[read], spent! + 1, reason: 'the press read once');
       });
     }
 
@@ -1143,38 +1139,46 @@ void main() {
         ..scrobblers = const [
           Scrobbler(service: 'lastfm', available: false, connected: false),
         ];
-      await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+      await _mount(tester, repo, const ScrobblingSection());
       await tester.pumpAndSettle();
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.scrobblerSetupLastfm),
       );
-      await tester.pump(const Duration(seconds: 40));
-      await tester.pump();
+      await spendRetries(tester, repo, 'lastfm');
+      final spent = repo.reads['lastfm'];
 
       expect(find.text(en.errorInternal), findsOneWidget);
+      final retry = find.widgetWithText(WaxButton, 'Retry');
+      expect(tester.widget<WaxButton>(retry).busy, isFalse);
       repo.down.clear();
-      await tester.tap(find.widgetWithText(WaxButton, 'Retry'));
+      await tester.tap(retry);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('lastfm-api-key-field')), findsOneWidget);
+      expect(repo.reads['lastfm'], spent! + 1, reason: 'the press read once');
     });
 
     testWidgets('the event checklist, in the target editor', (tester) async {
       final repo = _ReadsDown({'catalog'});
-      await tester.pumpWidget(
-        _host(repo, const PersonalNotificationTargetsSection()),
-      );
+      await _mount(tester, repo, const PersonalNotificationTargetsSection());
       await tester.pumpAndSettle();
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd),
       );
-      await tester.pump(const Duration(seconds: 40));
-      await tester.pump();
+      await spendRetries(tester, repo, 'catalog');
+      final spent = repo.reads['catalog'];
+      final switches = find.byType(WaxSwitch).evaluate().length;
 
       expect(find.text(en.errorInternal), findsOneWidget);
       repo.down.clear();
-      await tester.tap(find.widgetWithText(WaxButton, 'Retry'));
+      // The banner is scrolled out of the editor's view.
+      final retry = find.widgetWithText(WaxButton, 'Retry');
+      await tester.ensureVisible(retry);
+      await tester.pump();
+      await tester.tap(retry);
       await tester.pumpAndSettle();
       expect(find.byType(WaxSwitch), findsWidgets);
+      expect(find.byType(WaxSwitch).evaluate().length, greaterThan(switches));
+      expect(repo.reads['catalog'], spent! + 1, reason: 'the press read once');
     });
   });
 
@@ -1189,19 +1193,11 @@ void main() {
             Scrobbler(service: 'lastfm', available: true, connected: connected),
           ];
         final opener = _Opener();
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              repositoryProvider.overrideWithValue(repo),
-              credentialStoreProvider.overrideWithValue(
-                InMemoryCredentialStore(),
-              ),
-              urlOpenerProvider.overrideWithValue(opener),
-            ],
-            child: localizedHost(
-              Scaffold(body: ListView(children: const [ScrobblingSection()])),
-            ),
-          ),
+        await _mount(
+          tester,
+          repo,
+          const ScrobblingSection(),
+          extra: [urlOpenerProvider.overrideWithValue(opener)],
         );
         await tester.pumpAndSettle();
         WaxButton button() =>
@@ -1210,7 +1206,7 @@ void main() {
         await tester.tap(find.bySemanticsIdentifier(id));
         await tester.pump();
         expect(button().busy, isTrue);
-        await tester.tap(find.bySemanticsIdentifier(id), warnIfMissed: false);
+        await tester.tap(find.bySemanticsIdentifier(id));
         await tester.pump();
         expect(repo.asked, 1);
 
@@ -1269,7 +1265,7 @@ void main() {
       testWidgets('$name goes only once confirmed', (tester) async {
         final repo = FakeRepository();
         seed(repo);
-        await tester.pumpWidget(_host(repo, section));
+        await _mount(tester, repo, section);
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(press));
@@ -1290,7 +1286,7 @@ void main() {
           'press while it is out', (tester) async {
         final repo = _FailingDeletes();
         seed(repo);
-        await tester.pumpWidget(_host(repo, section));
+        await _mount(tester, repo, section);
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(press));
@@ -1300,7 +1296,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(tester.widget<WaxIconButton>(find.byKey(press)).busy, isTrue);
-        await tester.tap(find.byKey(press), warnIfMissed: false);
+        await tester.tap(find.byKey(press));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byType(AlertDialog), findsNothing);

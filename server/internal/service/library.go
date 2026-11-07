@@ -1262,6 +1262,9 @@ func (l *Library) JobStatus(ctx context.Context, apiJobPID string) (Job, error) 
 	}
 	job, err := l.lib.Job(ctx, pid)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return Job{}, errNotFound("no job with pid " + apiJobPID)
+		}
 		return Job{}, classify(err)
 	}
 	out := []Job{jobDTO(job)}
@@ -1568,6 +1571,9 @@ func (l *Library) getItem(ctx context.Context, apiItemPID string) (*model.ItemVi
 	}
 	it, err := l.lib.Get(ctx, pid)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return nil, errNotFound("no item with pid " + apiItemPID)
+		}
 		return nil, classify(err)
 	}
 	if !prefixFitsKind(prefix, it.Kind) {

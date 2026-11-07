@@ -1,7 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/connect/remote_session.dart';
 import 'package:waxdeck/src/desktop/desktop_ports.dart';
 import 'package:waxdeck/src/desktop/desktop_ports_io.dart'
@@ -21,6 +20,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
 import 'player_host.dart';
@@ -84,13 +84,12 @@ final _held = NotifierProvider<_HeldSlot, NowPlayingSlot>(_HeldSlot.new);
 
 ({ProviderContainer container, _Titles titles}) _bound() {
   final titles = _Titles();
-  final container = ProviderContainer(
-    overrides: [
+  final container = appContainer(
+    extra: [
       windowTitlePortProvider.overrideWithValue(titles),
       nowPlayingSlotProvider.overrideWith((ref) => ref.watch(_held)),
     ],
   );
-  addTearDown(container.dispose);
   container.listen(windowTitleBinderProvider, (_, _) {});
   return (container: container, titles: titles);
 }
@@ -98,16 +97,11 @@ final _held = NotifierProvider<_HeldSlot, NowPlayingSlot>(_HeldSlot.new);
 ({ProviderContainer container, _Titles titles}) _live() {
   final titles = _Titles();
   final repo = FakeRepository(items: [testItem(_a), testItem(_b)]);
-  final container = ProviderContainer(
-    overrides: [
-      windowTitlePortProvider.overrideWithValue(titles),
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(
-        FakeEngine(mediaDuration: const Duration(minutes: 3)),
-      ),
-    ],
+  final container = appContainer(
+    repo: repo,
+    engine: FakeEngine(mediaDuration: const Duration(minutes: 3)),
+    extra: [windowTitlePortProvider.overrideWithValue(titles)],
   );
-  addTearDown(container.dispose);
   container.listen(windowTitleBinderProvider, (_, _) {});
   return (container: container, titles: titles);
 }
@@ -427,13 +421,7 @@ void main() {
           trayPortProvider.overrideWithValue(const NoTray()),
         ],
       );
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const WaxDeckApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await pumpWholeApp(tester, container: container);
 
       final harness = PlayerHarness(container)..play([testItem(_a)]);
       await tester.pumpAndSettle();

@@ -50,10 +50,7 @@ func requireWorker(ctx context.Context) error {
 }
 
 func (s *Server) GetSimilarityStatus(ctx context.Context, _ GetSimilarityStatusRequestObject) (GetSimilarityStatusResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	st, err := s.svc.SimilarityStatusFor(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -82,9 +79,9 @@ func (s *Server) PullSimilarityWork(ctx context.Context, req PullSimilarityWorkR
 	if err := requireWorker(ctx); err != nil {
 		return nil, err
 	}
-	limit, ok := pageLimit(req.Params.Limit, 10, 50)
-	if !ok {
-		return nil, &service.Error{Kind: service.KindInvalid, Msg: "limit must be between 1 and 50"}
+	limit, err := pageLimit(req.Params.Limit, 10, 50)
+	if err != nil {
+		return nil, err
 	}
 	// A lease spends one of the few attempts a track gets, and while the
 	// engine is away a worker could not fetch the audio it names: nothing
@@ -117,28 +114,27 @@ func (s *Server) ReportEmbeddings(ctx context.Context, req ReportEmbeddingsReque
 	if err := requireWorker(ctx); err != nil {
 		return nil, err
 	}
-	if req.Body == nil || len(req.Body.Embeddings) == 0 {
-		return ReportEmbeddings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "embeddings must not be empty"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
+	}
+	if len(req.Body.Embeddings) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "embeddings must not be empty")
 	}
 	if len(req.Body.Embeddings) > 100 {
-		return ReportEmbeddings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "at most 100 embeddings per report"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "at most 100 embeddings per report")
 	}
 	if req.Body.Dims < 8 || req.Body.Dims > 4096 {
-		return ReportEmbeddings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "dims must be between 8 and 4096"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "dims must be between 8 and 4096")
 	}
 	if req.Body.Model == "" || len(req.Body.Model) > 128 {
-		return ReportEmbeddings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "model must be between 1 and 128 characters"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "model must be between 1 and 128 characters")
 	}
 	batch := make([]service.EmbeddingUpload, 0, len(req.Body.Embeddings))
 	for _, e := range req.Body.Embeddings {
 		batch = append(batch, service.EmbeddingUpload{PID: e.Pid, Essence: e.Essence, Vector: e.Vector})
 	}
 	res, err := s.svc.IngestEmbeddings(ctx, req.Body.Model, req.Body.Dims, batch)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		return ReportEmbeddings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	out := EmbeddingIngestResult{Accepted: res.Accepted, Replaced: res.Replaced}

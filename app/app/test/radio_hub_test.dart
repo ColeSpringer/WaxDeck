@@ -6,15 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Override lives here rather than in the root library.
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -22,9 +18,9 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'disclosure_glyph.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'secondary_click.dart';
 import 'wax_finders.dart';
 
@@ -77,23 +73,14 @@ ProviderContainer _container(
   /// provider with its own retry setting keeps it: that wins over the
   /// container's.
   bool retryFailures = true,
-}) {
-  final container = ProviderContainer(
-    retry: retryFailures ? ProviderContainer.defaultRetry : (_, _) => null,
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(engine ?? FakeEngine()),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      clientSettingsStoreProvider.overrideWithValue(
-        MemoryClientSettingsStore(),
-      ),
-      if (artwork != null) artworkStoreProvider.overrideWithValue(artwork),
-      ...extra,
-    ],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
+}) => appContainer(
+  repo: repo,
+  engine: engine,
+  artwork: artwork,
+  settings: MemoryClientSettingsStore(),
+  extra: extra,
+  retry: retryFailures ? ProviderContainer.defaultRetry : (_, _) => null,
+);
 
 /// Opens a station tile's overflow the way a person does.
 ///
@@ -136,13 +123,11 @@ Future<void> _pumpHub(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(_reducedMotion(const RadioScreen())),
-    ),
+  await pumpApp(
+    tester,
+    _reducedMotion(const RadioScreen()),
+    container: container,
   );
-  await tester.pumpAndSettle();
 }
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
@@ -1049,19 +1034,15 @@ void main() {
       WidgetTester tester,
       ProviderContainer container,
     ) async {
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          // At the location it publishes to, so typing keeps the chip:
-          // hosted anywhere else, the settled query replaces the page and
-          // a fresh screen resets the filter.
-          child: routedHost(
-            _reducedMotion(const SearchScreen()),
-            at: WaxRoute.search,
-          ),
-        ),
+      await pumpApp(
+        tester,
+        _reducedMotion(const SearchScreen()),
+        container: container,
+        // At the location it publishes to, so typing keeps the chip:
+        // hosted anywhere else, the settled query replaces the page and
+        // a fresh screen resets the filter.
+        at: WaxRoute.search,
       );
-      await tester.pumpAndSettle();
     }
 
     testWidgets('searches the directory and offers to add each result', (

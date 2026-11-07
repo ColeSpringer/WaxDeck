@@ -24,9 +24,6 @@ import (
 // --- internet radio ---------------------------------------------------------------
 
 func (s *Server) ListRadioStations(ctx context.Context, _ ListRadioStationsRequestObject) (ListRadioStationsResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
-	}
 	stations, err := s.svc.RadioStations(ctx)
 	if err != nil {
 		return nil, err
@@ -40,12 +37,9 @@ func (s *Server) ListRadioStations(ctx context.Context, _ ListRadioStationsReque
 
 func (s *Server) CreateRadioStation(ctx context.Context, req CreateRadioStationRequestObject) (CreateRadioStationResponseObject, error) {
 	if req.Body == nil {
-		return CreateRadioStation400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	st, err := s.svc.CreateRadioStation(ctx, uc, radioEditFromWire(*req.Body))
 	if err != nil {
 		return nil, err
@@ -54,9 +48,6 @@ func (s *Server) CreateRadioStation(ctx context.Context, req CreateRadioStationR
 }
 
 func (s *Server) GetRadioStation(ctx context.Context, req GetRadioStationRequestObject) (GetRadioStationResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
-	}
 	st, err := s.svc.RadioStationByPID(ctx, req.Pid)
 	if err != nil {
 		return nil, err
@@ -66,10 +57,7 @@ func (s *Server) GetRadioStation(ctx context.Context, req GetRadioStationRequest
 
 func (s *Server) UpdateRadioStation(ctx context.Context, req UpdateRadioStationRequestObject) (UpdateRadioStationResponseObject, error) {
 	if req.Body == nil {
-		return UpdateRadioStation400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
-	}
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
+		return nil, errNoBody()
 	}
 	st, err := s.svc.UpdateRadioStation(ctx, req.Pid, radioEditFromWire(*req.Body))
 	if err != nil {
@@ -79,9 +67,6 @@ func (s *Server) UpdateRadioStation(ctx context.Context, req UpdateRadioStationR
 }
 
 func (s *Server) DeleteRadioStation(ctx context.Context, req DeleteRadioStationRequestObject) (DeleteRadioStationResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
-	}
 	if err := s.svc.DeleteRadioStation(ctx, req.Pid); err != nil {
 		return nil, err
 	}
@@ -89,10 +74,8 @@ func (s *Server) DeleteRadioStation(ctx context.Context, req DeleteRadioStationR
 }
 
 func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoRequestObject) (GetRadioPlayInfoResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
+	p, _ := principalFromContext(ctx)
 	station, err := s.svc.RadioStationByPID(ctx, req.Pid)
 	if err != nil {
 		return nil, err
@@ -155,17 +138,8 @@ const (
 )
 
 func (s *Server) GetRadioStationLogo(ctx context.Context, req GetRadioStationLogoRequestObject) (GetRadioStationLogoResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
-	}
 	logo, err := s.svc.RadioStationLogo(ctx, req.Pid)
 	if err != nil {
-		// Every way there is nothing to draw is a 404, including a station
-		// that does not exist: the caller renders a monogram either way,
-		// and the service has already collapsed the fetch failures.
-		if service.KindOf(err) == service.KindNotFound {
-			return GetRadioStationLogo404JSONResponse(errObj("not-found", "no logo for station "+req.Pid)), nil
-		}
 		return nil, err
 	}
 	cacheControl := radioLogoCacheControl
@@ -199,16 +173,13 @@ func (s *Server) GetRadioStationLogo(ctx context.Context, req GetRadioStationLog
 }
 
 func (s *Server) GetRadioNowPlayingArt(ctx context.Context, req GetRadioNowPlayingArtRequestObject) (GetRadioNowPlayingArtResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
-	}
 	art, err := s.svc.RadioNowPlayingArt(req.Params.V)
 	if err != nil {
 		// Same collapse as the logo: nothing announced, nothing parsed,
 		// the rung off, the lookup not landed, upstream empty - the
 		// client falls back the same way for all of them.
 		if service.KindOf(err) == service.KindNotFound {
-			return GetRadioNowPlayingArt404JSONResponse(errObj("not-found", "no now-playing artwork for station "+req.Pid)), nil
+			return nil, refuse(http.StatusNotFound, "not-found", "no now-playing artwork for station "+req.Pid)
 		}
 		return nil, err
 	}
@@ -243,13 +214,10 @@ func (s *Server) GetRadioNowPlayingArt(ctx context.Context, req GetRadioNowPlayi
 }
 
 func (s *Server) ListRadioSavedSongs(ctx context.Context, req ListRadioSavedSongsRequestObject) (ListRadioSavedSongsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 50, 200)
 	if err != nil {
 		return nil, err
-	}
-	limit, ok := pageLimit(req.Params.Limit, 50, 200)
-	if !ok {
-		return ListRadioSavedSongs400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 200"))}, nil
 	}
 	cursor := ""
 	if req.Params.Cursor != nil {
@@ -271,27 +239,18 @@ func (s *Server) ListRadioSavedSongs(ctx context.Context, req ListRadioSavedSong
 
 func (s *Server) SaveRadioSong(ctx context.Context, req SaveRadioSongRequestObject) (SaveRadioSongResponseObject, error) {
 	if req.Body == nil {
-		return SaveRadioSong400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	song, err := s.svc.SaveRadioSong(ctx, uc, req.Body.StationPid, req.Body.NowPlaying)
 	if err != nil {
-		if service.KindOf(err) == service.KindConflict {
-			return SaveRadioSong409JSONResponse(errObj("conflict", err.Error())), nil
-		}
 		return nil, err
 	}
 	return SaveRadioSong201JSONResponse(radioSavedSongJSON(song)), nil
 }
 
 func (s *Server) DeleteRadioSavedSong(ctx context.Context, req DeleteRadioSavedSongRequestObject) (DeleteRadioSavedSongResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.RemoveRadioSaved(ctx, uc, req.Pid); err != nil {
 		return nil, err
 	}
@@ -299,17 +258,9 @@ func (s *Server) DeleteRadioSavedSong(ctx context.Context, req DeleteRadioSavedS
 }
 
 func (s *Server) GetRadioSavedSongArt(ctx context.Context, req GetRadioSavedSongArtRequestObject) (GetRadioSavedSongArtResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	art, err := s.svc.RadioSavedArt(ctx, uc, req.Pid)
 	if err != nil {
-		// No such row, another listener's row, or one saved with nothing
-		// to copy: the client draws a monogram for all three.
-		if service.KindOf(err) == service.KindNotFound {
-			return GetRadioSavedSongArt404JSONResponse(errObj("not-found", "no artwork for saved song "+req.Pid)), nil
-		}
 		return nil, err
 	}
 	// Varied by the credential, unlike the station logo beside it: a
@@ -374,13 +325,10 @@ func radioSavedSongJSON(s service.RadioSavedSong) RadioSavedSong {
 }
 
 func (s *Server) SearchRadioDirectory(ctx context.Context, req SearchRadioDirectoryRequestObject) (SearchRadioDirectoryResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 25, 100)
 	if err != nil {
 		return nil, err
-	}
-	limit := 25
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
 	}
 	// The caller is needed for their locale: the directory's own ranking
 	// is by votes, which knows nothing about where the listener is.
@@ -648,10 +596,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 // --- scrobbling -------------------------------------------------------------------
 
 func (s *Server) ListScrobblers(ctx context.Context, _ ListScrobblersRequestObject) (ListScrobblersResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	rows, err := s.svc.ListScrobblers(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -665,12 +610,9 @@ func (s *Server) ListScrobblers(ctx context.Context, _ ListScrobblersRequestObje
 
 func (s *Server) ConnectListenBrainz(ctx context.Context, req ConnectListenBrainzRequestObject) (ConnectListenBrainzResponseObject, error) {
 	if req.Body == nil {
-		return ConnectListenBrainz400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	apiURL := ""
 	if req.Body.ApiUrl != nil {
 		apiURL = *req.Body.ApiUrl
@@ -683,10 +625,7 @@ func (s *Server) ConnectListenBrainz(ctx context.Context, req ConnectListenBrain
 }
 
 func (s *Server) DisconnectListenBrainz(ctx context.Context, _ DisconnectListenBrainzRequestObject) (DisconnectListenBrainzResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DisconnectScrobbler(ctx, uc, service.ScrobblerListenBrainz); err != nil {
 		return nil, err
 	}
@@ -694,10 +633,7 @@ func (s *Server) DisconnectListenBrainz(ctx context.Context, _ DisconnectListenB
 }
 
 func (s *Server) DisconnectLastfm(ctx context.Context, _ DisconnectLastfmRequestObject) (DisconnectLastfmResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DisconnectScrobbler(ctx, uc, service.ScrobblerLastfm); err != nil {
 		return nil, err
 	}
@@ -705,10 +641,7 @@ func (s *Server) DisconnectLastfm(ctx context.Context, _ DisconnectLastfmRequest
 }
 
 func (s *Server) StartLastfmConnect(ctx context.Context, _ StartLastfmConnectRequestObject) (StartLastfmConnectResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	callback := strings.TrimSuffix(s.publicBase, "/") + "/api/v1/scrobble/lastfm/callback"
 	authURL, err := s.svc.StartLastfmConnect(ctx, uc, callback)
 	if err != nil {
@@ -752,10 +685,7 @@ func scrobblePage(loc *pagetext.Strings, title, body string) string {
 // --- push registrations -----------------------------------------------------------
 
 func (s *Server) ListPushRegistrations(ctx context.Context, _ ListPushRegistrationsRequestObject) (ListPushRegistrationsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	rows, err := s.svc.PushRegistrations(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -769,12 +699,9 @@ func (s *Server) ListPushRegistrations(ctx context.Context, _ ListPushRegistrati
 
 func (s *Server) CreatePushRegistration(ctx context.Context, req CreatePushRegistrationRequestObject) (CreatePushRegistrationResponseObject, error) {
 	if req.Body == nil {
-		return CreatePushRegistration400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	label := ""
 	if req.Body.Label != nil {
 		label = *req.Body.Label
@@ -790,10 +717,7 @@ func (s *Server) CreatePushRegistration(ctx context.Context, req CreatePushRegis
 }
 
 func (s *Server) DeletePushRegistration(ctx context.Context, req DeletePushRegistrationRequestObject) (DeletePushRegistrationResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DeletePushRegistration(ctx, uc, req.RegistrationId); err != nil {
 		return nil, err
 	}
@@ -801,10 +725,7 @@ func (s *Server) DeletePushRegistration(ctx context.Context, req DeletePushRegis
 }
 
 func (s *Server) DeleteAllPushRegistrations(ctx context.Context, _ DeleteAllPushRegistrationsRequestObject) (DeleteAllPushRegistrationsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DeleteAllPushRegistrations(ctx, uc); err != nil {
 		return nil, err
 	}
@@ -814,9 +735,6 @@ func (s *Server) DeleteAllPushRegistrations(ctx context.Context, _ DeleteAllPush
 // --- notifications ----------------------------------------------------------------
 
 func (s *Server) ListNotificationEvents(ctx context.Context, _ ListNotificationEventsRequestObject) (ListNotificationEventsResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
-	}
 	events := s.svc.NotifyEvents()
 	out := NotificationEventList{Events: make([]NotificationEvent, 0, len(events))}
 	for _, e := range events {
@@ -830,12 +748,8 @@ func (s *Server) ListNotificationEvents(ctx context.Context, _ ListNotificationE
 }
 
 func (s *Server) ListServerNotificationTargets(ctx context.Context, _ ListServerNotificationTargetsRequestObject) (ListServerNotificationTargetsResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return ListServerNotificationTargets403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	rows, err := s.svc.ListServerNotificationTargets(ctx)
 	if err != nil {
@@ -846,14 +760,10 @@ func (s *Server) ListServerNotificationTargets(ctx context.Context, _ ListServer
 
 func (s *Server) CreateServerNotificationTarget(ctx context.Context, req CreateServerNotificationTargetRequestObject) (CreateServerNotificationTargetResponseObject, error) {
 	if req.Body == nil {
-		return CreateServerNotificationTarget400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return CreateServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	in, err := notificationTargetInputFromWire(string(req.Body.Kind), req.Body.Label, req.Body.Config, req.Body.EnabledEvents, req.Body.Muted, req.Body.MinIntervalSeconds)
 	if err != nil {
@@ -869,14 +779,10 @@ func (s *Server) CreateServerNotificationTarget(ctx context.Context, req CreateS
 
 func (s *Server) UpdateServerNotificationTarget(ctx context.Context, req UpdateServerNotificationTargetRequestObject) (UpdateServerNotificationTargetResponseObject, error) {
 	if req.Body == nil {
-		return UpdateServerNotificationTarget400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return UpdateServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	in, err := notificationTargetInputFromWire("", req.Body.Label, req.Body.Config, req.Body.EnabledEvents, req.Body.Muted, req.Body.MinIntervalSeconds)
 	if err != nil {
@@ -891,12 +797,8 @@ func (s *Server) UpdateServerNotificationTarget(ctx context.Context, req UpdateS
 }
 
 func (s *Server) DeleteServerNotificationTarget(ctx context.Context, req DeleteServerNotificationTargetRequestObject) (DeleteServerNotificationTargetResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return DeleteServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	// Read first: once it is gone there is nothing left to name.
 	gone, _ := s.serverNotificationTarget(ctx, req.TargetId)
@@ -928,10 +830,7 @@ func (s *Server) serverNotificationTarget(ctx context.Context, pid string) (*ser
 // its kind and label. Its configuration is the address and the secrets
 // the destination answers to, and stays out of the log.
 func (s *Server) auditNotificationTarget(ctx context.Context, action string, t service.NotificationTarget) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return
-	}
+	uc := userCtx(ctx)
 	name := t.Label
 	if name == "" {
 		name = t.Kind
@@ -942,12 +841,8 @@ func (s *Server) auditNotificationTarget(ctx context.Context, action string, t s
 }
 
 func (s *Server) TestServerNotificationTarget(ctx context.Context, req TestServerNotificationTargetRequestObject) (TestServerNotificationTargetResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return TestServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	if err := s.svc.TestServerNotificationTarget(ctx, req.TargetId); err != nil {
 		return nil, err
@@ -956,10 +851,7 @@ func (s *Server) TestServerNotificationTarget(ctx context.Context, req TestServe
 }
 
 func (s *Server) ListMyNotificationTargets(ctx context.Context, _ ListMyNotificationTargetsRequestObject) (ListMyNotificationTargetsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	rows, err := s.svc.ListMyNotificationTargets(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -969,12 +861,9 @@ func (s *Server) ListMyNotificationTargets(ctx context.Context, _ ListMyNotifica
 
 func (s *Server) CreateMyNotificationTarget(ctx context.Context, req CreateMyNotificationTargetRequestObject) (CreateMyNotificationTargetResponseObject, error) {
 	if req.Body == nil {
-		return CreateMyNotificationTarget400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	in, err := notificationTargetInputFromWire(string(req.Body.Kind), req.Body.Label, req.Body.Config, req.Body.EnabledEvents, req.Body.Muted, req.Body.MinIntervalSeconds)
 	if err != nil {
 		return nil, err
@@ -988,12 +877,9 @@ func (s *Server) CreateMyNotificationTarget(ctx context.Context, req CreateMyNot
 
 func (s *Server) UpdateMyNotificationTarget(ctx context.Context, req UpdateMyNotificationTargetRequestObject) (UpdateMyNotificationTargetResponseObject, error) {
 	if req.Body == nil {
-		return UpdateMyNotificationTarget400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	in, err := notificationTargetInputFromWire("", req.Body.Label, req.Body.Config, req.Body.EnabledEvents, req.Body.Muted, req.Body.MinIntervalSeconds)
 	if err != nil {
 		return nil, err
@@ -1006,10 +892,7 @@ func (s *Server) UpdateMyNotificationTarget(ctx context.Context, req UpdateMyNot
 }
 
 func (s *Server) DeleteMyNotificationTarget(ctx context.Context, req DeleteMyNotificationTargetRequestObject) (DeleteMyNotificationTargetResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DeleteMyNotificationTarget(ctx, uc, req.TargetId); err != nil {
 		return nil, err
 	}
@@ -1017,10 +900,7 @@ func (s *Server) DeleteMyNotificationTarget(ctx context.Context, req DeleteMyNot
 }
 
 func (s *Server) TestMyNotificationTarget(ctx context.Context, req TestMyNotificationTargetRequestObject) (TestMyNotificationTargetResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.TestMyNotificationTarget(ctx, uc, req.TargetId); err != nil {
 		return nil, err
 	}
@@ -1030,13 +910,10 @@ func (s *Server) TestMyNotificationTarget(ctx context.Context, req TestMyNotific
 // --- the inbox --------------------------------------------------------------------
 
 func (s *Server) ListMyNotifications(ctx context.Context, req ListMyNotificationsRequestObject) (ListMyNotificationsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 50, 200)
 	if err != nil {
 		return nil, err
-	}
-	limit, ok := pageLimit(req.Params.Limit, 50, 200)
-	if !ok {
-		return ListMyNotifications400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 200"))}, nil
 	}
 	cursor := ""
 	if req.Params.Cursor != nil {
@@ -1060,10 +937,7 @@ func (s *Server) ListMyNotifications(ctx context.Context, req ListMyNotification
 }
 
 func (s *Server) MarkMyNotificationsRead(ctx context.Context, req MarkMyNotificationsReadRequestObject) (MarkMyNotificationsReadResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	var ids []string
 	if req.Body != nil && req.Body.Ids != nil {
 		ids = *req.Body.Ids
@@ -1075,10 +949,7 @@ func (s *Server) MarkMyNotificationsRead(ctx context.Context, req MarkMyNotifica
 }
 
 func (s *Server) DeleteMyNotification(ctx context.Context, req DeleteMyNotificationRequestObject) (DeleteMyNotificationResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DeleteNotification(ctx, uc, req.NotificationId); err != nil {
 		return nil, err
 	}
@@ -1086,10 +957,7 @@ func (s *Server) DeleteMyNotification(ctx context.Context, req DeleteMyNotificat
 }
 
 func (s *Server) ClearMyNotifications(ctx context.Context, _ ClearMyNotificationsRequestObject) (ClearMyNotificationsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.ClearNotifications(ctx, uc); err != nil {
 		return nil, err
 	}

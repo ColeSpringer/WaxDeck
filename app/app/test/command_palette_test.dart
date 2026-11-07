@@ -2,15 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/app.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/player/waveform.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
@@ -26,6 +23,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _albumPid = 'al-01JZX5N8QW3F4V9T2B7KDALBUM1';
@@ -73,11 +71,10 @@ Future<_Shell> _pumpShell(
     items: <ItemSummary>[testItem(_trackPid)],
   );
   final engine = FakeEngine();
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      audioEngineProvider.overrideWithValue(engine),
+  final container = appContainer(
+    repo: repo,
+    engine: engine,
+    extra: [
       // The platform gate on the volume keys. flutter_test pins the
       // target platform to Android, which is the half that deliberately
       // has no software level, so a test about the keys says which
@@ -85,19 +82,7 @@ Future<_Shell> _pumpShell(
       localVolumeAvailableProvider.overrideWithValue(localVolume),
     ],
   );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: MediaQuery(
-        data: MediaQueryData.fromView(
-          tester.view,
-        ).copyWith(disableAnimations: true),
-        child: const WaxDeckApp(),
-      ),
-    ),
-  );
-  await tester.pumpAndSettle();
+  await pumpWholeApp(tester, container: container, disableAnimations: true);
   return _Shell(container, repo, engine);
 }
 

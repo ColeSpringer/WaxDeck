@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Override lives here rather than in the root library.
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/connect/connect_providers.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
@@ -12,7 +11,6 @@ import 'package:waxdeck/src/player/radio_face.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/radio/radio_saved_controller.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -21,8 +19,8 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _stationPid = 'rs-01JZX5N8QW3F4V9T2B7KDSTATN1';
 
@@ -49,27 +47,14 @@ Future<ProviderContainer> _pumpTuned(
   required FakeEngine engine,
   List<Override> extra = const <Override>[],
 }) async {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(engine),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      clientSettingsStoreProvider.overrideWithValue(
-        MemoryClientSettingsStore(),
-      ),
-      ...extra,
-    ],
+  final container = appContainer(
+    repo: repo,
+    engine: engine,
+    settings: MemoryClientSettingsStore(),
+    extra: extra,
   );
-  addTearDown(container.dispose);
   await container.read(radioPlaybackProvider.notifier).play(_station());
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(_stilled(const PlayerScreen())),
-    ),
-  );
-  await tester.pumpAndSettle();
-  return container;
+  return pumpApp(tester, _stilled(const PlayerScreen()), container: container);
 }
 
 /// Lets the station go. The ICY poll is a live timer, and a test that
@@ -826,17 +811,10 @@ void main() {
   ) async {
     final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
     repo.radioPlayInfoGates[_stationPid] = Completer<void>();
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        clientSettingsStoreProvider.overrideWithValue(
-          MemoryClientSettingsStore(),
-        ),
-      ],
+    final container = appContainer(
+      repo: repo,
+      settings: MemoryClientSettingsStore(),
     );
-    addTearDown(container.dispose);
     final tune = container
         .read(radioPlaybackProvider.notifier)
         .play(_station());
@@ -906,17 +884,10 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        clientSettingsStoreProvider.overrideWithValue(
-          MemoryClientSettingsStore(),
-        ),
-      ],
+    final container = appContainer(
+      repo: repo,
+      settings: MemoryClientSettingsStore(),
     );
-    addTearDown(container.dispose);
 
     container.read(radioPlaybackProvider.notifier).refreshNowPlaying();
     await tester.pump();
@@ -936,17 +907,7 @@ void main() {
       // sockets tuned to the station a cover landed for, so a client that
       // never says which one it is on hears nothing - and one that walked
       // away from the dial must stop hearing about covers.
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository()),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-          clientSettingsStoreProvider.overrideWithValue(
-            MemoryClientSettingsStore(),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(settings: MemoryClientSettingsStore());
       final sent = <Map<String, Object?>>[];
       container.read(connectSenderProvider).impl = (frame) {
         sent.add(frame);
@@ -970,17 +931,7 @@ void main() {
   test('a reconnect says this client is listening to nothing too', () async {
     // The server forgets the tune with the socket, and an untuned
     // connection hears every relayed station's wake, one per song.
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(FakeRepository()),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        clientSettingsStoreProvider.overrideWithValue(
-          MemoryClientSettingsStore(),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(settings: MemoryClientSettingsStore());
     final sent = <Map<String, Object?>>[];
     container.read(connectSenderProvider).impl = (frame) {
       sent.add(frame);

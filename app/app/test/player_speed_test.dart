@@ -21,7 +21,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -77,7 +77,6 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.playerSpeedSheet),
       findsOneWidget,
     );
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a rate picked before the show settings landed still persists', (
@@ -92,7 +91,7 @@ void main() {
     final repo = FakeRepository()
       ..episodesByShow[showPid] = [testEpisode(episodePid)];
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -113,7 +112,6 @@ void main() {
       repo.putSubscriptionSettingsCalls.single.settings.speed,
       closeTo(1.75, 0.001),
     );
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the stepper stops at the band the contract allows', (
@@ -126,7 +124,7 @@ void main() {
       )
       ..episodesByShow[showPid] = [testEpisode(episodePid)];
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -152,7 +150,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(engine.speed, closeTo(3.45, 0.001));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a remembered show speed applies on start', (tester) async {
@@ -163,7 +160,7 @@ void main() {
       )
       ..episodesByShow[showPid] = [testEpisode(episodePid)];
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -171,7 +168,6 @@ void main() {
     );
 
     expect(engine.speed, closeTo(1.5, 0.001));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('music has no speed chip, and its speed never persists', (
@@ -201,7 +197,6 @@ void main() {
     expect(engine.speed, closeTo(1.25, 0.001));
     expect(repo.putSubscriptionSettingsCalls, isEmpty);
     expect(repo.putBookSettingsCalls, isEmpty);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('skip-intro starts an episode past the intro', (tester) async {
@@ -214,7 +209,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -223,7 +218,6 @@ void main() {
 
     expect(engine.position, const Duration(seconds: 30));
     expect(engine.playing, isTrue);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a resume point past the intro wins over the intro skip', (
@@ -239,7 +233,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -247,7 +241,6 @@ void main() {
     );
 
     expect(engine.position, const Duration(seconds: 90));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the device defaults open a choiceless show with effects on', (

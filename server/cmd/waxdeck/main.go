@@ -6,54 +6,28 @@
 package main
 
 import (
-	"cmp"
 	"context"
-	"crypto/subtle"
-	"database/sql"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
-	"math"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 	// Timezone validation for user preferences must work in scratch
 	// containers with no zoneinfo on disk.
 	_ "time/tzdata"
 
-	"github.com/colespringer/waxbin/enrich"
-	"github.com/colespringer/waxbin/source"
-
-	"github.com/colespringer/waxdeck/server/internal/adapter/gpodder"
-	"github.com/colespringer/waxdeck/server/internal/adapter/subsonic"
-	"github.com/colespringer/waxdeck/server/internal/analyzer"
 	"github.com/colespringer/waxdeck/server/internal/api"
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
-	"github.com/colespringer/waxdeck/server/internal/cast/castv2"
-	"github.com/colespringer/waxdeck/server/internal/cast/dlna"
-	"github.com/colespringer/waxdeck/server/internal/cast/jukebox"
-	"github.com/colespringer/waxdeck/server/internal/connect"
 	"github.com/colespringer/waxdeck/server/internal/db"
-	"github.com/colespringer/waxdeck/server/internal/envflag"
-	"github.com/colespringer/waxdeck/server/internal/events"
-	"github.com/colespringer/waxdeck/server/internal/metrics"
 	"github.com/colespringer/waxdeck/server/internal/notices"
-	"github.com/colespringer/waxdeck/server/internal/podping"
-	waxproviders "github.com/colespringer/waxdeck/server/internal/providers"
-	"github.com/colespringer/waxdeck/server/internal/restore"
 	"github.com/colespringer/waxdeck/server/internal/service"
-	"github.com/colespringer/waxdeck/server/internal/stubsource"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
-	"github.com/colespringer/waxdeck/server/internal/waxtapsource"
 	"github.com/colespringer/waxdeck/server/internal/web"
 )
 
@@ -61,191 +35,56 @@ import (
 var version = "0.1.0-dev"
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(flag.CommandLine, os.Args[1:], os.LookupEnv); err != nil {
 		fmt.Fprintln(os.Stderr, "waxdeck:", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	env := envflag.New(flag.CommandLine)
-	var (
-		addr       = flag.String("addr", envOr("WAXDECK_ADDR", ":4420"), "listen address")
-		webDir     = flag.String("web-dir", envOr("WAXDECK_WEB_DIR", ""), "serve the web UI from this directory instead of the embedded build (dev)")
-		dataDir    = flag.String("data-dir", envOr("WAXDECK_DATA_DIR", "./data"), "data directory (waxbin.db + waxdeck.db)")
-		rootsFlag  = flag.String("library-roots", envOr("WAXDECK_LIBRARY_ROOTS", ""), "library roots as name=path pairs, comma separated; names must match the WaxFlow roots serving the same directories")
-		flowURL    = flag.String("flow-url", envOr("WAXDECK_FLOW_URL", ""), "WaxFlow sidecar base URL; one that is not answering is retried in the background while originals play directly, and /health reports it (empty serves originals directly: no transcoding, gapless timelines or voice boost)")
-		flowAPIKey = flag.String("flow-api-key", envOr("WAXDECK_FLOW_API_KEY", ""), "API key WaxDeck presents to the WaxFlow sidecar")
-		flowConfig = flag.String("flow-config", envOr("WAXDECK_FLOW_CONFIG", ""), "the WaxFlow sidecar's JSON config file, as WaxDeck sees it; set it (and point the sidecar at the same file) so a library created at runtime streams without a sidecar restart")
-		scanStart  = env.Bool("scan-on-start", "WAXDECK_SCAN_ON_START", true, "launch a library scan at startup")
-		resetStale = env.Bool("reset-catalog", "WAXDECK_RESET_CATALOG", false, "when the catalog was built from a different schema baseline (which pre-1.0 is edited in place rather than migrated), move it aside and start on a fresh one instead of refusing to start. Discards play positions, ratings, stars, playlists, curation edits, podcast subscriptions and trash; media on disk is untouched and re-indexed by the startup scan. It fires only on that refusal, never on a catalog this build can open -- but it cannot tell a baseline that moved forward from one that moved back, so a rollback across a baseline edit discards rather than refuses")
-		cookieSec  = env.Bool("cookie-secure", "WAXDECK_COOKIE_SECURE", false, "mark session cookies Secure (set whenever the origin is HTTPS)")
-		sessionCap = env.Int("session-cap", "WAXDECK_SESSION_CAP", auth.DefaultSessionCap, "live sign-in sessions one account may hold; signing in past it ends the least recently used")
-		publicBase = flag.String("public-base", envOr("WAXDECK_PUBLIC_BASE", ""), "externally reachable base URL (needed for OIDC callbacks), e.g. https://wax.example.com")
-
-		podcastDir      = flag.String("podcast-dir", envOr("WAXDECK_PODCAST_DIR", ""), "episode download directory (its own library, never inside a library root; defaults to <data-dir>/podcasts; an explicit empty, -podcast-dir=\"\" or WAXDECK_PODCAST_DIR set and empty, disables podcasts)")
-		podcastRoot     = flag.String("podcast-root-name", envOr("WAXDECK_PODCAST_ROOT_NAME", "podcasts"), "WaxFlow root name the podcast dir is mounted under")
-		feedRefreshMin  = env.Int("feed-refresh-minutes", "WAXDECK_FEED_REFRESH_MINUTES", 30, "minutes between scheduled feed refreshes")
-		retentionKeep   = env.Int64("podcast-retention-default", "WAXDECK_PODCAST_RETENTION_DEFAULT", 0, "default keep-newest-N downloaded episodes for subscribers who leave retention unset (0 keeps all)")
-		allowPrivateNet = env.Bool("allow-private-feed-hosts", "WAXDECK_ALLOW_PRIVATE_FEED_HOSTS", false, "allow feeds and enclosures on private addresses (LAN-hosted feeds)")
-
-		podpingOn      = env.Bool("podping", "WAXDECK_PODPING", false, "watch the Hive blockchain for Podping notifications, so a subscribed show whose host publishes them refreshes within seconds of a new episode instead of at the next scheduled refresh. Off by default: it is a standing outbound connection to a third-party public node. Scheduled refresh stays the floor either way")
-		podpingNode    = flag.String("podping-node", envOr("WAXDECK_PODPING_NODE", ""), "Hive API node the Podping watcher reads (empty selects a public node)")
-		podpingWriters = flag.String("podping-writers", envOr("WAXDECK_PODPING_WRITERS", ""), "trusted Podping writer accounts, comma separated. Empty (the default) resolves the published podping.cloud writer set from the chain, which is how it is meant to be read; a list here pins it instead")
-
-		allowPrivateRadio    = env.Bool("allow-private-radio-hosts", "WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS", false, "allow radio stream URLs on private addresses (LAN icecast)")
-		allowPrivateScrobble = env.Bool("allow-private-scrobble-hosts", "WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS", false, "allow ListenBrainz-compatible API bases on private addresses (LAN Maloja)")
-		allowPrivateNotify   = env.Bool("allow-private-notify-hosts", "WAXDECK_ALLOW_PRIVATE_NOTIFY_HOSTS", false, "allow user-pointed notification destinations on private addresses (LAN ntfy or Gotify)")
-		radioDirBase         = flag.String("radio-directory-base", envOr("WAXDECK_RADIO_DIRECTORY_BASE", ""), "radio-browser directory API base URL (empty selects the public instance)")
-		podcastDirBase       = flag.String("podcast-directory-base", envOr("WAXDECK_PODCAST_DIRECTORY_BASE", ""), "podcast name-search API base URL (empty selects the public iTunes search endpoint)")
-		lastfmKey            = flag.String("lastfm-api-key", envOr("WAXDECK_LASTFM_API_KEY", ""), "Last.fm API key for outbound scrobbling (empty leaves Last.fm unavailable)")
-		lastfmSecret         = flag.String("lastfm-secret", envOr("WAXDECK_LASTFM_SECRET", ""), "Last.fm API shared secret")
-
-		youtubeOn    = env.Bool("youtube", "WAXDECK_YOUTUBE", true, "the YouTube acquisition bridge (download videos, playlists, and channels; subscribe to channels as podcasts). On by default; set WAXDECK_YOUTUBE=false to disable")
-		sealURL      = flag.String("seal-url", envOr("WAXDECK_SEAL_URL", ""), "WaxSeal attestation sidecar base URL (optional; full-quality YouTube path)")
-		sealKey      = flag.String("seal-api-key", envOr("WAXDECK_SEAL_API_KEY", ""), "API key for the WaxSeal sidecar")
-		sponsorBlock = flag.String("youtube-sponsorblock", envOr("WAXDECK_YOUTUBE_SPONSORBLOCK", ""), "SponsorBlock categories to cut from acquired audio, comma separated (default sponsor,music_offtopic; empty disables)")
-		ytThumbnail  = env.Bool("youtube-thumbnail", "WAXDECK_YOUTUBE_THUMBNAIL", true, "embed the source thumbnail as cover art on acquired audio, cropped to its square where the source is letterboxed release art, until enrichment finds official artwork. On by default; set WAXDECK_YOUTUBE_THUMBNAIL=false to disable")
-		sourceStub   = flag.String("source-stub-url", envOr("WAXDECK_SOURCE_STUB_URL", ""), "base URL of a sourceserv fixture host to use as the acquisition source (test stacks only; never production)")
-
-		advertiseBase = flag.String("advertise-base", envOr("WAXDECK_ADVERTISE_BASE", ""), "plain-HTTP LAN base URL cast devices fetch media from (empty auto-detects the LAN address)")
-		castDiscovery = env.Bool("cast-discovery", "WAXDECK_CAST_DISCOVERY", true, "discover Chromecast and DLNA devices on the LAN (mDNS and SSDP)")
-		castDevices   = flag.String("cast-devices", envOr("WAXDECK_CAST_DEVICES", ""), "static cast devices as name=host:port pairs, comma separated (networks without multicast)")
-		dlnaDevices   = flag.String("dlna-devices", envOr("WAXDECK_DLNA_DEVICES", ""), "static DLNA renderer description URLs, comma separated")
-		jukeboxOn     = env.Bool("jukebox", "WAXDECK_JUKEBOX", false, "play out the server's own audio device as a selectable endpoint (needs the streaming engine)")
-		jukeboxCmd    = flag.String("jukebox-cmd", envOr("WAXDECK_JUKEBOX_CMD", ""), "player command the jukebox pipes WAV into (default aplay; PipeWire hosts use pw-cat -p -)")
-		jukeboxName   = flag.String("jukebox-name", envOr("WAXDECK_JUKEBOX_NAME", "Server audio"), "display name of the jukebox endpoint")
-
-		managedRoots = flag.String("managed-roots", envOr("WAXDECK_MANAGED_ROOTS", ""), "library root names (comma separated) the catalog may place files into: uploads import there and the organizer may move files there; unlisted roots stay strictly in place")
-		bookRoots    = flag.String("audiobook-roots", envOr("WAXDECK_AUDIOBOOK_ROOTS", ""), "library root names (comma separated) that hold audiobooks: every audio file in them is cataloged as a book; unlisted roots hold whatever they were set to, mixed when new")
-		watchRoots   = env.Bool("library-watch", "WAXDECK_LIBRARY_WATCH", true, "watch the library roots and catalog files placed there by hand without waiting for a rescan. On by default; set WAXDECK_LIBRARY_WATCH=false to disable. Network mounts (NFS, SMB, 9p) rarely deliver change events; enable the scan schedule there instead")
-
-		uploadFormats = flag.String("upload-formats", envOr("WAXDECK_UPLOAD_FORMATS", ""), "file extensions uploads accept, comma separated. Replaces the default set rather than extending it; empty keeps the default (every format the catalog scans and the decode stack reads). DRM containers (aax, aaxc) are refused regardless")
-
-		matchingOn   = env.Bool("matching", "WAXDECK_MATCHING", true, "identify new and uploaded music against MusicBrainz (paced background lookups)")
-		mbBase       = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override for matching, the ISRC upgrade and radio artwork (a local mirror, or a stub in tests); the enrichment pass always asks the public service")
-		coverArtBase = flag.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override for radio artwork (a mirror, or a stub in tests); that rung only exists when matching is on, and the enrichment pass always asks the public archive")
-		trustedProxy = flag.String("trusted-proxies", envOr("WAXDECK_TRUSTED_PROXIES", ""), "comma-separated CIDRs or addresses of reverse proxies whose X-Forwarded-For may be believed; empty counts the socket address")
-		corsOrigins  = flag.String("cors-origins", envOr("WAXDECK_CORS_ORIGINS", ""), "comma-separated origins allowed to call this server from a browser on another origin (a self-hosted Feishin, say); empty serves same-origin only")
-		acoustidKey  = flag.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")
-		fanartKey    = flag.String("fanarttv-key", envOr("WAXDECK_FANARTTV_KEY", ""), "fanart.tv API key; empty leaves that artwork provider unconfigured")
-
-		discogsToken   = flag.String("discogs-token", envOr("WAXDECK_DISCOGS_TOKEN", ""), "Discogs personal access token; empty leaves that artwork and genre provider unconfigured")
-		hardcoverKey   = flag.String("hardcover-key", envOr("WAXDECK_HARDCOVER_KEY", ""), "Hardcover API token; empty leaves that audiobook provider unconfigured")
-		googleBooksKey = flag.String("google-books-key", envOr("WAXDECK_GOOGLE_BOOKS_KEY", ""), "Google Books API key; optional - the provider works keyless and a key only raises the quota")
-
-		enrichURLs = flag.String("enrich-provider-urls", envOr("WAXDECK_ENRICH_PROVIDER_URLS", ""), "custom enrichment providers as name=url pairs, comma separated, each implementing the contract in docs/custom-provider-api/. Validated at startup (the capabilities document must answer and advertise a name) and asked first, ahead of the providers WaxDeck ships; once an administrator has saved an order, one wired later joins its end until it is moved")
-		enrichAuth = flag.String("enrich-provider-auth", envOr("WAXDECK_ENRICH_PROVIDER_AUTH", ""), "bearer tokens for custom enrichment providers as name=token pairs, comma separated; names must match -enrich-provider-urls")
-
-		artistArtOn = env.Bool("artist-art", "WAXDECK_ARTIST_ART", true, "fill missing artist portraits during enrichment. The catalog's artist walk asks fanart.tv by MusicBrainz id where its key is set, and Deezer by name for every artist including the ones MusicBrainz never matched. On by default; set WAXDECK_ARTIST_ART=false and the providers stop advertising artist art, so the walk never asks either service for one")
-
-		enrichContact = flag.String("enrichment-contact", envOr("WAXDECK_ENRICHMENT_CONTACT", ""), "MusicBrainz contact (an email or a URL) the catalog's enrichment pass identifies itself with. MusicBrainz requires an identifying agent, so empty leaves the identity phases and the catalog's key-free sources (the Cover Art Archive, MusicBrainz and ListenBrainz genres, LRCLIB lyrics) off; the phases WaxDeck's own providers serve still run")
-		enrichMatch   = env.Bool("enrichment-match-releases", "WAXDECK_ENRICHMENT_MATCH_RELEASES", true, "during enrichment, resolve which pressing of a record the library holds from its barcode or catalog number, deciding ties on medium and country. On by default; needs -enrichment-contact to have any effect")
-		enrichRetry   = env.Int("enrichment-retry-misses-days", "WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS", 30, "days a target nothing answered for waits before an enrichment pass asks about it again, so a source that has since learned it is reached; 0 never asks again. A match is never re-asked")
-
-		oidcIssuer  = flag.String("oidc-issuer", envOr("WAXDECK_OIDC_ISSUER", ""), "OIDC issuer URL (empty disables single sign-on)")
-		oidcID      = flag.String("oidc-id", envOr("WAXDECK_OIDC_ID", "sso"), "OIDC provider id shown in start URLs")
-		oidcName    = flag.String("oidc-name", envOr("WAXDECK_OIDC_NAME", ""), "OIDC provider display name for login buttons")
-		oidcClient  = flag.String("oidc-client-id", envOr("WAXDECK_OIDC_CLIENT_ID", ""), "OIDC client id")
-		oidcSecret  = flag.String("oidc-client-secret", envOr("WAXDECK_OIDC_CLIENT_SECRET", ""), "OIDC client secret")
-		oidcGroups  = flag.String("oidc-groups-claim", envOr("WAXDECK_OIDC_GROUPS_CLAIM", ""), "ID-token claim holding groups (empty disables role mapping)")
-		oidcAdminGr = flag.String("oidc-admin-group", envOr("WAXDECK_OIDC_ADMIN_GROUP", ""), "group granting the admin role via the groups claim")
-
-		metricsToken = flag.String("metrics-token", envOr("WAXDECK_METRICS_TOKEN", ""), "bearer token protecting GET /metrics (empty leaves the endpoint disabled)")
-
-		sonicAnalysis    = env.Bool("sonic-analysis", "WAXDECK_SONIC_ANALYSIS", true, "boot default for background sonic-similarity analysis (embedded analyzer; powers instant mixes, similar tracks, and sonic paths). On by default; administrators toggle it at runtime in the server settings")
-		workerTokens     = flag.String("worker-tokens", envOr("WAXDECK_WORKER_TOKENS", ""), "external similarity worker tokens, comma separated (optional; offloads analysis to another machine through the worker API)")
-		workerLocalPaths = env.Bool("worker-local-paths", "WAXDECK_WORKER_LOCAL_PATHS", false, "expose library-relative source paths to similarity workers that mount the library read-only (single-root libraries)")
-
-		showVer     = flag.Bool("version", false, "print version and exit")
-		showNotices = flag.Bool("third-party-notices", false, "print the third-party license notices bundled in this binary and exit")
-		ping        = flag.Bool("ping", false, "probe the health endpoint of the server listening on -addr and exit 0 when it answers (the container HEALTHCHECK)")
-	)
-	flag.Parse()
-
-	if *showVer {
+// run serves with the settings in args and lookupEnv until the first
+// termination signal, or answers the mode they ask for.
+func run(fs *flag.FlagSet, args []string, lookupEnv func(string) (string, bool)) error {
+	cfg, err := parseConfig(fs, args, lookupEnv)
+	if err != nil {
+		return err
+	}
+	switch {
+	case cfg.showVersion:
 		fmt.Println(version)
 		return nil
-	}
-	if *ping {
-		return pingServer(*addr)
-	}
-	if *showNotices {
+	case cfg.ping:
+		return pingServer(cfg.core.addr)
+	case cfg.showNotices:
 		fmt.Print(notices.Text)
 		return nil
 	}
-	if err := env.Err(); err != nil {
-		return err
-	}
-	retryDays, err := enrichRetryWindow(*enrichRetry)
-	if err != nil {
-		return err
-	}
-	maxSessions, err := sessionCapFrom(*sessionCap)
-	if err != nil {
-		return err
-	}
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	roots, err := parseRoots(*rootsFlag)
-	if err != nil {
-		return err
-	}
-	// Before anything is opened: a web dir without the app is a typo,
-	// which a server answering every navigation with a 404 would hide.
-	site, webSource, err := web.Handler(*webDir)
-	if err != nil {
-		return err
-	}
 	// Settings the server cannot run with fail the start here, before
 	// anything is opened or started, as a held port does below: found once
 	// the catalog's workers run, they would wait those out (and hold the
-	// port) before saying so. A trusted-proxy list or an origin is refused
-	// rather than defaulted: a typo that silently trusted nothing, or
-	// matched nothing, would look exactly like a working configuration
-	// until the day somebody was locked out by it.
-	trusted, err := api.ParseTrustedProxies(*trustedProxy)
+	// port) before saying so.
+	front, err := checkStart(cfg)
 	if err != nil {
-		return fmt.Errorf("trusted proxies: %w", err)
-	}
-	allowedOrigins, err := normalizeOrigins(splitNonEmpty(*corsOrigins, ","))
-	if err != nil {
-		return fmt.Errorf("cors origins: %w", err)
-	}
-	if *oidcIssuer != "" && *publicBase == "" {
-		return errors.New("WAXDECK_OIDC_ISSUER requires WAXDECK_PUBLIC_BASE for the callback URL")
-	}
-	if *flowURL != "" {
-		if err := flow.CheckBaseURL(*flowURL); err != nil {
-			return err
-		}
+		return err
 	}
 	// Bound before anything is opened or started: a port another process
 	// holds fails the start here, with nothing to unwind and nothing yet
 	// saying it listens. Connections that arrive while the rest starts
 	// wait in the backlog for the server.
-	ln, err := listen(*addr)
+	ln, err := listen(cfg.core.addr)
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
-	log.Info("serving the web UI", "source", webSource)
-	if err := os.MkdirAll(*dataDir, 0o755); err != nil {
+	log.Info("serving the web UI", "source", front.webSource)
+	if err := os.MkdirAll(cfg.core.dataDir, 0o755); err != nil {
 		return fmt.Errorf("creating data dir: %w", err)
 	}
 
-	// A staged restore applies before anything opens a database: the
-	// marker survives any failure here, so a crash retries at the next
-	// start and a refusing error leaves the operator in charge.
-	restoreCasualties := stagedCasualties(*dataDir)
-	// Read before the swap: the restored database carries an older count.
-	liveMints := service.PeekCatalogMints(*dataDir)
-	restoreApplied, restoreReport, err := restore.Apply(*dataDir, log, service.VetRestore)
+	staged, err := applyStagedRestore(cfg.core.dataDir, log)
 	if err != nil {
-		return fmt.Errorf("applying staged restore: %w", err)
-	}
-	if restoreApplied {
-		log.Info("restore applied", "backup", restoreReport.BackupID, "archive", restoreReport.FileName)
+		return err
 	}
 
 	// Root context: canceled on the first termination signal; workers and
@@ -255,291 +94,30 @@ func run() error {
 
 	group := supervise.NewGroup(log)
 
-	secret, err := auth.LoadOrCreateSecret(*dataDir)
+	secret, err := auth.LoadOrCreateSecret(cfg.core.dataDir)
 	if err != nil {
 		return err
 	}
 
-	store, err := db.Open(ctx, filepath.Join(*dataDir, "waxdeck.db"))
+	store, err := db.Open(ctx, filepath.Join(cfg.core.dataDir, "waxdeck.db"))
 	if err != nil {
 		return err
 	}
 	defer store.Close()
-	if restoreApplied {
-		// Fresh stream generations mint at open; every outstanding
-		// client cursor answers sync-reset instead of silently reading
-		// the restored history.
-		if err := service.ResetSyncAfterRestore(ctx, store, liveMints); err != nil {
-			return err
-		}
-	}
-	if n, err := store.FailStaleRunningBackups(ctx, time.Now().UnixNano()); err != nil {
-		log.Warn("sweeping stale backups", "err", err)
-	} else if n > 0 {
-		log.Info("marked interrupted backups failed", "count", n)
-	}
-
-	sealer, err := auth.NewSealer(secret, "waxdeck-app-password-v1")
-	if err != nil {
-		return err
-	}
-	// Catalog-held secrets (private-feed passwords) seal under their own
-	// subkey; the catalog binds each secret's key as AAD.
-	catalogCipher, err := auth.NewAADSealer(secret, "waxdeck-catalog-secret-v1")
-	if err != nil {
-		return err
-	}
-	// Listing cursors that stand on a row the caller may not see travel
-	// sealed, under a subkey of the same secret so they outlive a restart.
-	cursorSealer, err := auth.NewSealer(secret, "waxdeck-cursor-v1")
-	if err != nil {
+	if err := settleStore(ctx, store, staged, log); err != nil {
 		return err
 	}
 
-	svcRoots, err := serviceRoots(roots, *managedRoots, *bookRoots)
-	if err != nil {
-		return err
-	}
-	*podcastDir = podcastDirFrom(*podcastDir, flagWasSet("podcast-dir"), os.LookupEnv, *dataDir)
-	if *podcastDir != "" {
-		abs, err := filepath.Abs(*podcastDir)
-		if err != nil {
-			return fmt.Errorf("bad podcast dir: %w", err)
-		}
-		*podcastDir = abs
-		if err := os.MkdirAll(abs, 0o755); err != nil {
-			return fmt.Errorf("creating podcast dir: %w", err)
-		}
-		if err := checkPodcastRootName(roots, *podcastRoot); err != nil {
-			return err
-		}
-	}
-	var providers []source.Provider
-	if *youtubeOn {
-		categories := sponsorBlockFrom(*sponsorBlock, flagWasSet("youtube-sponsorblock"), os.LookupEnv)
-		yt, err := waxtapsource.New(waxtapsource.Config{
-			WorkDir:        filepath.Join(*dataDir, "waxtap-work"),
-			SealBaseURL:    *sealURL,
-			SealAPIKey:     *sealKey,
-			SponsorBlock:   categories,
-			EmbedThumbnail: *ytThumbnail,
-			EmbedMetadata:  true,
-			Pending:        store,
-			Logger:         log,
-		})
-		if err != nil {
-			// The bridge is on by default, so a construction hiccup
-			// degrades acquisition rather than downing the server; the
-			// rest of the catalog is unaffected. Set WAXDECK_YOUTUBE=false
-			// to opt out entirely.
-			log.Warn("youtube acquisition bridge unavailable; URL downloads are disabled", "err", err)
-		} else {
-			providers = append(providers, yt)
-			log.Info("youtube acquisition bridge enabled", "seal", *sealURL != "")
-		}
-		// The bridge serves two independent paths: subscribing a
-		// channel or playlist as a podcast (episodes land in the
-		// podcast library) and acquiring a video, playlist, or channel
-		// into a music or audiobook library by URL. Only the former
-		// needs the podcast library, so its absence is a warning, not
-		// a refusal: URL acquisition still works.
-		if *podcastDir == "" {
-			log.Warn("youtube podcast subscriptions are unavailable without a podcast library; URL acquisition to music and audiobook libraries still works")
-		}
-	}
-	if *sourceStub != "" {
-		providers = append(providers, stubsource.New(*sourceStub))
-		log.Warn("stub acquisition source enabled; this is a test bridge, never production", "url", *sourceStub)
-	}
-
-	// The matching engine's candidate source and the server's own
-	// enrichment providers. Key-free providers are always registered;
-	// keyed ones only when configured. All are paced and cached, and all
-	// name this build.
 	agent := service.UserAgentFor(version)
-	var matchSource *waxproviders.Source
-	if *matchingOn {
-		matchSource = &waxproviders.Source{
-			MB: waxproviders.NewMusicBrainz(waxproviders.MusicBrainzConfig{BaseURL: *mbBase, UserAgent: agent}),
-			Acoust: waxproviders.NewAcoustID(waxproviders.AcoustIDConfig{
-				APIKey: *acoustidKey, UserAgent: agent,
-			}),
-		}
-	}
-	// One Deezer client, shared: radio's artwork rung and every
-	// enrichment rung go at api.deezer.com, and more clients would be
-	// that many unpaced callers.
-	deezer := waxproviders.NewDeezer(waxproviders.DeezerConfig{UserAgent: agent})
-	// The artist-art switch is applied to the enrichment port itself:
-	// hiding the capability is what takes the artist rung out of the
-	// catalog's walk, since a provider that does not advertise it is
-	// never dispatched for one.
-	hideArtistArt := func(p enrich.Provider) enrich.Provider {
-		if *artistArtOn {
-			return p
-		}
-		return waxproviders.WithoutArtistArt(p)
-	}
-	enrichProviders := []enrich.Provider{
-		hideArtistArt(deezer),
-		waxproviders.NewITunes(waxproviders.ITunesConfig{UserAgent: agent}),
-	}
-	if *discogsToken != "" {
-		enrichProviders = append(enrichProviders, waxproviders.NewDiscogs(waxproviders.DiscogsConfig{Token: *discogsToken, UserAgent: agent}))
-	}
-	// The book ladder, identifier-anchored end first: Audnexus answers
-	// the ASIN outright, Hardcover bridges an ASIN to the ISBN the two
-	// fallbacks key on, and the fallbacks also take a name-gated title
-	// search for books carrying neither identifier's answer yet.
-	enrichProviders = append(enrichProviders, waxproviders.NewAudnexus(waxproviders.AudnexusConfig{UserAgent: agent}))
-	if *hardcoverKey != "" {
-		enrichProviders = append(enrichProviders, waxproviders.NewHardcover(waxproviders.HardcoverConfig{Token: *hardcoverKey, UserAgent: agent}))
-	}
-	enrichProviders = append(enrichProviders,
-		waxproviders.NewGoogleBooks(waxproviders.GoogleBooksConfig{APIKey: *googleBooksKey, UserAgent: agent}),
-		waxproviders.NewOpenLibrary(waxproviders.OpenLibraryConfig{UserAgent: agent}),
-	)
-	// fanart.tv is registered ahead of the other art providers, so it
-	// leads the default order: it is the only one answering per role.
-	// One client for the same pacing reason as Deezer's.
-	if *fanartKey != "" {
-		fanart := waxproviders.NewFanartTV(waxproviders.FanartTVConfig{APIKey: *fanartKey, UserAgent: agent})
-		enrichProviders = append([]enrich.Provider{hideArtistArt(fanart)}, enrichProviders...)
-	}
-	// Custom providers ride ahead of everything: an operator who wired a
-	// regional service wants its answers to win. Each is validated at
-	// startup, so a typo'd URL or a downed sidecar is a refusal naming
-	// it rather than a provider that is silently absent.
-	bridgePairs, err := parsePairs(*enrichURLs, "enrich provider")
+	svcCfg, err := newServiceConfig(ctx, cfg, secret, store, agent, log)
 	if err != nil {
 		return err
 	}
-	authPairs, err := parsePairs(*enrichAuth, "enrich provider auth")
-	if err != nil {
-		return err
-	}
-	authFor := make(map[string]string, len(authPairs))
-	bridgeNames := make(map[string]bool, len(bridgePairs))
-	for _, p := range bridgePairs {
-		bridgeNames[p[0]] = true
-	}
-	for _, p := range authPairs {
-		if !bridgeNames[p[0]] {
-			return fmt.Errorf("WAXDECK_ENRICH_PROVIDER_AUTH names %q, which is not a configured enrich provider", p[0])
-		}
-		authFor[p[0]] = p[1]
-	}
-	if len(bridgePairs) > 0 {
-		// The provenance mark must be unambiguous: a bridge advertising a
-		// name a registered provider (or the catalog's own built-ins)
-		// already stamps values with would make every conflict
-		// unattributable.
-		takenNames := map[string]bool{}
-		for _, name := range service.ReservedEnrichNames {
-			takenNames[name] = true
-		}
-		for _, p := range enrichProviders {
-			takenNames[p.Name()] = true
-		}
-		bridged := make([]enrich.Provider, 0, len(bridgePairs))
-		for _, p := range bridgePairs {
-			bridge, err := waxproviders.NewHTTPBridge(ctx, waxproviders.HTTPBridgeConfig{
-				Label: p[0], BaseURL: p[1], Token: authFor[p[0]], Log: log, UserAgent: agent,
-			})
-			if err != nil {
-				return err
-			}
-			// A remote serving nothing this build can ask for is version
-			// skew, not misconfiguration: the URL answered and named itself.
-			// Skipping it with a log line beats refusing to start.
-			if bridge.Capabilities() == 0 {
-				log.Warn("custom enrichment provider serves nothing this build can ask for, at any target type it knows; skipping it",
-					"name", bridge.Name(), "label", p[0])
-				continue
-			}
-			if takenNames[bridge.Name()] {
-				return fmt.Errorf("enrich provider %q advertises the name %q, which another provider already stamps its values with", p[0], bridge.Name())
-			}
-			takenNames[bridge.Name()] = true
-			log.Info("custom enrichment provider connected", "name", bridge.Name(), "label", p[0])
-			bridged = append(bridged, bridge)
-		}
-		enrichProviders = append(bridged, enrichProviders...)
-	}
-
-	workerTokenList := splitNonEmpty(*workerTokens, ",")
-	svcCfg := service.Config{
-		DataDir:                   *dataDir,
-		WorkerLocalPaths:          *workerLocalPaths,
-		SonicAnalysisDefault:      *sonicAnalysis,
-		WorkerAPIConfigured:       len(workerTokenList) > 0,
-		Roots:                     svcRoots,
-		UploadFormats:             splitNonEmpty(*uploadFormats, ","),
-		ScanOnStart:               *scanStart && len(roots) > 0,
-		WatchLibraries:            *watchRoots,
-		ResetStaleCatalog:         *resetStale,
-		Sealer:                    sealer,
-		SecretCipher:              catalogCipher,
-		CursorSealer:              cursorSealer,
-		PodcastDir:                *podcastDir,
-		PodcastRootName:           *podcastRoot,
-		AllowPrivateFeedHosts:     *allowPrivateNet,
-		DefaultRetentionKeep:      *retentionKeep,
-		SourceProviders:           providers,
-		AllowPrivateRadioHosts:    *allowPrivateRadio,
-		AllowPrivateScrobbleHosts: *allowPrivateScrobble,
-		AllowPrivateNotifyHosts:   *allowPrivateNotify,
-		PublicBase:                *publicBase,
-		Version:                   version,
-		RadioDirectoryBase:        *radioDirBase,
-		PodcastDirectoryBase:      *podcastDirBase,
-		LastfmAPIKey:              *lastfmKey,
-		LastfmSecret:              *lastfmSecret,
-		EnrichmentProviders:       enrichProviders,
-		EnrichmentContact:         *enrichContact,
-		EnrichmentMatchReleases:   *enrichMatch,
-		EnrichmentRetryMissesDays: retryDays,
-		Logger:                    log,
-	}
-	// Radio's external artwork rung, Deezer first: it answers a title in a
-	// third of a second against the archive's tens. Whether it reaches out
-	// at all is the admin toggle's call.
-	radioArt := waxproviders.CoverChain{
-		Sources: []waxproviders.TitleCover{deezer},
-		NoCover: service.ErrNoRadioArt,
-	}
-	if matchSource != nil {
-		svcCfg.MatchSource = matchSource
-		// The ISRC upgrade and the archive half of the rung above ride the
-		// same paced client as matching: a second would be an unthrottled
-		// caller against a service that allows one request a second.
-		svcCfg.ISRCResolver = matchSource.MB
-		// Behind Deezer because its licensing is the unambiguous one and it
-		// holds the obscure and non-commercial releases Deezer has no entry
-		// for, not because it is the better first ask.
-		radioArt.Sources = append(radioArt.Sources, waxproviders.RecordingCover{
-			MB:  matchSource.MB,
-			CAA: waxproviders.NewCoverArt(waxproviders.CoverArtConfig{BaseURL: *coverArtBase, UserAgent: agent}),
-		})
-	}
-	svcCfg.RadioArtResolver = radioArt
 	// The identity provider is asked before the service opens: one that
 	// cannot be reached fails the start with nothing running yet.
-	var oidc *auth.OIDC
-	if *oidcIssuer != "" {
-		oidc, err = auth.NewOIDC(ctx, auth.OIDCConfig{
-			ID:           *oidcID,
-			DisplayName:  *oidcName,
-			Issuer:       *oidcIssuer,
-			ClientID:     *oidcClient,
-			ClientSecret: *oidcSecret,
-			GroupsClaim:  *oidcGroups,
-			AdminGroup:   *oidcAdminGr,
-		}, store)
-		if err != nil {
-			return err
-		}
-		log.Info("single sign-on enabled", "issuer", *oidcIssuer, "provider", *oidcID)
+	oidc, err := newOIDC(ctx, cfg.oidc, store, log)
+	if err != nil {
+		return err
 	}
 	svc, err := service.Open(ctx, svcCfg, store, group)
 	if err != nil {
@@ -556,15 +134,7 @@ func run() error {
 		group.Wait()
 	}()
 
-	// The event hub fans the service's change wakeups out to WebSocket
-	// subscribers as coalesced invalidation frames.
-	hub := events.New(svc)
-	// A station's new song or cover wakes the faces tuned to it, which
-	// would otherwise wait out a poll interval.
-	svc.SetRadioInvalidator(hub.MarkRadio)
-	// A replaced catalog (a restore) sends every client back to a snapshot.
-	svc.SetCatalogResyncer(hub.MarkCatalogReplaced)
-	group.Go(ctx, "event-hub", hub.Run)
+	hub := startEventHub(ctx, group, svc)
 
 	// One media-token instance signs both streaming and download URLs.
 	media := auth.NewMediaTokens(secret, 0)
@@ -573,854 +143,36 @@ func run() error {
 	// nothing share-secret is stored at rest.
 	shareTokens := auth.NewShareTokens(secret)
 
-	// The similarity sweep keeps the analysis queue reconciled with the
-	// catalog (new tracks enqueue, deleted audio prunes and backfills),
-	// running once a scan goes quiet and on a ten-minute backstop, and the
-	// embedded analyzer drains that queue in process: sonic
-	// similarity with zero setup, no second container (the server
-	// already links the decoders through the catalog). Both loops
-	// self-gate on the runtime admin setting, so administrators flip
-	// analysis on and off without a restart; external workers remain
-	// the offload path for installs that want analysis off this
-	// machine.
-	group.Go(ctx, "similarity-sweep", svc.RunSimilaritySweeps)
-	group.Go(ctx, "embedded-analysis", func(ctx context.Context) error {
-		an := analyzer.New()
-		first := time.NewTimer(45 * time.Second)
-		defer first.Stop()
-		tick := time.NewTicker(30 * time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-first.C:
-			case <-tick.C:
-			}
-			for {
-				worked, err := svc.DrainEmbeddedAnalysis(ctx, an)
-				if err != nil {
-					log.Warn("embedded analysis", "err", err)
-					break
-				}
-				if !worked {
-					break
-				}
-			}
-		}
-	})
-
-	// Trash retention: purge trashed files older than the configured
-	// window (0 disables it). Self-gates on the runtime admin setting so
-	// administrators change the policy without a restart, and a slow
-	// cadence is plenty for a space-reclaim pass.
-	group.Go(ctx, "trash-retention", func(ctx context.Context) error {
-		first := time.NewTimer(5 * time.Minute)
-		defer first.Stop()
-		tick := time.NewTicker(6 * time.Hour)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-first.C:
-			case <-tick.C:
-			}
-			rep, err := svc.SweepTrashRetention(ctx)
-			if err != nil {
-				log.Warn("trash retention sweep", "err", err)
-				continue
-			}
-			if rep.Purged > 0 || rep.Errored > 0 {
-				log.Info("trash retention sweep",
-					"purged", rep.Purged, "errored", rep.Errored, "reclaimedBytes", rep.ReclaimedBytes)
-			}
-		}
-	})
-
-	// Stranded listen marks: a listen row is claimed, then marked, then
-	// recorded as marked, and a crash between the last two leaves a
-	// claim whose play was never counted. This re-runs those marks at
-	// the session's own time, so a play that arrived before a restart
-	// still lands where it belongs on the recency lists.
-	group.Go(ctx, "listen-mark-sweep", func(ctx context.Context) error {
-		first := time.NewTimer(2 * time.Minute)
-		defer first.Stop()
-		tick := time.NewTicker(time.Hour)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-first.C:
-			case <-tick.C:
-			}
-			rep, err := svc.SweepListenMarks(ctx)
-			if err != nil {
-				log.Warn("listen mark sweep", "err", err)
-				continue
-			}
-			if rep.Marked > 0 || rep.Settled > 0 {
-				log.Info("listen mark sweep",
-					"scanned", rep.Scanned, "marked", rep.Marked, "settled", rep.Settled)
-			}
-		}
-	})
-
-	// First start: write the sidecar's roots file (compose starts the
-	// engine after this server), with or without an engine URL.
-	if *flowConfig != "" {
-		seed := engineSeedRoots(roots, *podcastRoot, *podcastDir)
-		switch created, err := flow.SeedRootsConfig(*flowConfig, seed); {
-		case err != nil:
-			log.Warn("could not write the streaming engine's roots file", "path", *flowConfig, "err", err)
-		case created:
-			log.Info("wrote the streaming engine's roots file", "path", *flowConfig, "roots", len(seed))
-		}
-	}
-
-	// The streaming engine is optional: without one, and while a
-	// configured one is not answering, originals play directly. The bridge
-	// asks nothing of it at construction; its supervised loop connects in
-	// the background and reports each crossing to the service.
-	var bridge *flow.Bridge
-	if *flowURL != "" {
-		// The catalog's roots the sidecar serves: the configured ones, and
-		// the runtime ones it has accepted.
-		var configured, table []flow.Root
-		for _, r := range roots {
-			configured = append(configured, flow.Root{Name: r.Name, Path: r.Path})
-		}
-		for _, r := range svc.RootTable() {
-			table = append(table, flow.Root{Name: r.Name, Path: r.Path})
-		}
-		flowRoots := flow.SeedRoots(configured, table, *flowConfig)
-		if *podcastDir != "" {
-			// The podcast dir is its own root pair: the catalog refuses a
-			// download dir inside a user root, and the sidecar streams
-			// episodes only from a root it mounts.
-			flowRoots = append(flowRoots, flow.Root{Name: *podcastRoot, Path: *podcastDir})
-		}
-		bridge, err = flow.New(ctx, flow.Config{
-			BaseURL:    *flowURL,
-			APIKey:     *flowAPIKey,
-			Roots:      flowRoots,
-			ConfigPath: *flowConfig,
-			Tokens:     media,
-			Resolver:   svc,
-			Timelines:  store,
-			Logger:     log,
-		})
-		if err != nil {
-			return err
-		}
-		svc.SetFlowJobs(bridge)
-		bridge.SetTranscodeGate(svc.TranscodeGate())
-		svc.FollowEngine(ctx, bridge)
-		group.Go(ctx, "flow-bridge", bridge.Run)
-		// A gapless queue holds a transcode slot the way a stream does,
-		// and there is no end-of-response to give it back at: the slot
-		// goes back once every one of a listener's timelines has gone
-		// quiet. Supervised like every other periodic sweep here, and
-		// cheap when nobody is listening.
-		group.Go(ctx, "timeline-slots", func(ctx context.Context) error {
-			tick := time.NewTicker(15 * time.Second)
-			defer tick.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-tick.C:
-					bridge.SweepTimelineSlots()
-				}
-			}
-		})
-	} else {
-		log.Warn("WAXDECK_FLOW_URL is not set; playing original files directly (no transcoding, gapless timelines, or voice boost)")
-		// No sidecar config to take a removed library's root out of, so
-		// nothing owed to a bridge waits for one.
-		svc.SetFlowRoots(nil)
-	}
-
-	backups := service.NewBackups(svc, *dataDir, keyProber(sealer))
-	backups.SweepTempFiles()
-	if restoreApplied {
-		if err := backups.PostRestoreSweep(ctx, service.RestoreReportLike{
-			BackupID:   restoreReport.BackupID,
-			FileName:   restoreReport.FileName,
-			SetAside:   restoreReport.SetAside,
-			Casualties: restoreCasualties,
-		}); err != nil {
-			log.Warn("post-restore sweep", "err", err)
-		}
-	}
-	backupWake := make(chan string, 8)
-	group.Go(ctx, "backup-runner", func(ctx context.Context) error {
-		sweep := time.NewTicker(time.Minute)
-		defer sweep.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case id := <-backupWake:
-				if err := backups.Run(ctx, id); err != nil && ctx.Err() == nil {
-					log.Warn("backup run", "backup", id, "err", err)
-				}
-			case <-sweep.C:
-				// A wake dropped by a full channel leaves a claimed row
-				// running with nobody on it; the sweep picks it up.
-				rows, err := backups.List(ctx)
-				if err != nil {
-					continue
-				}
-				for _, row := range rows {
-					if row.State == "running" {
-						if err := backups.Run(ctx, row.ID); err != nil && ctx.Err() == nil {
-							log.Warn("backup run", "backup", row.ID, "err", err)
-						}
-					}
-				}
-			}
-		}
-	})
-	group.Go(ctx, "cron-scheduler", func(ctx context.Context) error {
-		tick := time.NewTicker(30 * time.Second)
-		defer tick.Stop()
-		// The window floor is per kind, not one value for the loop.
-		// DueSchedule asks "did this kind's cron fire between the floor
-		// and now", so a kind that was due and could not run has to keep
-		// its old floor: advancing it would move the window past the
-		// firing it just missed and the run would be lost until the next
-		// scheduled one, a week away on the analyze and backup defaults.
-		// A shared floor cannot express that, which is the bug this
-		// replaced.
-		lastCheck := map[string]time.Time{}
-		start := time.Now()
-		for _, kind := range []string{"prune", "scan", "analyze", "enrich", "backup"} {
-			lastCheck[kind] = start
-		}
-		// due reports whether the kind should run now; ran records that
-		// it did (or that it was not due), advancing that kind's floor.
-		// A kind that was due and deferred simply never calls ran, so it
-		// is asked again on the next tick, 30 seconds later.
-		due := func(kind string, now time.Time) bool {
-			if svc.DueSchedule(ctx, kind, lastCheck[kind], now) {
-				return true
-			}
-			lastCheck[kind] = now
-			return false
-		}
-		ran := func(kind string, now time.Time) { lastCheck[kind] = now }
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case now := <-tick.C:
-				// Mid-hand-off every kind waits a tick, its window kept.
-				if svc.Maintenance() {
-					continue
-				}
-				// Order matters: prune, scan, analyze and enrich finish
-				// fast (the three passes are async catalog jobs), so the
-				// one long-running kind, backup, goes last and can only
-				// delay the next tick, never a sibling due in this one.
-				// Delayed firings are caught up, not lost: DueSchedule
-				// measures from the last run, not from the tick that
-				// should have fired.
-				if due("prune", now) {
-					svc.MarkScheduleRun(ctx, "prune", svc.RunPrune(ctx))
-					ran("prune", now)
-				}
-				if due("scan", now) {
-					_, err := svc.Rescan(ctx, false)
-					svc.MarkScheduleRun(ctx, "scan", err)
-					ran("scan", now)
-				}
-				if due("analyze", now) {
-					// An analyze pass launched by hand still holds the
-					// scope lease. Marking the schedule as run would
-					// defer this firing to the NEXT one (a week, on the
-					// default); leaving both the schedule and this kind's
-					// window floor alone retries on the next tick.
-					_, err := svc.Analyze(ctx)
-					if service.KindOf(err) == service.KindConflict {
-						log.Info("scheduled analyze waiting on a running analyze pass")
-					} else {
-						svc.MarkScheduleRun(ctx, "analyze", err)
-						ran("analyze", now)
-					}
-				}
-				if due("enrich", now) {
-					// A pass an administrator started by hand holds the
-					// lease; same reasoning as analyze above, and the
-					// nightly cadence makes the retry cheap.
-					err := svc.RunScheduledEnrichment(ctx)
-					switch {
-					case service.KindOf(err) == service.KindConflict:
-						log.Info("scheduled enrichment waiting on a running pass")
-					case service.KindOf(err) == service.KindUnsupported:
-						// Nothing configured to enrich with. The
-						// schedule is on by default, so this is an
-						// ordinary state rather than a fault; marking
-						// the run keeps the log quiet until something
-						// is wired.
-						svc.MarkScheduleRun(ctx, "enrich", nil)
-						ran("enrich", now)
-					default:
-						svc.MarkScheduleRun(ctx, "enrich", err)
-						ran("enrich", now)
-					}
-				}
-				if due("backup", now) {
-					row, err := backups.Create(ctx, nil, "scheduled")
-					if service.KindOf(err) == service.KindConflict {
-						// A manual backup holds the slot; same reasoning
-						// as analyze above.
-						log.Info("scheduled backup waiting on a running backup")
-					} else {
-						if err == nil {
-							err = backups.Run(ctx, row.ID)
-						}
-						svc.MarkScheduleRun(ctx, "backup", err)
-						ran("backup", now)
-					}
-				}
-			}
-		}
-	})
-
-	// Podcast background work: the feed refresh scheduler, the retention
-	// sweeper, and the queue drainers. All are supervised ticker loops on
-	// the process context; each cycle is cheap when idle.
-	if *podcastDir != "" {
-		refreshEvery := time.Duration(*feedRefreshMin) * time.Minute
-		group.Go(ctx, "feed-refresh", func(ctx context.Context) error {
-			tick := time.NewTicker(time.Minute)
-			defer tick.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-tick.C:
-					svc.RefreshDueFeeds(ctx, refreshEvery)
-				}
-			}
-		})
-		// PodPing: a floor-lowering signal, not a second sync path. It
-		// watches somebody else's public chain for "this feed changed" and
-		// drives the same syncShow the scheduler does, so an episode lands
-		// within seconds of publication instead of at the next refresh.
-		// Off by default because it is a standing outbound connection to
-		// a third party, and the refresh above stays the floor either way.
-		if *podpingOn {
-			client := podping.New(podping.Config{NodeURL: *podpingNode, UserAgent: agent})
-			watcher := podping.NewWatcher(client, log, func(ctx context.Context, ping podping.Ping) {
-				svc.NotePodping(ctx, ping.IRI)
-			})
-			pinned := splitNonEmpty(*podpingWriters, ",")
-			if len(pinned) > 0 {
-				watcher.PinWriters(pinned)
-			}
-			// Said once, at start: the operator turned on an outbound
-			// connection to a third party, and the next log line about it
-			// may not come until a subscribed show is published to.
-			log.Info("podping watcher started",
-				"node", cmp.Or(*podpingNode, podping.DefaultNode),
-				"writers", cmp.Or(strings.Join(pinned, ","), "from the chain"))
-			group.Go(ctx, "podping", watcher.Run)
-		}
-		group.Go(ctx, "retention-sweeper", func(ctx context.Context) error {
-			tick := time.NewTicker(time.Minute)
-			defer tick.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-tick.C:
-					svc.SweepRetention(ctx)
-				}
-			}
-		})
-		group.Go(ctx, "fetch-worker", func(ctx context.Context) error {
-			tick := time.NewTicker(5 * time.Second)
-			defer tick.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-tick.C:
-					for svc.DrainFetchQueue(ctx) {
-						if ctx.Err() != nil {
-							return nil
-						}
-					}
-				}
-			}
-		})
-	}
-
-	// Playlist-sync scheduler: queues a sync task for every live source
-	// binding whose interval elapsed. Deliberately outside the podcast
-	// block - a music-only instance syncs playlists too - and the
-	// service self-gates on a snapshot-capable source provider, so a
-	// bridge-less instance just idles here.
-	group.Go(ctx, "playlist-sync", func(ctx context.Context) error {
-		tick := time.NewTicker(time.Minute)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-				svc.SyncDuePlaylistSources(ctx)
-			}
-		}
-	})
-
-	// The silence and loudness analysis worker serves audiobooks as
-	// much as podcasts (skip maps and voice-boost leveling), so it runs
-	// whenever the streaming sidecar does, independent of the podcast
-	// surface.
-	if bridge != nil {
-		group.Go(ctx, "analysis-worker", func(ctx context.Context) error {
-			tick := time.NewTicker(10 * time.Second)
-			defer tick.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-tick.C:
-					for svc.DrainAnalysisQueue(ctx) {
-						if ctx.Err() != nil {
-							return nil
-						}
-					}
-				}
-			}
-		})
-	}
-
-	// The scrobble and notification outboxes drain continuously; both
-	// are cheap when idle and their deliveries back off on failure.
-	group.Go(ctx, "scrobble-outbox", func(ctx context.Context) error {
-		tick := time.NewTicker(5 * time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-				for svc.DrainScrobbleOutbox(ctx) {
-					if ctx.Err() != nil {
-						return nil
-					}
-				}
-			}
-		}
-	})
-	group.Go(ctx, "notify-outbox", func(ctx context.Context) error {
-		tick := time.NewTicker(5 * time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-				for svc.DrainNotifyOutbox(ctx) {
-					if ctx.Err() != nil {
-						return nil
-					}
-				}
-			}
-		}
-	})
-
-	sessions := auth.NewSessions(store)
-	sessions.LimitPerAccount(maxSessions)
-
-	// Expired sessions, spent OIDC state, and stale one-time codes are
-	// swept on a coarse timer; correctness never depends on the sweep
-	// (lookups check expiry themselves), it just keeps the tables lean.
-	// The outbox prunes ride the same coarse timer.
-	group.Go(ctx, "session-janitor", func(ctx context.Context) error {
-		tick := time.NewTicker(time.Hour)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-				if err := store.SweepExpired(ctx); err != nil {
-					log.Warn("sweeping expired auth state", "err", err)
-				}
-				svc.PruneScrobbleOutbox(ctx)
-				svc.PruneNotifyOutbox(ctx)
-				svc.PruneNotifications(ctx)
-				svc.SweepMigrationExports(ctx)
-			}
-		}
-	})
-
-	// Curation background work: the identify worker (woken by new review
-	// entries, ticker as backstop), the health fix drainer, the tool
-	// task runner, the upload janitor, and the health sweep scheduler.
-	group.Go(ctx, "match-worker", func(ctx context.Context) error {
-		tick := time.NewTicker(30 * time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-svc.MatchWakeups():
-			case <-tick.C:
-			}
-			for svc.DrainMatchQueue(ctx) {
-				if ctx.Err() != nil {
-					return nil
-				}
-			}
-		}
-	})
-	for name, drain := range map[string]func(context.Context) bool{
-		"tool-worker": svc.DrainToolTasks,
-		// Health fixes and catalog repairs run for hours; on the tool
-		// worker, every acquisition and sync queued behind one would wait
-		// as long.
-		"long-task-worker": svc.DrainLongToolTasks,
-	} {
-		group.Go(ctx, name, func(ctx context.Context) error {
-			tick := time.NewTicker(10 * time.Second)
-			defer tick.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-tick.C:
-					for drain(ctx) {
-						if ctx.Err() != nil {
-							return nil
-						}
-					}
-				}
-			}
-		})
-	}
-	group.Go(ctx, "upload-janitor", func(ctx context.Context) error {
-		tick := time.NewTicker(time.Hour)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-				// Overdue batches finalize first (their members regain
-				// normal retention), then expired sessions reclaim.
-				for svc.DrainExpiredUploadBatches(ctx) {
-					if ctx.Err() != nil {
-						return nil
-					}
-				}
-				for svc.DrainExpiredUploads(ctx) {
-					if ctx.Err() != nil {
-						return nil
-					}
-				}
-			}
-		}
-	})
-	group.Go(ctx, "health-sweep", func(ctx context.Context) error {
-		tick := time.NewTicker(time.Minute)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-				if !svc.HealthSweepDue(ctx) {
-					continue
-				}
-				if err := svc.RunHealthSweep(ctx); err != nil {
-					log.Warn("health sweep", "err", err)
-				}
-			}
-		}
-	})
-
-	// Genre normalization is continuous rather than an ingest hook:
-	// genres read from file tags are resolved and stored by the catalog's
-	// own scanner and never pass through WaxDeck, so a library scanned
-	// tomorrow would be unnormalized again. This follows the catalog's
-	// change log, so newly scanned items fold onto the canonical
-	// vocabulary shortly after they land; the full-catalog pass is a tool
-	// task for anything older than the log retains.
-	group.Go(ctx, "genre-normalize", func(ctx context.Context) error {
-		first := time.NewTimer(time.Minute)
-		defer first.Stop()
-		tick := time.NewTicker(2 * time.Minute)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-first.C:
-			case <-tick.C:
-			}
-			for {
-				rep, err := svc.SweepGenres(ctx)
-				if err != nil {
-					log.Warn("genre normalization sweep", "err", err)
-					break
-				}
-				if rep.Normalized > 0 || rep.Locked > 0 {
-					log.Info("genre normalization sweep",
-						"scanned", rep.Scanned, "normalized", rep.Normalized,
-						"locked", rep.Locked, "offTree", rep.Unmapped)
-				}
-				if !rep.More || ctx.Err() != nil {
-					break
-				}
-			}
-		}
-	})
-
-	// Files a scan discovers reach the matching pipeline the same way:
-	// by tailing the catalog's change log rather than by an ingest hook,
-	// because a scan indexes files without WaxDeck being in the loop.
-	// The pass defers while a catalog job runs, which is what lets an
-	// album arrive whole rather than one entry per file indexed so far,
-	// so the ticker is slower than the sweeps that are pure computation.
-	group.Go(ctx, "discovery-match", func(ctx context.Context) error {
-		first := time.NewTimer(90 * time.Second)
-		defer first.Stop()
-		tick := time.NewTicker(3 * time.Minute)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-first.C:
-			case <-tick.C:
-			}
-			// Paced, not drained. A first scan of a large library holds
-			// thousands of album units and each pass re-reads the
-			// pending set, so looping back to back would spend the
-			// import as one long burst against a table the burst is
-			// growing - and the identify worker behind it is the thing
-			// that actually has to keep up. A short breath between
-			// passes turns that into a steady trickle; the ticker is
-			// the backstop either way.
-			for {
-				rep, err := svc.SweepDiscoveries(ctx)
-				if err != nil {
-					log.Warn("scan discovery sweep", "err", err)
-					break
-				}
-				if rep.Opened > 0 {
-					log.Info("scan discovery sweep",
-						"considered", rep.Considered, "opened", rep.Opened)
-				}
-				if !rep.More || ctx.Err() != nil {
-					break
-				}
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-time.After(2 * time.Second):
-				}
-			}
-		}
-	})
-
-	// The connect core: endpoint registry, playback sessions, and the
-	// command routing between controllers and endpoints. The advertise
-	// bases are what cast devices and renderers fetch media from; the
-	// LAN base auto-detects so plain-HTTP casting works with zero
-	// setup, and the loopback base serves the jukebox.
-	port := listenPort(*addr)
-	lanBase := *advertiseBase
-	if lanBase == "" {
-		if ip := detectLANIP(); ip != "" {
-			lanBase = "http://" + ip + ":" + port
-		}
-	}
-	bases := connect.Bases{
-		Public:   strings.TrimRight(*publicBase, "/"),
-		LAN:      strings.TrimRight(lanBase, "/"),
-		Loopback: "http://127.0.0.1:" + port,
-	}
-	connectSvc, err := connect.New(ctx, connect.Config{
-		Store:                store,
-		Group:                group,
-		Resolver:             &api.ConnectResolver{Svc: svc, Bridge: bridge, Media: media},
-		Sink:                 &api.ConnectSink{Svc: svc},
-		Bases:                bases,
-		InvalidatePlayer:     hub.MarkPlayerAll,
-		SharedOutputsAllowed: svc.UserSharedOutputsAllowed,
-		EntriesVisible:       svc.QueueEntriesVisible,
-		Logger:               log,
-	})
+	startSweeps(ctx, group, svc, log)
+	bridge, err := startFlow(ctx, group, cfg.streaming, cfg.core.libraryRoots, cfg.podcasts.rootName, svcCfg.PodcastDir,
+		svc, store, media, log)
 	if err != nil {
 		return err
 	}
-	group.Go(ctx, "connect", connectSvc.Run)
+	backups, backupWake := startBackups(ctx, group, svc, cfg.core.dataDir, svcCfg.Sealer, staged, log)
+	startCron(ctx, group, svc, backups, log)
+	if svcCfg.PodcastDir != "" {
+		startPodcastWorkers(ctx, group, svc, cfg.podcasts, agent, log)
+	}
+	startDrains(ctx, group, svc, bridge)
 
-	// Device discovery: multicast on the LAN plus statically configured
-	// devices for networks where multicast never arrives (the compose
-	// stack runs the server on the host network for this).
-	if *castDiscovery || *castDevices != "" {
-		cfg := castv2.DiscoveryConfig{
-			Announce:   connectSvc,
-			Group:      group,
-			Logger:     log,
-			Static:     parseCastDevices(*castDevices),
-			StaticOnly: !*castDiscovery,
-		}
-		group.Go(ctx, "cast-discovery", func(c context.Context) error {
-			return castv2.RunDiscovery(c, cfg)
-		})
-	}
-	if *castDiscovery || *dlnaDevices != "" {
-		cfg := dlna.DiscoveryConfig{
-			Announce:   connectSvc,
-			Group:      group,
-			Logger:     log,
-			Static:     parseDLNADevices(*dlnaDevices),
-			StaticOnly: !*castDiscovery,
-		}
-		group.Go(ctx, "dlna-discovery", func(c context.Context) error {
-			return dlna.RunDiscovery(c, cfg)
-		})
-	}
-	if *jukeboxOn {
-		if bridge == nil {
-			log.Warn("jukebox needs the streaming engine for WAV output; not registering the endpoint")
-		} else {
-			jbCfg := jukebox.Config{Name: *jukeboxName, Log: log}
-			if *jukeboxCmd != "" {
-				jbCfg.Command = strings.Fields(*jukeboxCmd)
-			}
-			if _, err := connectSvc.EndpointOnline(ctx, "jukebox", "jukebox", *jukeboxName, "", true, false, jukebox.Dial(jbCfg, group)); err != nil {
-				log.Warn("registering jukebox endpoint", "err", err)
-			}
-		}
+	sessions := auth.NewSessions(store)
+	sessions.LimitPerAccount(cfg.core.sessionCap)
+	startJanitor(ctx, group, store, svc, log)
+	startCurationWorkers(ctx, group, svc, log)
+
+	connectSvc, bases, err := startConnect(ctx, group, cfg.casting, cfg.core.addr, cfg.core.publicBase,
+		store, svc, bridge, media, hub, log)
+	if err != nil {
+		return err
 	}
 
-	if *trustedProxy != "" {
-		log.Info("trusting forwarded client addresses", "proxies", *trustedProxy)
-	}
-
-	srv := api.NewServer(version, api.Options{
-		Service:        svc,
-		Bridge:         bridge,
-		Sessions:       sessions,
-		OIDC:           oidc,
-		Media:          media,
-		Connect:        connectSvc,
-		Group:          group,
-		Bases:          bases,
-		Logger:         log,
-		CookieSecure:   *cookieSec,
-		PublicBase:     *publicBase,
-		Backups:        backups,
-		BackupWake:     backupWake,
-		Shares:         shareTokens,
-		WorkerTokens:   workerTokenList,
-		TrustedProxies: trusted,
-		// The signal context, not the request one: background work the
-		// API starts has to outlive the request that asked for it and
-		// still end when the process is asked to stop, or Group.Wait
-		// holds the shutdown open for the worker's whole budget.
-		ProcCtx: ctx,
+	mux := newMux(ctx, group, cfg.core, muxDeps{
+		front: front, svc: svc, store: store, bridge: bridge, hub: hub,
+		sessions: sessions, oidc: oidc, media: media, shareTokens: shareTokens,
+		connectSvc: connectSvc, bases: bases, backups: backups, backupWake: backupWake,
+		workerTokens: cfg.similarity.workerTokens, log: log,
 	})
-	apiHandler := srv.Handler()
-
-	// Request metrics ride the same registry the endpoint exposes, so a
-	// server with no metrics token instruments nothing at all: there is
-	// no scraper, and the series would only accumulate unread.
-	var reg *metrics.Registry
-	var httpm *httpMetrics
-	if *metricsToken != "" {
-		reg = newMetricsRegistry(version, store, svc)
-		httpm = newHTTPMetrics(reg)
-	} else {
-		log.Info("metrics endpoint disabled; set WAXDECK_METRICS_TOKEN to enable GET /metrics")
-	}
-
-	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", httpm.instrument("api", apiHandler.ServeHTTP))
-	// The event channel and the download endpoint live outside the
-	// generated router: a WebSocket upgrade and a ranged file server do
-	// not fit the strict-handler shape. The event channel runs behind
-	// the same auth middleware as the rest of the API; downloads
-	// authenticate by media token like /media/stream. It is also the one
-	// route with no request metrics: the upgrade hijacks the connection,
-	// so nothing is written through an instrumented writer, and what it
-	// opens is a session rather than a request.
-	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
-	// Backup archives are ranged and resumable, which the generated
-	// whole-body shape cannot be; the exact pattern wins over the
-	// /api/v1/ prefix above, and the same auth middleware still runs.
-	mux.Handle(api.BackupArchiveRoute,
-		httpm.instrumentStream("download", srv.AuthMiddleware(http.HandlerFunc(srv.ServeBackupArchive)).ServeHTTP))
-	// The tool-task event stream stays on the generated handler and is
-	// registered here only to be classed apart: it is open for as long as
-	// someone watches a task, so timing it as request duration is the
-	// poisoning the api class exists to avoid. Bulk request bodies under
-	// /api/v1/ (artwork, upload chunks, a backup import) deliberately stay
-	// in the api class: they are bounded transfers, and a slow one reads
-	// as a slow request, which is true.
-	mux.Handle(api.TaskEventsRoute, httpm.instrumentStream("api-events", apiHandler.ServeHTTP))
-	mux.Handle("GET /media/download", httpm.instrumentStream("download", srv.ServeDownload))
-	// A podcast episode whose audio is not on this server relays from
-	// the feed's own host, media-token authenticated like the rest of
-	// /media/*. The target comes from the episode in the catalog, never
-	// from the query, which is what keeps it from being an open proxy.
-	mux.Handle("GET /media/enclosure", httpm.instrumentStream("media-stream", srv.ServeEnclosure))
-	// Artwork for endpoints that cannot present a session: a cast
-	// receiver or a DLNA renderer fetches the URL it was handed, and the
-	// only credential it can carry is the one in that URL.
-	mux.Handle("GET /media/art", httpm.instrument("media-art", srv.ServeMediaArt))
-	// A second of silence for the device half of the cast connection
-	// check, fetched by the device under the token in its URL like the
-	// art beside it.
-	mux.Handle("GET /media/probe.wav", httpm.instrument("media-probe", srv.ServeProbeAudio))
-	// Radio streams proxy through this origin under a media token,
-	// like /media/stream; the guarded client owns the URL policy.
-	mux.Handle("GET /media/radio/{pid}", httpm.instrumentStream("media-stream", srv.ServeRadio))
-	// Public share pages: server-rendered plain HTML plus their media,
-	// authenticated by the capability token in the path.
-	mux.Handle("GET /s/{token}", httpm.instrument("share", srv.ServeSharePage))
-	mux.Handle("GET /s/{token}/stream", httpm.instrumentStream("media-stream", srv.ServeShareStream))
-	mux.Handle("GET /s/{token}/art", httpm.instrument("share", srv.ServeShareArt))
-	mux.Handle("GET /s/{token}/download", httpm.instrumentStream("download", srv.ServeShareDownload))
-	// The similarity worker's audio pull; worker-token authenticated.
-	mux.Handle("GET /media/analysis/{pid}", httpm.instrumentStream("media-stream", srv.ServeAnalysisAudio))
-	// The read-only OpenSubsonic compatibility surface. App-password
-	// authenticated; third-party clients browse and stream while the
-	// first-party clients mature.
-	mux.Handle("/rest/", httpm.instrument("subsonic", subsonic.New(svc, bridge, media, version, log).WithSessions(connectSvc).ServeHTTP))
-	// The gpodder.net-compatible sync surface (AntennaPod and friends):
-	// app passwords over Basic plus its own stored session cookie.
-	gp := gpodder.New(svc, *cookieSec, log)
-	mountGpodder(ctx, mux, group, httpm.instrument("gpodder", gp.ServeHTTP), svc.RetryPendingGpodder, time.Minute)
-	if bridge != nil {
-		mux.Handle("/media/stream", httpm.instrumentStream("media-stream", bridge.ServeStream))
-		// HLS fetches are many short requests (a playlist, an init
-		// segment, a few seconds of audio each), so total duration is a
-		// real latency number here and not a listening session's length.
-		mux.Handle("/media/hls/", httpm.instrument("media-hls", bridge.ServeHLS))
-	} else {
-		mux.Handle("/media/stream", httpm.instrument("media-stream", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotImplemented)
-			fmt.Fprintln(w, `{"code":"internal","message":"streaming is not configured on this server"}`)
-		}))
-	}
-	if reg != nil {
-		// Exempt from instrumentation: a scrape must not measure itself.
-		mux.Handle("GET /metrics", metricsHandler(*metricsToken, reg))
-	}
-	mux.Handle("/", httpm.instrument("web", site.ServeHTTP))
 
 	// Streaming handlers (the radio proxy, any long response body) hold
 	// their connections active for as long as both sides stay open, and
@@ -1430,18 +182,7 @@ func run() error {
 	// ends the streams so the drain can finish.
 	reqCtx, reqCancel := context.WithCancel(context.Background())
 	defer reqCancel()
-	if len(allowedOrigins) > 0 {
-		// Logged as parsed, not as written: an exact-match list is the
-		// kind of configuration that fails silently on a stray slash, and
-		// this is the line that says what the server actually believes.
-		log.Info("allowing cross-origin browser clients", "origins", allowedOrigins)
-	}
-	httpSrv := &http.Server{
-		Addr:              *addr,
-		Handler:           withCORS(allowedOrigins, mux),
-		ReadHeaderTimeout: 10 * time.Second,
-		BaseContext:       func(net.Listener) context.Context { return reqCtx },
-	}
+	httpSrv := newHTTPServer(reqCtx, cfg.core.addr, front.origins, mux, log)
 
 	served := serve(ctx, group, log, httpSrv, ln, stop)
 
@@ -1458,496 +199,43 @@ func run() error {
 	return served()
 }
 
-// mountGpodder serves the gpodder surface and runs, every interval, the
-// retries of the feeds its devices added that could not be fetched yet.
-// On a server whose podcast directory is off every add is refused, so
-// nothing parks, and a park left from before is refused at its next try.
-func mountGpodder(ctx context.Context, mux *http.ServeMux, group *supervise.Group, h http.Handler,
-	retry func(context.Context), every time.Duration) {
-	mux.Handle("/api/2/", h)
-	mux.Handle("/subscriptions/", h)
-	group.Go(ctx, "gpodder-pending", func(ctx context.Context) error {
-		tick := time.NewTicker(every)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-				retry(ctx)
-			}
-		}
-	})
+// httpFront is what the start's checks yield for the HTTP surface: the web
+// UI, the origins allowed to call from a browser, and the parsed
+// trusted-proxy list.
+type httpFront struct {
+	site      http.Handler
+	webSource string
+	origins   []string
+	proxies   api.TrustedProxies
 }
 
-// root is one parsed name=path pair.
-type root struct {
-	Name string
-	Path string
-}
-
-// checkPodcastRootName refuses a podcast root named like a library root:
-// the engine refuses duplicate root names at start.
-func checkPodcastRootName(roots []root, name string) error {
-	for _, r := range roots {
-		if r.Name == name {
-			return fmt.Errorf("WAXDECK_PODCAST_ROOT_NAME %q is also a library root in WAXDECK_LIBRARY_ROOTS; give one of them another name", name)
-		}
-	}
-	return nil
-}
-
-// engineSeedRoots is what the engine's roots file starts with: the
-// configured roots, then the podcast root when podcasts are on.
-func engineSeedRoots(roots []root, podcastRoot, podcastDir string) []flow.Root {
-	out := make([]flow.Root, 0, len(roots)+1)
-	for _, r := range roots {
-		out = append(out, flow.Root{Name: r.Name, Path: r.Path})
-	}
-	if podcastDir != "" {
-		out = append(out, flow.Root{Name: podcastRoot, Path: podcastDir})
-	}
-	return out
-}
-
-// parseRoots parses "name=path,name2=path2". Names must match the
-// WaxFlow roots that mount the same directories, since stream requests
-// address sources as name/relpath.
-func parseRoots(s string) ([]root, error) {
-	if strings.TrimSpace(s) == "" {
-		return nil, nil
-	}
-	var roots []root
-	for part := range strings.SplitSeq(s, ",") {
-		name, path, ok := strings.Cut(strings.TrimSpace(part), "=")
-		if !ok || name == "" || path == "" {
-			return nil, fmt.Errorf("bad library root %q: want name=path", part)
-		}
-		abs, err := filepath.Abs(path)
-		if err != nil {
-			return nil, fmt.Errorf("bad library root %q: %w", part, err)
-		}
-		roots = append(roots, root{Name: name, Path: abs})
-	}
-	return roots, nil
-}
-
-// serviceRoots marks the configured roots that managedRoots and bookRoots
-// (comma-separated names) name as managed or as holding audiobooks. A name
-// that is no configured root is refused: a typo would otherwise leave a
-// root unmanaged, or its books cataloged as music, with nothing to say so.
-func serviceRoots(roots []root, managedRoots, bookRoots string) ([]service.Root, error) {
-	managed := map[string]bool{}
-	for name := range strings.SplitSeq(managedRoots, ",") {
-		if name = strings.TrimSpace(name); name != "" {
-			managed[name] = true
-		}
-	}
-	books := map[string]bool{}
-	for _, name := range splitNonEmpty(bookRoots, ",") {
-		books[name] = true
-	}
-	svcRoots := make([]service.Root, len(roots))
-	for i, r := range roots {
-		svcRoots[i] = service.Root{Name: r.Name, Path: r.Path, Managed: managed[r.Name]}
-		if books[r.Name] {
-			svcRoots[i].Media = "audiobook"
-		}
-		delete(managed, r.Name)
-		delete(books, r.Name)
-	}
-	if len(managed) > 0 {
-		for name := range managed {
-			return nil, fmt.Errorf("WAXDECK_MANAGED_ROOTS names %q, which is not a configured library root", name)
-		}
-	}
-	for name := range books {
-		return nil, fmt.Errorf("WAXDECK_AUDIOBOOK_ROOTS names %q, which is not a configured library root", name)
-	}
-	return svcRoots, nil
-}
-
-// podcastDirFrom resolves the podcast directory. Podcasts work out of
-// the box: with nothing said the dir lands beside the databases. Only an
-// explicit empty, -podcast-dir="" or WAXDECK_PODCAST_DIR set and empty,
-// turns podcasts off; the flag default is empty so the env fallback
-// stays expressible, hence asking whether either was set at all.
-func podcastDirFrom(value string, flagSet bool, lookupEnv func(string) (string, bool), dataDir string) string {
-	if value != "" || flagSet {
-		return value
-	}
-	if _, set := lookupEnv("WAXDECK_PODCAST_DIR"); set {
-		return ""
-	}
-	return filepath.Join(dataDir, "podcasts")
-}
-
-// sponsorBlockFrom resolves the SponsorBlock categories cut from acquired
-// audio: the flag when given, else the variable when set (empty turns
-// cutting off), else sponsors and non-music sections.
-func sponsorBlockFrom(value string, flagSet bool, lookupEnv func(string) (string, bool)) []string {
-	if !flagSet {
-		if v, set := lookupEnv("WAXDECK_YOUTUBE_SPONSORBLOCK"); set {
-			value = v
-		} else {
-			value = "sponsor,music_offtopic"
-		}
-	}
-	var out []string
-	for c := range strings.SplitSeq(value, ",") {
-		if c = strings.TrimSpace(c); c != "" {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}
-
-// splitNonEmpty splits on sep, trims each part, and drops empties.
-func splitNonEmpty(s, sep string) []string {
-	var out []string
-	for _, part := range strings.Split(s, sep) {
-		if part = strings.TrimSpace(part); part != "" {
-			out = append(out, part)
-		}
-	}
-	return out
-}
-
-// parsePairs parses "name=value,name2=value2", order-preserving; what
-// names the flag for the error. The error never echoes a value: one of
-// these flags carries bearer tokens, and a malformed entry must not
-// write its secret to the log on its way out.
-func parsePairs(s, what string) ([][2]string, error) {
-	if strings.TrimSpace(s) == "" {
-		return nil, nil
-	}
-	var out [][2]string
-	i := 0
-	for part := range strings.SplitSeq(s, ",") {
-		i++
-		name, val, ok := strings.Cut(strings.TrimSpace(part), "=")
-		if !ok || name == "" || val == "" {
-			return nil, fmt.Errorf("bad %s entry %d: want name=value", what, i)
-		}
-		out = append(out, [2]string{name, val})
-	}
-	return out, nil
-}
-
-// flagWasSet reports whether the named flag appeared on the command
-// line (distinguishing an explicit empty value from the default).
-func flagWasSet(name string) bool {
-	set := false
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			set = true
-		}
-	})
-	return set
-}
-
-// maxRetryDays is the longest miss window a Duration holds; past it the
-// catalog's day count wraps to a short window.
-const maxRetryDays = int(math.MaxInt64 / int64(24*time.Hour))
-
-// enrichRetryWindow refuses a negative miss window, which the catalog
-// would silently read as never, and one too long to hold.
-func enrichRetryWindow(days int) (*int, error) {
-	if days < 0 || days > maxRetryDays {
-		return nil, fmt.Errorf("WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS is %d; want at most %d days, or 0 to never ask again", days, maxRetryDays)
-	}
-	return &days, nil
-}
-
-// sessionCapFrom refuses a cap below one, which would otherwise read as
-// the default: there is no "no cap", since every sign-in adds a row.
-func sessionCapFrom(n int) (int, error) {
-	if n < 1 {
-		return 0, fmt.Errorf("WAXDECK_SESSION_CAP is %d; want at least 1", n)
-	}
-	return n, nil
-}
-
-// listenPort extracts the port from a listen address, defaulting to
-// the standard port when the address carries none.
-func listenPort(addr string) string {
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil || port == "" {
-		return "4420"
-	}
-	return port
-}
-
-// detectLANIP picks the machine's most plausible LAN IPv4: the first
-// global unicast address on an up, non-loopback interface. Cast
-// devices resolve nothing, so an address beats any name.
-func detectLANIP() string {
-	ifaces, err := net.Interfaces()
+// checkStart refuses the settings the server cannot run with.
+func checkStart(cfg *config) (httpFront, error) {
+	// Before anything is opened: a web dir without the app is a typo,
+	// which a server answering every navigation with a 404 would hide.
+	site, webSource, err := web.Handler(cfg.core.webDir)
 	if err != nil {
-		return ""
+		return httpFront{}, err
 	}
-	var list []lanIface
-	for _, iface := range ifaces {
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		list = append(list, lanIface{
-			name: iface.Name, up: iface.Flags&net.FlagUp != 0,
-			loopback: iface.Flags&net.FlagLoopback != 0, addrs: addrs,
-		})
-	}
-	return scanLANIP(list)
-}
-
-// lanIface is what detectLANIP reads off an interface, so the choice can
-// be tested without one.
-type lanIface struct {
-	name     string
-	up       bool
-	loopback bool
-	addrs    []net.Addr
-}
-
-// scanLANIP picks the first routable IPv4 of an interface that is up and
-// neither loopback nor virtual: on the host network docker0, compose's
-// br-* and VPN tunnels carry routable addresses no cast device can reach.
-func scanLANIP(ifaces []lanIface) string {
-	for _, iface := range ifaces {
-		if !iface.up || iface.loopback || virtualInterface(iface.name) {
-			continue
-		}
-		for _, a := range iface.addrs {
-			ipNet, ok := a.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			ip := ipNet.IP.To4()
-			if ip == nil || !ip.IsGlobalUnicast() {
-				continue
-			}
-			return ip.String()
-		}
-	}
-	return ""
-}
-
-func virtualInterface(name string) bool {
-	for _, p := range []string{"docker", "br-", "veth", "virbr", "podman", "cni", "flannel", "tun", "tap", "wg", "tailscale"} {
-		if strings.HasPrefix(name, p) {
-			return true
-		}
-	}
-	return false
-}
-
-// parseCastDevices parses name=host:port pairs into static devices.
-func parseCastDevices(s string) []castv2.Device {
-	var out []castv2.Device
-	for _, part := range strings.Split(s, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		name, addr, ok := strings.Cut(part, "=")
-		if !ok {
-			continue
-		}
-		host, portStr, err := net.SplitHostPort(addr)
-		if err != nil {
-			continue
-		}
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			continue
-		}
-		out = append(out, castv2.Device{Host: host, Port: port, Name: name})
-	}
-	return out
-}
-
-// parseDLNADevices parses description URLs into static devices.
-func parseDLNADevices(s string) []dlna.Device {
-	var out []dlna.Device
-	for _, part := range strings.Split(s, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		out = append(out, dlna.Device{Location: part})
-	}
-	return out
-}
-
-// stagedCasualties reads the sealed-credential casualty list out of the
-// restore marker before Apply consumes it, so the post-restore sweep
-// can record exactly what went pending re-auth.
-func stagedCasualties(dataDir string) []service.SealedCasualty {
-	raw, err := os.ReadFile(filepath.Join(dataDir, "restore-staged.json"))
+	// A trusted-proxy list or an origin is refused rather than defaulted:
+	// a typo that silently trusted nothing, or matched nothing, would look
+	// exactly like a working configuration until the day somebody was
+	// locked out by it.
+	trusted, err := api.ParseTrustedProxies(cfg.core.trustedProxies)
 	if err != nil {
-		return nil
+		return httpFront{}, fmt.Errorf("trusted proxies: %w", err)
 	}
-	var doc struct {
-		SealedCasualties []service.SealedCasualty `json:"sealedCasualties"`
+	allowedOrigins, err := normalizeOrigins(splitNonEmpty(cfg.core.corsOrigins, ","))
+	if err != nil {
+		return httpFront{}, fmt.Errorf("cors origins: %w", err)
 	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil
+	if cfg.oidc.issuer != "" && cfg.core.publicBase == "" {
+		return httpFront{}, errors.New("WAXDECK_OIDC_ISSUER requires WAXDECK_PUBLIC_BASE for the callback URL")
 	}
-	return doc.SealedCasualties
-}
-
-// keyProber answers the restore preflight: whether this host's key
-// opens the archive's sealed credentials, and which credentials break
-// when it does not. It reads the archive's own waxdeck.db snapshot,
-// never the live one.
-func keyProber(sealer *auth.Sealer) service.KeyProber {
-	return func(ctx context.Context, waxdeckDBPath string) (bool, bool, []service.SealedCasualty) {
-		conn, err := sql.Open("sqlite", "file:"+waxdeckDBPath+"?mode=ro")
-		if err != nil {
-			return true, false, nil
-		}
-		defer conn.Close()
-		type sealedRow struct {
-			kind, name string
-			blob       []byte
-		}
-		var rows []sealedRow
-		if r, err := conn.QueryContext(ctx, `
-			SELECT ap.label, u.username, ap.secret_enc
-			FROM app_passwords ap LEFT JOIN users u ON u.id = ap.user_id`); err == nil {
-			mark := len(rows)
-			for r.Next() {
-				var label, username sql.NullString
-				var blob []byte
-				if r.Scan(&label, &username, &blob) == nil {
-					rows = append(rows, sealedRow{"app-password", username.String + "/" + label.String, blob})
-				}
-			}
-			r.Close()
-			// An iteration that broke mid-stream contributes nothing, like
-			// the query failing outright: a half-read table must not pass
-			// for the whole casualty list.
-			if r.Err() != nil {
-				rows = rows[:mark]
-			}
-		}
-		if r, err := conn.QueryContext(ctx, `
-			SELECT sc.service, u.username, sc.sealed_secret
-			FROM scrobble_connections sc LEFT JOIN users u ON u.id = sc.user_id`); err == nil {
-			mark := len(rows)
-			for r.Next() {
-				var svcName, username sql.NullString
-				var blob []byte
-				if r.Scan(&svcName, &username, &blob) == nil {
-					rows = append(rows, sealedRow{"scrobble-connection", username.String + "/" + svcName.String, blob})
-				}
-			}
-			r.Close()
-			if r.Err() != nil {
-				rows = rows[:mark]
-			}
-		}
-		// The err == nil idiom doubles as version tolerance: an archive
-		// from before notification targets simply lacks the table and
-		// contributes nothing.
-		if r, err := conn.QueryContext(ctx, `
-			SELECT nt.kind, nt.label, u.username, nt.sealed_config
-			FROM notification_targets nt LEFT JOIN users u ON u.id = nt.user_id`); err == nil {
-			mark := len(rows)
-			for r.Next() {
-				var kind, label, username sql.NullString
-				var blob []byte
-				if r.Scan(&kind, &label, &username, &blob) == nil {
-					owner := username.String
-					if owner == "" {
-						owner = "server"
-					}
-					name := owner + "/" + kind.String
-					if label.String != "" {
-						name += "/" + label.String
-					}
-					rows = append(rows, sealedRow{"notification-target", name, blob})
-				}
-			}
-			r.Close()
-			if r.Err() != nil {
-				rows = rows[:mark]
-			}
-		}
-		if len(rows) == 0 {
-			return true, true, nil
-		}
-		if _, err := sealer.Open(rows[0].blob); err == nil {
-			return true, true, nil
-		}
-		casualties := make([]service.SealedCasualty, 0, len(rows))
-		for _, row := range rows {
-			casualties = append(casualties, service.SealedCasualty{Kind: row.kind, Name: row.name})
-		}
-		return true, false, casualties
-	}
-}
-
-// metricsHandler serves the Prometheus endpoint behind its bearer
-// token. Gauges sample the database at scrape time; counts here are
-// small at self-host scale.
-// newMetricsRegistry builds the registry the /metrics endpoint renders.
-// It is separate from the handler because the request-level families
-// are registered on it before the mux is wired, and the wiring is what
-// names each route's class.
-func newMetricsRegistry(version string, store *db.DB, svc *service.Library) *metrics.Registry {
-	reg := metrics.NewRegistry()
-	reg.GoRuntime()
-	reg.GaugeVec("waxdeck_build_info", "Build metadata; value is always 1.", []string{"version"}).
-		With(version).Set(1)
-	count := func(query string) func() float64 {
-		return func() float64 {
-			var n float64
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := store.Reader().QueryRowContext(ctx, query).Scan(&n); err != nil {
-				return 0
-			}
-			return n
+	if cfg.streaming.flowURL != "" {
+		if err := flow.CheckBaseURL(cfg.streaming.flowURL); err != nil {
+			return httpFront{}, err
 		}
 	}
-	reg.GaugeFunc("waxdeck_users", "Accounts, pending registrations included.",
-		count(`SELECT COUNT(*) FROM users`))
-	reg.GaugeFunc("waxdeck_signup_requests_pending", "Registrations awaiting approval.",
-		count(`SELECT COUNT(*) FROM users WHERE pending = 1`))
-	reg.GaugeFunc("waxdeck_sessions", "Live login sessions.",
-		count(`SELECT COUNT(*) FROM sessions`))
-	reg.GaugeFunc("waxdeck_listen_sessions_total", "Recorded listen sessions.",
-		count(`SELECT COUNT(*) FROM listen_sessions`))
-	reg.GaugeFunc("waxdeck_tool_tasks_active", "Queued or running background tasks.",
-		count(`SELECT COUNT(*) FROM tool_tasks WHERE state IN ('queued','running')`))
-	reg.GaugeFunc("waxdeck_scrobble_outbox_depth", "Undelivered scrobbles.",
-		count(`SELECT COUNT(*) FROM scrobble_outbox`))
-	reg.GaugeFunc("waxdeck_notify_outbox_depth", "Undelivered notifications.",
-		count(`SELECT COUNT(*) FROM notify_outbox`))
-	reg.GaugeFunc("waxdeck_transcode_sessions_active", "Engine-backed sessions in flight.",
-		func() float64 { return float64(svc.ActiveTranscodeSessions().Sessions) })
-	reg.GaugeFunc("waxdeck_transcode_timelines_active", "Listeners playing a queue as one gapless rendering.",
-		func() float64 { return float64(svc.ActiveTranscodeSessions().Timelines) })
-	return reg
-}
-
-// metricsHandler renders a registry behind the scrape token.
-func metricsHandler(token string, reg *metrics.Registry) http.Handler {
-	inner := reg.Handler()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if subtle.ConstantTimeCompare([]byte(auth), []byte("Bearer "+token)) != 1 {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		inner.ServeHTTP(w, r)
-	})
+	return httpFront{site: site, webSource: webSource, origins: allowedOrigins, proxies: trusted}, nil
 }

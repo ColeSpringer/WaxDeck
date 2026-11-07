@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"unicode/utf8"
 
@@ -26,18 +27,15 @@ func (s *Server) GetBootstrapStatus(ctx context.Context, _ GetBootstrapStatusReq
 
 func (s *Server) Bootstrap(ctx context.Context, req BootstrapRequestObject) (BootstrapResponseObject, error) {
 	if req.Body == nil {
-		return Bootstrap400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	if msg := passwordPolicy(req.Body.Password); msg != "" {
-		return Bootstrap400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", msg))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", msg)
 	}
 	acct, err := s.svc.Bootstrap(ctx, req.Body.Username, req.Body.Password, deref(req.Body.DisplayName))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindConflict:
-			return Bootstrap409JSONResponse{ConflictJSONResponse(errObj("conflict", "the server already has accounts"))}, nil
-		case service.KindInvalid:
-			return Bootstrap400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		if service.KindOf(err) == service.KindConflict {
+			return nil, refuse(http.StatusConflict, "conflict", "the server already has accounts")
 		}
 		return nil, err
 	}
@@ -56,12 +54,9 @@ func (s *Server) Bootstrap(ctx context.Context, req BootstrapRequestObject) (Boo
 // --- session & device management ---------------------------------------------------
 
 func (s *Server) RefreshToken(ctx context.Context, _ RefreshTokenRequestObject) (RefreshTokenResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return RefreshToken401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
-	}
+	p, _ := principalFromContext(ctx)
 	if p.FromCookie {
-		return RefreshToken400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "cookie sessions have no bearer token to rotate"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "cookie sessions have no bearer token to rotate")
 	}
 	token, err := s.sessions.Rotate(ctx, p.Session)
 	if err != nil {
@@ -73,10 +68,7 @@ func (s *Server) RefreshToken(ctx context.Context, _ RefreshTokenRequestObject) 
 }
 
 func (s *Server) ListSessions(ctx context.Context, _ ListSessionsRequestObject) (ListSessionsResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return ListSessions401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
-	}
+	p, _ := principalFromContext(ctx)
 	rows, err := s.sessions.ListForUser(ctx, p.User.ID)
 	if err != nil {
 		return nil, err
@@ -128,32 +120,29 @@ func truncatedDeviceName(raw string) string {
 }
 
 func (s *Server) RenameSession(ctx context.Context, req RenameSessionRequestObject) (RenameSessionResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return RenameSession401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
-	}
+	p, _ := principalFromContext(ctx)
 	if req.Body == nil {
-		return RenameSession400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	name, ok := deviceNameFor(req.Body.DeviceName)
 	if !ok {
-		return RenameSession400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request",
-			"deviceName must be 1 to 128 characters after trimming"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request",
+			"deviceName must be 1 to 128 characters after trimming")
 	}
 	target, err := s.sessions.Get(ctx, req.SessionId)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
-			return RenameSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no session with id "+req.SessionId))}, nil
+			return nil, refuse(http.StatusNotFound, "not-found", "no session with id "+req.SessionId)
 		}
 		return nil, err
 	}
 	// A foreign session is indistinguishable from a missing one.
 	if target.UserID != p.User.ID {
-		return RenameSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no session with id "+req.SessionId))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no session with id "+req.SessionId)
 	}
 	if err := s.sessions.Rename(ctx, target.ID, name); err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
-			return RenameSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no session with id "+req.SessionId))}, nil
+			return nil, refuse(http.StatusNotFound, "not-found", "no session with id "+req.SessionId)
 		}
 		return nil, err
 	}
@@ -162,20 +151,17 @@ func (s *Server) RenameSession(ctx context.Context, req RenameSessionRequestObje
 }
 
 func (s *Server) RevokeSession(ctx context.Context, req RevokeSessionRequestObject) (RevokeSessionResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return RevokeSession401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
-	}
+	p, _ := principalFromContext(ctx)
 	target, err := s.sessions.Get(ctx, req.SessionId)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
-			return RevokeSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no session with id "+req.SessionId))}, nil
+			return nil, refuse(http.StatusNotFound, "not-found", "no session with id "+req.SessionId)
 		}
 		return nil, err
 	}
 	// A foreign session is indistinguishable from a missing one.
 	if target.UserID != p.User.ID {
-		return RevokeSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no session with id "+req.SessionId))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no session with id "+req.SessionId)
 	}
 	if err := s.endSessions(ctx, p.User.ID, target.ID, ""); err != nil {
 		return nil, err
@@ -189,18 +175,12 @@ func (s *Server) RevokeSession(ctx context.Context, req RevokeSessionRequestObje
 }
 
 func (s *Server) RevokeUserSessions(ctx context.Context, req RevokeUserSessionsRequestObject) (RevokeUserSessionsResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return RevokeUserSessions401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
-	}
+	p, _ := principalFromContext(ctx)
 	if req.UserId != p.User.ID && !p.IsAdmin() {
-		return RevokeUserSessions403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators only")
 	}
 	acct, err := s.svc.Account(ctx, req.UserId)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return RevokeUserSessions404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no user with id "+req.UserId))}, nil
-		}
 		return nil, err
 	}
 	self := req.UserId == p.User.ID
@@ -214,11 +194,9 @@ func (s *Server) RevokeUserSessions(ctx context.Context, req RevokeUserSessionsR
 	// Signing an account out everywhere is a deliberate act on every
 	// device it holds, so it is on the record whoever asked - once the
 	// sessions are gone, whatever the gpodder half below answers.
-	if uc, _, err := s.requireUserCtx(ctx); err == nil {
-		s.svc.Audit(ctx, uc, "user.sessions-revoke",
-			service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
-			map[string]any{"self": self, "kept": keep != ""})
-	}
+	s.svc.Audit(ctx, userCtx(ctx), "user.sessions-revoke",
+		service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
+		map[string]any{"self": self, "kept": keep != ""})
 	// Everywhere includes the podcast clients signed in over gpodder; a
 	// failure here is reported so the caller tries again.
 	if err := s.svc.EndGpodderSessions(ctx, req.UserId); err != nil {
@@ -263,13 +241,12 @@ func deviceSessionJSON(row *wdb.Session, current bool) DeviceSession {
 // --- user administration -----------------------------------------------------------
 
 func (s *Server) ListUsers(ctx context.Context, req ListUsersRequestObject) (ListUsersResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return ListUsers403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
-	limit, okLimit := pageLimit(req.Params.Limit, 100, 500)
-	if !okLimit {
-		return ListUsers400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
+	if err != nil {
+		return nil, err
 	}
 	page, err := s.svc.Accounts(ctx, deref(req.Params.Cursor), limit)
 	if err != nil {
@@ -286,15 +263,14 @@ func (s *Server) ListUsers(ctx context.Context, req ListUsersRequestObject) (Lis
 }
 
 func (s *Server) CreateUser(ctx context.Context, req CreateUserRequestObject) (CreateUserResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return CreateUser403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	if req.Body == nil {
-		return CreateUser400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	if msg := passwordPolicy(req.Body.Password); msg != "" {
-		return CreateUser400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", msg))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", msg)
 	}
 	in := service.AccountCreate{
 		Username:    req.Body.Username,
@@ -320,57 +296,43 @@ func (s *Server) CreateUser(ctx context.Context, req CreateUserRequestObject) (C
 	}
 	acct, err := s.svc.CreateAccount(ctx, in)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindConflict:
-			return CreateUser409JSONResponse{ConflictJSONResponse(errObj("conflict", "username is taken"))}, nil
-		case service.KindInvalid:
-			return CreateUser400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		if service.KindOf(err) == service.KindConflict {
+			return nil, refuse(http.StatusConflict, "conflict", "username is taken")
 		}
 		return nil, err
 	}
-	if uc, _, err := s.requireUserCtx(ctx); err == nil {
-		s.svc.Audit(ctx, uc, "user.create",
-			service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
-			map[string]any{"roles": acct.User.Roles})
-	}
+	s.svc.Audit(ctx, userCtx(ctx), "user.create",
+		service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
+		map[string]any{"roles": acct.User.Roles})
 	return CreateUser201JSONResponse(userAccountJSON(*acct)), nil
 }
 
 func (s *Server) GetUser(ctx context.Context, req GetUserRequestObject) (GetUserResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return GetUser401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
-	}
+	p, _ := principalFromContext(ctx)
 	if req.UserId != p.User.ID && !p.IsAdmin() {
-		return GetUser403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators only")
 	}
 	acct, err := s.svc.Account(ctx, req.UserId)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetUser404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no user with id "+req.UserId))}, nil
-		}
 		return nil, err
 	}
 	return GetUser200JSONResponse(userAccountJSON(*acct)), nil
 }
 
 func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (UpdateUserResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return UpdateUser401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
-	}
+	p, _ := principalFromContext(ctx)
 	if req.Body == nil {
-		return UpdateUser400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	admin := p.IsAdmin()
 	if req.UserId != p.User.ID && !admin {
-		return UpdateUser403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators only")
 	}
 	// Non-administrators may change only their own display name; any
 	// other supplied field is rejected loudly, never silently ignored.
 	if !admin && (req.Body.Roles != nil || req.Body.Disabled != nil || req.Body.LibraryAccess != nil ||
 		req.Body.UploadEnabled != nil || req.Body.UploadQuotaBytes != nil || req.Body.Permissions != nil) {
-		return UpdateUser403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "only displayName may be changed on your own account"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "only displayName may be changed on your own account")
 	}
 	upd := service.AccountUpdate{
 		DisplayName:      req.Body.DisplayName,
@@ -413,14 +375,6 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 	}
 	acct, err := s.svc.UpdateAccount(ctx, req.UserId, upd)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return UpdateUser404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no user with id "+req.UserId))}, nil
-		case service.KindConflict:
-			return UpdateUser409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		case service.KindInvalid:
-			return UpdateUser400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	// Disabling ends the account's sessions and gpodder logins at once.
@@ -435,11 +389,9 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 	if before != nil {
 		// A save that changed nothing is not an event.
 		if changes := service.AccountChanges(before, acct); len(changes) > 0 {
-			if uc, _, err := s.requireUserCtx(ctx); err == nil {
-				s.svc.Audit(ctx, uc, "user.update",
-					service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
-					map[string]any{"changes": changes})
-			}
+			s.svc.Audit(ctx, userCtx(ctx), "user.update",
+				service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
+				map[string]any{"changes": changes})
 		}
 	}
 	if revokeErr != nil {
@@ -449,17 +401,14 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 }
 
 func (s *Server) DeleteUser(ctx context.Context, req DeleteUserRequestObject) (DeleteUserResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return DeleteUser403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
+	p, _ := principalFromContext(ctx)
 	if req.UserId == p.User.ID {
-		return DeleteUser409JSONResponse{ConflictJSONResponse(errObj("conflict", "you cannot delete the account you are signed in as"))}, nil
+		return nil, refuse(http.StatusConflict, "conflict", "you cannot delete the account you are signed in as")
 	}
-	uc, _, ucErr := s.requireUserCtx(ctx)
-	if ucErr != nil {
-		return nil, ucErr
-	}
+	uc := userCtx(ctx)
 	opts := service.AccountDeletion{TransferTo: deref(req.Params.TransferTo)}
 	if req.Params.Playlists != nil {
 		opts.Playlists = string(*req.Params.Playlists)
@@ -488,14 +437,6 @@ func (s *Server) DeleteUser(ctx context.Context, req DeleteUserRequestObject) (D
 			userDeleteDetail(deleted, err))
 	}
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return DeleteUser404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no user with id "+req.UserId))}, nil
-		case service.KindConflict:
-			return DeleteUser409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		case service.KindInvalid:
-			return DeleteUser400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	// The rows went with the account (a cascade nothing announces); this
@@ -541,7 +482,7 @@ func userDeleteDetail(deleted service.AccountDeleted, err error) map[string]any 
 		// an internal fault's text can carry paths and queries.
 		detail["error"] = "internal error"
 		if service.KindOf(err) != service.KindInternal {
-			detail["error"] = err.Error()
+			detail["error"] = serviceMessage(err)
 		}
 		// A copy of a playlist that the failure could not take back stays
 		// in the catalog until the next attempt takes it up.
@@ -558,19 +499,16 @@ func userDeleteDetail(deleted service.AccountDeleted, err error) map[string]any 
 type leftCopier interface{ LeftCopy() string }
 
 func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) (SetPasswordResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return SetPassword401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
-	}
+	p, _ := principalFromContext(ctx)
 	if req.Body == nil {
-		return SetPassword400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	if msg := passwordPolicy(req.Body.NewPassword); msg != "" {
-		return SetPassword400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", msg))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", msg)
 	}
 	self := req.UserId == p.User.ID
 	if !self && !p.IsAdmin() {
-		return SetPassword403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators only")
 	}
 	// Changing your own password always proves possession of the current
 	// one, administrators included; admin privilege only waives it for
@@ -583,13 +521,10 @@ func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) 
 		}
 		hasPassword := p.User.PasswordHash != ""
 		if hasPassword && (current == "" || verified == nil) {
-			return SetPassword403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "wrong current password"))}, nil
+			return nil, refuse(http.StatusForbidden, "forbidden", "wrong current password")
 		}
 	}
 	if err := s.svc.SetAccountPassword(ctx, req.UserId, req.Body.NewPassword); err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return SetPassword404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no user with id "+req.UserId))}, nil
-		}
 		return nil, err
 	}
 	// Self-change spares the session making the request; an admin reset
@@ -602,13 +537,11 @@ func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) 
 		return nil, err
 	}
 	if !self {
-		if uc, _, err := s.requireUserCtx(ctx); err == nil {
-			target := service.AuditTarget{Kind: "user", PID: req.UserId}
-			if acct, err := s.svc.Account(ctx, req.UserId); err == nil {
-				target.Name = acct.User.Username
-			}
-			s.svc.Audit(ctx, uc, "user.password-reset", target, nil)
+		target := service.AuditTarget{Kind: "user", PID: req.UserId}
+		if acct, err := s.svc.Account(ctx, req.UserId); err == nil {
+			target.Name = acct.User.Username
 		}
+		s.svc.Audit(ctx, userCtx(ctx), "user.password-reset", target, nil)
 	}
 	return SetPassword204Response{}, nil
 }
@@ -616,10 +549,7 @@ func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) 
 // --- prefs -------------------------------------------------------------------------
 
 func (s *Server) GetPrefs(ctx context.Context, _ GetPrefsRequestObject) (GetPrefsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	p, err := s.svc.Prefs(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -628,12 +558,9 @@ func (s *Server) GetPrefs(ctx context.Context, _ GetPrefsRequestObject) (GetPref
 }
 
 func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPrefsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return PutPrefs400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	in := service.Prefs{
 		Timezone:            deref(req.Body.Timezone),
@@ -665,9 +592,6 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 	}
 	stored, err := s.svc.PutPrefs(ctx, uc, in)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return PutPrefs400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PutPrefs200JSONResponse(prefsJSON(stored)), nil
@@ -720,9 +644,8 @@ func prefsJSON(p service.Prefs) Prefs {
 // --- libraries ---------------------------------------------------------------------
 
 func (s *Server) ListLibraries(ctx context.Context, req ListLibrariesRequestObject) (ListLibrariesResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return ListLibraries403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	// A count per library, taken only where it was asked for.
 	libs, err := s.svc.Libraries(ctx)
@@ -742,61 +665,37 @@ func (s *Server) ListLibraries(ctx context.Context, req ListLibrariesRequestObje
 // --- stars & ratings ---------------------------------------------------------------
 
 func (s *Server) SetStar(ctx context.Context, req SetStarRequestObject) (SetStarResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	st, err := s.svc.SetStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return SetStar404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return SetStar200JSONResponse(playStateJSON(st)), nil
 }
 
 func (s *Server) SetPlayed(ctx context.Context, req SetPlayedRequestObject) (SetPlayedResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetPlayed400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	st, err := s.svc.SetPlayed(ctx, uc, req.Pid,
 		req.Body.Played, req.Body.Finished, req.Body.PlayCount, req.Body.PositionMs, req.Body.RecordedAt)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return SetPlayed404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindInvalid:
-			return SetPlayed400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetPlayed200JSONResponse(playStateJSON(st)), nil
 }
 
 func (s *Server) SetRating(ctx context.Context, req SetRatingRequestObject) (SetRatingResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	st, err := s.svc.SetRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return SetRating404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindInvalid:
-			return SetRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetRating200JSONResponse(playStateJSON(st)), nil
@@ -826,136 +725,84 @@ func entityPlayStateJSON(st service.EntityPlayState) EntityPlayState {
 	return out
 }
 
-// entityStateResult folds a service answer into the JSON body plus the
-// error kind the per-path wrapper renders.
-func (s *Server) entityStateResult(st service.EntityPlayState, err error) (EntityPlayState, service.ErrorKind) {
-	if err != nil {
-		return EntityPlayState{}, service.KindOf(err)
+// entityRouteMiss words a play-state route's not-found in the route's own
+// noun: the service sees only the pid, which may name another kind of
+// entity or none.
+func entityRouteMiss(err error, noun, pid string) error {
+	if service.KindOf(err) == service.KindNotFound {
+		return refuse(http.StatusNotFound, "not-found", "no "+noun+" with pid "+pid)
 	}
-	return entityPlayStateJSON(st), ""
+	return err
 }
 
 func (s *Server) GetArtistPlayState(ctx context.Context, req GetArtistPlayStateRequestObject) (GetArtistPlayStateResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	st, err := s.svc.EntityPlayStateFor(ctx, uc, req.Pid)
 	if err != nil {
-		return nil, err
+		return nil, entityRouteMiss(err, "artist", req.Pid)
 	}
-	st, svcErr := s.svc.EntityPlayStateFor(ctx, uc, req.Pid)
-	body, kind := s.entityStateResult(st, svcErr)
-	switch kind {
-	case "":
-		return GetArtistPlayState200JSONResponse(body), nil
-	case service.KindNotFound:
-		return GetArtistPlayState404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artist with pid "+req.Pid))}, nil
-	}
-	return nil, svcErr
+	return GetArtistPlayState200JSONResponse(entityPlayStateJSON(st)), nil
 }
 
 func (s *Server) SetArtistStar(ctx context.Context, req SetArtistStarRequestObject) (SetArtistStarResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetArtistStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	st, svcErr := s.svc.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
-	body, kind := s.entityStateResult(st, svcErr)
-	switch kind {
-	case "":
-		return SetArtistStar200JSONResponse(body), nil
-	case service.KindNotFound:
-		return SetArtistStar404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artist with pid "+req.Pid))}, nil
-	case service.KindInvalid:
-		return SetArtistStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", svcErr.Error()))}, nil
+	st, err := s.svc.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
+	if err != nil {
+		return nil, entityRouteMiss(err, "artist", req.Pid)
 	}
-	return nil, svcErr
+	return SetArtistStar200JSONResponse(entityPlayStateJSON(st)), nil
 }
 
 func (s *Server) SetArtistRating(ctx context.Context, req SetArtistRatingRequestObject) (SetArtistRatingResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetArtistRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	st, svcErr := s.svc.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
-	body, kind := s.entityStateResult(st, svcErr)
-	switch kind {
-	case "":
-		return SetArtistRating200JSONResponse(body), nil
-	case service.KindNotFound:
-		return SetArtistRating404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artist with pid "+req.Pid))}, nil
-	case service.KindInvalid:
-		return SetArtistRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", svcErr.Error()))}, nil
+	st, err := s.svc.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
+	if err != nil {
+		return nil, entityRouteMiss(err, "artist", req.Pid)
 	}
-	return nil, svcErr
+	return SetArtistRating200JSONResponse(entityPlayStateJSON(st)), nil
 }
 
 func (s *Server) GetAlbumPlayState(ctx context.Context, req GetAlbumPlayStateRequestObject) (GetAlbumPlayStateResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	st, err := s.svc.EntityPlayStateFor(ctx, uc, req.Pid)
 	if err != nil {
-		return nil, err
+		return nil, entityRouteMiss(err, "album", req.Pid)
 	}
-	st, svcErr := s.svc.EntityPlayStateFor(ctx, uc, req.Pid)
-	body, kind := s.entityStateResult(st, svcErr)
-	switch kind {
-	case "":
-		return GetAlbumPlayState200JSONResponse(body), nil
-	case service.KindNotFound:
-		return GetAlbumPlayState404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no album with pid "+req.Pid))}, nil
-	}
-	return nil, svcErr
+	return GetAlbumPlayState200JSONResponse(entityPlayStateJSON(st)), nil
 }
 
 func (s *Server) SetAlbumStar(ctx context.Context, req SetAlbumStarRequestObject) (SetAlbumStarResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetAlbumStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	st, svcErr := s.svc.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
-	body, kind := s.entityStateResult(st, svcErr)
-	switch kind {
-	case "":
-		return SetAlbumStar200JSONResponse(body), nil
-	case service.KindNotFound:
-		return SetAlbumStar404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no album with pid "+req.Pid))}, nil
-	case service.KindInvalid:
-		return SetAlbumStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", svcErr.Error()))}, nil
+	st, err := s.svc.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
+	if err != nil {
+		return nil, entityRouteMiss(err, "album", req.Pid)
 	}
-	return nil, svcErr
+	return SetAlbumStar200JSONResponse(entityPlayStateJSON(st)), nil
 }
 
 func (s *Server) SetAlbumRating(ctx context.Context, req SetAlbumRatingRequestObject) (SetAlbumRatingResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetAlbumRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	st, svcErr := s.svc.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
-	body, kind := s.entityStateResult(st, svcErr)
-	switch kind {
-	case "":
-		return SetAlbumRating200JSONResponse(body), nil
-	case service.KindNotFound:
-		return SetAlbumRating404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no album with pid "+req.Pid))}, nil
-	case service.KindInvalid:
-		return SetAlbumRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", svcErr.Error()))}, nil
+	st, err := s.svc.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
+	if err != nil {
+		return nil, entityRouteMiss(err, "album", req.Pid)
 	}
-	return nil, svcErr
+	return SetAlbumRating200JSONResponse(entityPlayStateJSON(st)), nil
 }
 
 func (s *Server) ListStarredEntities(ctx context.Context, _ ListStarredEntitiesRequestObject) (ListStarredEntitiesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	res, err := s.svc.StarredEntities(ctx, uc)
 	if err != nil {
 		return nil, err

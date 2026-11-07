@@ -19,9 +19,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 const _endpoint = PlayerEndpoint(
@@ -129,12 +129,7 @@ void main() {
     final repo = FakeRepository(items: [testItem('tr-current')])
       ..playerEndpoints = [_endpoint];
     final container = _container(repo: repo);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const _PickerHost()),
-      ),
-    );
+    await mountApp(tester, const _PickerHost(), container: container);
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -166,12 +161,6 @@ void main() {
     // Starting playback elsewhere is what the shell now follows: the bar's
     // remote face and the remote screen both read this.
     expect(container.read(remoteSessionProvider)?.id, 'ps-created');
-
-    // A playing remote session feeds a position, which is a timer that
-    // lives as long as the session does; the harness checks for pending
-    // ones when the tree goes away, and a container teardown runs after
-    // that. Letting go here is what a listener does with the triad.
-    container.read(remoteSessionProvider.notifier).release();
   });
 
   // Both faces can be live at once, so which session moves is the face's
@@ -186,12 +175,7 @@ void main() {
     // A session in the kitchen while an album plays here.
     container.read(remoteSessionProvider.notifier).adopt(_session());
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const _PickerHost()),
-      ),
-    );
+    await mountApp(tester, const _PickerHost(), container: container);
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     await tester.tap(
@@ -203,8 +187,6 @@ void main() {
     expect(repo.transferPlaybackSessionCalls, isEmpty);
     expect(repo.createPlaybackSessionCalls, hasLength(1));
     expect(repo.createPlaybackSessionCalls.single.itemPids, ['tr-current']);
-
-    container.read(remoteSessionProvider.notifier).release();
   });
 
   testWidgets('casting from a playing device hands the whole queue over, '
@@ -241,11 +223,10 @@ void main() {
 
     final harness = PlayerHarness(container);
     harness.play([testItem('tr-one'), testItem('tr-two')], startIndex: 1);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const _PickerHost(currentPid: 'tr-two')),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(currentPid: 'tr-two'),
+      container: container,
     );
     await tester.pumpAndSettle();
     container.read(queueControllerProvider.notifier).setRepeat(QueueRepeat.all);
@@ -274,8 +255,6 @@ void main() {
     expect(container.read(queueControllerProvider).isEmpty, isTrue);
     expect(connect.mirrorSessionId, isNull);
     expect(container.read(remoteSessionProvider)?.id, 'ps-created');
-
-    container.read(remoteSessionProvider.notifier).release();
   });
 
   testWidgets('a transfer of a session the server has lost falls through to '
@@ -295,11 +274,10 @@ void main() {
 
     final harness = PlayerHarness(container);
     harness.play([testItem('tr-one')]);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const _PickerHost(currentPid: 'tr-one')),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(currentPid: 'tr-one'),
+      container: container,
     );
     await tester.pumpAndSettle();
 
@@ -316,8 +294,6 @@ void main() {
       shellMessageText(raisedMessage(tester)),
       'Playing on Kitchen speaker',
     );
-
-    container.read(remoteSessionProvider.notifier).release();
   });
 
   // Somebody else's session on a shared device can hold an item outside
@@ -331,12 +307,7 @@ void main() {
       ..playbackSessions = [_hiddenSlot()];
     final container = _container(repo: repo);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const _PickerHost()),
-      ),
-    );
+    await mountApp(tester, const _PickerHost(), container: container);
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -357,18 +328,16 @@ void main() {
     final container = _container(repo: repo);
     container.read(remoteSessionProvider.notifier).adopt(_hiddenSlot());
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const RemoteControlScreen(), pushed: true),
-      ),
+    await mountApp(
+      tester,
+      const RemoteControlScreen(),
+      container: container,
+      pushed: true,
     );
     await tester.pump();
 
     expect(find.text('Playing'), findsOneWidget);
     expect(find.text(''), findsNothing);
-    container.read(remoteSessionProvider.notifier).release();
-    await tester.pump();
   });
 
   testWidgets('taking the room back from the picker asks with house buttons', (
@@ -379,12 +348,7 @@ void main() {
     final container = _container(repo: repo);
     container.read(remoteSessionProvider.notifier).adopt(_session());
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const _PickerHost()),
-      ),
-    );
+    await mountApp(tester, const _PickerHost(), container: container);
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerThisDevice));
@@ -423,12 +387,7 @@ void main() {
     final container = _container(repo: repo);
     await container.read(radioPlaybackProvider.notifier).play(station);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const _PickerHost()),
-      ),
-    );
+    await mountApp(tester, const _PickerHost(), container: container);
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -488,11 +447,10 @@ void main() {
     await container.read(radioPlaybackProvider.notifier).play(station);
     container.read(remoteSessionProvider.notifier).adopt(_session());
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const _PickerHost(from: CastSource.elsewhere)),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(from: CastSource.elsewhere),
+      container: container,
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -510,7 +468,6 @@ void main() {
     );
     expect(row.enabled, isTrue);
 
-    container.read(remoteSessionProvider.notifier).release();
     await container.read(radioPlaybackProvider.notifier).stop();
     await tester.pumpAndSettle();
   });
@@ -525,13 +482,10 @@ void main() {
     final container = _container(repo: repo);
     container.read(remoteSessionProvider.notifier).adopt(_session());
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(
-          const _PickerHost(currentPid: null, from: CastSource.elsewhere),
-        ),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(currentPid: null, from: CastSource.elsewhere),
+      container: container,
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -550,8 +504,6 @@ void main() {
     await tester.tap(row, warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(repo.transferPlaybackSessionCalls, isEmpty);
-
-    container.read(remoteSessionProvider.notifier).release();
   });
 
   // What a row says under a device's name, in the app's language: every
@@ -618,11 +570,11 @@ void main() {
           endpoint(8, volume: true, speed: true, inUse: true),
           endpoint(9),
         ];
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: _container(repo: repo),
-          child: routedHost(const _PickerHost(), locale: locale),
-        ),
+      await mountApp(
+        tester,
+        const _PickerHost(),
+        container: _container(repo: repo),
+        locale: locale,
       );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
@@ -652,11 +604,10 @@ void main() {
   ) async {
     final repo = FakeRepository(items: [testItem('tr-current')])
       ..playerEndpoints = [_offline];
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: _container(repo: repo),
-        child: routedHost(const _PickerHost()),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(),
+      container: _container(repo: repo),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -698,12 +649,7 @@ void main() {
         }),
       ],
     );
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const _PickerHost()),
-      ),
-    );
+    await mountApp(tester, const _PickerHost(), container: container);
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -751,11 +697,11 @@ void main() {
     // Adopting is what the picker does; the screen is a viewer of it.
     container.read(remoteSessionProvider.notifier).adopt(_session());
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const RemoteControlScreen(), pushed: true),
-      ),
+    await mountApp(
+      tester,
+      const RemoteControlScreen(),
+      container: container,
+      pushed: true,
     );
     await tester.pump();
 
@@ -822,27 +768,22 @@ void main() {
         ],
       );
       container.read(remoteSessionProvider.notifier).adopt(session);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(
-            const RemoteControlScreen(),
-            pushed: true,
-            locale: const Locale('es'),
-          ),
-        ),
+      await mountApp(
+        tester,
+        const RemoteControlScreen(),
+        container: container,
+        pushed: true,
+        locale: const Locale('es'),
       );
       await tester.pump();
       return (container: container, sent: sent);
     }
 
     testWidgets('names a device the server did not', (tester) async {
-      final remote = await pumpRemote(tester, _session(endpointName: null));
+      await pumpRemote(tester, _session(endpointName: null));
 
       expect(find.text('otro dispositivo'), findsOneWidget);
       expect(find.textContaining('another device'), findsNothing);
-      remote.container.read(remoteSessionProvider.notifier).release();
-      await tester.pump();
     });
 
     testWidgets('says a device queue the server drives has nothing after '
@@ -867,8 +808,6 @@ void main() {
         raisedMessage(tester)?.resolve(es),
         'Ese dispositivo ya está al final de su cola.',
       );
-      container.read(remoteSessionProvider.notifier).release();
-      await tester.pump();
     });
 
     for (final (code, sentence) in <(String, String)>[
@@ -897,8 +836,6 @@ void main() {
 
         final es = lookupAppLocalizations(const Locale('es'));
         expect(raisedMessage(tester)?.resolve(es), sentence);
-        container.read(remoteSessionProvider.notifier).release();
-        await tester.pump();
       });
     }
   });
@@ -1177,11 +1114,11 @@ void main() {
     final container = _container(repo: repo);
     container.read(remoteSessionProvider.notifier).adopt(_session());
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const RemoteControlScreen(), pushed: true),
-      ),
+    await mountApp(
+      tester,
+      const RemoteControlScreen(),
+      container: container,
+      pushed: true,
     );
     await tester.pump();
 
@@ -1198,11 +1135,11 @@ void main() {
     final container = _container(repo: repo);
     container.read(remoteSessionProvider.notifier).adopt(_session());
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const RemoteControlScreen(), pushed: true),
-      ),
+    await mountApp(
+      tester,
+      const RemoteControlScreen(),
+      container: container,
+      pushed: true,
     );
     await tester.pump();
 
@@ -1221,11 +1158,11 @@ void main() {
     final controller = container.read(remoteSessionProvider.notifier);
     controller.adopt(_session());
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const RemoteControlScreen(), pushed: true),
-      ),
+    await mountApp(
+      tester,
+      const RemoteControlScreen(),
+      container: container,
+      pushed: true,
     );
     await tester.pump();
     expect(find.text('Alpha'), findsOneWidget);
@@ -1266,11 +1203,10 @@ void main() {
           notes: [],
         ),
       ];
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: _container(repo: repo),
-        child: routedHost(const _PickerHost()),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(),
+      container: _container(repo: repo),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -1337,11 +1273,10 @@ void main() {
           ],
         ),
       };
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: _container(repo: repo),
-        child: routedHost(const _PickerHost()),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(),
+      container: _container(repo: repo),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -1381,11 +1316,10 @@ void main() {
         message: 'YouTube is running on this device',
         statusCode: 409,
       );
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: _container(repo: repo),
-        child: routedHost(const _PickerHost()),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(),
+      container: _container(repo: repo),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -1414,11 +1348,10 @@ void main() {
     final repo = FakeRepository(items: [testItem('tr-current')])
       ..playerEndpoints = [_endpoint]
       ..preflightBases = const [];
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: _container(repo: repo),
-        child: routedHost(const _PickerHost()),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(),
+      container: _container(repo: repo),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -1442,11 +1375,10 @@ void main() {
     final repo = FakeRepository(items: [testItem('tr-current')])
       ..playerEndpoints = const []
       ..preflightBases = const [];
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: _container(repo: repo),
-        child: routedHost(const _PickerHost()),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(),
+      container: _container(repo: repo),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -1472,11 +1404,10 @@ void main() {
             'streaming engine to cast: tr-1',
         params: <String, String>{'feature': 'windowed-track', 'pid': 'tr-1'},
       );
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: _container(repo: repo),
-        child: routedHost(const _PickerHost(currentPid: 'tr-1')),
-      ),
+    await mountApp(
+      tester,
+      const _PickerHost(currentPid: 'tr-1'),
+      container: _container(repo: repo),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();

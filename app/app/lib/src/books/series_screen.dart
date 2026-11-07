@@ -7,6 +7,7 @@ import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../player/play_progress.dart';
+import '../presenters/media_tiles.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -111,19 +112,11 @@ class _Books extends ConsumerWidget {
           final entry = books[index];
           final book = entry.book;
           return MediaListRow(
-            data: MediaTileData(
-              title: book.title,
-              subtitle: book.artist,
-              artwork: store.source(book.artUrl),
-              domain: WaxDomain.audiobooks,
-              shape: ArtworkShape.portrait,
-              progress: progress[book.pid].fractionOf(book.durationMs),
-              trailingText: wax.formatSpan(
-                Duration(milliseconds: book.durationMs),
-              ),
-              trailingSpoken: wax.spellDuration(
-                Duration(milliseconds: book.durationMs),
-              ),
+            data: seriesBookRowTile(
+              book,
+              wax: wax,
+              store: store,
+              progress: progress[book.pid],
               semanticsId: SemanticsIds.bookSeriesRow(index),
             ),
             // The number the tags spell, not the row's position: a

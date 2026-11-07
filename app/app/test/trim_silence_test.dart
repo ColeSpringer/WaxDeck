@@ -39,7 +39,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -58,7 +58,6 @@ void main() {
     // The jump happened once; playback continues normally afterwards.
     await _listen(tester, engine, 2);
     expect(engine.position, const Duration(seconds: 17));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the savings read in the listener\'s language', (tester) async {
@@ -66,7 +65,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -82,7 +81,6 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('saved'), findsNothing);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the trim jump never distorts listen accounting', (tester) async {
@@ -114,7 +112,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -124,7 +122,6 @@ void main() {
     await _listen(tester, engine, 7);
     // No map: playback runs straight through the would-be span.
     expect(engine.position, const Duration(seconds: 7));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the player chip toggles trimming at runtime', (tester) async {
@@ -138,7 +135,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -151,6 +148,5 @@ void main() {
     await _listen(tester, engine, 5);
     await tester.pump();
     expect(engine.position, const Duration(seconds: 15));
-    await harness.endPlayback(tester);
   });
 }

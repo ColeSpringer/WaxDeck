@@ -1,11 +1,10 @@
 /// Turning API models into the design system's plain view data.
 ///
-/// `waxdeck_ui` never imports the API package, so every
-/// screen maps at the call site. These are the mappings more than one
-/// screen would otherwise write differently: which domain a media type
-/// belongs to, what shape its artwork takes, and how a URL becomes an
-/// image. Everything else stays at its call site, where the screen knows
-/// what its own rows mean.
+/// `waxdeck_ui` never imports the API package, so the app maps. These are
+/// the mappings more than one surface would otherwise write differently:
+/// which domain a media type belongs to, what shape its artwork takes,
+/// and how a URL becomes an image. The tile data a surface draws from a
+/// model is mapped in `presenters/media_tiles.dart`, which calls these.
 library;
 
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -80,7 +79,7 @@ WaxArtwork? waxArtwork(ArtworkStore store, String? url) => store.source(url);
 /// fetching from the station after the hub was converted.
 WaxArtwork? waxStationLogo(
   ArtworkStore store,
-  WaxDeckRepository repository,
+  MediaUrlsApi repository,
   RadioStation station,
 ) => store.source(repository.radioLogoUrlFor(station.pid));
 
@@ -96,7 +95,7 @@ WaxArtwork? waxStationLogo(
 /// face beside it draws the record.
 ({WaxArtwork? artwork, ArtworkShape shape, bool onTheRecord}) waxRadioArtwork(
   ArtworkStore store,
-  WaxDeckRepository repository,
+  MediaUrlsApi repository,
   RadioStation station,
   String? nowPlayingArtUrl,
 ) {

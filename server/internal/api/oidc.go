@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -26,7 +27,7 @@ func (s *Server) ListOidcProviders(ctx context.Context, _ ListOidcProvidersReque
 
 func (s *Server) StartOidc(ctx context.Context, req StartOidcRequestObject) (StartOidcResponseObject, error) {
 	if s.oidc == nil || req.Params.Provider != s.oidc.Config().ID {
-		return StartOidc404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such provider"))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no such provider")
 	}
 	mode := "web"
 	if req.Params.Mode != nil {
@@ -39,7 +40,7 @@ func (s *Server) StartOidc(ctx context.Context, req StartOidcRequestObject) (Sta
 		if req.Params.Redirect != nil {
 			p := *req.Params.Redirect
 			if !safeRedirectPath(p) {
-				return StartOidc400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "redirect must be a rooted path on this origin"))}, nil
+				return nil, refuse(http.StatusBadRequest, "invalid-request", "redirect must be a rooted path on this origin")
 			}
 			redirectTo = p
 		}
@@ -47,11 +48,11 @@ func (s *Server) StartOidc(ctx context.Context, req StartOidcRequestObject) (Sta
 		// Nothing extra to validate.
 	case "loopback":
 		if req.Params.Port == nil || *req.Params.Port < 1024 || *req.Params.Port > 65535 {
-			return StartOidc400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "loopback mode requires port between 1024 and 65535"))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", "loopback mode requires port between 1024 and 65535")
 		}
 		loopbackPort = *req.Params.Port
 	default:
-		return StartOidc400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown mode"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown mode")
 	}
 	authURL, err := s.oidc.StartFlow(ctx, mode, s.oidcRedirectURI(), redirectTo, deref(req.Params.Challenge), loopbackPort)
 	if err != nil {
@@ -79,7 +80,7 @@ func (s *Server) OidcCallback(ctx context.Context, req OidcCallbackRequestObject
 		// The Go error stays English on purpose: it is a diagnostic a
 		// reader pastes into a bug report, and a translated one is a
 		// string nobody can grep for.
-		return oidcErrorPage(loc, loc.OidcCouldNotComplete+": "+err.Error()), nil
+		return oidcErrorPage(loc, loc.OidcCouldNotComplete+": "+ownWords(err)), nil
 	}
 	acct, err := s.svc.ResolveOidcAccount(ctx, service.OidcIdentity{
 		Provider: done.Identity.Provider,
@@ -91,7 +92,7 @@ func (s *Server) OidcCallback(ctx context.Context, req OidcCallbackRequestObject
 	})
 	if err != nil {
 		s.log.Warn("oidc account resolution failed", "err", err)
-		return oidcErrorPage(loc, loc.OidcCouldNotComplete+": "+err.Error()), nil
+		return oidcErrorPage(loc, loc.OidcCouldNotComplete+": "+serviceMessage(err)), nil
 	}
 	switch done.Mode {
 	case "web":
@@ -134,22 +135,25 @@ func (s *Server) OidcCallback(ctx context.Context, req OidcCallbackRequestObject
 }
 
 func (s *Server) ExchangeOidcCode(ctx context.Context, req ExchangeOidcCodeRequestObject) (ExchangeOidcCodeResponseObject, error) {
-	if req.Body == nil || req.Body.Code == "" {
-		return ExchangeOidcCode400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "code is required"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
+	}
+	if req.Body.Code == "" {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "code is required")
 	}
 	ip := remoteIPFromContext(ctx)
 	key := "oidc-exchange:" + ip
 	if s.oidc == nil {
-		return ExchangeOidcCode401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "single sign-on is not configured"))}, nil
+		return nil, refuse(http.StatusUnauthorized, "unauthenticated", "single sign-on is not configured")
 	}
 	if !s.limiter.Allowed(key) {
-		return ExchangeOidcCode429JSONResponse{RateLimitedJSONResponse(errObj("rate-limited", "too many attempts; retry later"))}, nil
+		return nil, refuse(http.StatusTooManyRequests, "rate-limited", "too many attempts; retry later")
 	}
 	userID, err := s.oidc.RedeemCode(ctx, req.Body.Code, deref(req.Body.Verifier))
 	if err != nil {
 		s.limiter.Failure(key)
 		s.log.Warn(authFailureLog, "user", "oidc-exchange", "ip", ip)
-		return ExchangeOidcCode401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "invalid code"))}, nil
+		return nil, refuse(http.StatusUnauthorized, "unauthenticated", "invalid code")
 	}
 	s.limiter.Success(key)
 	acct, err := s.svc.Account(ctx, userID)

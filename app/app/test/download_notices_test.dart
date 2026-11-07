@@ -1,24 +1,20 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/downloads/download_notices.dart';
 import 'package:waxdeck/src/l10n/off_tree.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 
 void main() {
   Future<FakeDownloads> pump(WidgetTester tester) async {
     final downloads = FakeDownloads();
     addTearDown(downloads.dispose);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [downloadManagerProvider.overrideWithValue(downloads)],
-        child: localizedHost(
-          const DownloadNoticeRationale(child: SizedBox.expand()),
-        ),
-      ),
+    await mountApp(
+      tester,
+      const DownloadNoticeRationale(child: SizedBox.expand()),
+      container: appContainer(downloads: downloads),
+      routed: false,
     );
     return downloads;
   }

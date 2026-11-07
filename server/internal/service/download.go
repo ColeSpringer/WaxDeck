@@ -56,6 +56,9 @@ func (l *Library) DownloadInfo(ctx context.Context, uc *UserCtx, apiItemPID stri
 	if unfetchedEpisode(it) {
 		return DownloadResolution{}, notFetchedEpisode()
 	}
+	if err := inTrash(it, apiItemPID); err != nil {
+		return DownloadResolution{}, err
+	}
 	return l.downloadResolution(ctx, it)
 }
 

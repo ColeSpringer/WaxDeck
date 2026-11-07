@@ -53,7 +53,7 @@ func (s *Server) authorizeMediaFor(w http.ResponseWriter, r *http.Request, c aut
 		writeError(w, http.StatusNotFound, "not-found", "no such item")
 	case service.KindOf(err) == service.KindForbidden:
 		writeError(w, http.StatusForbidden, "forbidden", kindMessage(err, "not allowed"))
-	case service.KindOf(err) == service.KindMaintenance:
+	case s.kindOf(err) == service.KindMaintenance:
 		writeMaintenance(w)
 	default:
 		writeError(w, http.StatusInternalServerError, "internal", "authorizing the media token failed")

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -56,19 +57,13 @@ func reviewEntryJSON(e service.ReviewEntryDTO) ReviewEntry {
 }
 
 func (s *Server) ListReviewQueue(ctx context.Context, req ListReviewQueueRequestObject) (ListReviewQueueResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 50, 200)
 	if err != nil {
 		return nil, err
 	}
-	limit, ok := pageLimit(req.Params.Limit, 50, 200)
-	if !ok {
-		return ListReviewQueue400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit out of range"))}, nil
-	}
 	entries, next, err := s.svc.ListReviewQueue(ctx, uc, deref(req.Params.Status), deref(req.Params.Cursor), limit)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ListReviewQueue400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	page := ReviewEntryPage{Entries: make([]ReviewEntry, 0, len(entries))}
@@ -82,15 +77,9 @@ func (s *Server) ListReviewQueue(ctx context.Context, req ListReviewQueueRequest
 }
 
 func (s *Server) GetReviewEntry(ctx context.Context, req GetReviewEntryRequestObject) (GetReviewEntryResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	detail, err := s.svc.GetReviewEntry(ctx, uc, string(req.EntryId))
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetReviewEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such review entry"))}, nil
-		}
 		return nil, err
 	}
 	return GetReviewEntry200JSONResponse(reviewDetailJSON(detail)), nil
@@ -219,26 +208,13 @@ func identifyRequestJSON(o *service.ReviewOverrideDTO) *ReviewIdentifyRequest {
 }
 
 func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryRequestObject) (DecideReviewEntryResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return DecideReviewEntry400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a decision body is required"))}, nil
+		return nil, errNoBody()
 	}
 	entry, warnings, err := s.svc.DecideReviewEntry(ctx, uc, string(req.EntryId),
 		string(req.Body.Action), deref(req.Body.CandidateMbid))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return DecideReviewEntry400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return DecideReviewEntry403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return DecideReviewEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such review entry"))}, nil
-		case service.KindConflict, service.KindCatalogBusy, service.KindReadOnly, service.KindStorageUnwritable:
-			return DecideReviewEntry409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
-		}
 		return nil, err
 	}
 	result := ReviewDecideResult{Entry: reviewEntryJSON(entry)}
@@ -249,30 +225,16 @@ func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryReq
 }
 
 func (s *Server) RevertReviewEntry(ctx context.Context, req RevertReviewEntryRequestObject) (RevertReviewEntryResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	entry, err := s.svc.RevertReviewEntry(ctx, uc, string(req.EntryId))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindForbidden:
-			return RevertReviewEntry403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return RevertReviewEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such review entry"))}, nil
-		case service.KindConflict:
-			return RevertReviewEntry409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return RevertReviewEntry200JSONResponse(reviewEntryJSON(entry)), nil
 }
 
 func (s *Server) ReidentifyReviewEntry(ctx context.Context, req ReidentifyReviewEntryRequestObject) (ReidentifyReviewEntryResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	// The body is optional: sending none is how a reviewer clears an
 	// override and runs the plain derivation again.
 	var override service.ReviewOverrideDTO
@@ -285,31 +247,21 @@ func (s *Server) ReidentifyReviewEntry(ctx context.Context, req ReidentifyReview
 	}
 	entry, err := s.svc.ReidentifyEntry(ctx, uc, string(req.EntryId), override)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return ReidentifyReviewEntry400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return ReidentifyReviewEntry403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return ReidentifyReviewEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such review entry"))}, nil
-		case service.KindConflict:
-			return ReidentifyReviewEntry409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return ReidentifyReviewEntry200JSONResponse(reviewEntryJSON(entry)), nil
 }
 
 func (s *Server) DecideReviewBulk(ctx context.Context, req DecideReviewBulkRequestObject) (DecideReviewBulkResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
+	uc := userCtx(ctx)
+	if req.Body == nil {
+		return nil, errNoBody()
 	}
-	if req.Body == nil || len(req.Body.EntryIds) == 0 {
-		return DecideReviewBulk400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "entryIds are required"))}, nil
+	if len(req.Body.EntryIds) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "entryIds are required")
 	}
 	if len(req.Body.EntryIds) > 200 {
-		return DecideReviewBulk400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "at most 200 entries per bulk decision"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "at most 200 entries per bulk decision")
 	}
 	outcomes := s.svc.DecideReviewBulk(ctx, uc, req.Body.EntryIds, string(req.Body.Action))
 	result := ReviewBulkResult{Results: make([]ReviewBulkOutcome, 0, len(outcomes))}
@@ -327,10 +279,7 @@ func (s *Server) DecideReviewBulk(ctx context.Context, req DecideReviewBulkReque
 }
 
 func (s *Server) GetReviewStats(ctx context.Context, _ GetReviewStatsRequestObject) (GetReviewStatsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	stats, err := s.svc.ReviewStatsFor(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -359,18 +308,9 @@ func (s *Server) GetReviewStats(ctx context.Context, _ GetReviewStatsRequestObje
 }
 
 func (s *Server) GetLibraryMatching(ctx context.Context, req GetLibraryMatchingRequestObject) (GetLibraryMatchingResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	matching, err := s.svc.LibraryMatchingFor(ctx, uc, string(req.Pid))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindForbidden:
-			return GetLibraryMatching403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return GetLibraryMatching404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such library"))}, nil
-		}
 		return nil, err
 	}
 	return GetLibraryMatching200JSONResponse(LibraryMatching{
@@ -380,26 +320,15 @@ func (s *Server) GetLibraryMatching(ctx context.Context, req GetLibraryMatchingR
 }
 
 func (s *Server) SetLibraryMatching(ctx context.Context, req SetLibraryMatchingRequestObject) (SetLibraryMatchingResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetLibraryMatching400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a mode body is required"))}, nil
+		return nil, errNoBody()
 	}
 	matching := service.LibraryMatching{
 		Mode:             string(req.Body.Mode),
 		SinglesAutoApply: req.Body.SinglesAutoApply,
 	}
 	if err := s.svc.SetLibraryMatching(ctx, uc, string(req.Pid), matching); err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetLibraryMatching400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return SetLibraryMatching403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetLibraryMatching404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such library"))}, nil
-		}
 		return nil, err
 	}
 	return SetLibraryMatching200JSONResponse(LibraryMatching{

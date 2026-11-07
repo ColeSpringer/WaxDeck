@@ -1,17 +1,13 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'bundled_type.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 
@@ -65,17 +61,12 @@ Future<FakeRepository> _confirmTool(
   tester.platformDispatcher.textScaleFactorTestValue = scale;
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
   final repo = _repo(merge: merge);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-      child: routedHost(const BookScreen(pid: bookPid), locale: locale),
-    ),
+  await pumpApp(
+    tester,
+    const BookScreen(pid: bookPid),
+    container: appContainer(repo: repo),
+    locale: locale,
   );
-  await tester.pumpAndSettle();
 
   await _tap(tester, SemanticsIds.bookOverflow);
   await _tap(tester, merge ? SemanticsIds.bookMerge : SemanticsIds.bookSplit);

@@ -8,9 +8,9 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../discovery/discovery_actions.dart';
 import '../l10n/l10n.dart';
-import '../media_view.dart';
 import '../music/music_controllers.dart';
 import '../player/now_playing_controller.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../shell/routes.dart';
@@ -49,14 +49,10 @@ class MixShelf extends ConsumerWidget {
     final store = ref.watch(artworkStoreProvider);
     final tiles = <MediaTileData>[
       for (var i = 0; i < cards.length; i++)
-        MediaTileData(
-          title: cards[i].titleOf(l10n),
-          subtitle: l10n.discoveryInstantMixTitle,
-          // The card clamps every line, so the full name lives on the
-          // hover tooltip, as on every other home shelf.
-          tooltip: cards[i].titleOf(l10n),
-          artwork: waxArtwork(store, cards[i].artUrl),
-          domain: WaxDomain.music,
+        mixCardTile(
+          cards[i],
+          l10n: l10n,
+          store: store,
           semanticsId: SemanticsIds.homeMix(i),
         ),
     ];

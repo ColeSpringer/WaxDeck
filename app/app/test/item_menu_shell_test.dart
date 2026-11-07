@@ -2,9 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/app.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
@@ -14,7 +11,6 @@ import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_screen.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
@@ -24,9 +20,9 @@ import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/side_panel.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'secondary_click.dart';
 
@@ -76,20 +72,8 @@ Future<ProviderContainer> _pumpApp(
     items: const <ItemSummary>[_bookSummary, _trackSummary],
   )..playPositions[_book] = 900000;
   seed?.call(repo);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-      artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(container: container, child: const WaxDeckApp()),
-  );
-  await tester.pumpAndSettle();
-  return container;
+  final container = appContainer(repo: repo);
+  return pumpWholeApp(tester, container: container);
 }
 
 /// Puts [item] in the deck and answers its queue row's menu handle.

@@ -3,10 +3,8 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/formats.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/add_to_library.dart';
@@ -15,8 +13,8 @@ import 'package:waxdeck/src/uploads/uploads_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 /// The folder flow's honesty: what its filter dropped is said rather
 /// than silent, and an identify-on upload says it is identifying and
@@ -89,35 +87,44 @@ class _ThrowingFolderPicker extends _FolderPicker {
   }) async => throw PlatformException(code: 'no-picker');
 }
 
-(Widget, ProviderContainer Function()) _host(
+/// Mounts a button over [container] that runs [open]; leaving the screen
+/// takes the button's widget, and its `ref`, away.
+Future<void> _mountOpener(
+  WidgetTester tester,
+  ProviderContainer container,
+  Future<void> Function(BuildContext, WidgetRef) open,
+) => mountApp(
+  tester,
+  Consumer(
+    builder: (context, ref, _) => Scaffold(
+      body: Center(
+        child: WaxButton(label: 'Open', onPressed: () => open(context, ref)),
+      ),
+    ),
+  ),
+  container: container,
+);
+
+/// Mounts a button that runs [open] over a container whose file picker is
+/// [picker], taps it and settles. Returns the container.
+Future<ProviderContainer> _openPick(
+  WidgetTester tester,
   FakeRepository repo,
   FilePickerPort picker,
   Future<void> Function(BuildContext, WidgetRef, FilePickerPort) open,
-) {
-  late ProviderContainer container;
-  final host = ProviderScope(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      filePickerProvider.overrideWithValue(picker),
-    ],
-    child: routedHost(
-      Consumer(
-        builder: (context, ref, _) {
-          container = ProviderScope.containerOf(context);
-          return Scaffold(
-            body: Center(
-              child: WaxButton(
-                label: 'Open',
-                onPressed: () => open(context, ref, picker),
-              ),
-            ),
-          );
-        },
-      ),
-    ),
+) async {
+  final container = appContainer(
+    repo: repo,
+    extra: [filePickerProvider.overrideWithValue(picker)],
   );
-  return (host, () => container);
+  await _mountOpener(
+    tester,
+    container,
+    (context, ref) => open(context, ref, picker),
+  );
+  await tester.tap(find.text('Open'));
+  await tester.pumpAndSettle();
+  return container;
 }
 
 FakeRepository _repo() =>
@@ -128,16 +135,14 @@ void main() {
   testWidgets('a folder of Audible files says why nothing uploads', (
     tester,
   ) async {
-    final (host, containerOf) = _host(
+    final container = await _openPick(
+      tester,
       _repo(),
       _FolderPicker(const FolderPick(skippedDrm: 3, skippedUnsupported: 0)),
       pickFolderAndUpload,
     );
-    await tester.pumpWidget(host);
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
 
-    final message = containerOf().read(shellMessengerProvider);
+    final message = container.read(shellMessengerProvider);
     expect(message?.resolve(_l10n), contains('Audible'));
     expect(message?.resolve(_l10n), contains('DRM'));
     // Nothing survived the filter, so the media-type question never
@@ -154,17 +159,15 @@ void main() {
     // A ROM without a documents picker, or a provider that errored
     // mid-walk: the exception must reach a sentence, or the folder
     // tile just does nothing.
-    final (host, containerOf) = _host(
+    final container = await _openPick(
+      tester,
       _repo(),
       _ThrowingFolderPicker(),
       pickFolderAndUpload,
     );
-    await tester.pumpWidget(host);
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
 
     expect(
-      containerOf().read(shellMessengerProvider)?.resolve(_l10n),
+      container.read(shellMessengerProvider)?.resolve(_l10n),
       _l10n.uploadsPickFolderFailed,
     );
     expect(
@@ -176,17 +179,15 @@ void main() {
   testWidgets('a folder of only non-audio explains the empty pick', (
     tester,
   ) async {
-    final (host, containerOf) = _host(
+    final container = await _openPick(
+      tester,
       _repo(),
       _FolderPicker(const FolderPick(skippedUnsupported: 3)),
       pickFolderAndUpload,
     );
-    await tester.pumpWidget(host);
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
 
     expect(
-      containerOf().read(shellMessengerProvider)?.resolve(_l10n),
+      container.read(shellMessengerProvider)?.resolve(_l10n),
       'Skipped 3 unsupported files',
     );
     expect(
@@ -201,20 +202,18 @@ void main() {
     // The cover image and the rip log are left behind by design;
     // announcing them on every folder would teach people to ignore the
     // report that matters.
-    final (host, containerOf) = _host(
+    final container = await _openPick(
+      tester,
       _repo(),
       _FolderPicker(
         FolderPick(files: [_file('a.flac')], skippedUnsupported: 2),
       ),
       pickFolderAndUpload,
     );
-    await tester.pumpWidget(host);
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
 
     expect(find.bySemanticsIdentifier(SemanticsIds.uploadMediaType), findsOne);
     final raised = <String>[];
-    containerOf().listen(shellMessengerProvider, (_, next) {
+    container.listen(shellMessengerProvider, (_, next) {
       if (next != null) raised.add(next.resolve(_l10n));
     });
     await tester.tap(
@@ -228,7 +227,8 @@ void main() {
   testWidgets('DRM files are named even when audio uploads beside them', (
     tester,
   ) async {
-    final (host, containerOf) = _host(
+    final container = await _openPick(
+      tester,
       _repo(),
       _FolderPicker(
         FolderPick(
@@ -239,15 +239,12 @@ void main() {
       ),
       pickFolderAndUpload,
     );
-    await tester.pumpWidget(host);
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
     // The report holds until the dialog is gone: a toast raised under
     // a modal is hidden from the semantics tree and can expire there.
-    expect(containerOf().read(shellMessengerProvider), isNull);
+    expect(container.read(shellMessengerProvider), isNull);
 
     final raised = <String>[];
-    containerOf().listen(shellMessengerProvider, (_, next) {
+    container.listen(shellMessengerProvider, (_, next) {
       if (next != null) raised.add(next.resolve(_l10n));
     });
     await tester.tap(
@@ -264,20 +261,18 @@ void main() {
   testWidgets('an Audible file picked beside audio is named after the flow', (
     tester,
   ) async {
-    final (host, containerOf) = _host(
+    final container = await _openPick(
+      tester,
       _repo(),
       _FilesPicker(Future.value([_file('book.aax'), _file('song.mp3')])),
       pickAndUpload,
     );
-    await tester.pumpWidget(host);
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
     // Held until the dialog is gone, as the folder flow holds it.
     expect(find.bySemanticsIdentifier(SemanticsIds.uploadMediaType), findsOne);
-    expect(containerOf().read(shellMessengerProvider), isNull);
+    expect(container.read(shellMessengerProvider), isNull);
 
     final raised = <String>[];
-    containerOf().listen(shellMessengerProvider, (_, next) {
+    container.listen(shellMessengerProvider, (_, next) {
       if (next != null) raised.add(next.resolve(_l10n));
     });
     await tester.tap(
@@ -291,38 +286,18 @@ void main() {
 
   testWidgets('a pick answered after its host left still names what it '
       'dropped', (tester) async {
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(_repo()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: _repo());
     final picked = Completer<List<PickedAudioFile>>();
     final picker = _FilesPicker(picked.future);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(
-          Consumer(
-            builder: (context, ref, _) => Scaffold(
-              body: Center(
-                child: WaxButton(
-                  label: 'Open',
-                  onPressed: () => pickAndUpload(context, ref, picker),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+    await _mountOpener(
+      tester,
+      container,
+      (context, ref) => pickAndUpload(context, ref, picker),
     );
     await tester.tap(find.text('Open'));
     await tester.pump();
     // Signed out, or the route replaced, while the native sheet was up.
-    await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const SizedBox()),
-    );
+    await leaveScreen(tester, container);
 
     picked.complete([_file('book.aax'), _file('song.mp3')]);
     await tester.pumpAndSettle();
@@ -331,27 +306,6 @@ void main() {
       contains('Skipped 1 Audible file'),
     );
   });
-
-  /// A host over [container] whose button runs [open]; pumping anything
-  /// else in its place takes the button's widget, and its `ref`, away.
-  Widget hostOver(
-    ProviderContainer container,
-    Future<void> Function(BuildContext, WidgetRef) open,
-  ) => UncontrolledProviderScope(
-    container: container,
-    child: routedHost(
-      Consumer(
-        builder: (context, ref, _) => Scaffold(
-          body: Center(
-            child: WaxButton(
-              label: 'Open',
-              onPressed: () => open(context, ref),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 
   testWidgets('a refusal after its host left is still said, and the rest '
       'of the batch still goes', (tester) async {
@@ -368,21 +322,14 @@ void main() {
           );
         }
       };
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     // Loaded, as on the Uploads screen, so the allowance is known.
     await container.read(uploadsProvider.future);
-    await tester.pumpWidget(
-      hostOver(
-        container,
-        (context, ref) =>
-            uploadPickedFiles(context, ref, [_file('a.flac'), _file('b.flac')]),
-      ),
+    await _mountOpener(
+      tester,
+      container,
+      (context, ref) =>
+          uploadPickedFiles(context, ref, [_file('a.flac'), _file('b.flac')]),
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
@@ -391,9 +338,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     // Navigated away while the first file was on its way.
-    await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const SizedBox()),
-    );
+    await leaveScreen(tester, container);
     final raised = <String>[];
     container.listen(shellMessengerProvider, (_, next) {
       if (next != null) raised.add(next.resolve(_l10n));
@@ -419,15 +364,11 @@ void main() {
   ) async {
     final gate = Completer<void>();
     final repo = _repo()..createAcquisitionGate = gate;
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      hostOver(container, (context, ref) => acquireFromUrl(context, ref)),
+    final container = appContainer(repo: repo);
+    await _mountOpener(
+      tester,
+      container,
+      (context, ref) => acquireFromUrl(context, ref),
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
@@ -438,9 +379,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
     await tester.pumpAndSettle();
-    await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const SizedBox()),
-    );
+    await leaveScreen(tester, container);
 
     gate.complete();
     await tester.pumpAndSettle();
@@ -455,15 +394,11 @@ void main() {
   testWidgets('a refused link keeps its error until the text changes', (
     tester,
   ) async {
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(_repo()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      hostOver(container, (context, ref) => acquireFromUrl(context, ref)),
+    final container = appContainer(repo: _repo());
+    await _mountOpener(
+      tester,
+      container,
+      (context, ref) => acquireFromUrl(context, ref),
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
@@ -493,14 +428,12 @@ void main() {
     'an identify-on upload says it is identifying and offers review',
     (tester) async {
       final repo = _repo();
-      final (host, containerOf) = _host(
+      final container = await _openPick(
+        tester,
         repo,
         _FolderPicker(FolderPick(files: [_file('a.flac'), _file('b.flac')])),
         pickFolderAndUpload,
       );
-      await tester.pumpWidget(host);
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
 
       // Identification defaults on; confirming the dialog runs the batch.
       await tester.tap(
@@ -508,7 +441,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final message = containerOf().read(shellMessengerProvider);
+      final message = container.read(shellMessengerProvider);
       expect(message?.resolve(_l10n), contains('Uploaded 2 files'));
       expect(message?.actionLabel, 'Open review');
       expect(message?.actionSemanticsId, SemanticsIds.uploadIdentifyingReview);
@@ -519,14 +452,12 @@ void main() {
     tester,
   ) async {
     final repo = _repo()..prefs = const Prefs(identifyOptOut: true);
-    final (host, containerOf) = _host(
+    final container = await _openPick(
+      tester,
       repo,
       _FolderPicker(FolderPick(files: [_file('a.flac')])),
       pickFolderAndUpload,
     );
-    await tester.pumpWidget(host);
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
@@ -536,6 +467,6 @@ void main() {
     // Identify was off by account default: the import is synchronous
     // and the shelves move on their own, so a "waiting in review"
     // message would be a lie.
-    expect(containerOf().read(shellMessengerProvider), isNull);
+    expect(container.read(shellMessengerProvider), isNull);
   });
 }

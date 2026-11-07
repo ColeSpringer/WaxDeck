@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
 import 'package:waxdeck/src/shell/routes.dart';
@@ -13,8 +12,8 @@ import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'row_finders.dart';
 import 'wax_finders.dart';
 
@@ -64,22 +63,15 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = const Size(800, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    retry: retryFailures ? ProviderContainer.defaultRetry : (_, _) => null,
-    overrides: [repositoryProvider.overrideWithValue(repository)],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(
-        SearchScreen(initialQuery: initialQuery),
-        at: atOwnLocation ? WaxRoute.search : null,
-      ),
+  return pumpApp(
+    tester,
+    SearchScreen(initialQuery: initialQuery),
+    container: appContainer(
+      repo: repository,
+      retry: retryFailures ? ProviderContainer.defaultRetry : (_, _) => null,
     ),
+    at: atOwnLocation ? WaxRoute.search : null,
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 void main() {
@@ -214,22 +206,13 @@ void main() {
       ..searchResults['night'] = _results(
         artists: <SearchHit>[_hit('artist', 'Nightjar')],
       );
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repository)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repository);
     container.read(searchQueryProvider.notifier).submit('night');
 
     tester.view.physicalSize = const Size(900, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const SearchScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const SearchScreen(), container: container);
 
     expect(container.read(searchQueryProvider), isEmpty);
     expect(find.text('Nightjar'), findsNothing);
@@ -271,22 +254,17 @@ void main() {
       ..searchResults['night'] = _results(
         artists: <SearchHit>[_hit('artist', 'Nightjar')],
       );
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repository)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repository);
     container.read(searchScopeProvider.notifier).select(SearchScope.books);
 
     tester.view.physicalSize = const Size(900, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const SearchScreen(initialQuery: 'night')),
-      ),
+    await pumpApp(
+      tester,
+      const SearchScreen(initialQuery: 'night'),
+      container: container,
     );
-    await tester.pumpAndSettle();
 
     expect(container.read(searchScopeProvider), SearchScope.all);
     expect(find.text('Nightjar'), findsOneWidget);
@@ -763,15 +741,10 @@ void main() {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repository)],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const SearchScreen(initialQuery: 'night')),
-      ),
+    await mountApp(
+      tester,
+      const SearchScreen(initialQuery: 'night'),
+      container: appContainer(repo: repository),
     );
     await tester.pump(SearchQuery.debounce);
     await tester.pump();
@@ -828,10 +801,9 @@ void main() {
     // case-insensitively, so forget has to mean that one. Every caller
     // today passes a string read off the list; a screen that forgot what
     // was typed rather than what was drawn would not.
-    final container = ProviderContainer(
-      overrides: [signedInAccountProvider.overrideWithValue('us-listener')],
+    final container = appContainer(
+      extra: [signedInAccountProvider.overrideWithValue('us-listener')],
     );
-    addTearDown(container.dispose);
     final recents = container.read(recentSearchesProvider.notifier);
 
     recents.remember('Nightjar');

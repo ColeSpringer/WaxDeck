@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/series_screen.dart';
 import 'package:waxdeck/src/health/folds_section.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
@@ -14,14 +13,13 @@ import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 const _admin = WaxDeckUser(
@@ -71,17 +69,6 @@ FakeRepository _repo() =>
         evaluatedItems: 1,
       );
 
-ProviderContainer _container(FakeRepository repo) {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
-
 Future<ProviderContainer> _pump(
   WidgetTester tester,
   FakeRepository repo,
@@ -89,15 +76,11 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = const Size(1280, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = _container(repo);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const HealthScreen()),
-    ),
+  return pumpApp(
+    tester,
+    const HealthScreen(),
+    container: appContainer(repo: repo),
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 Future<void> _tap(WidgetTester tester, Finder target) async {
@@ -607,13 +590,11 @@ void main() {
     addTearDown(tester.view.reset);
     final repo = _repo()
       ..entityFolds = [_fold('artist', 'beatles', 'ar-1', 'The Beatles')];
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: _container(repo),
-        child: routedHost(const HealthScreen()),
-      ),
+    await pumpApp(
+      tester,
+      const HealthScreen(),
+      container: appContainer(repo: repo),
     );
-    await tester.pumpAndSettle();
     final row = find.bySemanticsIdentifier(
       SemanticsIds.foldRow('artist', 'beatles'),
     );

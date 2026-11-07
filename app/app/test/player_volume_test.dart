@@ -23,7 +23,7 @@ void main() {
     // the half of the condition that deliberately gets no slider, because
     // hardware buttons own local volume there. Overridden through the
     // provider rather than the foundation global.
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -55,8 +55,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(engine.volume, greaterThan(0));
     expect(find.bySemanticsLabel('Mute'), findsOneWidget);
-
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the level moves under the finger, not on release', (
@@ -67,7 +65,7 @@ void main() {
     // optimistic controller writes each one straight to the engine.
     final repo = FakeRepository(items: [testItem('tr-A')]);
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -93,8 +91,6 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
     expect(engine.volume, closeTo(0.25, 0.1));
-
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the level follows a change nothing on screen made', (
@@ -105,7 +101,7 @@ void main() {
     // than keeping a copy of what it last sent.
     final repo = FakeRepository(items: [testItem('tr-A')]);
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -124,8 +120,6 @@ void main() {
     await engine.setVolume(0.6);
     await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('Mute'), findsOneWidget);
-
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a level the platform refuses does not stay on the slider', (
@@ -143,7 +137,7 @@ void main() {
         engine: engine,
         extra: [localVolumeAvailableProvider.overrideWithValue(true)],
       );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: engine,
@@ -165,8 +159,6 @@ void main() {
       // Back to the engine's own gain, not the level nobody took.
       expect(engine.volume, closeTo(0.4, 0.001));
       expect(container.read(outputVolumeProvider), closeTo(0.4, 0.001));
-
-      await harness.endPlayback(tester);
     });
   });
 
@@ -185,7 +177,7 @@ void main() {
         engine: engine,
         extra: [localVolumeAvailableProvider.overrideWithValue(true)],
       );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: engine,
@@ -210,8 +202,6 @@ void main() {
         closeTo(0.6, 0.001),
         reason: 'the remembered level survived the refusal',
       );
-
-      await harness.endPlayback(tester);
     });
   });
 
@@ -220,7 +210,7 @@ void main() {
   ) async {
     final repo = FakeRepository(items: [testItem('tr-A')]);
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -232,7 +222,5 @@ void main() {
       findsNothing,
       reason: 'a software slider there fights the OS volume stack',
     );
-
-    await harness.endPlayback(tester);
   });
 }

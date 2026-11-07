@@ -1,14 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/library/item_menu.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 /// Opens an item's sheet as a row's kebab does.
 class _Opener extends ConsumerWidget {
@@ -51,18 +49,11 @@ void main() {
           user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
         ),
       );
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(repo),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-          ],
-          child: routedHost(_Opener(mediaType: mediaType)),
-        ),
+      await pumpApp(
+        tester,
+        _Opener(mediaType: mediaType),
+        container: appContainer(repo: repo),
       );
-      await tester.pumpAndSettle();
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
       expect(find.bySemanticsIdentifier(SemanticsIds.itemMenuDelete), offered);

@@ -10,6 +10,7 @@ import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../player/now_playing_controller.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
@@ -395,13 +396,9 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
           key: _itemKey(item),
           drop: QueueDrop.item(item),
           child: MediaListRow(
-            data: MediaTileData(
-              title: item.title,
-              subtitle: item.artist,
-              artwork: ref.watch(artworkStoreProvider).source(item.artUrl),
-              trailingText: formatTimecode(
-                Duration(milliseconds: item.durationMs),
-              ),
+            data: itemRowTile(
+              item,
+              store: ref.watch(artworkStoreProvider),
               // Addressed by pid rather than by position, unlike the
               // album and artist screens: this is the complete
               // enumeration a caller reaches for one known item in,

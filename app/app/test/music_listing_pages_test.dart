@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// A listing page can come back empty and still carry a cursor: the
@@ -25,10 +25,7 @@ void main() {
   ];
 
   ProviderContainer containerOver(FakeRepository repo) {
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final keep = container.listen(musicItemsProvider(tracks), (_, _) {});
     addTearDown(keep.close);
     return container;
@@ -66,10 +63,7 @@ void main() {
     final repo = FakeRepository(
       items: [...hidden('seen', page), ...unseen, testItem('tr-last')],
     )..hiddenFromListings.addAll(unseen.map((i) => i.pid));
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final keep = container.listen(musicItemsProvider(tracks), (_, _) {});
     await container.read(musicItemsProvider(tracks).future);
     final controller = container.read(musicItemsProvider(tracks).notifier);
@@ -106,10 +100,7 @@ void main() {
     final unseen = hidden('unseen', 6 * page);
     final repo = FakeRepository(items: [...unseen, testItem('tr-last')])
       ..hiddenFromListings.addAll(unseen.map((i) => i.pid));
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final gate = Completer<void>();
     repo.listItemsGate = gate;
     final keep = container.listen(musicItemsProvider(tracks), (_, _) {});

@@ -2,9 +2,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/add_to_library.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
@@ -12,8 +9,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 /// Which library a submission is filed under, on the servers where that
@@ -84,41 +81,30 @@ FakeRepository _repo(List<UploadTarget> targets) => FakeRepository()
   ..sessionState = const SessionState(authenticated: true, user: _user)
   ..uploadTargets.addAll(targets);
 
-(Widget, ProviderContainer Function()) _host(
+Future<void> _openPick(
+  WidgetTester tester,
   FakeRepository repo, {
   ClientSettingsStore? settings,
-}) {
-  late ProviderContainer container;
+}) async {
   final picker = _OneFilePicker();
-  final host = ProviderScope(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      filePickerProvider.overrideWithValue(picker),
-      if (settings != null)
-        clientSettingsStoreProvider.overrideWithValue(settings),
-    ],
-    child: routedHost(
-      Consumer(
-        builder: (context, ref, _) {
-          container = ProviderScope.containerOf(context);
-          return Scaffold(
-            body: Center(
-              child: WaxButton(
-                label: 'Open',
-                onPressed: () => pickAndUpload(context, ref, picker),
-              ),
-            ),
-          );
-        },
+  await mountApp(
+    tester,
+    Consumer(
+      builder: (context, ref, _) => Scaffold(
+        body: Center(
+          child: WaxButton(
+            label: 'Open',
+            onPressed: () => pickAndUpload(context, ref, picker),
+          ),
+        ),
       ),
     ),
+    container: appContainer(
+      repo: repo,
+      settings: settings,
+      extra: [filePickerProvider.overrideWithValue(picker)],
+    ),
   );
-  return (host, () => container);
-}
-
-Future<void> _openPick(WidgetTester tester, Widget host) async {
-  await tester.pumpWidget(host);
   await tester.tap(find.text('Open'));
   await tester.pumpAndSettle();
 }
@@ -138,8 +124,7 @@ void main() {
     // The server routes exactly as it did before the picker existed;
     // naming the only candidate would pin a policy nobody asked for.
     final repo = _repo([_music, _books]);
-    final (host, _) = _host(repo);
-    await _openPick(tester, host);
+    await _openPick(tester, repo);
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadLibrary),
@@ -151,8 +136,7 @@ void main() {
 
   testWidgets('two candidates for the medium get a picker', (tester) async {
     final repo = _repo([_music, _bootlegs, _books]);
-    final (host, _) = _host(repo);
-    await _openPick(tester, host);
+    await _openPick(tester, repo);
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadLibrary),
@@ -173,8 +157,7 @@ void main() {
   ) async {
     final repo = _repo([_music, _bootlegs]);
     final settings = MemoryClientSettingsStore();
-    final (host, _) = _host(repo, settings: settings);
-    await _openPick(tester, host);
+    await _openPick(tester, repo, settings: settings);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadLibrary));
     await tester.pumpAndSettle();
@@ -203,8 +186,7 @@ void main() {
     final settings = MemoryClientSettingsStore();
     await settings.write(ClientSettingKeys.uploadTarget, _bootlegs.pid);
     final repo = _repo([_music, _bootlegs]);
-    final (host, _) = _host(repo, settings: settings);
-    await _openPick(tester, host);
+    await _openPick(tester, repo, settings: settings);
     await _confirm(tester);
 
     expect(_sentLibraryPid(repo), _bootlegs.pid);
@@ -219,8 +201,7 @@ void main() {
     final repo = _repo([_music, _bootlegs]);
     final settings = MemoryClientSettingsStore();
     await settings.write(ClientSettingKeys.uploadTarget, 'lb-elsewhere');
-    final (host, _) = _host(repo, settings: settings);
-    await _openPick(tester, host);
+    await _openPick(tester, repo, settings: settings);
     await _confirm(tester);
 
     expect(_sentLibraryPid(repo), _music.pid);
@@ -237,8 +218,7 @@ void main() {
         message: '404 page not found',
         statusCode: 404,
       );
-    final (host, _) = _host(repo);
-    await _openPick(tester, host);
+    await _openPick(tester, repo);
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadLibrary),

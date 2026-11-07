@@ -3,14 +3,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/trash_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
 /// Holds each restore until [release], counting them.
@@ -26,19 +25,8 @@ class _HeldRestore extends FakeRepository {
   }
 }
 
-ProviderContainer _container(FakeRepository repo) {
-  final container = ProviderContainer(
-    overrides: [repositoryProvider.overrideWithValue(repo)],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
-
-Widget _host(FakeRepository repo, [ProviderContainer? container]) =>
-    UncontrolledProviderScope(
-      container: container ?? _container(repo),
-      child: localizedHost(const TrashScreen()),
-    );
+Future<void> _pump(WidgetTester tester, ProviderContainer container) =>
+    pumpApp(tester, const TrashScreen(), container: container, routed: false);
 
 TrashEntry _entry(
   String id, {
@@ -67,8 +55,7 @@ void main() {
       _entry('ts-1'),
       _entry('ts-2', restoredAt: DateTime.utc(2026, 7, 11)),
     ]);
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, appContainer(repo: repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.trashRow('ts-1')),
@@ -102,8 +89,7 @@ void main() {
       _entry('ts-2', reason: 'book-split'),
       _entry('ts-3', reason: 'cue-split'),
     ]);
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, appContainer(repo: repo));
 
     expect(find.text('book merge'), findsOneWidget);
     expect(find.text('book split'), findsOneWidget);
@@ -116,9 +102,8 @@ void main() {
   ) async {
     final repo = FakeRepository();
     repo.trashEntries.add(_entry('ts-1'));
-    final container = _container(repo);
-    await tester.pumpWidget(_host(repo, container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.trashRestore('ts-1')),
@@ -140,8 +125,7 @@ void main() {
     tester,
   ) async {
     final repo = _HeldRestore()..trashEntries.add(_entry('ts-1'));
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, appContainer(repo: repo));
     final id = SemanticsIds.trashRestore('ts-1');
     WaxIconButton button() =>
         tester.widget<WaxIconButton>(waxControl<WaxIconButton>(id));
@@ -163,9 +147,8 @@ void main() {
   ) async {
     final repo = FakeRepository();
     repo.trashEntries.addAll([_entry('ts-1'), _entry('ts-2')]);
-    final container = _container(repo);
-    await tester.pumpWidget(_host(repo, container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.trashPurge('ts-1')),
@@ -196,9 +179,8 @@ void main() {
   ) async {
     final repo = FakeRepository();
     repo.trashEntries.addAll([_entry('ts-1'), _entry('ts-2')]);
-    final container = _container(repo);
-    await tester.pumpWidget(_host(repo, container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.trashEmpty));
     await tester.pumpAndSettle();
@@ -232,9 +214,8 @@ void main() {
       _entry('ts-1'),
       _entry('ts-2', libraryPid: 'lb-2', libraryName: 'vinyl'),
     ]);
-    final container = _container(repo);
-    await tester.pumpWidget(_host(repo, container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.trashEmpty));
     await tester.pumpAndSettle();
@@ -270,9 +251,8 @@ void main() {
         ThumbnailRung(size: 256, rows: 8, bytes: 1024 * 1024),
       ],
     );
-    final container = _container(repo);
-    await tester.pumpWidget(_host(repo, container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
 
     expect(find.text('3.0 MB in 12 copies'), findsOneWidget);
     expect(find.text('From 4 of 6 covers, which hold 30.0 MB'), findsOneWidget);
@@ -311,8 +291,7 @@ void main() {
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     final repo = FakeRepository()..emptyTrashGate = Completer<void>();
     repo.trashEntries.add(_entry('ts-1'));
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, appContainer(repo: repo));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.trashEmpty));
     await tester.pumpAndSettle();

@@ -6,7 +6,6 @@ import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/now_playing_slot.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
@@ -15,6 +14,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// The gapless-in-a-browser path: a queue minted as one stream, its
@@ -97,14 +97,11 @@ _harness({List<ItemSummary>? items, bool gapless = true}) {
     engine,
     items: items ?? [testItem(_a), testItem(_b), testItem(_c)],
   );
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(engine),
-      webGaplessProvider.overrideWith(() => _Gapless(gapless)),
-    ],
+  final container = appContainer(
+    repo: repo,
+    engine: engine,
+    extra: [webGaplessProvider.overrideWith(() => _Gapless(gapless))],
   );
-  addTearDown(container.dispose);
   return (container: container, repo: repo, engine: engine);
 }
 

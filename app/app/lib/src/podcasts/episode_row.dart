@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../player/play_progress.dart';
+import '../presenters/media_tiles.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'episode_actions.dart';
@@ -16,34 +17,6 @@ import 'episode_fetch.dart';
 /// A row's key, so the row moves with its episode (see [indexByKey]).
 Key episodeRowKey(EpisodeSummary episode) =>
     ValueKey(SemanticsIds.episode(episode.pid));
-
-/// What the row says about [episode] under its title: its number, and
-/// where its audio stands.
-String episodeFacts(AppLocalizations l10n, EpisodeSummary episode) {
-  final facts = <String>[
-    if (episode.season != null && episode.episodeNumber != null)
-      l10n.podcastSeasonEpisode(episode.season!, episode.episodeNumber!)
-    else if (episode.episodeNumber != null)
-      l10n.podcastEpisodeNumber(episode.episodeNumber!),
-    if (episode.explicit) l10n.podcastExplicit,
-    ?_audioFact(l10n, episode),
-  ];
-  return facts.join(' · ');
-}
-
-String? _audioFact(AppLocalizations l10n, EpisodeSummary episode) {
-  final fetch = episodeFetchOf(episode);
-  if (episodeFetchFact(l10n, fetch) case final fact?) return fact;
-  // Said on the row rather than left to the tap: an episode this server
-  // holds no bytes for still plays, relayed from the feed's own host,
-  // unless the listing says there is no audio to relay. It does not say
-  // why (no enclosure, a playlist, a YouTube watch page), so the words
-  // hold for every cause.
-  if (!episode.downloaded && !episode.hasEnclosure) {
-    return l10n.podcastNoAudioToStream;
-  }
-  return null;
-}
 
 /// One episode in a list: the show's own, or the hub's latest.
 class EpisodeRow extends ConsumerWidget {
@@ -88,27 +61,14 @@ class EpisodeRow extends ConsumerWidget {
     final actions = EpisodeActions(ref: ref, showPid: showPid);
     final l10n = context.l10n;
     final select = onSelect;
-    final remaining = episode.durationMs - progress.positionMs;
-    final trailing = progress.inProgress && remaining > 0
-        ? l10n.podcastTimeLeft(l10n.formatListenTime(remaining))
-        : l10n.formatListenTime(episode.durationMs);
-    final facts = subtitle == null
-        ? episodeFacts(l10n, episode)
-        : [
-            subtitle,
-            _audioFact(l10n, episode),
-          ].nonNulls.where((fact) => fact.isNotEmpty).join(' · ');
 
     return MediaListRow(
-      data: MediaTileData(
-        title: episode.title,
-        subtitle: facts.isEmpty ? null : facts,
+      data: episodeRowTile(
+        episode,
+        l10n: l10n,
+        progress: progress,
+        subtitle: subtitle,
         artwork: artwork,
-        domain: WaxDomain.podcasts,
-        progress: progress.fractionOf(episode.durationMs),
-        trailingText: trailing,
-        downloaded: episode.downloaded,
-        unplayed: !progress.played && progress.positionMs == 0,
         semanticsId: SemanticsIds.episode(episode.pid),
       ),
       leadingText: leadingText,

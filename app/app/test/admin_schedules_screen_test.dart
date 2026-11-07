@@ -3,34 +3,24 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/schedules_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
-
-ProviderContainer _container(FakeRepository repo) {
-  final container = ProviderContainer(
-    overrides: [repositoryProvider.overrideWithValue(repo)],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
 
 Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
   tester.view.physicalSize = const Size(1200, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: localizedHost(const SchedulesScreen()),
-    ),
+  await pumpApp(
+    tester,
+    const SchedulesScreen(),
+    container: container,
+    routed: false,
   );
-  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -39,18 +29,14 @@ void main() {
   ) async {
     // The app's own retry left on: while an attempt runs a failing read
     // is AsyncLoading still carrying the last error.
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(_SchedulesDown())],
-    );
-    addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: localizedHost(const SchedulesScreen()),
-      ),
+    await mountApp(
+      tester,
+      const SchedulesScreen(),
+      container: appContainer(repo: _SchedulesDown()),
+      routed: false,
     );
     await tester.pump();
     // Past the first retry's delay: the read is loading again.
@@ -66,7 +52,7 @@ void main() {
 
   testWidgets('lists every schedule with what it costs', (tester) async {
     final repo = FakeRepository();
-    await _pump(tester, _container(repo));
+    await _pump(tester, appContainer(repo: repo));
 
     for (final kind in const <String>[
       'scan',
@@ -116,7 +102,7 @@ void main() {
 
   testWidgets('an invalid cron surfaces the server message', (tester) async {
     final repo = FakeRepository();
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     await _pump(tester, container);
 
     await tester.enterText(
@@ -139,7 +125,7 @@ void main() {
 
   testWidgets('a valid save stores cron and enablement', (tester) async {
     final repo = FakeRepository();
-    final container = _container(repo);
+    final container = appContainer(repo: repo);
     await _pump(tester, container);
 
     await tester.tap(

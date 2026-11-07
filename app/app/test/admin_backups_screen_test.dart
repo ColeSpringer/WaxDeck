@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/backups_screen.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -15,8 +14,8 @@ import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
 /// A picker resolving pickFile to one fixed archive.
@@ -50,7 +49,7 @@ class _ZipPicker implements FilePickerPort {
 
 /// A viewport tall enough to hold the archives and the retention
 /// fields, so no test scrolls through lazily built rows.
-Future<void> _pump(
+Future<ProviderContainer> _pump(
   WidgetTester tester,
   FakeRepository repo, {
   FilePickerPort? picker,
@@ -58,26 +57,27 @@ Future<void> _pump(
   tester.view.physicalSize = const Size(1200, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        filePickerProvider.overrideWithValue(picker),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-      child: localizedHost(const BackupsScreen()),
+  return pumpApp(
+    tester,
+    const BackupsScreen(),
+    container: appContainer(
+      repo: repo,
+      extra: [filePickerProvider.overrideWithValue(picker)],
     ),
+    routed: false,
   );
-  await tester.pumpAndSettle();
 }
 
 /// The same host, with motion off: a running archive holds the create
 /// button busy, and a busy ring only settles with motion off.
-Future<void> _pumpStill(WidgetTester tester, FakeRepository repo) async {
+Future<ProviderContainer> _pumpStill(
+  WidgetTester tester,
+  FakeRepository repo,
+) async {
   tester.platformDispatcher.accessibilityFeaturesTestValue =
       const FakeAccessibilityFeatures(disableAnimations: true);
   addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
-  await _pump(tester, repo);
+  return _pump(tester, repo);
 }
 
 Backup _backup(String id, {String state = 'done'}) => Backup(
@@ -590,22 +590,16 @@ void main() {
 Future<void> _pumpWith(
   WidgetTester tester,
   FakeRepository repo,
-  List<Override> overrides, {
-  Duration? Function(int, Object)? retry,
-}) async {
+  List<Override> overrides,
+) async {
   tester.view.physicalSize = const Size(1200, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      retry: retry,
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ...overrides,
-      ],
-      child: localizedHost(const BackupsScreen()),
-    ),
+  await mountApp(
+    tester,
+    const BackupsScreen(),
+    container: appContainer(repo: repo, extra: overrides),
+    routed: false,
   );
   await tester.pump(const Duration(milliseconds: 100));
 }

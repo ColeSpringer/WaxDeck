@@ -4,15 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/sync/refresh_pacing.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 // The starvation the pacer closes: a live invalidation used to rebuild
 // every controller its topic touched, and a rebuild landing on a
@@ -439,11 +438,7 @@ void main() {
         name: 'By Hand',
         kind: 'static',
       );
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repository)],
-        observers: [observer],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repository, observers: [observer]);
 
       repository.gatedPid = created.pid;
       final gate = repository.gate = Completer<void>();
@@ -474,11 +469,7 @@ void main() {
           name: 'By Hand',
           kind: 'static',
         );
-        final container = ProviderContainer(
-          overrides: [repositoryProvider.overrideWithValue(repository)],
-          observers: [observer],
-        );
-        addTearDown(container.dispose);
+        final container = appContainer(repo: repository, observers: [observer]);
         final fanOut = InvalidationFanOut(
           container: container,
           firstBuilds: observer,
@@ -524,11 +515,7 @@ void main() {
         name: 'By Hand',
         kind: 'static',
       );
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repository)],
-        observers: [observer],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repository, observers: [observer]);
       final fanOut = InvalidationFanOut(
         container: container,
         firstBuilds: observer,
@@ -582,11 +569,7 @@ void main() {
           name: 'Opening',
           kind: 'static',
         );
-        final container = ProviderContainer(
-          overrides: [repositoryProvider.overrideWithValue(repository)],
-          observers: [observer],
-        );
-        addTearDown(container.dispose);
+        final container = appContainer(repo: repository, observers: [observer]);
         final fanOut = InvalidationFanOut(
           container: container,
           firstBuilds: observer,
@@ -648,10 +631,7 @@ void main() {
         name: 'By Hand',
         kind: 'static',
       );
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repository)],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repository);
       final fanOut = InvalidationFanOut(
         container: container,
         families: [playlistDetailProvider],
@@ -680,11 +660,7 @@ void main() {
         final observer = FirstBuildObserver();
         final repository = _GatedRepository(items: const [_track]);
         await repository.createPlaylist(name: 'By Hand', kind: 'static');
-        final container = ProviderContainer(
-          overrides: [repositoryProvider.overrideWithValue(repository)],
-          observers: [observer],
-        );
-        addTearDown(container.dispose);
+        final container = appContainer(repo: repository, observers: [observer]);
         final fanOut = InvalidationFanOut(
           container: container,
           firstBuilds: observer,
@@ -723,11 +699,7 @@ void main() {
         name: 'By Hand',
         kind: 'static',
       );
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repository)],
-        observers: [observer],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repository, observers: [observer]);
       final fanOut = InvalidationFanOut(
         container: container,
         firstBuilds: observer,
@@ -758,14 +730,11 @@ void main() {
       name: 'By Hand',
       kind: 'static',
     );
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repository),
-        filePickerProvider.overrideWithValue(null),
-      ],
+    final container = appContainer(
+      repo: repository,
+      extra: [filePickerProvider.overrideWithValue(null)],
       observers: [observer],
     );
-    addTearDown(container.dispose);
     final fanOut = InvalidationFanOut(
       container: container,
       firstBuilds: observer,
@@ -773,11 +742,11 @@ void main() {
     );
     final paced = PacedRefresh(fanOut: fanOut.sweep, retry: fanOut.retry);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(PlaylistScreen(pid: created.pid), pushed: true),
-      ),
+    await mountApp(
+      tester,
+      PlaylistScreen(pid: created.pid),
+      container: container,
+      pushed: true,
     );
 
     // Five seconds of an unrelenting server. The build takes 1.4 s
@@ -810,13 +779,10 @@ void main() {
       name: 'By Hand',
       kind: 'static',
     );
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repository),
-        filePickerProvider.overrideWithValue(null),
-      ],
+    final container = appContainer(
+      repo: repository,
+      extra: [filePickerProvider.overrideWithValue(null)],
     );
-    addTearDown(container.dispose);
     // No FirstBuildObserver: this is the pre-deferral wiring, kept
     // failing on purpose so the mechanism above cannot quietly rot.
     final fanOut = InvalidationFanOut(
@@ -825,11 +791,11 @@ void main() {
     );
     final paced = PacedRefresh(fanOut: fanOut.sweep, retry: fanOut.retry);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(PlaylistScreen(pid: created.pid), pushed: true),
-      ),
+    await mountApp(
+      tester,
+      PlaylistScreen(pid: created.pid),
+      container: container,
+      pushed: true,
     );
 
     var settled = false;

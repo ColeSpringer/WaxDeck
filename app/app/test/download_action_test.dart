@@ -3,21 +3,18 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/connectivity/connectivity_port.dart';
 import 'package:waxdeck/src/downloads/download_state.dart';
 import 'package:waxdeck/src/downloads/wifi_only_gate.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/player/download_action.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
 const _book = 'bk-01JZX5N8QW3F4V9T2B7KD3M9R6';
@@ -43,38 +40,49 @@ class _Bar extends ConsumerWidget {
 
 /// Both renderers over one item, each under its own handle, or neither
 /// once the screen is [closed].
-Future<void> _pumpBoth(
+///
+/// Returns the container, which a test that visits again passes back as
+/// [container]: what the first visit learnt outlives the screen.
+Future<ProviderContainer> _pumpBoth(
   WidgetTester tester, {
   FakeDownloads? downloads,
   FakeArtworkStore? artwork,
   WifiOnlyGate? gate,
+  ProviderContainer? container,
   bool closed = false,
-}) => tester.pumpWidget(
-  ProviderScope(
-    overrides: [
-      artworkStoreProvider.overrideWithValue(artwork ?? FakeArtworkStore()),
-      if (downloads != null)
-        downloadManagerProvider.overrideWithValue(downloads),
-      if (gate != null) transferGateProvider.overrideWithValue(gate),
-    ],
-    child: localizedHost(
-      Scaffold(
-        body: closed
-            ? const SizedBox.shrink()
-            : const Column(
-                children: <Widget>[
-                  _Bar(),
-                  DownloadAction(
-                    pid: _book,
-                    label: 'Download',
-                    semanticsId: SemanticsIds.downloadButton,
-                  ),
-                ],
-              ),
-      ),
+}) async {
+  assert(
+    container == null || (downloads == null && artwork == null && gate == null),
+    'a given container carries its own downloads, artwork and gate',
+  );
+  final over =
+      container ??
+      appContainer(
+        artwork: artwork,
+        downloads: downloads,
+        extra: [if (gate != null) transferGateProvider.overrideWithValue(gate)],
+      );
+  await mountApp(
+    tester,
+    Scaffold(
+      body: closed
+          ? const SizedBox.shrink()
+          : const Column(
+              children: <Widget>[
+                _Bar(),
+                DownloadAction(
+                  pid: _book,
+                  label: 'Download',
+                  semanticsId: SemanticsIds.downloadButton,
+                ),
+              ],
+            ),
     ),
-  ),
-);
+    routed: false,
+    container: over,
+  );
+  return over;
+}
 
 Finder get _pill => waxControl<WaxButton>(SemanticsIds.bookDownload);
 
@@ -161,24 +169,17 @@ void main() {
       downloads.dispose();
       await db.close();
     });
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          syncEngineProvider.overrideWithValue(sync),
-          downloadManagerProvider.overrideWithValue(downloads),
-          artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-        ],
-        child: localizedHost(
-          const Scaffold(
-            body: DownloadAction(
-              pid: _book,
-              label: 'Download',
-              semanticsId: SemanticsIds.bookDownload,
-            ),
-          ),
+    await mountApp(
+      tester,
+      const Scaffold(
+        body: DownloadAction(
+          pid: _book,
+          label: 'Download',
+          semanticsId: SemanticsIds.bookDownload,
         ),
       ),
+      routed: false,
+      container: appContainer(repo: repo, sync: sync, downloads: downloads),
     );
     await tester.pump();
 
@@ -360,13 +361,7 @@ void main() {
     () async {
       final downloads = FakeDownloads()..downloadError = StateError('closed');
       addTearDown(downloads.dispose);
-      final container = ProviderContainer(
-        overrides: [
-          artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-          downloadManagerProvider.overrideWithValue(downloads),
-        ],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(downloads: downloads);
       container.listen(downloadStateProvider(_book), (_, _) {});
       await pumpEventQueue();
 
@@ -391,13 +386,7 @@ void main() {
   test('a bug the probe hits offers the download, and is reported', () async {
     final downloads = _ProbeBug();
     addTearDown(downloads.dispose);
-    final container = ProviderContainer(
-      overrides: [
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-        downloadManagerProvider.overrideWithValue(downloads),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(downloads: downloads);
 
     final reported = <Object>[];
     runZonedGuarded(
@@ -508,13 +497,7 @@ void main() {
         message: '',
       );
     addTearDown(downloads.dispose);
-    final container = ProviderContainer(
-      overrides: [
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-        downloadManagerProvider.overrideWithValue(downloads),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(downloads: downloads);
     container.listen(downloadStateProvider(_book), (_, _) {});
 
     // Started before the probe answers, as a quick tap would.
@@ -566,17 +549,16 @@ void main() {
     final downloads = FakeDownloads();
     final artwork = FakeArtworkStore();
     addTearDown(downloads.dispose);
-    await _pumpBoth(tester, downloads: downloads, artwork: artwork);
+    final container = await _pumpBoth(
+      tester,
+      downloads: downloads,
+      artwork: artwork,
+    );
     await tester.pump();
     await tester.tap(_pill);
     await tester.pump();
 
-    await _pumpBoth(
-      tester,
-      downloads: downloads,
-      artwork: artwork,
-      closed: true,
-    );
+    await _pumpBoth(tester, container: container, closed: true);
     await tester.pumpAndSettle();
     downloads.byPid[_book] = testLocal('/books/one.m4b');
     downloads.emit(
@@ -680,13 +662,7 @@ void main() {
     () async {
       final downloads = _UnreadableDownloads();
       addTearDown(downloads.dispose);
-      final container = ProviderContainer(
-        overrides: [
-          artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-          downloadManagerProvider.overrideWithValue(downloads),
-        ],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(downloads: downloads);
       container.listen(downloadStateProvider(_book), (_, _) {});
       await pumpEventQueue();
 
@@ -748,14 +724,10 @@ void main() {
       gate.dispose();
       downloads.dispose();
     });
-    final container = ProviderContainer(
-      overrides: [
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-        downloadManagerProvider.overrideWithValue(downloads),
-        transferGateProvider.overrideWithValue(gate),
-      ],
+    final container = appContainer(
+      downloads: downloads,
+      extra: [transferGateProvider.overrideWithValue(gate)],
     );
-    addTearDown(container.dispose);
     for (final pid in [_book, other]) {
       container.listen(downloadStateProvider(pid), (_, _) {});
     }
@@ -825,7 +797,7 @@ void main() {
       local: {_book: testLocal('/books/one.m4b')},
     );
     addTearDown(downloads.dispose);
-    await _pumpBoth(tester, downloads: downloads);
+    final container = await _pumpBoth(tester, downloads: downloads);
     await tester.pump();
 
     // Until the device answers, nothing is pressable and no verb shows.
@@ -839,10 +811,10 @@ void main() {
 
     // Visited again: what this run already knows is done reads done at
     // once, before the device answers again.
-    await _pumpBoth(tester, downloads: downloads, closed: true);
+    await _pumpBoth(tester, container: container, closed: true);
     await tester.pumpAndSettle();
     final again = downloads.answer = Completer<void>();
-    await _pumpBoth(tester, downloads: downloads);
+    await _pumpBoth(tester, container: container);
     await tester.pump();
     expect(tester.widget<WaxButton>(_pill).label, 'Downloaded');
     expect(tester.widget<WaxIconButton>(_icon).status, isTrue);
@@ -855,13 +827,7 @@ void main() {
     // A sign-out disposes the manager mid-transfer: its stream closes
     // and no ending will ever arrive on it.
     final downloads = FakeDownloads();
-    final container = ProviderContainer(
-      overrides: [
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-        downloadManagerProvider.overrideWithValue(downloads),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(downloads: downloads);
     container.listen(downloadStateProvider(_book), (_, _) {});
     await pumpEventQueue();
 
@@ -901,18 +867,18 @@ void main() {
     final downloads = _SlowDownloads(local: {_book: testLocal('/b.m4b')})
       ..answer = null;
     addTearDown(downloads.dispose);
-    await _pumpBoth(tester, downloads: downloads);
+    final container = await _pumpBoth(tester, downloads: downloads);
     await tester.pumpAndSettle();
     expect(tester.widget<WaxButton>(_pill).label, 'Downloaded');
 
     // Removed from the Downloads screen while nothing here is drawn.
-    await _pumpBoth(tester, downloads: downloads, closed: true);
+    await _pumpBoth(tester, container: container, closed: true);
     await tester.pumpAndSettle();
     unawaited(downloads.remove(_book));
     await tester.pumpAndSettle();
 
     final again = downloads.answer = Completer<void>();
-    await _pumpBoth(tester, downloads: downloads);
+    await _pumpBoth(tester, container: container);
     await tester.pump();
     expect(tester.widget<WaxButton>(_pill).label, isNot('Downloaded'));
     again.complete();

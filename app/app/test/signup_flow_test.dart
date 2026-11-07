@@ -1,24 +1,20 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/login_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
-
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: routedHost(const LoginScreen()),
-);
 
 void main() {
   testWidgets('open signup queues the request and says so', (tester) async {
     final repo = FakeRepository();
     repo.adminSettings = repo.adminSettings.copyWith(signupEnabled: true);
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await pumpApp(
+      tester,
+      const LoginScreen(),
+      container: appContainer(repo: repo),
+    );
 
     // Open signup gets the louder label.
     expect(find.text('Request an account'), findsOneWidget);
@@ -46,8 +42,11 @@ void main() {
 
   testWidgets('an invite signup lands back on login prefilled', (tester) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await pumpApp(
+      tester,
+      const LoginScreen(),
+      container: appContainer(repo: repo),
+    );
 
     // Without open signup the link still serves invite holders.
     expect(find.text('Have an invite?'), findsOneWidget);
@@ -81,8 +80,7 @@ void main() {
   testWidgets('the request form is the app\'s own page, and back is sign-in', (
     tester,
   ) async {
-    await tester.pumpWidget(_host(FakeRepository()));
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const LoginScreen());
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.signupOpen));
     await tester.pumpAndSettle();
 
@@ -102,8 +100,7 @@ void main() {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(_host(FakeRepository()));
-      await tester.pumpAndSettle();
+      await pumpApp(tester, const LoginScreen());
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.signupOpen));
       await tester.pumpAndSettle();
 

@@ -4,9 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/discovery/track_list_screen.dart';
@@ -33,11 +31,10 @@ import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/shell/side_panel.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
 
@@ -65,58 +62,32 @@ Future<ProviderContainer> _pumpShell(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(
-        FakeRepository(
-            sessionState: SessionState(authenticated: true, user: user),
-          )
-          ..addSubscription(testShow(_showPid))
-          // The show's episodes, so the drill-in assertions render a
-          // screen rather than a not-found: a chrome test is about what
-          // the chrome highlights, not about a failed fetch.
-          ..episodesByShow[_showPid] = <EpisodeSummary>[
-            testEpisode(_episodePid),
-          ]
-          ..libraryItems.addAll(<ItemSummary>[
-            if (hasBooks)
-              testItem(
-                _bookPid,
-                mediaType: MediaType.audiobook,
-                title: 'There And Back Again',
-              ),
-          ])
-          ..books[_bookPid] = testBook(_bookPid)
-          ..serverPodcasts = podcastsOn ? null : false,
-      ),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      // The shell hosts the deck bar, so mounting it builds playback:
-      // the real engine wants platform channels no widget test has.
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-      // Downloads is a native destination, and a widget test has no
-      // manager unless it is given one.
-      if (hasDownloads)
-        downloadManagerProvider.overrideWithValue(FakeDownloads()),
-    ],
+  final repo =
+      FakeRepository(
+          sessionState: SessionState(authenticated: true, user: user),
+        )
+        ..addSubscription(testShow(_showPid))
+        // The show's episodes, so the drill-in assertions render a
+        // screen rather than a not-found: a chrome test is about what
+        // the chrome highlights, not about a failed fetch.
+        ..episodesByShow[_showPid] = <EpisodeSummary>[testEpisode(_episodePid)]
+        ..libraryItems.addAll(<ItemSummary>[
+          if (hasBooks)
+            testItem(
+              _bookPid,
+              mediaType: MediaType.audiobook,
+              title: 'There And Back Again',
+            ),
+        ])
+        ..books[_bookPid] = testBook(_bookPid)
+        ..serverPodcasts = podcastsOn ? null : false;
+  final container = appContainer(
+    repo: repo,
+    // Downloads is a native destination, and a widget test has no
+    // manager unless it is given one.
+    downloads: hasDownloads ? FakeDownloads() : null,
   );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      // Animations off: the deck bar's indicators run for as long as
-      // something is playing, which is the point of them and the end of
-      // `pumpAndSettle`. Built from the view, so the size class every
-      // one of these tests keys off is still the window's own.
-      child: MediaQuery(
-        data: MediaQueryData.fromView(
-          tester.view,
-        ).copyWith(disableAnimations: true),
-        child: const WaxDeckApp(),
-      ),
-    ),
-  );
-  await tester.pumpAndSettle();
-  return container;
+  return pumpWholeApp(tester, container: container, disableAnimations: true);
 }
 
 /// Presses system back the way the platform does.

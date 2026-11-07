@@ -1,18 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import 'fakes.dart';
-import 'routed_host.dart';
+import 'app_host.dart';
 
 /// The harness has to route as the app does, or a door a screen takes
 /// under it walks a path the app never walks.
@@ -20,17 +15,7 @@ void main() {
   testWidgets('a door taken inside the shell pushes over the page', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository()),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-        child: routedHost(const SizedBox()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const SizedBox());
     final router =
         tester.widget<MaterialApp>(find.byType(MaterialApp)).routerConfig!
             as GoRouter;

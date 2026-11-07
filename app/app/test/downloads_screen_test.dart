@@ -2,23 +2,18 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/connectivity/connectivity_port.dart';
 import 'package:waxdeck/src/downloads/downloads_controller.dart';
 import 'package:waxdeck/src/downloads/downloads_screen.dart';
 import 'package:waxdeck/src/downloads/wifi_only_gate.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _track = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK1';
 const _episode = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
@@ -96,28 +91,22 @@ void main() {
           );
     }
     final repo = FakeRepository();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-          mirrorDatabaseProvider.overrideWithValue(db),
-          downloadManagerProvider.overrideWithValue(downloads),
-          artworkStoreProvider.overrideWithValue(artwork),
-          if (gate != null) transferGateProvider.overrideWithValue(gate),
-          syncEngineProvider.overrideWithValue(
-            SyncEngine(
-              db: db,
-              repository: repo,
-              channelFactory: deadChannelFactory(),
-            ),
-          ),
-        ],
-        child: routedHost(const DownloadsScreen()),
+    await pumpApp(
+      tester,
+      const DownloadsScreen(),
+      container: appContainer(
+        repo: repo,
+        mirror: db,
+        downloads: downloads,
+        artwork: artwork,
+        sync: SyncEngine(
+          db: db,
+          repository: repo,
+          channelFactory: deadChannelFactory(),
+        ),
+        extra: [if (gate != null) transferGateProvider.overrideWithValue(gate)],
       ),
     );
-    await tester.pumpAndSettle();
   }
 
   testWidgets('a refresh redraws the rows it already has', (tester) async {
@@ -289,22 +278,17 @@ void main() {
     }
 
     final repo = FakeRepository();
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        mirrorDatabaseProvider.overrideWithValue(db),
-        downloadManagerProvider.overrideWithValue(downloads),
-        artworkStoreProvider.overrideWithValue(artwork),
-        syncEngineProvider.overrideWithValue(
-          SyncEngine(
-            db: db,
-            repository: repo,
-            channelFactory: deadChannelFactory(),
-          ),
-        ),
-      ],
+    final container = appContainer(
+      repo: repo,
+      mirror: db,
+      downloads: downloads,
+      artwork: artwork,
+      sync: SyncEngine(
+        db: db,
+        repository: repo,
+        channelFactory: deadChannelFactory(),
+      ),
     );
-    addTearDown(container.dispose);
     await container.read(downloadsProvider.future);
 
     // Off is off: the binder holds no timer and sweeps nothing.
@@ -822,36 +806,26 @@ void main() {
       final repo = FakeRepository();
       final visible = ValueNotifier<bool>(true);
       addTearDown(visible.dispose);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(repo),
-            audioEngineProvider.overrideWithValue(FakeEngine()),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-            mirrorDatabaseProvider.overrideWithValue(db),
-            downloadManagerProvider.overrideWithValue(downloads),
-            artworkStoreProvider.overrideWithValue(artwork),
-            transferGateProvider.overrideWithValue(gate),
-            syncEngineProvider.overrideWithValue(
-              SyncEngine(
-                db: db,
-                repository: repo,
-                channelFactory: deadChannelFactory(),
-              ),
-            ),
-          ],
-          child: routedHost(
-            ValueListenableBuilder<bool>(
-              valueListenable: visible,
-              builder: (context, shown, _) =>
-                  shown ? const DownloadsScreen() : const SizedBox.shrink(),
-            ),
+      await pumpApp(
+        tester,
+        ValueListenableBuilder<bool>(
+          valueListenable: visible,
+          builder: (context, shown, _) =>
+              shown ? const DownloadsScreen() : const SizedBox.shrink(),
+        ),
+        container: appContainer(
+          repo: repo,
+          mirror: db,
+          downloads: downloads,
+          artwork: artwork,
+          sync: SyncEngine(
+            db: db,
+            repository: repo,
+            channelFactory: deadChannelFactory(),
           ),
+          extra: [transferGateProvider.overrideWithValue(gate)],
         ),
       );
-      await tester.pumpAndSettle();
       MediaTileData row() =>
           tester.widget<MediaListRow>(find.byType(MediaListRow).first).data;
       await _tap(tester, SemanticsIds.downloadPause(_book));

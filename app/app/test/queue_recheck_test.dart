@@ -1,9 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_item.dart';
 import 'package:waxdeck/src/queue/queue_recheck.dart';
@@ -11,11 +8,11 @@ import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _a = 'tr-01JZX5N8QW3F4V9T2B7KDRECHA';
@@ -76,16 +73,12 @@ _Session _session() {
   final engine = FakeEngine(
     mediaDuration: const Duration(milliseconds: 214000),
   );
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(engine),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      mirrorDatabaseProvider.overrideWithValue(db),
-      downloadManagerProvider.overrideWithValue(downloads),
-      artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-      syncEngineProvider.overrideWithValue(sync),
-    ],
+  final container = appContainer(
+    repo: repo,
+    engine: engine,
+    mirror: db,
+    downloads: downloads,
+    sync: sync,
   );
   container.listen(syncBinderProvider, (_, _) {});
   return (container: container, repo: repo, sync: sync, engine: engine);

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
@@ -9,13 +8,12 @@ import 'package:waxdeck/src/playlists/playlist_actions.dart';
 import 'package:waxdeck/src/playlists/playlist_import.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 const _track = ItemSummary(
@@ -26,10 +24,9 @@ const _track = ItemSummary(
   durationMs: 214000,
 );
 
-Widget _host(FakeRepository repo, Widget home) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: routedHost(home, pushed: true),
-);
+/// Mounts [screen] pushed over [repo] and settles.
+Future<void> _pump(WidgetTester tester, FakeRepository repo, Widget screen) =>
+    pumpApp(tester, screen, container: appContainer(repo: repo), pushed: true);
 
 /// Opens the import menu and picks [source].
 Future<void> _openImport(
@@ -64,8 +61,7 @@ void main() {
           descriptive: 1,
         ),
       );
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.spotify);
     await tester.enterText(
@@ -101,8 +97,7 @@ void main() {
   testWidgets('a fully unmatched import reports no playlist', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     // The fake derives an empty result: nothing resolved, no playlist.
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.text);
     await tester.enterText(
@@ -126,8 +121,7 @@ void main() {
     final repo = FakeRepository(items: const [_track])
       ..importMatched = 1
       ..importUnmatched = 0;
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.m3u);
     await tester.enterText(
@@ -153,8 +147,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository(items: const [_track]);
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.m3u);
     await tester.enterText(
@@ -213,8 +206,7 @@ void main() {
         return null;
       },
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
@@ -247,8 +239,7 @@ void main() {
           descriptive: 0,
         ),
       );
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.portable);
     await tester.enterText(
@@ -281,8 +272,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository(items: const [_track]);
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.portable);
     await tester.enterText(
@@ -303,8 +293,7 @@ void main() {
   ) async {
     final l10n = await AppLocalizations.delegate.load(const Locale('en'));
     final repo = FakeRepository(items: const [_track]);
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     // M3U is not in the binding's source enum, so there is nothing to
     // keep it matched to.
@@ -366,8 +355,7 @@ void main() {
           descriptive: 0,
         ),
       );
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.spotify);
     await tester.enterText(
@@ -415,8 +403,7 @@ void main() {
           descriptive: 0,
         ),
       );
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.portable);
     await tester.enterText(
@@ -473,8 +460,7 @@ void main() {
         code: 'invalid-request',
         message: 'a matched source takes append or mirror',
       );
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.text);
     await tester.enterText(
@@ -514,8 +500,7 @@ void main() {
   ) async {
     // Nothing resolved means no playlist, so there is no pid to bind.
     final repo = FakeRepository(items: const [_track]);
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo, const PlaylistsScreen());
 
     await _openImport(tester, PlaylistImportSource.text);
     await tester.enterText(
@@ -541,8 +526,7 @@ void main() {
         '{"is": {"loved": true}}, {"gt": {"duration": 180}}]}';
 
     Future<void> check(WidgetTester tester, FakeRepository repo) async {
-      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo, const PlaylistsScreen());
       await _openImport(tester, PlaylistImportSource.nsp);
       await tester.enterText(
         find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
@@ -770,8 +754,7 @@ void main() {
       final gate = Completer<void>();
       final repo = FakeRepository(items: const [_track])
         ..nspImportCheckGate = gate;
-      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo, const PlaylistsScreen());
       await _openImport(tester, PlaylistImportSource.nsp);
       await tester.enterText(
         find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
@@ -803,8 +786,7 @@ void main() {
       FakeRepository repo,
       String text,
     ) async {
-      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo, const PlaylistsScreen());
       await _openImport(tester, PlaylistImportSource.nsp);
       await tester.enterText(
         find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
@@ -923,8 +905,7 @@ void main() {
       tester,
     ) async {
       final repo = FakeRepository(items: const [_track]);
-      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo, const PlaylistsScreen());
       await _openImport(tester, PlaylistImportSource.nsp);
       await tester.enterText(
         find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
@@ -972,8 +953,7 @@ void main() {
 
     testWidgets('with no name asks for one before importing', (tester) async {
       final repo = FakeRepository(items: const [_track]);
-      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo, const PlaylistsScreen());
       await _openImport(tester, PlaylistImportSource.nsp);
       await tester.enterText(
         find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),

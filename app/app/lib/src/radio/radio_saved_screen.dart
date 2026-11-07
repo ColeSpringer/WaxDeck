@@ -5,7 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
-import '../media_view.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/paged_scroll.dart';
@@ -98,18 +98,6 @@ class _SavedList extends ConsumerWidget {
   final List<RadioSavedSong> rows;
   final Future<void> Function(RadioSavedSong song) onRemove;
 
-  /// What a row says under its title: who it is by where the line
-  /// split, where it was heard, and whether the hunt is over. In the
-  /// subtitle rather than the trailing slot, which is unclipped and
-  /// reserved for a timecode - a caption of this length there pushes the
-  /// row's own controls off the end of it.
-  static String _caption(AppLocalizations l10n, RadioSavedSong song) =>
-      <String>[
-        if (song.artist != null) song.artist!,
-        song.stationName,
-        if (song.inLibraryPid != null) l10n.radioSavedInLibrary,
-      ].join(' · ');
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
@@ -123,9 +111,13 @@ class _SavedList extends ConsumerWidget {
         findChildIndexCallback: indexByKey(rows, _songKey),
         itemBuilder: (context, index) {
           final song = rows[index];
-          // The announced line is what the listener saw, so it is what
-          // the row leads with when nothing parsed out of it.
-          final title = song.title ?? song.nowPlaying;
+          final tile = savedSongTile(
+            song,
+            l10n: l10n,
+            store: store,
+            repository: repository,
+            semanticsId: SemanticsIds.radioSavedEntry(song.pid),
+          );
           // Both halves or neither. The split is a pair - this server
           // sends one only when the line parsed into both - but the
           // schema makes them independently optional, and half a pair
@@ -137,19 +129,7 @@ class _SavedList extends ConsumerWidget {
               : '${song.artist} ${song.title}';
           return MediaListRow(
             key: _songKey(song),
-            data: MediaTileData(
-              title: title,
-              subtitle: _caption(l10n, song),
-              // The snapshot taken when the heart was tapped, or the
-              // monogram - which is the ordinary state rather than a
-              // loading one, since most announcements have no cover on
-              // any rung.
-              artwork: song.hasArt
-                  ? waxArtwork(store, repository.radioSavedArtUrlFor(song.pid))
-                  : null,
-              domain: WaxDomain.radio,
-              semanticsId: SemanticsIds.radioSavedEntry(song.pid),
-            ),
+            data: tile,
             // Tapping the row is the search, because finding it is the
             // whole point of the list. `go`, not `push`: a search is a
             // location a stranger can open.
@@ -159,17 +139,17 @@ class _SavedList extends ConsumerWidget {
             // and a long press instead of only the button.
             onMore: () => showRadioSavedMenu(context, ref, song),
             moreSemanticsId: SemanticsIds.radioSavedMore(song.pid),
-            moreLabel: l10n.radioSavedWays(title),
+            moreLabel: l10n.radioSavedWays(tile.title),
             actions: <Widget>[
               WaxIconButton(
                 glyph: WaxIcons.search,
-                label: l10n.radioSavedFind(title),
+                label: l10n.radioSavedFind(tile.title),
                 semanticsId: SemanticsIds.radioSavedFind(song.pid),
                 onPressed: () => context.go(WaxRoute.searchFor(query)),
               ),
               WaxIconButton(
                 glyph: WaxIcons.close,
-                label: l10n.radioSavedForget(title),
+                label: l10n.radioSavedForget(tile.title),
                 semanticsId: SemanticsIds.radioSavedRemove(song.pid),
                 onPressed: () => onRemove(song),
               ),

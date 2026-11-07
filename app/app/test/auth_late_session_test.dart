@@ -1,12 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _ada = WaxDeckUser(id: 'us-ada', username: 'ada', roles: ['admin']);
@@ -46,13 +44,7 @@ class _HeldSessions extends FakeRepository {
 void main() {
   test('a late session read does not undo a sign-out and a sign-in', () async {
     final repo = _HeldSessions();
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     await container.read(authControllerProvider.future);
     final auth = container.read(authControllerProvider.notifier);
 

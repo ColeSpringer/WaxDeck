@@ -6,10 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/dashboard_screen.dart';
 import 'package:waxdeck/src/admin/first_run_wizard.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
-import 'package:waxdeck/src/providers.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -17,8 +14,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _admin = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
 
@@ -62,27 +59,12 @@ class _GatedCounts extends FakeRepository {
   }
 }
 
+// The device's own store is where the tour's progress lives. Passing the
+// same one to a second container is this suite's version of a reload.
 ProviderContainer _container(
   FakeRepository repo, {
   ClientSettingsStore? store,
-}) {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      // The session only resolves with a store behind it: the auth
-      // controller reads the stored token before it probes.
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      // The device's own store, which is where the tour's progress
-      // lives. Passing the same one to a second container is this
-      // suite's version of a reload.
-      clientSettingsStoreProvider.overrideWithValue(
-        store ?? MemoryClientSettingsStore(),
-      ),
-    ],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
+}) => appContainer(repo: repo, settings: store ?? MemoryClientSettingsStore());
 
 /// Every case here is an administrator looking at their own console;
 /// the one that is not says so.
@@ -99,13 +81,7 @@ Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
   tester.platformDispatcher.accessibilityFeaturesTestValue =
       const FakeAccessibilityFeatures(disableAnimations: true);
   addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const AdminDashboardScreen()),
-    ),
-  );
-  await tester.pumpAndSettle();
+  await pumpApp(tester, const AdminDashboardScreen(), container: container);
 }
 
 LibraryInfo _library({int? items}) =>
@@ -260,17 +236,11 @@ void main() {
         evaluatedItems: 0,
         warmingUp: true,
       );
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        clientSettingsStoreProvider.overrideWithValue(
-          MemoryClientSettingsStore(),
-        ),
-        healthProvider.overrideWith(_PendingHealth.new),
-      ],
+    final container = appContainer(
+      repo: repo,
+      settings: MemoryClientSettingsStore(),
+      extra: [healthProvider.overrideWith(_PendingHealth.new)],
     );
-    addTearDown(container.dispose);
     await _pump(tester, container);
 
     // Library in, scan recorded: only health stands before the end.
@@ -298,17 +268,11 @@ void main() {
     tester,
   ) async {
     final repo = _repo();
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        clientSettingsStoreProvider.overrideWithValue(
-          MemoryClientSettingsStore(),
-        ),
-        healthProvider.overrideWith(_FailingHealth.new),
-      ],
+    final container = appContainer(
+      repo: repo,
+      settings: MemoryClientSettingsStore(),
+      extra: [healthProvider.overrideWith(_FailingHealth.new)],
     );
-    addTearDown(container.dispose);
     await _pump(tester, container);
 
     repo.libraries.add(_library());

@@ -5,9 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
@@ -15,18 +13,23 @@ import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'row_nodes.dart';
 import 'wax_finders.dart';
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-  child: routedHost(const TasksScreen()),
-);
+/// The tasks screen over [repo], settled.
+Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
+  await pumpApp(
+    tester,
+    const TasksScreen(),
+    container: appContainer(repo: repo),
+  );
+}
+
+/// The tasks screen over [repo], mounted and not settled.
+Future<void> _mount(WidgetTester tester, FakeRepository repo) =>
+    mountApp(tester, const TasksScreen(), container: appContainer(repo: repo));
 
 Finder _row(String id) => find.bySemanticsIdentifier(SemanticsIds.taskRow(id));
 
@@ -111,8 +114,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
     expect(find.byType(AsyncSliverFace<ToolTasksState>), findsOneWidget);
     expect(_row('tt-1'), findsOneWidget);
 
@@ -154,7 +156,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     // No pumpAndSettle: a running row's progress bar animates forever.
     await tester.pump();
     await tester.pump();
@@ -227,8 +229,7 @@ void main() {
       bookInTrash: true,
       createdAt: DateTime.utc(2026, 7, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final row = _row('tt-w');
     Finder inRow(String text) =>
@@ -296,8 +297,7 @@ void main() {
       retryAt: soon,
       createdAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     Finder inRow(String id, String text) =>
         find.descendant(of: _row(id), matching: find.text(text));
@@ -347,8 +347,7 @@ void main() {
       );
       i++;
     }
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     i = 0;
     for (final sentence in reasons.values) {
@@ -382,16 +381,12 @@ void main() {
       bookInTrash: true,
       createdAt: DateTime.utc(2026, 7, 1),
     );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-        child: routedHost(const TasksScreen(), locale: const Locale('es')),
-      ),
+    await pumpApp(
+      tester,
+      const TasksScreen(),
+      container: appContainer(repo: repo),
+      locale: const Locale('es'),
     );
-    await tester.pumpAndSettle();
 
     final row = _row('tt-w');
     Finder inRow(String text) =>
@@ -430,7 +425,7 @@ void main() {
       bookInTrash: true,
       createdAt: DateTime.utc(2026, 7, 1),
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pump();
     await tester.pump();
 
@@ -472,8 +467,7 @@ void main() {
       'and is dismissed like a failed one', (tester) async {
     final repo = FakeRepository();
     repo.toolTasksById['tt-p'] = parkedMerge();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final row = _row('tt-p');
     final status = find.descendant(
@@ -530,8 +524,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final row = _row('tt-p');
     final text = find.descendant(of: row, matching: find.text(account));
@@ -558,8 +551,7 @@ void main() {
   testWidgets('clear finished sweeps a parked task too', (tester) async {
     final repo = FakeRepository();
     repo.toolTasksById['tt-p'] = parkedMerge();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
@@ -590,8 +582,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(find.text('Book merge: The Fixture Book'), findsOneWidget);
     // A task queued with no title keeps its plain label.
@@ -608,8 +599,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final row = _row('tt-acq');
     expect(
@@ -635,8 +625,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final row = _row('tt-dl');
     expect(find.text('Open the review queue'), findsNothing);
@@ -663,8 +652,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
     expect(
       find.descendant(of: _row('tt-m'), matching: find.text('1 item')),
       findsOneWidget,
@@ -695,8 +683,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(
       find.descendant(of: _row('tt-s'), matching: find.text('2 items')),
@@ -723,8 +710,7 @@ void main() {
       finishedAt: DateTime.utc(2026, 7, 20, 1),
       summary: const {'matched': 120, 'unmatched': 3, 'listens': 987},
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final row = _row('tt-imp');
     expect(
@@ -755,8 +741,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final row = _row('tt-f');
     expect(_forward(row), findsOneWidget);
@@ -783,8 +768,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
     expect(_row('tt-a'), findsOneWidget);
     expect(_forward(_row('tt-a')), findsNothing);
 
@@ -815,8 +799,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 2),
       finishedAt: DateTime.utc(2026, 7, 2, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.taskDismiss('tt-a')),
@@ -845,8 +828,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 2),
       finishedAt: DateTime.utc(2026, 7, 2, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
@@ -894,8 +876,7 @@ void main() {
       tester,
     ) async {
       final repo = adminRepo();
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       // The control opens a menu rather than sweeping.
       await tapId(tester, SemanticsIds.tasksClearFinished);
@@ -911,8 +892,7 @@ void main() {
 
     testWidgets('clearing everyone\'s asks first', (tester) async {
       final repo = adminRepo();
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await tapId(tester, SemanticsIds.tasksClearFinished);
       await tapId(tester, SemanticsIds.tasksClearFinishedAll);
@@ -951,8 +931,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
       finishedAt: DateTime.utc(2026, 7, 1, 1),
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
@@ -973,7 +952,7 @@ void main() {
       state: 'running',
       createdAt: DateTime.utc(2026, 7, 1),
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pump();
     await tester.pump();
 
@@ -1010,8 +989,7 @@ void main() {
         SemanticsIds.tasksClearFinishedAll,
       ]) {
         final repo = adminRepo();
-        await tester.pumpWidget(_host(repo));
-        await tester.pumpAndSettle();
+        await _pump(tester, repo);
         expect(_job('jb-scan'), findsOneWidget);
 
         await tapId(tester, SemanticsIds.tasksClearFinished);
@@ -1049,8 +1027,7 @@ void main() {
             finishedAt: DateTime.utc(2026, 9, 29, 11, 1),
           ),
         );
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await tapId(tester, SemanticsIds.tasksClearFinished);
       await tapId(tester, SemanticsIds.tasksClearFinishedMine);
@@ -1073,8 +1050,7 @@ void main() {
         createdAt: DateTime.utc(2026, 7, 1),
         finishedAt: DateTime.utc(2026, 7, 1, 1),
       );
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await tapId(tester, SemanticsIds.tasksClearFinished);
       await tapId(tester, SemanticsIds.tasksClearFinishedMine);
@@ -1096,18 +1072,12 @@ void main() {
         createdAt: DateTime.utc(2026, 7, 1),
         finishedAt: DateTime.utc(2026, 7, 1, 1),
       );
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(repo),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-          ],
-          child: routedHost(const TasksScreen(), locale: const Locale('es')),
-        ),
+      await pumpApp(
+        tester,
+        const TasksScreen(),
+        container: appContainer(repo: repo),
+        locale: const Locale('es'),
       );
-      await tester.pumpAndSettle();
 
       await tapId(tester, SemanticsIds.tasksClearFinished);
       await tapId(tester, SemanticsIds.tasksClearFinishedMine);
@@ -1130,7 +1100,7 @@ void main() {
             startedAt: DateTime.utc(2026, 9, 29, 10),
           ),
         ];
-      await tester.pumpWidget(_host(repo));
+      await _mount(tester, repo);
       for (var i = 0; i < 5; i++) {
         await tester.pump();
       }
@@ -1158,8 +1128,7 @@ void main() {
               createdAt: DateTime.utc(2026, 7, 1),
               finishedAt: DateTime.utc(2026, 7, 1, 1),
             );
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       expect(_job('jb-scan'), findsNothing);
       await tapId(tester, SemanticsIds.tasksClearFinished);
@@ -1184,8 +1153,7 @@ void main() {
         createdAt: DateTime.utc(2026, 7, 1),
         finishedAt: DateTime.utc(2026, 7, 1, 1),
       );
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await tapId(tester, SemanticsIds.tasksClearFinished);
       await tapId(tester, SemanticsIds.tasksClearFinishedMine);
@@ -1210,8 +1178,7 @@ void main() {
         createdAt: DateTime.utc(2026, 7, 1),
         finishedAt: DateTime.utc(2026, 7, 1, 1),
       );
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await tapId(tester, SemanticsIds.tasksClearFinished);
       await tapId(tester, SemanticsIds.tasksClearFinishedMine);
@@ -1231,8 +1198,7 @@ void main() {
       final repo = FakeRepository(
         sessionState: const SessionState(authenticated: true, user: _admin),
       )..jobs = [Job(pid: 'jb-scan', kind: 'scan', state: 'done')];
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       final glyph = tester
           .widget<WaxIcon>(
@@ -1256,8 +1222,7 @@ void main() {
         createdAt: DateTime.utc(2026, 10, 1),
         finishedAt: DateTime.utc(2026, 10, 1, 1),
       );
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       final glyph = tester
           .widget<WaxIcon>(
@@ -1333,8 +1298,7 @@ void main() {
                   finishedAt: DateTime.utc(2026, 9, 29, 10, 5),
                 ),
             ];
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       for (final kind in kinds) {
         expect(
@@ -1365,8 +1329,7 @@ void main() {
       for (final type in types) {
         repo.toolTasksById['tt-$type'] = _doneTask('tt-$type', type);
       }
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       for (final type in types) {
         expect(
@@ -1386,8 +1349,7 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repo = _PagedTasks();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(repo.cursors, [null, 'c2']);
     expect(_row('tt-50'), findsOneWidget);
@@ -1400,8 +1362,7 @@ void main() {
       final repo = _HeldSweep();
       repo.toolTasksById['tt-a'] = _doneTask('tt-a', 'book-merge');
       repo.toolTasksById['tt-b'] = _doneTask('tt-b', 'cue-split');
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       final control = find.bySemanticsIdentifier(
         SemanticsIds.tasksClearFinished,
@@ -1433,8 +1394,7 @@ void main() {
         sessionState: const SessionState(authenticated: true, user: _admin),
       );
       repo.toolTasksById['tt-a'] = _doneTask('tt-a', 'book-merge');
-      await tester.pumpWidget(_host(repo));
-      await tester.pumpAndSettle();
+      await _pump(tester, repo);
 
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
@@ -1472,8 +1432,7 @@ void main() {
   });
 
   testWidgets('an empty task list shows the empty state', (tester) async {
-    await tester.pumpWidget(_host(FakeRepository()));
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const TasksScreen());
 
     expect(find.text('No tool tasks'), findsOneWidget);
   });
@@ -1488,7 +1447,7 @@ void main() {
     final repo = FakeRepository();
     await repo.mergeBook('bk-1', titles: ['One', 'Two']);
     await repo.splitBook('bk-2');
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     // No pumpAndSettle: queued tasks render an indeterminate progress
     // bar, which animates forever.
     await tester.pump();
@@ -1564,7 +1523,7 @@ void main() {
               ),
             ),
           ];
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     // A running job's bar animates forever: frames, not a settle, while
     // the session and then the jobs answer.
     for (var i = 0; i < 5; i++) {
@@ -1669,8 +1628,7 @@ void main() {
               },
             ),
           ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final scan = _job('jb-7');
     expect(
@@ -1734,8 +1692,7 @@ void main() {
               },
             ),
           ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(
       find.descendant(
@@ -1785,8 +1742,7 @@ void main() {
               },
             ),
           ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(
       find.descendant(
@@ -1818,8 +1774,7 @@ void main() {
     final repo = FakeRepository(
       sessionState: const SessionState(authenticated: true, user: _admin),
     )..jobs = [scan('jb-2', 2), scan('jb-1', 1)];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await expectRowsKeepTheirNodes(
       tester,
@@ -1850,8 +1805,7 @@ void main() {
     repo.toolTasksById
       ..['tt-2'] = merge('tt-2', 2)
       ..['tt-1'] = merge('tt-1', 1);
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await expectRowsKeepTheirNodes(
       tester,
@@ -1878,8 +1832,7 @@ void main() {
         user: WaxDeckUser(id: 'us-2', username: 'sam'),
       ),
     )..jobs = [const Job(pid: 'jb-1', kind: 'scan', state: 'running')];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     expect(repo.jobReads, 0);
     expect(_job('jb-1'), findsNothing);
@@ -1899,7 +1852,7 @@ void main() {
       finishedAt: DateTime.utc(2026, 9, 29, 1),
       summary: const {'rule': 'missing-lyrics'},
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pump();
     await tester.pump();
 
@@ -1937,7 +1890,7 @@ void main() {
       state: 'queued',
       createdAt: DateTime.utc(2026, 9, 29),
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pump();
     await tester.pump();
 

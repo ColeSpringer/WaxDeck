@@ -62,6 +62,9 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 	if it.Kind == model.KindEpisode {
 		return WaveformResult{State: waveformStateUnavailable}, nil
 	}
+	if err := inTrash(it, apiItemPID); err != nil {
+		return WaveformResult{}, err
+	}
 	// Each part has its own peaks row. Reading through the item answers
 	// the primary's, and the primary is not part one - it is whichever
 	// part was attached first.
@@ -159,6 +162,9 @@ func (l *Library) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID s
 	// either span.
 	if it.Kind == model.KindEpisode {
 		return WaveformResult{State: waveformStateUnavailable}, nil
+	}
+	if err := inTrash(it, apiItemPID); err != nil {
+		return WaveformResult{}, err
 	}
 	parts, err := l.itemParts(ctx, it)
 	if err != nil {

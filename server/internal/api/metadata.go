@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"io"
+	"net/http"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -183,9 +184,6 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 // --- vocabulary and reads ---------------------------------------------------------
 
 func (s *Server) GetMetadataFields(ctx context.Context, _ GetMetadataFieldsRequestObject) (GetMetadataFieldsResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
-	}
 	vocab := s.svc.MetadataFieldVocabulary()
 	out := MetadataFields{
 		Kinds:       make([]KindFields, 0, len(vocab.Kinds)),
@@ -212,10 +210,7 @@ func (s *Server) GetMetadataFields(ctx context.Context, _ GetMetadataFieldsReque
 }
 
 func (s *Server) GetItemPermissions(ctx context.Context, req GetItemPermissionsRequestObject) (GetItemPermissionsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	may, err := s.svc.MayCurateItem(ctx, uc, string(req.Pid))
 	if err != nil {
 		return nil, err
@@ -224,15 +219,9 @@ func (s *Server) GetItemPermissions(ctx context.Context, req GetItemPermissionsR
 }
 
 func (s *Server) GetItemMetadata(ctx context.Context, req GetItemMetadataRequestObject) (GetItemMetadataResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	d, err := s.svc.ItemMetadataFor(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetItemMetadata404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return GetItemMetadata200JSONResponse(itemMetadataJSON(d)), nil
@@ -241,27 +230,19 @@ func (s *Server) GetItemMetadata(ctx context.Context, req GetItemMetadataRequest
 // --- scalar edits -----------------------------------------------------------------
 
 func (s *Server) EditItemMetadata(ctx context.Context, req EditItemMetadataRequestObject) (EditItemMetadataResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return EditItemMetadata403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
-	if req.Body == nil || len(req.Body.Fields) == 0 {
-		return EditItemMetadata400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a fields body is required"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
+	}
+	if len(req.Body.Fields) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "a fields body is required")
 	}
 	out, err := s.svc.EditItemMetadata(ctx, uc, req.Pid, req.Body.Fields,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return EditItemMetadata400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return EditItemMetadata404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindLocked:
-			return EditItemMetadata409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return EditItemMetadata200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
@@ -279,24 +260,15 @@ func (s *Server) EditItemMetadata(ctx context.Context, req EditItemMetadataReque
 // the editor's banner is made of, and a status code would discard them.
 // The refusals below are for a request that commits nothing at all.
 func (s *Server) CommitItemMetadata(ctx context.Context, req CommitItemMetadataRequestObject) (CommitItemMetadataResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return CommitItemMetadata403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
-		return CommitItemMetadata400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	out, err := s.svc.CommitItemMetadata(ctx, uc, req.Pid, metadataCommitDTO(*req.Body))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return CommitItemMetadata400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return CommitItemMetadata404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return CommitItemMetadata200JSONResponse(s.commitResultJSON(ctx, uc, out)), nil
@@ -354,7 +326,7 @@ func (s *Server) commitResultJSON(ctx context.Context, uc *service.UserCtx, out 
 			part.Detail = ptr(p.Detail)
 		}
 		if p.Refusal != nil {
-			refusal := partRefusal(p.Refusal)
+			refusal := s.partRefusal(p.Refusal)
 			part.Refusal = &refusal
 		}
 		result.Parts = append(result.Parts, part)
@@ -380,39 +352,34 @@ func chapterMarkDTO(ch ChapterMark) service.ChapterMark {
 	}
 }
 
-// partRefusal is responseError's table without the status. It keeps the
-// error's own message, as the per-part endpoints do, so a refusal reads the
-// same on either save path; an internal error may name internals, so not it.
-func partRefusal(err error) Error {
-	kind := service.KindOf(err)
-	if kind == "" || kind == service.KindInternal {
-		return errObj("internal", kindMessage(err, "internal server error"))
+// partRefusal is the answer a part's own endpoint gives its error, without
+// the status, so a refusal reads the same on either save path.
+func (s *Server) partRefusal(err error) Error {
+	if s.handedOff(err) {
+		err = maintenanceAnswer()
 	}
-	return errObj(string(kind), err.Error())
+	answer := answerTo(err)
+	body := Error{Code: answer.Code, Message: answer.Message}
+	if len(answer.Params) > 0 {
+		body.Params = &answer.Params
+	}
+	return body
 }
 
 func (s *Server) BulkEditMetadata(ctx context.Context, req BulkEditMetadataRequestObject) (BulkEditMetadataResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !uc.Admin {
-		return BulkEditMetadata403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
 	}
-	if req.Body == nil || len(req.Body.ItemPids) == 0 || len(req.Body.Fields) == 0 {
-		return BulkEditMetadata400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "itemPids and fields are required"))}, nil
+	if len(req.Body.ItemPids) == 0 || len(req.Body.Fields) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "itemPids and fields are required")
 	}
 	out, err := s.svc.BulkEditMetadata(ctx, uc, req.Body.ItemPids, req.Body.Fields,
 		derefBool(req.Body.WriteBack), derefBool(req.Body.SkipLocked), derefBool(req.Body.Force))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return BulkEditMetadata400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return BulkEditMetadata404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		case service.KindLocked:
-			return BulkEditMetadata409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	result := BulkEditResult{Edited: out.Edited, Skipped: out.Skipped}
@@ -428,27 +395,19 @@ func (s *Server) BulkEditMetadata(ctx context.Context, req BulkEditMetadataReque
 // --- credits ----------------------------------------------------------------------
 
 func (s *Server) SetItemCredits(ctx context.Context, req SetItemCreditsRequestObject) (SetItemCreditsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return SetItemCredits403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
-	if req.Body == nil || req.Body.Role == "" {
-		return SetItemCredits400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a role body is required"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
+	}
+	if req.Body.Role == "" {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "a role body is required")
 	}
 	out, err := s.svc.SetItemCredits(ctx, uc, req.Pid, req.Body.Role, req.Body.Names,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetItemCredits400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetItemCredits404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindLocked:
-			return SetItemCredits409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetItemCredits200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
@@ -457,46 +416,29 @@ func (s *Server) SetItemCredits(ctx context.Context, req SetItemCreditsRequestOb
 // --- lyrics -----------------------------------------------------------------------
 
 func (s *Server) SetItemLyrics(ctx context.Context, req SetItemLyricsRequestObject) (SetItemLyricsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return SetItemLyrics403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
-		return SetItemLyrics400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a lyrics body is required"))}, nil
+		return nil, errNoBody()
 	}
 	out, err := s.svc.SetItemLyrics(ctx, uc, req.Pid, deref(req.Body.Lrc), deref(req.Body.Plain),
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetItemLyrics400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetItemLyrics404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindLocked:
-			return SetItemLyrics409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetItemLyrics200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 func (s *Server) ClearItemLyrics(ctx context.Context, req ClearItemLyricsRequestObject) (ClearItemLyricsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return ClearItemLyrics403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	out, err := s.svc.ClearItemLyrics(ctx, uc, req.Pid,
 		service.MetadataEditParams{WriteBack: derefBool(req.Params.WriteBack)})
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return ClearItemLyrics404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	// A 204 carries no body to name a sidecar that stayed.
@@ -509,15 +451,12 @@ func (s *Server) ClearItemLyrics(ctx context.Context, req ClearItemLyricsRequest
 // --- chapters ---------------------------------------------------------------------
 
 func (s *Server) SetBookChapters(ctx context.Context, req SetBookChaptersRequestObject) (SetBookChaptersResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return SetBookChapters403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
-		return SetBookChapters400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a chapters body is required"))}, nil
+		return nil, errNoBody()
 	}
 	chapters := make([]service.ChapterMark, 0, len(req.Body.Chapters))
 	for _, ch := range req.Body.Chapters {
@@ -526,14 +465,6 @@ func (s *Server) SetBookChapters(ctx context.Context, req SetBookChaptersRequest
 	out, err := s.svc.SetBookChapters(ctx, uc, req.Pid, chapters,
 		boolOr(req.Body.Lock, true), derefBool(req.Body.Force))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetBookChapters400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetBookChapters404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no book with pid "+req.Pid))}, nil
-		case service.KindLocked:
-			return SetBookChapters409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetBookChapters200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
@@ -551,54 +482,32 @@ func readArtworkBody(body io.Reader) ([]byte, error) {
 }
 
 func (s *Server) SetItemArtwork(ctx context.Context, req SetItemArtworkRequestObject) (SetItemArtworkResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return SetItemArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	// Reject a bad role before buffering up to 16 MiB of image body.
 	if req.Params.Role != nil && !req.Params.Role.Valid() {
-		return SetItemArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown art role"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown art role")
 	}
 	raw, err := readArtworkBody(req.Body)
 	if err != nil {
-		return SetItemArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "reading the image body failed"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "reading the image body failed")
 	}
 	out, err := s.svc.SetItemArtwork(ctx, uc, req.Pid, enumStr(req.Params.Role), raw,
 		derefBool(req.Params.WriteBack), boolOr(req.Params.Lock, true))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetItemArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindFormat:
-			return SetItemArtwork415JSONResponse{UnsupportedFormatJSONResponse(errObj("unsupported-format", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetItemArtwork404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindLocked:
-			return SetItemArtwork409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetItemArtwork200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 func (s *Server) ClearItemArtwork(ctx context.Context, req ClearItemArtworkRequestObject) (ClearItemArtworkResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return ClearItemArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if err := s.svc.ClearItemArtwork(ctx, uc, req.Pid, enumStr(req.Params.Role)); err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return ClearItemArtwork404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindInvalid:
-			return ClearItemArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return ClearItemArtwork204Response{}, nil
@@ -636,59 +545,35 @@ func entityArtworkRefusal(entityType string) string {
 }
 
 func (s *Server) SetEntityArtwork(ctx context.Context, req SetEntityArtworkRequestObject) (SetEntityArtworkResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !entityArtworkPermitted(uc, string(req.EntityType)) {
-		return SetEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", entityArtworkRefusal(string(req.EntityType)))
 	}
 	// Reject a bad role before buffering up to 16 MiB of image body.
 	if req.Params.Role != nil && !req.Params.Role.Valid() {
-		return SetEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown art role"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown art role")
 	}
 	raw, err := readArtworkBody(req.Body)
 	if err != nil {
-		return SetEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "reading the image body failed"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "reading the image body failed")
 	}
 	out, err := s.svc.SetEntityArtwork(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), raw,
 		derefBool(req.Params.WriteBack))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindFormat:
-			return SetEntityArtwork415JSONResponse{UnsupportedFormatJSONResponse(errObj("unsupported-format", err.Error()))}, nil
-		case service.KindForbidden:
-			return SetEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetEntityArtwork404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
-		}
 		return nil, err
 	}
 	return SetEntityArtwork200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 func (s *Server) ClearEntityArtwork(ctx context.Context, req ClearEntityArtworkRequestObject) (ClearEntityArtworkResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !entityArtworkPermitted(uc, string(req.EntityType)) {
-		return ClearEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", entityArtworkRefusal(string(req.EntityType)))
 	}
 	if req.Params.Role != nil && !req.Params.Role.Valid() {
-		return ClearEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown art role"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown art role")
 	}
 	if err := s.svc.ClearEntityArtwork(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role)); err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return ClearEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return ClearEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return ClearEntityArtwork404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
-		}
 		return nil, err
 	}
 	return ClearEntityArtwork204Response{}, nil
@@ -700,21 +585,12 @@ func (s *Server) ClearEntityArtwork(ctx context.Context, req ClearEntityArtworkR
 // service (the documented invalid-request), so no owner ever pins.
 
 func (s *Server) GetEntityArtworkLock(ctx context.Context, req GetEntityArtworkLockRequestObject) (GetEntityArtworkLockResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !entityArtworkPermitted(uc, string(req.EntityType)) {
-		return GetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", entityArtworkRefusal(string(req.EntityType)))
 	}
 	locked, err := s.svc.EntityArtworkLock(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return GetEntityArtworkLock400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return GetEntityArtworkLock404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
-		}
 		return nil, err
 	}
 	return GetEntityArtworkLock200JSONResponse(ArtworkLock{
@@ -724,24 +600,15 @@ func (s *Server) GetEntityArtworkLock(ctx context.Context, req GetEntityArtworkL
 }
 
 func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkLockRequestObject) (SetEntityArtworkLockResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !entityArtworkPermitted(uc, string(req.EntityType)) {
-		return SetEntityArtworkLock403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", entityArtworkRefusal(string(req.EntityType))))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", entityArtworkRefusal(string(req.EntityType)))
 	}
 	if req.Body == nil {
-		return SetEntityArtworkLock400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a locked body is required"))}, nil
+		return nil, errNoBody()
 	}
 	locked, err := s.svc.SetEntityArtworkLock(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), req.Body.Locked)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetEntityArtworkLock400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetEntityArtworkLock404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
-		}
 		return nil, err
 	}
 	return SetEntityArtworkLock200JSONResponse(ArtworkLock{
@@ -753,27 +620,16 @@ func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkL
 // --- custom tags ------------------------------------------------------------------
 
 func (s *Server) SetItemTag(ctx context.Context, req SetItemTagRequestObject) (SetItemTagResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return SetItemTag403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
-		return SetItemTag400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a values body is required"))}, nil
+		return nil, errNoBody()
 	}
 	out, err := s.svc.SetItemTag(ctx, uc, req.Pid, req.Key, req.Body.Values,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetItemTag400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetItemTag404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindLocked:
-			return SetItemTag409JSONResponse(errObj("field-locked", err.Error())), nil
-		}
 		return nil, err
 	}
 	res := TagEditResult{Key: out.Key, Stored: out.Stored}
@@ -784,22 +640,13 @@ func (s *Server) SetItemTag(ctx context.Context, req SetItemTagRequestObject) (S
 }
 
 func (s *Server) ClearItemTag(ctx context.Context, req ClearItemTagRequestObject) (ClearItemTagResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return ClearItemTag403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	out, err := s.svc.ClearItemTag(ctx, uc, req.Pid, req.Key,
 		service.MetadataEditParams{WriteBack: derefBool(req.Params.WriteBack)})
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return ClearItemTag404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindInvalid:
-			return ClearItemTag400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	// A 204 carries no body to name the files a write-back missed; the
@@ -814,21 +661,18 @@ func (s *Server) ClearItemTag(ctx context.Context, req ClearItemTagRequestObject
 
 // The origin verbs mirror the custom-tag pair beside them: the same
 // curate gate, the same not-found sentence, and the same field-locked
-// arm, because the origin is one more curated field with a lock of its
+// answer, because the origin is one more curated field with a lock of its
 // own. What differs is the replacement rule the schema documents - the
 // four editable columns are written as sent, absent meaning cleared -
 // which is the whole reason a correction is possible at all.
 
 func (s *Server) SetItemAcquisition(ctx context.Context, req SetItemAcquisitionRequestObject) (SetItemAcquisitionResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return SetItemAcquisition403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
-		return SetItemAcquisition400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a sourceType body is required"))}, nil
+		return nil, errNoBody()
 	}
 	edit := service.AcquisitionEdit{
 		SourceType: req.Body.SourceType,
@@ -845,41 +689,22 @@ func (s *Server) SetItemAcquisition(ctx context.Context, req SetItemAcquisitionR
 		Force:     derefBool(req.Body.Force),
 	})
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetItemAcquisition400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetItemAcquisition404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindLocked:
-			return SetItemAcquisition409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetItemAcquisition200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 func (s *Server) ClearItemAcquisition(ctx context.Context, req ClearItemAcquisitionRequestObject) (ClearItemAcquisitionResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return ClearItemAcquisition403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
-	err = s.svc.ClearItemAcquisition(ctx, uc, req.Pid, service.MetadataEditParams{
+	err := s.svc.ClearItemAcquisition(ctx, uc, req.Pid, service.MetadataEditParams{
 		WriteBack: derefBool(req.Params.WriteBack),
 		Lock:      boolOr(req.Params.Lock, true),
 		Force:     derefBool(req.Params.Force),
 	})
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return ClearItemAcquisition400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return ClearItemAcquisition404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindLocked:
-			return ClearItemAcquisition409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return ClearItemAcquisition204Response{}, nil
@@ -888,24 +713,18 @@ func (s *Server) ClearItemAcquisition(ctx context.Context, req ClearItemAcquisit
 // --- locks ------------------------------------------------------------------------
 
 func (s *Server) SetItemLocks(ctx context.Context, req SetItemLocksRequestObject) (SetItemLocksResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return SetItemLocks403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
-	if req.Body == nil || len(req.Body.Fields) == 0 {
-		return SetItemLocks400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a fields body is required"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
+	}
+	if len(req.Body.Fields) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "a fields body is required")
 	}
 	locked, err := s.svc.SetItemLocks(ctx, uc, req.Pid, req.Body.Fields, req.Body.Locked)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetItemLocks400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetItemLocks404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return SetItemLocks200JSONResponse(LocksResult{LockedFields: locked}), nil
@@ -914,27 +733,19 @@ func (s *Server) SetItemLocks(ctx context.Context, req SetItemLocksRequestObject
 // --- entity curation --------------------------------------------------------------
 
 func (s *Server) EditEntity(ctx context.Context, req EditEntityRequestObject) (EditEntityResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !uc.Admin {
-		return EditEntity403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
 	}
-	if req.Body == nil || len(req.Body.Edits) == 0 {
-		return EditEntity400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an edits body is required"))}, nil
+	if len(req.Body.Edits) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "an edits body is required")
 	}
 	out, err := s.svc.EditEntity(ctx, string(req.EntityType), req.EntityPid, req.Body.Edits,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return EditEntity400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return EditEntity404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
-		case service.KindLocked:
-			return EditEntity409JSONResponse(errObj("field-locked", err.Error())), nil
-		}
 		return nil, err
 	}
 	return EditEntity200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
@@ -947,29 +758,19 @@ func (s *Server) EditEntity(ctx context.Context, req EditEntityRequestObject) (E
 // landing apart, an archived member, a group titled apart) as 409
 // conflict.
 func (s *Server) RenameEntity(ctx context.Context, req RenameEntityRequestObject) (RenameEntityResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !uc.Admin {
-		return RenameEntity403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
 	}
-	if req.Body == nil || len(req.Body.Fields) == 0 {
-		return RenameEntity400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a fields body is required"))}, nil
+	if len(req.Body.Fields) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "a fields body is required")
 	}
 	out, err := s.svc.RenameEntity(ctx, string(req.EntityType), req.EntityPid, req.Body.Fields,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return RenameEntity400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return RenameEntity404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
-		case service.KindLocked:
-			return RenameEntity409JSONResponse(errObj("field-locked", err.Error())), nil
-		case service.KindConflict:
-			return RenameEntity409JSONResponse(errObj("conflict", err.Error())), nil
-		}
 		return nil, err
 	}
 	res := EntityRenameResult{
@@ -992,15 +793,9 @@ func (s *Server) RenameEntity(ctx context.Context, req RenameEntityRequestObject
 }
 
 func (s *Server) GetEntityCuration(ctx context.Context, req GetEntityCurationRequestObject) (GetEntityCurationResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	rows, err := s.svc.EntityCurationFor(ctx, uc, string(req.EntityType), req.EntityPid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetEntityCuration404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
-		}
 		return nil, err
 	}
 	out := EntityCuration{Curated: make([]EntityCuratedField, 0, len(rows))}
@@ -1021,25 +816,12 @@ func (s *Server) GetEntityCuration(ctx context.Context, req GetEntityCurationReq
 
 // SetItemKind starts a kind change, answering its job at once.
 func (s *Server) SetItemKind(ctx context.Context, req SetItemKindRequestObject) (SetItemKindResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetItemKind400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	job, err := s.svc.SetItemsKind(ctx, uc, req.Body.Pids, string(req.Body.MediaType), derefBool(req.Body.WriteBack))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetItemKind400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return SetItemKind403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetItemKind404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		case service.KindConflict, service.KindCatalogBusy, service.KindReadOnly:
-			return SetItemKind409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
-		}
 		return nil, err
 	}
 	return SetItemKind202JSONResponse(jobJSON(job)), nil
@@ -1050,12 +832,9 @@ func (s *Server) SetItemKind(ctx context.Context, req SetItemKindRequestObject) 
 // sentences, which name the case (a non-track, a chain with no id, an
 // album's last member).
 func (s *Server) DetachItem(ctx context.Context, req DetachItemRequestObject) (DetachItemResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return DetachItem403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	writeBack := false
 	if req.Body != nil {
@@ -1063,12 +842,6 @@ func (s *Server) DetachItem(ctx context.Context, req DetachItemRequestObject) (D
 	}
 	out, err := s.svc.DetachItem(ctx, uc, req.Pid, writeBack)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return DetachItem400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return DetachItem404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	res := DetachResult{ItemPid: out.ItemPID, OldAlbumPid: out.OldAlbumPID}
@@ -1087,25 +860,16 @@ func (s *Server) DetachItem(ctx context.Context, req DetachItemRequestObject) (D
 // --- release status ---------------------------------------------------------------
 
 func (s *Server) SetReleaseStatus(ctx context.Context, req SetReleaseStatusRequestObject) (SetReleaseStatusResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return SetReleaseStatus403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
-		return SetReleaseStatus400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an unofficial body is required"))}, nil
+		return nil, errNoBody()
 	}
 	out, err := s.svc.SetReleaseStatus(ctx, uc, req.Pid, req.Body.Unofficial,
 		service.MetadataEditParams{WriteBack: derefBool(req.Body.WriteBack)})
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetReleaseStatus400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetReleaseStatus404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return SetReleaseStatus200JSONResponse(s.editResultJSON(ctx, uc, out)), nil

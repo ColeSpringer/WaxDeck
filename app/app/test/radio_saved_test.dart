@@ -2,9 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/radio/radio_saved_controller.dart';
 import 'package:waxdeck/src/radio/radio_saved_screen.dart';
@@ -14,8 +11,8 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 RadioSavedSong _song({
   required String pid,
@@ -55,28 +52,17 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      // The tests that tune a station need an engine to tune it through.
-      if (engine != null) ...[
-        audioEngineProvider.overrideWithValue(engine),
-        clientSettingsStoreProvider.overrideWithValue(
-          MemoryClientSettingsStore(),
-        ),
-      ],
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const RadioSavedScreen()),
+  return pumpApp(
+    tester,
+    const RadioSavedScreen(),
+    container: appContainer(
+      repo: repo,
+      engine: engine,
+      // The tests that tune a station pass an engine to tune it through,
+      // with an in-memory settings store beside it.
+      settings: engine == null ? null : MemoryClientSettingsStore(),
     ),
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 void main() {
@@ -87,10 +73,7 @@ void main() {
       for (var i = 0; i < RadioSavedController.pageSize + 2; i++) {
         repo.seedSavedSong(_song(pid: 'rw-$i', line: 'Artist - Song $i'));
       }
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo);
       final held = container.listen(radioSavedProvider, (_, _) {});
       addTearDown(held.close);
       return (container: container, repo: repo);
@@ -286,12 +269,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.radioSavedRemove('rw-1')),
     );
     await tester.pump();
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const SizedBox.shrink(),
-      ),
-    );
+    await leaveScreen(tester, container);
     await tester.pumpAndSettle();
 
     gate.complete();
@@ -318,12 +296,7 @@ void main() {
 
     // Closed the way leaving the screen closes it: the scope stays, and
     // nothing reads the list any more.
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const SizedBox.shrink(),
-      ),
-    );
+    await leaveScreen(tester, container);
     await tester.pumpAndSettle();
     repo.seedSavedSong(
       _song(
@@ -333,13 +306,7 @@ void main() {
         title: 'Harbour Lights',
       ),
     );
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const RadioSavedScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const RadioSavedScreen(), container: container);
     expect(find.text('Harbour Lights'), findsOneWidget);
   });
 

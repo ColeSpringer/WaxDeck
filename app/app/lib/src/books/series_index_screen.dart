@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../presenters/media_tiles.dart';
 import '../settings/client_prefs.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
@@ -86,15 +87,9 @@ class _SeriesGrid extends ConsumerWidget {
               final row = series[index];
               return MediaCard(
                 key: _seriesKey(row),
-                data: MediaTileData(
-                  title: row.name,
-                  // Zero is what a restricted account reads, and a "0
-                  // books" caption on a series it can open is a lie the
-                  // count is not allowed to tell.
-                  subtitle: row.bookCount > 0
-                      ? l10n.bookSeriesBookCount(row.bookCount)
-                      : null,
-                  domain: WaxDomain.audiobooks,
+                data: seriesCardTile(
+                  row,
+                  l10n: l10n,
                   semanticsId: SemanticsIds.bookSeriesCard(row.pid),
                 ),
                 width: grid.width,

@@ -1,10 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/adaptive_shell.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
@@ -13,6 +9,7 @@ import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 
@@ -32,32 +29,19 @@ import 'localized_host.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
 
-List<Override> _signedIn() => [
-  repositoryProvider.overrideWithValue(
-    FakeRepository(
-      sessionState: const SessionState(authenticated: true, user: _user),
-      items: [testItem('tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE')],
-    ),
+ProviderContainer _signedInContainer() => appContainer(
+  repo: FakeRepository(
+    sessionState: const SessionState(authenticated: true, user: _user),
+    items: [testItem('tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE')],
   ),
-  credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-];
-
-ProviderContainer _signedInContainer() =>
-    ProviderContainer(overrides: _signedIn());
+);
 
 void main() {
   testWidgets('a message with an action is reachable from over the player', (
     tester,
   ) async {
     final container = _signedInContainer();
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const WaxDeckApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: container);
 
     // The player over the shell, which is where the mix sheet raises its
     // message from.
@@ -94,14 +78,7 @@ void main() {
     // The other position, so the one above is a comparison rather than
     // an isolated fact: no route pushed, the shell's own branch showing.
     final container = _signedInContainer();
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const WaxDeckApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: container);
 
     container.read(shellMessengerProvider.notifier).show('Scan started');
     await tester.pumpAndSettle();
@@ -112,14 +89,7 @@ void main() {
   testWidgets('a message is drawn over a lone overlay', (tester) async {
     // A typed overlay location builds no shell beneath it.
     final container = _signedInContainer();
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const WaxDeckApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: container);
     container.read(routerProvider).go(WaxRoute.queue);
     await tester.pumpAndSettle();
     expect(find.byType(AdaptiveShell), findsNothing);
@@ -136,14 +106,7 @@ void main() {
     // Each tab's top screen is a Scaffold of its own and draws the bar, so
     // a hidden tab would put a second copy of the bar's hero in flight.
     final container = _signedInContainer();
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const WaxDeckApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: container);
     final router = container.read(routerProvider)..go(WaxRoute.health);
     await tester.pumpAndSettle();
     container.read(shellMessengerProvider.notifier).show('Scan started');
@@ -183,20 +146,8 @@ void main() {
         ],
       )
       ..fixHealthStart = const HealthFixStart(queued: 1, taskId: 'tk-fix');
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const WaxDeckApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: repo);
+    await pumpWholeApp(tester, container: container);
     final router = container.read(routerProvider)..go(WaxRoute.health);
     await tester.pumpAndSettle();
     await tester.tap(
@@ -218,16 +169,9 @@ void main() {
   });
 
   group('a run of messages', () {
-    Future<ShellMessenger> pumpApp(WidgetTester tester) async {
+    Future<ShellMessenger> pumpMessenger(WidgetTester tester) async {
       final container = _signedInContainer();
-      addTearDown(container.dispose);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const WaxDeckApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await pumpWholeApp(tester, container: container);
       return container.read(shellMessengerProvider.notifier);
     }
 
@@ -237,7 +181,7 @@ void main() {
     }
 
     testWidgets('replaces its own bar on screen', (tester) async {
-      final messenger = await pumpApp(tester);
+      final messenger = await pumpMessenger(tester);
 
       messenger.show('Unpinned Blue Train', channel: ShellChannel.pins);
       await tester.pumpAndSettle();
@@ -249,7 +193,7 @@ void main() {
     });
 
     testWidgets('waits behind another bar as its newest word', (tester) async {
-      final messenger = await pumpApp(tester);
+      final messenger = await pumpMessenger(tester);
 
       messenger.show('Could not save');
       await tester.pumpAndSettle();
@@ -269,7 +213,7 @@ void main() {
     testWidgets('an offer made to wait stays until it is answered', (
       tester,
     ) async {
-      final messenger = await pumpApp(tester);
+      final messenger = await pumpMessenger(tester);
 
       messenger.show(
         'Marked finished',
@@ -296,7 +240,7 @@ void main() {
       addTearDown(
         tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
       );
-      final messenger = await pumpApp(tester);
+      final messenger = await pumpMessenger(tester);
 
       messenger.show(
         'Added 2 tracks to the queue',
@@ -311,7 +255,7 @@ void main() {
     testWidgets('an offer made to wait yields only after its time', (
       tester,
     ) async {
-      final messenger = await pumpApp(tester);
+      final messenger = await pumpMessenger(tester);
 
       messenger.show(
         'Identifying 2 files',
@@ -330,7 +274,7 @@ void main() {
     });
 
     testWidgets('an answered offer lets the next message on', (tester) async {
-      final messenger = await pumpApp(tester);
+      final messenger = await pumpMessenger(tester);
       var undone = false;
 
       messenger.show(
@@ -352,7 +296,7 @@ void main() {
     testWidgets('an offer that waited its turn yields to the next', (
       tester,
     ) async {
-      final messenger = await pumpApp(tester);
+      final messenger = await pumpMessenger(tester);
 
       messenger.show('Saved');
       await tester.pump();
@@ -374,7 +318,7 @@ void main() {
     });
 
     testWidgets('an offer answers one press', (tester) async {
-      final messenger = await pumpApp(tester);
+      final messenger = await pumpMessenger(tester);
       var undone = 0;
 
       messenger.show(
@@ -394,14 +338,7 @@ void main() {
 
     testWidgets('a waiting offer leaves with the session', (tester) async {
       final container = _signedInContainer();
-      addTearDown(container.dispose);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const WaxDeckApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await pumpWholeApp(tester, container: container);
 
       container
           .read(shellMessengerProvider.notifier)
@@ -458,7 +395,7 @@ void main() {
     });
 
     testWidgets('leaves other messages to take their turns', (tester) async {
-      final messenger = await pumpApp(tester);
+      final messenger = await pumpMessenger(tester);
 
       messenger.show('Scan started');
       await tester.pump();

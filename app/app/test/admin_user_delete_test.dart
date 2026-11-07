@@ -1,14 +1,11 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/users_screen.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _admin = WaxDeckUser(id: 'us-0', username: 'admin', roles: ['admin']);
 
@@ -26,13 +23,8 @@ FakeRepository _repo() {
   return repo;
 }
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-  child: routedHost(const UsersScreen()),
-);
+Future<void> _mount(WidgetTester tester, FakeRepository repo) =>
+    mountApp(tester, const UsersScreen(), container: appContainer(repo: repo));
 
 Future<void> _openDeleteDialog(
   WidgetTester tester, {
@@ -63,7 +55,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo();
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await _openDeleteDialog(tester);
 
     expect(find.text('Delete account?'), findsOneWidget);
@@ -103,7 +95,7 @@ void main() {
 
   testWidgets('the other answer deletes the playlists', (tester) async {
     final repo = _repo();
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await _openDeleteDialog(tester);
 
     final remove = find.bySemanticsIdentifier(
@@ -140,7 +132,7 @@ void main() {
       ]) {
     testWidgets('the lower answer is reachable on $name', (tester) async {
       final repo = _repo();
-      await tester.pumpWidget(_host(repo));
+      await _mount(tester, repo);
       await _openDeleteDialog(tester, size: size, textScale: scale);
 
       final remove = find.bySemanticsIdentifier(
@@ -163,7 +155,7 @@ void main() {
 
   testWidgets('cancelling deletes nothing', (tester) async {
     final repo = _repo();
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await _openDeleteDialog(tester);
 
     await tester.tap(find.text('Cancel'));

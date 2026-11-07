@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/connectivity/connectivity_port.dart';
 import 'package:waxdeck/src/downloads/wifi_only_gate.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
+
+import 'app_host.dart';
 
 class _FakeConnectivity implements ConnectivityPort {
   ConnectionCost now = ConnectionCost.metered;
@@ -88,15 +88,10 @@ void main() {
   });
 
   test('the setting turning off releases the hold', () async {
-    final container = ProviderContainer(
-      overrides: [
-        connectivityProvider.overrideWithValue(net),
-        clientSettingsStoreProvider.overrideWithValue(
-          MemoryClientSettingsStore(),
-        ),
-      ],
+    final container = appContainer(
+      settings: MemoryClientSettingsStore(),
+      extra: [connectivityProvider.overrideWithValue(net)],
     );
-    addTearDown(container.dispose);
     final gate = container.read(transferGateProvider);
     expect(await gate.isOpen(), isFalse);
     final seen = <bool>[];

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func mustTrust(t *testing.T, list string) trustedProxies {
+func mustTrust(t *testing.T, list string) TrustedProxies {
 	t.Helper()
 	parsed, err := ParseTrustedProxies(list)
 	if err != nil {

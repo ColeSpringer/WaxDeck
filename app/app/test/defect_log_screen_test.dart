@@ -1,16 +1,14 @@
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/diagnostics/defect_log.dart';
 import 'package:waxdeck/src/diagnostics/defect_log_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/about_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
@@ -19,10 +17,7 @@ void main() {
   testWidgets('About reaches the defect log, and the log shows what it holds', (
     tester,
   ) async {
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer();
     container
         .read(defectLogProvider.notifier)
         .record(
@@ -31,13 +26,7 @@ void main() {
           stack: StackTrace.fromString('the stack'),
         );
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const AboutScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const AboutScreen(), container: container);
 
     expect(find.textContaining('newest first'), findsNothing);
     await tester.tap(_byId(SemanticsIds.aboutDefects));
@@ -50,19 +39,16 @@ void main() {
 
   testWidgets("a server version that cannot be read says why, in the app's "
       'words', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(
-            FakeRepository()
-              ..serverHealthError = const WaxDeckApiException(
-                code: 'internal',
-                message: 'boom',
-                statusCode: 500,
-              ),
+    await mountApp(
+      tester,
+      const AboutScreen(),
+      container: appContainer(
+        repo: FakeRepository()
+          ..serverHealthError = const WaxDeckApiException(
+            code: 'internal',
+            message: 'boom',
+            statusCode: 500,
           ),
-        ],
-        child: routedHost(const AboutScreen()),
       ),
     );
     await tester.pump(const Duration(seconds: 1));
@@ -79,13 +65,7 @@ void main() {
   testWidgets('an empty log says so rather than showing a blank page', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
-        child: routedHost(const DefectLogScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const DefectLogScreen());
 
     expect(find.text('Nothing has gone wrong'), findsOneWidget);
     expect(
@@ -98,21 +78,12 @@ void main() {
   });
 
   testWidgets('clear flips the log to its empty state', (tester) async {
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer();
     container
         .read(defectLogProvider.notifier)
         .record(source: 'async', error: StateError('a stale failure'));
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const DefectLogScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const DefectLogScreen(), container: container);
 
     await tester.tap(_byId(SemanticsIds.defectsClear));
     await tester.pumpAndSettle();
@@ -143,21 +114,12 @@ void main() {
         null,
       ),
     );
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer();
     container
         .read(defectLogProvider.notifier)
         .record(source: 'framework', error: StateError('a build error'));
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const DefectLogScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const DefectLogScreen(), container: container);
 
     await tester.tap(_byId(SemanticsIds.defectsCopy));
     await tester.pumpAndSettle();

@@ -70,7 +70,7 @@ func (s *Server) ServeMediaArt(w http.ResponseWriter, r *http.Request) {
 
 	blob, err := s.svc.Art(r.Context(), uc, pid, "front", size)
 	if err != nil {
-		switch service.KindOf(err) {
+		switch s.kindOf(err) {
 		case service.KindNotFound, service.KindInvalid:
 			// Invalid lands here with not-found: a device asking for art
 			// of something that has none gets the same nothing either

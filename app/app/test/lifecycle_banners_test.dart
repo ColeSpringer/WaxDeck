@@ -2,17 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/server_settings_screen.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/lifecycle_banners.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
-import 'routed_host.dart';
 
 /// The banners on their own, the way the shell frame hosts them.
 class _BannerHost extends ConsumerWidget {
@@ -30,23 +27,13 @@ class _BannerHost extends ConsumerWidget {
 Future<ProviderContainer> _pump(
   WidgetTester tester, {
   required FakeRepository repo,
-}) async {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: localizedHost(const _BannerHost(), theme: buildWaxTheme()),
-    ),
-  );
-  await tester.pumpAndSettle();
-  return container;
-}
+}) => pumpApp(
+  tester,
+  const _BannerHost(),
+  container: appContainer(repo: repo),
+  routed: false,
+  theme: buildWaxTheme(),
+);
 
 void main() {
   testWidgets('a dropped connection says it is reconnecting, and stops', (
@@ -212,20 +199,11 @@ void main() {
           serverReadOnly: true,
         ),
       );
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(admin),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
+      await pumpApp(
+        tester,
+        const _BannerHost(),
+        container: appContainer(repo: admin),
       );
-      addTearDown(container.dispose);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const _BannerHost()),
-        ),
-      );
-      await tester.pumpAndSettle();
       final action = find.bySemanticsIdentifier(
         SemanticsIds.readOnlyBannerSettings,
       );

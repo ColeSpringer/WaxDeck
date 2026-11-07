@@ -1,31 +1,17 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-
-Widget _app(FakeRepository repo, {InMemoryCredentialStore? store}) =>
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(
-          store ?? InMemoryCredentialStore(),
-        ),
-      ],
-      child: const WaxDeckApp(),
-    );
 
 void main() {
   testWidgets('routes to setup while the server has no accounts', (
     tester,
   ) async {
     final repo = FakeRepository(bootstrapNeeded: true);
-    await tester.pumpWidget(_app(repo));
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: appContainer(repo: repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.setupUsername),
@@ -43,8 +29,7 @@ void main() {
 
   testWidgets('routes to login once accounts exist', (tester) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_app(repo));
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: appContainer(repo: repo));
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.loginUsername),
@@ -59,19 +44,16 @@ void main() {
   testWidgets('an unconfigured native launch lands on the connect gate', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository()),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    await pumpWholeApp(
+      tester,
+      container: appContainer(
+        extra: [
           // No stored address, no dart-define: the state main() seeds on
           // a fresh desktop launch.
           bootServerAddressProvider.overrideWithValue(null),
         ],
-        child: const WaxDeckApp(),
       ),
     );
-    await tester.pumpAndSettle();
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.connectServerAddress),
@@ -89,8 +71,10 @@ void main() {
       items: [testItem('tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE')],
     );
     final store = InMemoryCredentialStore();
-    await tester.pumpWidget(_app(repo, store: store));
-    await tester.pumpAndSettle();
+    await pumpWholeApp(
+      tester,
+      container: appContainer(repo: repo, credentials: store),
+    );
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.setupUsername),
@@ -126,8 +110,7 @@ void main() {
 
   testWidgets('a short password never reaches the API', (tester) async {
     final repo = FakeRepository(bootstrapNeeded: true);
-    await tester.pumpWidget(_app(repo));
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: appContainer(repo: repo));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.setupUsername),
@@ -152,8 +135,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository(bootstrapNeeded: true);
-    await tester.pumpWidget(_app(repo));
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: appContainer(repo: repo));
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.setupUsername),

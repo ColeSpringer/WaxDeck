@@ -1,14 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/item_star_rating_row.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'player_host.dart';
 
 void main() {
@@ -20,12 +19,7 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
 
     expect(find.byKey(const Key('star-button')), findsOneWidget);
     expect(find.byIcon(WaxIcons.heart.regular), findsOneWidget);
@@ -39,7 +33,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.starredByPid[pid], isFalse);
     expect(find.byIcon(WaxIcons.heart.regular), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('rating stars map to the 0 to 100 scale and clear on repeat', (
@@ -50,12 +43,7 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
 
     await tester.tap(find.byKey(const Key('rating-3')));
     await tester.pumpAndSettle();
@@ -72,7 +60,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.ratingByPid[pid], isNull);
     expect(find.byIcon(WaxIcons.star.regular), findsNWidgets(5));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a stored rating renders on open', (tester) async {
@@ -83,16 +70,10 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
 
     expect(find.byIcon(WaxIcons.heart.fill), findsOneWidget);
     expect(find.byIcon(WaxIcons.star.fill), findsNWidgets(2));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a failed star rolls back and tells the user', (tester) async {
@@ -101,12 +82,7 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
     expect(find.byIcon(WaxIcons.heart.regular), findsOneWidget);
 
     // Arm the failure after load, so only the mutation trips it.
@@ -130,7 +106,6 @@ void main() {
       shellMessageText(raisedMessage(tester)),
       'Could not save that change',
     );
-    await harness.endPlayback(tester);
   });
 
   testWidgets('an item the server cannot find is no change that did not '
@@ -143,11 +118,11 @@ void main() {
         message: 'no such item',
         statusCode: 404,
       );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: localizedHost(const Scaffold(body: ItemStarRatingRow(pid: pid))),
-      ),
+    await mountApp(
+      tester,
+      const Scaffold(body: ItemStarRatingRow(pid: pid)),
+      container: appContainer(repo: repo),
+      routed: false,
     );
     // Past every retry the read is given.
     await tester.pump(const Duration(minutes: 2));

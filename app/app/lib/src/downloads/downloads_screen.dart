@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
+import '../presenters/media_tiles.dart';
 import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/semantics_ids.dart';
@@ -302,16 +303,11 @@ class _TransferRowState extends ConsumerState<_TransferRow> {
       active: entry.record.active,
     );
     return MediaListRow(
-      data: MediaTileData(
-        title: entry.title,
-        subtitle: entry.subtitle,
-        artwork: store.source(entry.item?.artUrl),
-        domain: _domainOf(entry.mediaType),
-        shape: _shapeOf(entry.mediaType),
-        // The progress bar under the row, which is the sliver
-        // MediaListRow already draws for a resume position.
+      data: downloadTransferTile(
+        entry,
+        l10n: l10n,
+        store: store,
         progress: widget.fraction,
-        trailingText: l10n.formatBytes(entry.record.sizeBytes),
         trailingDetail: held ? l10n.downloadsActionHeld : null,
         trailingDetailSpoken: held
             ? context.waxL10n.statesSpoken(
@@ -384,20 +380,10 @@ class _Groups extends ConsumerWidget {
             for (final entry in group.entries)
               MediaListRow(
                 key: ValueKey(SemanticsIds.downloadRow(entry.pid)),
-                data: MediaTileData(
-                  title: entry.title,
-                  subtitle: entry.subtitle,
-                  artwork: store.source(entry.item?.artUrl),
-                  domain: _domainOf(entry.mediaType),
-                  shape: _shapeOf(entry.mediaType),
-                  downloaded: true,
-                  // Played state as the row already draws it: a dot for
-                  // never-heard, a sliver for part way through.
-                  unplayed: (entry.progress?.positionMs ?? 0) == 0,
-                  progress: entry.finished
-                      ? null
-                      : _fraction(entry.progress, entry.item?.durationMs),
-                  trailingText: l10n.formatBytes(entry.record.sizeBytes),
+                data: downloadRowTile(
+                  entry,
+                  l10n: l10n,
+                  store: store,
                   semanticsId: SemanticsIds.downloadRow(entry.pid),
                 ),
                 actions: <Widget>[
@@ -418,12 +404,6 @@ class _Groups extends ConsumerWidget {
       ),
     );
   }
-
-  static double? _fraction(PlayState? progress, int? durationMs) {
-    final position = progress?.positionMs ?? 0;
-    if (position <= 0 || durationMs == null || durationMs <= 0) return null;
-    return (position / durationMs).clamp(0.0, 1.0);
-  }
 }
 
 String _mediumLabel(AppLocalizations l10n, MediaType type) => switch (type) {
@@ -431,12 +411,3 @@ String _mediumLabel(AppLocalizations l10n, MediaType type) => switch (type) {
   MediaType.podcast => l10n.downloadsMediumPodcasts,
   MediaType.audiobook => l10n.downloadsMediumBooks,
 };
-
-WaxDomain _domainOf(MediaType type) => switch (type) {
-  MediaType.music => WaxDomain.music,
-  MediaType.podcast => WaxDomain.podcasts,
-  MediaType.audiobook => WaxDomain.audiobooks,
-};
-
-ArtworkShape _shapeOf(MediaType type) =>
-    type == MediaType.audiobook ? ArtworkShape.portrait : ArtworkShape.square;

@@ -2,15 +2,11 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/auth/signup_screen.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/player/now_playing_slot.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
@@ -20,20 +16,11 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
-
-ProviderContainer _container(FakeRepository repo) => ProviderContainer(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-);
-
-Widget _app(ProviderContainer container) =>
-    UncontrolledProviderScope(container: container, child: const WaxDeckApp());
 
 FakeRepository _signedIn() => FakeRepository(
   sessionState: const SessionState(authenticated: true, user: _user),
@@ -49,10 +36,8 @@ String _location(ProviderContainer container) => container
 
 void main() {
   testWidgets('a signed-out visitor is sent to login', (tester) async {
-    final container = _container(FakeRepository());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer();
+    await pumpWholeApp(tester, container: container);
 
     expect(_location(container), WaxRoute.login);
   });
@@ -60,10 +45,8 @@ void main() {
   testWidgets('a server with no accounts sends every location to setup', (
     tester,
   ) async {
-    final container = _container(FakeRepository(bootstrapNeeded: true));
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: FakeRepository(bootstrapNeeded: true));
+    await pumpWholeApp(tester, container: container);
 
     container.read(routerProvider).go(WaxRoute.settings);
     await tester.pumpAndSettle();
@@ -74,10 +57,8 @@ void main() {
   testWidgets('the auth screens are unreachable while signed in', (
     tester,
   ) async {
-    final container = _container(_signedIn());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: _signedIn());
+    await pumpWholeApp(tester, container: container);
 
     container.read(routerProvider).go(WaxRoute.login);
     await tester.pumpAndSettle();
@@ -89,10 +70,8 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    final container = _container(repo);
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: repo);
+    await pumpWholeApp(tester, container: container);
 
     container.read(routerProvider).go(WaxRoute.settings);
     await tester.pumpAndSettle();
@@ -116,10 +95,8 @@ void main() {
   testWidgets('a from parameter pointing off the app is refused', (
     tester,
   ) async {
-    final container = _container(_signedIn());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: _signedIn());
+    await pumpWholeApp(tester, container: container);
 
     // Each of these reads as an authority once a browser is done with
     // it: the second slash outright, the backslash because http(s)
@@ -142,10 +119,8 @@ void main() {
   testWidgets('signing out replaces the signed-in stack with login', (
     tester,
   ) async {
-    final container = _container(_signedIn());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: _signedIn());
+    await pumpWholeApp(tester, container: container);
 
     container.read(routerProvider).push(WaxRoute.settings);
     await tester.pumpAndSettle();
@@ -163,10 +138,8 @@ void main() {
   testWidgets('the player route stands on its own with nothing playing', (
     tester,
   ) async {
-    final container = _container(_signedIn());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: _signedIn());
+    await pumpWholeApp(tester, container: container);
 
     // What a reload of /now-playing looks like. The player is a view of
     // whatever is playing, so the location needs nothing in memory to
@@ -182,10 +155,8 @@ void main() {
   testWidgets('an unknown location renders the not-found screen', (
     tester,
   ) async {
-    final container = _container(_signedIn());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: _signedIn());
+    await pumpWholeApp(tester, container: container);
 
     container.read(routerProvider).go('/no-such-place');
     await tester.pumpAndSettle();
@@ -201,10 +172,8 @@ void main() {
   });
 
   testWidgets('a screen opened directly can still leave', (tester) async {
-    final container = _container(FakeRepository());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer();
+    await pumpWholeApp(tester, container: container);
 
     // Straight to the signup link with no login screen underneath, the
     // way a shared invite arrives.
@@ -231,10 +200,8 @@ void main() {
   testWidgets('a location change animates rather than cuts', (tester) async {
     // go_router picks each page by the MaterialApp above it, and one
     // from the other Material library turns every page into a cut.
-    final container = _container(FakeRepository());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer();
+    await pumpWholeApp(tester, container: container);
 
     container.read(routerProvider).go(WaxRoute.signup);
     // The location is parsed asynchronously: the page lands a frame on.
@@ -253,10 +220,8 @@ void main() {
     // The other half of the rule. These locations resolve to something
     // else on their own, so reporting them would hand out a link that
     // lands somewhere the sender did not mean.
-    final container = _container(_signedIn());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: _signedIn());
+    await pumpWholeApp(tester, container: container);
 
     container.read(routerProvider).push<void>(WaxRoute.nowPlaying);
     await tester.pumpAndSettle();
@@ -267,10 +232,8 @@ void main() {
   testWidgets('the preserved metadata deep link still resolves', (
     tester,
   ) async {
-    final container = _container(_signedIn());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: _signedIn());
+    await pumpWholeApp(tester, container: container);
 
     container.read(routerProvider).go(WaxRoute.metadata('tr-1'));
     await tester.pumpAndSettle();
@@ -295,10 +258,8 @@ void main() {
     // emptied, so dealing with the thing itself - opening the surface
     // from anywhere else - left a badge standing over work that was
     // done. The router is what sees an arrival, however it was reached.
-    final container = _container(_signedIn());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: _signedIn());
+    await pumpWholeApp(tester, container: container);
 
     final notifications = container.read(localNotificationsProvider.notifier);
     notifications
@@ -328,19 +289,11 @@ void main() {
     final repo = _signedIn()
       ..radioStationsByPid[stationPid] = station
       ..radioNowPlaying[stationPid] = 'Ashley McBryde - What if We Don\'t';
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        clientSettingsStoreProvider.overrideWithValue(
-          MemoryClientSettingsStore(),
-        ),
-      ],
+    final container = appContainer(
+      repo: repo,
+      settings: MemoryClientSettingsStore(),
     );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(_app(container));
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: container);
 
     await container.read(radioPlaybackProvider.notifier).play(station);
     container.read(routerProvider).push<void>(WaxRoute.nowPlaying);
@@ -375,20 +328,12 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 1),
     );
 
-    ProviderContainer radioContainer(FakeRepository repo, FakeEngine engine) {
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-          audioEngineProvider.overrideWithValue(engine),
-          clientSettingsStoreProvider.overrideWithValue(
-            MemoryClientSettingsStore(),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      return container;
-    }
+    ProviderContainer radioContainer(FakeRepository repo, FakeEngine engine) =>
+        appContainer(
+          repo: repo,
+          engine: engine,
+          settings: MemoryClientSettingsStore(),
+        );
 
     // Pumped rather than settled while a station may be on: its face
     // turns for as long as it plays.
@@ -403,8 +348,7 @@ void main() {
     ) async {
       final engine = FakeEngine();
       final container = radioContainer(_signedIn(), engine);
-      await tester.pumpWidget(_app(container));
-      await tester.pumpAndSettle();
+      await pumpWholeApp(tester, container: container);
 
       await container.read(radioPlaybackProvider.notifier).play(station);
       await frames(tester);
@@ -434,8 +378,7 @@ void main() {
     ) async {
       final engine = FakeEngine();
       final container = radioContainer(_signedIn(), engine);
-      await tester.pumpWidget(_app(container));
-      await tester.pumpAndSettle();
+      await pumpWholeApp(tester, container: container);
       await container.read(radioPlaybackProvider.notifier).play(station);
       await frames(tester);
 
@@ -455,8 +398,7 @@ void main() {
       final gate = repo.radioPlayInfoGates[station.pid] = Completer<void>();
       final engine = FakeEngine();
       final container = radioContainer(repo, engine);
-      await tester.pumpWidget(_app(container));
-      await tester.pumpAndSettle();
+      await pumpWholeApp(tester, container: container);
 
       final tune = container.read(radioPlaybackProvider.notifier).play(station);
       await tester.pump();

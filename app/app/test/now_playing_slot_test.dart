@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/connect/remote_session.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/now_playing_slot.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
@@ -11,6 +10,7 @@ import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _a = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
@@ -70,8 +70,8 @@ NowPlayingSlot _slotOf({
   RemoteSession? remote,
   RestorableQueue? offer,
 }) {
-  final container = ProviderContainer(
-    overrides: [
+  final container = appContainer(
+    extra: [
       radioPlaybackProvider.overrideWithBuild(
         (ref, _) =>
             station ? RadioPlayback(station: _station) : const RadioPlayback(),
@@ -82,7 +82,6 @@ NowPlayingSlot _slotOf({
       queueRestoreProvider.overrideWithBuild((ref, _) => offer),
     ],
   );
-  addTearDown(container.dispose);
   return container.read(nowPlayingSlotProvider);
 }
 
@@ -91,13 +90,7 @@ NowPlayingSlot _slotOf({
     items: [testItem(_a), testItem(_b), testItem(_c)],
   );
   final engine = FakeEngine(mediaDuration: const Duration(minutes: 3));
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(engine),
-    ],
-  );
-  addTearDown(container.dispose);
+  final container = appContainer(repo: repo, engine: engine);
   return (container: container, engine: engine);
 }
 

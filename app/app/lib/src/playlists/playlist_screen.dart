@@ -11,6 +11,7 @@ import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
@@ -642,18 +643,9 @@ class _EntryRow extends ConsumerWidget {
         children: <Widget>[
           Expanded(
             child: MediaListRow(
-              data: MediaTileData(
-                title: item.title,
-                subtitle: item.artist,
-                artwork: waxArtwork(
-                  ref.watch(artworkStoreProvider),
-                  item.artUrl,
-                ),
-                domain: waxDomainOf(item.mediaType),
-                shape: waxShapeOf(item.mediaType),
-                trailingText: item.durationMs > 0
-                    ? formatTimecode(Duration(milliseconds: item.durationMs))
-                    : null,
+              data: itemRowTile(
+                item,
+                store: ref.watch(artworkStoreProvider),
                 semanticsId: SemanticsIds.playlistEntry(index),
               ),
               onTap: onTap,

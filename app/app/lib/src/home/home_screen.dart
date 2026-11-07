@@ -10,11 +10,11 @@ import '../downloads/downloads_controller.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../library/item_play.dart';
-import '../media_view.dart';
 import '../notifications/notifications_bell.dart';
 import '../player/play_progress.dart';
 import '../podcasts/episode_actions.dart';
 import '../podcasts/podcast_shelves.dart';
+import '../presenters/media_tiles.dart';
 import '../review/review_controller.dart';
 import '../search/search_chrome.dart';
 import '../sync/sync_providers.dart';
@@ -273,13 +273,9 @@ class _DownloadedShelf extends ConsumerWidget {
     final shown = entries.take(kHomeShelfCards).toList();
     final tiles = <MediaTileData>[
       for (final entry in shown)
-        MediaTileData(
-          title: entry.title,
-          subtitle: entry.subtitle,
-          artwork: waxArtwork(store, entry.item?.artUrl),
-          domain: waxDomainOf(entry.mediaType),
-          shape: waxShapeOf(entry.mediaType),
-          downloaded: true,
+        downloadShelfTile(
+          entry,
+          store: store,
           semanticsId: SemanticsIds.shelfCard('downloaded', entry.pid),
         ),
     ];
@@ -374,19 +370,9 @@ class _NewEpisodesShelf extends ConsumerWidget {
     final store = ref.watch(artworkStoreProvider);
     final tiles = <MediaTileData>[
       for (final row in rows)
-        MediaTileData(
-          title: row.episode.title,
-          subtitle: row.showTitle,
-          // The card clamps every line, so the full name lives on the
-          // hover tooltip, as the item shelves' cards do.
-          tooltip: <String?>[
-            row.episode.title,
-            row.showTitle,
-          ].nonNulls.join('\n'),
-          artwork: waxArtwork(store, row.episode.artUrl),
-          domain: WaxDomain.podcasts,
-          unplayed: true,
-          downloaded: row.episode.downloaded,
+        episodeShelfTile(
+          row,
+          store: store,
           semanticsId: SemanticsIds.shelfCard('episodes', row.episode.pid),
         ),
     ];

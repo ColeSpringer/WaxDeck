@@ -9,13 +9,13 @@ import 'package:waxdeck/src/connect/queue_gateway.dart';
 import 'package:waxdeck/src/player/autoplay_gate.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const pidA = 'tr-01JZX5N8QW3F4V9T2B7KDAAAAA1';
@@ -55,10 +55,10 @@ _build({
   final engine = FakeEngine(
     mediaDuration: const Duration(milliseconds: _trackMs),
   );
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(engine),
+  final container = appContainer(
+    repo: repo,
+    engine: engine,
+    extra: [
       connectSenderProvider.overrideWithValue(
         ConnectSender()
           ..impl = (frame) {
@@ -70,7 +70,6 @@ _build({
         prefsControllerProvider.overrideWith(() => _StubPrefs(prefs)),
     ],
   );
-  addTearDown(container.dispose);
   final controller = container.read(connectControllerProvider)..wire();
   return (
     container: container,

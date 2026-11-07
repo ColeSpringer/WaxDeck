@@ -32,10 +32,8 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'player_host.dart';
 import 'queue_persistence_test.dart' show RecordingQueueStore;
-import 'routed_host.dart';
 
 /// The widget carrying one semantics handle. By widget rather than by
 /// semantics node, because these tests do not enable the semantics tree.
@@ -85,17 +83,15 @@ Future<PlayerHarness> _pumpDeck(
   const slot = Scaffold(
     body: Align(alignment: Alignment.bottomCenter, child: DeckBarHost()),
   );
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: harness.container,
-      // Over the app's own route table where a test needs one: the bar's
-      // menu reaches the router, and the player it opens is a real route.
-      child: routed
-          ? routedHost(_reducedMotion(slot))
-          : localizedHost(_reducedMotion(slot), theme: buildWaxTheme()),
-    ),
+  // Over the app's own route table where a test needs one: the bar's
+  // menu reaches the router, and the player it opens is a real route.
+  await pumpApp(
+    tester,
+    _reducedMotion(slot),
+    container: harness.container,
+    routed: routed,
+    theme: routed ? null : buildWaxTheme(),
   );
-  await tester.pumpAndSettle();
   return harness;
 }
 
@@ -180,7 +176,6 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.byType(WaxSpinner), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a stream reopened where it stood reads as playing and '
@@ -208,7 +203,6 @@ void main() {
       await tester.pump();
       expect(engine.playing, isTrue);
       expect(find.byType(WaxSpinner), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('Pause pressed while a stream reopens keeps it paused', (
@@ -235,7 +229,6 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(engine.playing, isFalse, reason: 'the press was a pause');
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a track change reads Pause through its load, and a press '
@@ -264,7 +257,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(engine.loadedUrl, contains('tr-B'));
       expect(engine.playing, isFalse, reason: 'the press was a pause');
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a load that lands at once never draws the ring', (
@@ -285,7 +277,6 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.byType(WaxSpinner), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('shows the modes its own controls cycle', (tester) async {
@@ -311,9 +302,6 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Repeat all'));
       await tester.pumpAndSettle();
       expect(find.bySemanticsLabel('Repeat one'), findsOneWidget);
-
-      await harness.endPlayback(tester);
-      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('steps the queue from the bar', (tester) async {
@@ -333,7 +321,6 @@ void main() {
 
       expect(find.text('Second'), findsOneWidget);
       expect(harness.container.read(queueControllerProvider).currentIndex, 1);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('offers next only where the queue has one', (tester) async {
@@ -358,8 +345,6 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Next'));
       await tester.pumpAndSettle();
       expect(nextEnabled(), isFalse, reason: 'now standing on the last entry');
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('opens the words beside the page, for a track that has any', (
@@ -386,7 +371,6 @@ void main() {
       ]);
       await tester.pumpAndSettle();
       expect(find.bySemanticsIdentifier(SemanticsIds.deckLyrics), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('and drops the control on a bar with no cluster', (
@@ -403,7 +387,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.bySemanticsIdentifier(SemanticsIds.deckLyrics), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     // Words, speed and timecode digits left while the next entry loaded,
@@ -447,7 +430,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(harness.container.read(nowPlayingProvider).session, isNotNull);
         expect(_layoutOf(tester), playing);
-        await harness.endPlayback(tester);
       });
     }
 
@@ -485,7 +467,6 @@ void main() {
         isTrue,
       );
       expect(_layoutOf(tester), pending);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('draws the kind of an entry named by pid alone', (
@@ -514,7 +495,6 @@ void main() {
 
       gate.complete();
       await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     testWidgets('holds nothing pending for an entry that failed to resolve', (
@@ -538,7 +518,6 @@ void main() {
         ]) {
           expect(_byId(id), findsNothing, reason: id);
         }
-        await harness.endPlayback(tester);
       });
     });
 
@@ -572,9 +551,6 @@ void main() {
         expect(harness.container.read(nowPlayingProvider).error, isNotNull);
         expect(_byId(SemanticsIds.deckLyrics), findsNothing);
         expect(command(), isFalse);
-        await harness.endPlayback(tester);
-        // Connect reports a queue change after a pause.
-        await tester.pump(const Duration(seconds: 1));
       });
     });
 
@@ -613,7 +589,6 @@ void main() {
         isTrue,
         reason: 'the bar itself did not rebuild',
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('says so when the browser refuses to resume', (tester) async {
@@ -633,7 +608,6 @@ void main() {
 
         expect(engine.playing, isTrue, reason: 'the tap is the gesture');
         expect(find.bySemanticsLabel('Pause'), findsOneWidget);
-        await harness.endPlayback(tester);
       });
     });
 
@@ -672,8 +646,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(engine.position, const Duration(seconds: 90));
       expect(engine.playing, isFalse, reason: 'the press was a pause');
-      await harness.endPlayback(tester);
-      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('offers the heart for a named song, at sidebar width only', (
@@ -711,10 +683,6 @@ void main() {
       tester.view.physicalSize = const Size(600, 900);
       await tester.pumpAndSettle();
       expect(heart, findsNothing);
-
-      await harness.container.read(radioPlaybackProvider.notifier).stop();
-      await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     testWidgets("the bar's heart keeps an open saved list in step", (
@@ -747,10 +715,6 @@ void main() {
       await tester.tap(_byId(SemanticsIds.deckSaveSong));
       await tester.pumpAndSettle();
       expect(rows(), 0);
-
-      await harness.container.read(radioPlaybackProvider.notifier).stop();
-      await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     testWidgets('draws the matched song cover, not only the logo', (
@@ -807,10 +771,6 @@ void main() {
         tester.widget<ArtworkImage>(find.byType(ArtworkImage).first).shape,
         ArtworkShape.circle,
       );
-
-      await harness.container.read(radioPlaybackProvider.notifier).stop();
-      await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     testWidgets('follows live radio onto the station', (tester) async {
@@ -888,8 +848,6 @@ void main() {
       expect(engine.position, const Duration(seconds: 30));
       expect(find.byType(DeckBar), findsOneWidget);
       expect(_byId(SemanticsIds.deckOffer), findsNothing);
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a track queued under a station is offered as queued, and '
@@ -933,8 +891,6 @@ void main() {
       expect(engine.position, Duration.zero);
       expect(engine.playing, isTrue);
       expect(_byId(SemanticsIds.deckOffer), findsNothing);
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('an undo a station overtook before it loaded is offered as a '
@@ -982,8 +938,6 @@ void main() {
       expect(engine.loadedUrl, contains('tr-A'));
       expect(engine.position, const Duration(seconds: 6));
       expect(engine.playing, isTrue);
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a start given a place that a station overtook before it '
@@ -1025,8 +979,6 @@ void main() {
       expect(engine.loadedUrl, contains('tr-A'));
       expect(engine.position, const Duration(seconds: 6));
       expect(engine.playing, isTrue);
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('an entry queued under a station that nothing has named '
@@ -1065,7 +1017,6 @@ void main() {
             .label,
         '1 queued item',
       );
-      await endEditedPlayback(tester, harness.container);
     });
 
     testWidgets('a queue a stopped station displaced can be let go', (
@@ -1134,8 +1085,6 @@ void main() {
           isNotNull,
           reason: 'the station is still tuned',
         );
-        await harness.container.read(radioPlaybackProvider.notifier).stop();
-        await tester.pumpAndSettle();
       });
     });
   });
@@ -1193,7 +1142,6 @@ void main() {
         ),
         isSemantics(isSelected: true),
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('spans what the full player chose once it collapses', (
@@ -1235,7 +1183,6 @@ void main() {
 
       expect(timecode('1:00:00'), findsOneWidget);
       expect(timecode('30:00'), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('draws no switch for a book without chapters', (tester) async {
@@ -1259,7 +1206,6 @@ void main() {
         findsOneWidget,
       );
       expect(_byId(SemanticsIds.deckSpan), findsNothing);
-      await harness.endPlayback(tester);
     });
   });
 
@@ -1318,8 +1264,6 @@ void main() {
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.deckMute));
       await tester.pumpAndSettle();
       expect(engine.volume, closeTo(0.25, 0.001));
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the level moves under the finger, not on release', (
@@ -1354,8 +1298,6 @@ void main() {
 
       await gesture.up();
       await tester.pumpAndSettle();
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a level set from elsewhere becomes the one to come back to', (
@@ -1410,8 +1352,6 @@ void main() {
       await fresh.read(audioEngineProvider).setVolume(0);
       await fresh.read(outputVolumeProvider.notifier).toggleMute();
       expect(fresh.read(audioEngineProvider).volume, 1.0);
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('is on the radio face too, over the same engine gain', (
@@ -1470,8 +1410,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(engine.volume, 0);
       expect(tester.getSemantics(slider).value, '0%');
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('is absent on the compact bar, which has no cluster', (
@@ -1500,8 +1438,6 @@ void main() {
         findsNothing,
         reason: 'a 64 px bar has no right cluster to hold a track',
       );
-
-      await harness.endPlayback(tester);
     });
   });
 
@@ -1645,9 +1581,6 @@ void main() {
 
       expect(find.byType(DeckBar), findsOneWidget);
       expect(find.text('Playing'), findsOneWidget);
-
-      harness.container.read(remoteSessionProvider.notifier).release();
-      await tester.pumpAndSettle();
     });
 
     testWidgets('offers no seek over an entry with no length', (tester) async {
@@ -1689,9 +1622,6 @@ void main() {
         Tristate.isFalse,
         reason: 'a zero-length entry has nowhere to seek to',
       );
-
-      harness.container.read(remoteSessionProvider.notifier).release();
-      await tester.pumpAndSettle();
     });
 
     testWidgets('yields to what is playing on this device', (tester) async {
@@ -1730,9 +1660,6 @@ void main() {
 
       expect(find.text('Prancing Pony Blues'), findsOneWidget);
       expect(find.text('Somewhere Else'), findsNothing);
-
-      harness.container.read(remoteSessionProvider.notifier).release();
-      await harness.endPlayback(tester);
     });
 
     testWidgets('and follows the sound the moment a handoff silences this '
@@ -1775,9 +1702,6 @@ void main() {
 
       expect(engine.playing, isFalse);
       expect(find.textContaining('on Kitchen speaker'), findsOneWidget);
-
-      harness.container.read(remoteSessionProvider.notifier).release();
-      await harness.endPlayback(tester);
     });
   });
 
@@ -1824,8 +1748,6 @@ void main() {
         hasLength(before + 1),
         reason: 'a second click must not stack a second player',
       );
-
-      await harness.endPlayback(tester);
     });
 
     testWidgets('takes a click on the padding, not only on what is drawn', (
@@ -1857,8 +1779,6 @@ void main() {
         router.routerDelegate.currentConfiguration.matches,
         hasLength(before + 1),
       );
-
-      await harness.endPlayback(tester);
     });
   });
 
@@ -1902,20 +1822,12 @@ void main() {
       final repo = FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]);
       final engine = FakeEngine();
       final store = RecordingQueueStore()..saved = _storedAlbum();
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(engine),
-          queueStoreProvider.overrideWithValue(store),
-        ],
-      );
-      addTearDown(container.dispose);
-      final harness = await _pumpDeck(
-        tester,
+      final container = appContainer(
         repo: repo,
         engine: engine,
-        container: container,
+        extra: [queueStoreProvider.overrideWithValue(store)],
       );
+      await _pumpDeck(tester, repo: repo, engine: engine, container: container);
 
       expect(find.byType(DeckBarOffer), findsOneWidget);
       expect(find.text('2 queued items'), findsOneWidget);
@@ -1939,7 +1851,6 @@ void main() {
       expect(engine.playing, isTrue);
       expect(find.byType(DeckBarOffer), findsNothing);
       expect(find.byType(DeckBar), findsOneWidget);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('can be turned down, and is forgotten when it is', (
@@ -1948,14 +1859,11 @@ void main() {
       final repo = FakeRepository(items: [testItem('tr-A')]);
       final engine = FakeEngine();
       final store = RecordingQueueStore()..saved = _storedAlbum();
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(engine),
-          queueStoreProvider.overrideWithValue(store),
-        ],
+      final container = appContainer(
+        repo: repo,
+        engine: engine,
+        extra: [queueStoreProvider.overrideWithValue(store)],
       );
-      addTearDown(container.dispose);
       await _pumpDeck(tester, repo: repo, engine: engine, container: container);
 
       await tester.tap(find.bySemanticsLabel('Not now'));
@@ -1990,15 +1898,12 @@ void main() {
         reason: 'the bar opens the panel it names',
       );
 
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: harness.container,
-          child: localizedHost(
-            _reducedMotion(const Scaffold(body: QueuePanel())),
-          ),
-        ),
+      await pumpApp(
+        tester,
+        _reducedMotion(const Scaffold(body: QueuePanel())),
+        container: harness.container,
+        routed: false,
       );
-      await tester.pumpAndSettle();
 
       expect(find.text('Playing from Kind of Blue'), findsOneWidget);
       expect(find.text('First'), findsOneWidget);
@@ -2035,15 +1940,12 @@ void main() {
       ], source: _album);
       await tester.pumpAndSettle();
 
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: harness.container,
-          child: localizedHost(
-            _reducedMotion(const Scaffold(body: QueuePanel())),
-          ),
-        ),
+      await pumpApp(
+        tester,
+        _reducedMotion(const Scaffold(body: QueuePanel())),
+        container: harness.container,
+        routed: false,
       );
-      await tester.pumpAndSettle();
 
       await tester.tap(find.bySemanticsLabel('Remove from queue').last);
       await tester.pumpAndSettle();
@@ -2052,10 +1954,6 @@ void main() {
         'tr-A',
         'tr-B',
       ]);
-      await harness.endPlayback(tester);
-      // A queue edit is reported to Connect once it settles, four
-      // hundred milliseconds later; the test outlives its own timer.
-      await tester.pump(const Duration(milliseconds: 500));
     });
   });
 }

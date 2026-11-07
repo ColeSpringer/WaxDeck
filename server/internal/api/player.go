@@ -478,63 +478,44 @@ func endedSessionJSON(e connect.EndedSession) PlaybackSessionHistoryEntry {
 	return out
 }
 
-// connectHTTP maps connect errors onto typed responses; the bool is
-// false for errors the caller should surface as 500. It answers the
-// whole Error rather than its parts so a refusal's params ride out
-// with it instead of needing a return value of their own.
-func connectHTTP(err error) (status int, body Error, ok bool) {
+// connectRefusal is the refusal a connect error answers with, or nil for
+// one the hub did not word, which the handler returns as it is. The hub's
+// sentinels keep their codes; an InvalidError's goes through the refusal
+// whitelist. An engine that is away answers 503 with when to ask again.
+func connectRefusal(err error) error {
 	var inv connect.InvalidError
 	switch {
 	case errors.Is(err, connect.ErrNotFound):
-		return http.StatusNotFound, errObj("not-found", "no such endpoint or session is visible to you"), true
+		return refuse(http.StatusNotFound, "not-found", "no such endpoint or session is visible to you")
 	case errors.Is(err, connect.ErrEndpointOffline):
-		return http.StatusConflict, errObj("endpoint-offline", err.Error()), true
+		return refuse(http.StatusConflict, "endpoint-offline", ownWords(err))
 	case errors.Is(err, connect.ErrEndpointBusy):
 		// The server's to say, not an endpoint's, and so not routed
 		// through the refusal whitelist: the device answered a question
 		// about what it was doing and this is that answer.
-		return http.StatusConflict, errObj("endpoint-busy", err.Error()), true
+		return refuse(http.StatusConflict, "endpoint-busy", ownWords(err))
 	case errors.Is(err, connect.ErrForbidden):
-		return http.StatusForbidden, errObj("forbidden", err.Error()), true
+		return refuse(http.StatusForbidden, "forbidden", ownWords(err))
 	case errors.Is(err, connect.ErrTimeout):
 		// `timeout`, not `endpoint-offline`: the endpoint is connected
 		// and silent, and telling a controller to refresh the endpoint
 		// list would send it looking for a departure that did not
 		// happen. The socket has always said `timeout` here.
-		return http.StatusConflict, errObj("timeout", "the endpoint did not answer in time"), true
+		return refuse(http.StatusConflict, "timeout", "the endpoint did not answer in time")
 	case errors.As(err, &inv):
-		status, code := refusalStatus(inv.Code)
-		body := errObj(code, inv.Msg)
-		// Only where the code survived the whitelist: params keys are
-		// documented per code, so a set minted for a rejected one would
-		// arrive describing the `invalid-request` it degraded to, and
-		// the whitelist is what it would be walking around.
-		if len(inv.Params) > 0 && code == inv.Code {
-			body.Params = &inv.Params
-			// An engine that is away is a wait rather than a lack: the
-			// outage's own status, which the handlers send with when to
-			// ask again. Only the server sets params, so no endpoint's
-			// refusal can claim it.
-			if code == "feature-unavailable" && inv.Params["feature"] == flow.FeatureStreamingEngine {
-				status = http.StatusServiceUnavailable
-			}
+		// An engine that is away is a wait rather than a lack: the
+		// outage's own status, with when to ask again. Only the server
+		// sets params, so no endpoint's refusal can claim it.
+		if inv.Code == "feature-unavailable" && inv.Params["feature"] == flow.FeatureStreamingEngine {
+			return refuseEngineAway(inv.Msg, inv.Params)
 		}
-		return status, body, true
+		return refusalErrorParams(inv.Code, inv.Msg, inv.Params)
 	}
-	if service.KindOf(err) == service.KindNotFound {
-		return http.StatusNotFound, errObj("not-found", err.Error()), true
-	}
-	if service.KindOf(err) == service.KindConflict {
-		return http.StatusConflict, errObj("conflict", err.Error()), true
-	}
-	return 0, Error{}, false
+	return nil
 }
 
 func (s *Server) ListPlayerEndpoints(ctx context.Context, _ ListPlayerEndpointsRequestObject) (ListPlayerEndpointsResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p, _ := principalFromContext(ctx)
 	if s.connect == nil {
 		return ListPlayerEndpoints200JSONResponse{Endpoints: []PlayerEndpoint{}}, nil
 	}
@@ -547,10 +528,7 @@ func (s *Server) ListPlayerEndpoints(ctx context.Context, _ ListPlayerEndpointsR
 }
 
 func (s *Server) ListPlaybackSessions(ctx context.Context, _ ListPlaybackSessionsRequestObject) (ListPlaybackSessionsResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p, _ := principalFromContext(ctx)
 	if s.connect == nil {
 		return ListPlaybackSessions200JSONResponse{Sessions: []PlaybackSession{}}, nil
 	}
@@ -563,10 +541,7 @@ func (s *Server) ListPlaybackSessions(ctx context.Context, _ ListPlaybackSession
 }
 
 func (s *Server) ListPlaybackSessionHistory(ctx context.Context, _ ListPlaybackSessionHistoryRequestObject) (ListPlaybackSessionHistoryResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p, _ := principalFromContext(ctx)
 	if s.connect == nil {
 		return ListPlaybackSessionHistory200JSONResponse{Sessions: []PlaybackSessionHistoryEntry{}}, nil
 	}
@@ -582,10 +557,7 @@ func (s *Server) ListPlaybackSessionHistory(ctx context.Context, _ ListPlaybackS
 }
 
 func (s *Server) CreatePlaybackSession(ctx context.Context, req CreatePlaybackSessionRequestObject) (CreatePlaybackSessionResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p, _ := principalFromContext(ctx)
 	if s.connect == nil {
 		return nil, errors.New("connect is not wired")
 	}
@@ -616,21 +588,8 @@ func (s *Server) CreatePlaybackSession(ctx context.Context, req CreatePlaybackSe
 	}
 	snap, err := s.connect.CreateSession(ctx, p.User.ID, p.User.Username, create)
 	if err != nil {
-		if status, body, ok := connectHTTP(err); ok {
-			switch status {
-			case http.StatusNotFound:
-				return CreatePlaybackSession404JSONResponse{NotFoundJSONResponse(body)}, nil
-			case http.StatusConflict:
-				return CreatePlaybackSession409JSONResponse{PlaybackConflictJSONResponse(body)}, nil
-			case http.StatusBadRequest:
-				return CreatePlaybackSession400JSONResponse{InvalidRequestJSONResponse(body)}, nil
-			case http.StatusForbidden:
-				return CreatePlaybackSession403JSONResponse{ForbiddenJSONResponse(body)}, nil
-			case http.StatusNotImplemented:
-				return CreatePlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(body)}, nil
-			case http.StatusServiceUnavailable:
-				return CreatePlaybackSession503JSONResponse{engineAway(body)}, nil
-			}
+		if refusal := connectRefusal(err); refusal != nil {
+			return nil, refusal
 		}
 		return nil, err
 	}
@@ -638,63 +597,40 @@ func (s *Server) CreatePlaybackSession(ctx context.Context, req CreatePlaybackSe
 }
 
 func (s *Server) GetPlaybackSession(ctx context.Context, req GetPlaybackSessionRequestObject) (GetPlaybackSessionResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p, _ := principalFromContext(ctx)
 	if s.connect == nil {
-		return GetPlaybackSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such session"))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no such session")
 	}
 	snap, err := s.connect.Session(p.User.ID, req.SessionId)
 	if err != nil {
-		return GetPlaybackSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such session is visible to you"))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no such session is visible to you")
 	}
 	return GetPlaybackSession200JSONResponse(sessionJSON(p.User.ID, snap)), nil
 }
 
 func (s *Server) DeletePlaybackSession(ctx context.Context, req DeletePlaybackSessionRequestObject) (DeletePlaybackSessionResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p, _ := principalFromContext(ctx)
 	if s.connect == nil {
-		return DeletePlaybackSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such session"))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no such session")
 	}
 	if err := s.connect.End(ctx, p.User.ID, req.SessionId); err != nil {
-		return DeletePlaybackSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such session is visible to you"))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no such session is visible to you")
 	}
 	return DeletePlaybackSession204Response{}, nil
 }
 
 func (s *Server) TransferPlaybackSession(ctx context.Context, req TransferPlaybackSessionRequestObject) (TransferPlaybackSessionResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p, _ := principalFromContext(ctx)
 	if s.connect == nil {
-		return TransferPlaybackSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such session"))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no such session")
 	}
 	snap, err := s.connect.Transfer(ctx, p.User.ID, req.SessionId, req.Body.EndpointId)
 	if err != nil {
-		if status, body, ok := connectHTTP(err); ok {
-			switch status {
-			case http.StatusNotFound:
-				return TransferPlaybackSession404JSONResponse{NotFoundJSONResponse(body)}, nil
-			case http.StatusConflict:
-				return TransferPlaybackSession409JSONResponse{PlaybackConflictJSONResponse(body)}, nil
-			case http.StatusBadRequest:
-				return TransferPlaybackSession400JSONResponse{InvalidRequestJSONResponse(body)}, nil
-			case http.StatusForbidden:
-				// A 403, not a 404 wearing a `forbidden` code: both
-				// refusals here are about the target endpoint, and the
-				// session the caller named is one they can see and
-				// drive.
-				return TransferPlaybackSession403JSONResponse{ForbiddenJSONResponse(body)}, nil
-			case http.StatusNotImplemented:
-				return TransferPlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(body)}, nil
-			case http.StatusServiceUnavailable:
-				return TransferPlaybackSession503JSONResponse{engineAway(body)}, nil
-			}
+		// A forbidden target answers 403, not a 404 wearing a `forbidden`
+		// code: both refusals here are about the target endpoint, and the
+		// session the caller named is one they can see and drive.
+		if refusal := connectRefusal(err); refusal != nil {
+			return nil, refusal
 		}
 		return nil, err
 	}
@@ -702,18 +638,15 @@ func (s *Server) TransferPlaybackSession(ctx context.Context, req TransferPlayba
 }
 
 func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelineRequestObject) (CreateQueueTimelineResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return CreateQueueTimeline401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
-	}
+	p, _ := principalFromContext(ctx)
 	// One reading of the engine decides the call: two reads either side
 	// of it going away would answer as though there were none.
 	engine := s.bridge.Status()
 	if s.bridge != nil && !engine.Connected {
-		return engineAwayTimeline(), nil
+		return nil, engineAwayTimeline()
 	}
 	if !engine.Timelines {
-		return CreateQueueTimeline501JSONResponse{FeatureUnavailableJSONResponse(errObj("feature-unavailable", "queue timelines need the streaming engine"))}, nil
+		return nil, refuse(http.StatusNotImplemented, "feature-unavailable", "queue timelines need the streaming engine")
 	}
 	body := req.Body
 	crossfade := 0.0
@@ -721,7 +654,7 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		crossfade = *body.CrossfadeSeconds
 	}
 	if crossfade < 0 || crossfade > 12 {
-		return CreateQueueTimeline400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "crossfadeSeconds must be between 0 and 12"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "crossfadeSeconds must be between 0 and 12")
 	}
 	// The crossfade is the request's, since a caller minting its own
 	// timeline is deciding this queue's presentation. Leveling is not on
@@ -732,7 +665,7 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		formats = make([]string, 0, len(*body.Formats))
 		for _, f := range *body.Formats {
 			if !f.Valid() {
-				return CreateQueueTimeline400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown timeline format "+string(f)))}, nil
+				return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown timeline format "+string(f))
 			}
 			formats = append(formats, string(f))
 		}
@@ -756,14 +689,14 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 	members := make([]flow.TimelineMember, 0, len(body.ItemPids))
 	for _, pid := range body.ItemPids {
 		if err := s.svc.VisibleItem(ctx, uc, pid); err != nil {
-			return CreateQueueTimeline404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+pid))}, nil
+			return nil, refuse(http.StatusNotFound, "not-found", "no item with pid "+pid)
 		}
 		src, err := s.svc.StreamSource(ctx, pid, "")
 		if err != nil {
-			return CreateQueueTimeline409JSONResponse{ConflictJSONResponse(errObj("conflict", "this item cannot join a timeline: "+pid))}, nil
+			return nil, refuse(http.StatusConflict, "conflict", "this item cannot join a timeline: "+pid)
 		}
 		if src.Virtual && !engine.TimelineWindows {
-			return CreateQueueTimeline409JSONResponse{ConflictJSONResponse(errObj("conflict", "virtual tracks cannot join a timeline: "+pid))}, nil
+			return nil, refuse(http.StatusConflict, "conflict", "virtual tracks cannot join a timeline: "+pid)
 		}
 		if opts.ReplayGain {
 			s.svc.FillLoudness(ctx, &src)
@@ -773,15 +706,14 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 	res, err := s.bridge.TimelineFor(ctx, p.User.ID, members, opts)
 	if err != nil {
 		if errors.Is(err, flow.ErrEngineDown) {
-			return engineAwayTimeline(), nil
+			return nil, engineAwayTimeline()
 		}
 		if errors.Is(err, flow.ErrTranscodeLimited) {
-			return CreateQueueTimeline429JSONResponse{TranscodeLimitedJSONResponse(errObj("transcode-limited",
-				"the server's transcode session limit is reached; retry when a session ends"))}, nil
+			return nil, refuse(http.StatusTooManyRequests, "transcode-limited", "the server's transcode session limit is reached; retry when a session ends")
 		}
-		msg := err.Error()
+		msg := ownWords(err)
 		if strings.Contains(msg, "crossfade") {
-			return CreateQueueTimeline400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", msg))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", msg)
 		}
 		// The engine would not render this queue. Every member was
 		// visible and resolvable, so this is not an internal fault: it
@@ -789,7 +721,7 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		// above answer, discovered by the renderer rather than by us,
 		// and a caller's move is the same either way - play per item.
 		if errors.Is(err, flow.ErrTimelineUnrenderable) {
-			return CreateQueueTimeline409JSONResponse{ConflictJSONResponse(errObj("conflict", msg))}, nil
+			return nil, refuse(http.StatusConflict, "conflict", msg)
 		}
 		// Everything else is the server being broken - the sidecar down,
 		// a signature that would not sign - and belongs in the error
@@ -833,16 +765,8 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 
 // engineAwayTimeline refuses a timeline while a configured engine is
 // not answering: the queue plays per item until it does.
-func engineAwayTimeline() CreateQueueTimeline503JSONResponse {
-	e := errObj("feature-unavailable", flow.ErrEngineDown.Error())
-	e.Params = &map[string]string{"feature": flow.FeatureStreamingEngine}
-	return CreateQueueTimeline503JSONResponse{engineAway(e)}
-}
-
-// engineAway is the outage's answer on a typed route: the refusal naming
-// the engine, and when to ask again.
-func engineAway(body Error) EngineAwayJSONResponse {
-	return EngineAwayJSONResponse{Body: body, Headers: EngineAwayResponseHeaders{RetryAfter: ptr(flow.EngineRetrySeconds)}}
+func engineAwayTimeline() error {
+	return refuseEngineAway(flow.ErrEngineDown.Error(), nil)
 }
 
 // ReleaseQueueTimeline hands a listener's transcode slot back the
@@ -850,21 +774,15 @@ func engineAway(body Error) EngineAwayJSONResponse {
 // A server with no engine has nothing to release, which is the same
 // answer an id it never minted gets.
 func (s *Server) ReleaseQueueTimeline(ctx context.Context, req ReleaseQueueTimelineRequestObject) (ReleaseQueueTimelineResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p, _ := principalFromContext(ctx)
 	id := strings.TrimPrefix(req.Pid, flow.TimelinePIDPrefix)
 	if s.bridge == nil || !s.bridge.ReleaseTimeline(p.User.ID, id) {
-		return ReleaseQueueTimeline404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no live timeline with pid "+req.Pid))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no live timeline with pid "+req.Pid)
 	}
 	return ReleaseQueueTimeline204Response{}, nil
 }
 
 func (s *Server) GetCastPreflight(ctx context.Context, _ GetCastPreflightRequestObject) (GetCastPreflightResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
-		return nil, err
-	}
 	var bases []string
 	if s.bases.Public != "" {
 		bases = append(bases, s.bases.Public)
@@ -911,7 +829,7 @@ func (s *Server) reachability(ctx context.Context, bases []string) []CastPreflig
 			resp, err := client.Get(strings.TrimRight(base, "/") + "/api/v1/health")
 			if err != nil {
 				entry.Reachable = false
-				entry.Notes = append(entry.Notes, "the server could not reach itself through this address: "+err.Error())
+				entry.Notes = append(entry.Notes, "the server could not reach itself through this address: "+ownWords(err))
 			} else {
 				resp.Body.Close()
 				entry.Reachable = resp.StatusCode == http.StatusOK
@@ -977,12 +895,9 @@ func probeMimeFor(target connect.EndpointTarget) string {
 // says what happened, which is the failure mode a server checking
 // itself is blind to.
 func (s *Server) ProbeCastEndpoint(ctx context.Context, req ProbeCastEndpointRequestObject) (ProbeCastEndpointResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	p, _ := principalFromContext(ctx)
 	if s.connect == nil {
-		return ProbeCastEndpoint404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such endpoint or session is visible to you"))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no such endpoint or session is visible to you")
 	}
 	if s.media == nil {
 		return nil, errors.New("media tokens are not configured on this server")
@@ -1014,15 +929,8 @@ func (s *Server) ProbeCastEndpoint(ctx context.Context, req ProbeCastEndpointReq
 	}
 	res, err := s.connect.Probe(ctx, p.User.ID, req.EndpointId, media)
 	if err != nil {
-		if status, body, ok := connectHTTP(err); ok {
-			switch status {
-			case http.StatusNotFound:
-				return ProbeCastEndpoint404JSONResponse{NotFoundJSONResponse(body)}, nil
-			case http.StatusForbidden:
-				return ProbeCastEndpoint403JSONResponse{ForbiddenJSONResponse(body)}, nil
-			case http.StatusConflict:
-				return ProbeCastEndpoint409JSONResponse{PlaybackConflictJSONResponse(body)}, nil
-			}
+		if refusal := connectRefusal(err); refusal != nil {
+			return nil, refusal
 		}
 		return nil, err
 	}

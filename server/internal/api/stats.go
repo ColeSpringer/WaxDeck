@@ -13,10 +13,7 @@ import (
 // Listening statistics and the year in review.
 
 func (s *Server) GetListeningStats(ctx context.Context, req GetListeningStatsRequestObject) (GetListeningStatsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	rng, bucket := "30d", "day"
 	if req.Params.Range != nil {
 		rng = string(*req.Params.Range)
@@ -25,11 +22,7 @@ func (s *Server) GetListeningStats(ctx context.Context, req GetListeningStatsReq
 		bucket = string(*req.Params.Bucket)
 	}
 	res, err := s.svc.ListeningStats(ctx, uc, rng, bucket)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		return GetListeningStats400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	out := ListeningStats{
@@ -58,20 +51,13 @@ func (s *Server) GetListeningStats(ctx context.Context, req GetListeningStatsReq
 }
 
 func (s *Server) GetListeningHeatmap(ctx context.Context, req GetListeningHeatmapRequestObject) (GetListeningHeatmapResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	year := 0
 	if req.Params.Year != nil {
 		year = *req.Params.Year
 	}
 	res, err := s.svc.ListeningHeatmap(ctx, uc, year)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		return GetListeningHeatmap400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	out := ListeningHeatmap{
@@ -92,24 +78,17 @@ func (s *Server) GetListeningHeatmap(ctx context.Context, req GetListeningHeatma
 }
 
 func (s *Server) GetTopList(ctx context.Context, req GetTopListRequestObject) (GetTopListResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	rng := "30d"
 	if req.Params.Range != nil {
 		rng = string(*req.Params.Range)
 	}
-	limit, ok := pageLimit(req.Params.Limit, 10, 100)
-	if !ok {
-		return GetTopList400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 100"))}, nil
+	limit, err := pageLimit(req.Params.Limit, 10, 100)
+	if err != nil {
+		return nil, err
 	}
 	res, err := s.svc.TopListFor(ctx, uc, string(req.Params.Kind), rng, limit)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		return GetTopList400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	return GetTopList200JSONResponse(TopList{
@@ -143,20 +122,13 @@ func topEntriesJSON(entries []service.TopEntry) []TopEntry {
 }
 
 func (s *Server) ListListenLog(ctx context.Context, req ListListenLogRequestObject) (ListListenLogResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 50, 200)
 	if err != nil {
 		return nil, err
 	}
-	limit, ok := pageLimit(req.Params.Limit, 50, 200)
-	if !ok {
-		return ListListenLog400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 200"))}, nil
-	}
 	res, err := s.svc.ListenLog(ctx, uc, deref(req.Params.Client), deref(req.Params.Cursor), limit)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		return ListListenLog400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	out := ListenLogPage{Sessions: []ListenLogEntry{}}
@@ -188,20 +160,13 @@ func (s *Server) ListListenLog(ctx context.Context, req ListListenLogRequestObje
 }
 
 func (s *Server) GetYearInReview(ctx context.Context, req GetYearInReviewRequestObject) (GetYearInReviewResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	year := 0
 	if req.Params.Year != nil {
 		year = *req.Params.Year
 	}
 	res, err := s.svc.UserYearInReview(ctx, uc, year)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		return GetYearInReview400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	out := YearInReview{
@@ -232,20 +197,13 @@ func (s *Server) GetYearInReview(ctx context.Context, req GetYearInReviewRequest
 }
 
 func (s *Server) GetServerYearInReview(ctx context.Context, req GetServerYearInReviewRequestObject) (GetServerYearInReviewResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	year := 0
 	if req.Params.Year != nil {
 		year = *req.Params.Year
 	}
 	res, err := s.svc.ServerWideYearInReview(ctx, uc, year)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		return GetServerYearInReview400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	return GetServerYearInReview200JSONResponse(ServerYearInReview{

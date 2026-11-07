@@ -2,18 +2,15 @@ import 'package:flutter/semantics.dart' show debugSemanticsDisableAnimations;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/notifications/notifications_bell.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
 
@@ -22,42 +19,28 @@ Future<ProviderContainer> _pump(
   WidgetTester tester, {
   ValueNotifier<int>? generation,
 }) async {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(
-        FakeRepository(
-          sessionState: const SessionState(
-            authenticated: true,
-            user: WaxDeckUser(id: 'us-1', username: 'sam', roles: <String>[]),
-          ),
-        ),
+  return pumpApp(
+    tester,
+    Scaffold(
+      body: Center(
+        child: generation == null
+            ? const NotificationsBell()
+            : ValueListenableBuilder<int>(
+                valueListenable: generation,
+                builder: (context, value, _) =>
+                    NotificationsBell(key: ValueKey(value)),
+              ),
       ),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      // A chosen row lands in the shell, and the shell hosts the deck bar.
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(
-        Scaffold(
-          body: Center(
-            child: generation == null
-                ? const NotificationsBell()
-                : ValueListenableBuilder<int>(
-                    valueListenable: generation,
-                    builder: (context, value, _) =>
-                        NotificationsBell(key: ValueKey(value)),
-                  ),
-          ),
+    ),
+    container: appContainer(
+      repo: FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(id: 'us-1', username: 'sam', roles: <String>[]),
         ),
       ),
     ),
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 String _location(GoRouter router) =>

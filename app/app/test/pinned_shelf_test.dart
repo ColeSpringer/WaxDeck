@@ -1,20 +1,15 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/pinned_controller.dart';
 import 'package:waxdeck/src/home/pinned_shelf.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _album = 'al-01JZX5N8QW3F4V9T2B7KDALBUM';
 const _show = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
@@ -56,20 +51,11 @@ Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
   tester.view.physicalSize = const Size(1200, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-      ],
-      child: routedHost(
-        const CustomScrollView(slivers: <Widget>[PinnedShelf()]),
-      ),
-    ),
+  await pumpApp(
+    tester,
+    const CustomScrollView(slivers: <Widget>[PinnedShelf()]),
+    container: appContainer(repo: repo),
   );
-  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -167,20 +153,9 @@ void main() {
       english = await AppLocalizations.delegate.load(const Locale('en'));
     });
 
-    ProviderContainer container(FakeRepository repo) {
-      final c = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-      );
-      addTearDown(c.dispose);
-      return c;
-    }
-
     test('a pin goes on the end, so the shelf does not reshuffle', () async {
       final repo = _repo(pinned: <String>[_album]);
-      final c = container(repo);
+      final c = appContainer(repo: repo);
       await c.read(prefsControllerProvider.future);
 
       expect(await c.read(pinnedEntitiesProvider.notifier).toggle(_show), null);
@@ -191,7 +166,7 @@ void main() {
 
     test('unpinning writes the list without it', () async {
       final repo = _repo(pinned: <String>[_album, _show]);
-      final c = container(repo);
+      final c = appContainer(repo: repo);
       await c.read(prefsControllerProvider.future);
 
       await c.read(pinnedEntitiesProvider.notifier).toggle(_album);
@@ -206,7 +181,7 @@ void main() {
         code: 'invalid-request',
         message: 'not a pinnable entity pid',
       );
-      final c = container(repo);
+      final c = appContainer(repo: repo);
       await c.read(prefsControllerProvider.future);
 
       final refusal = await c
@@ -226,7 +201,7 @@ void main() {
           'al-01JZX5N8QW3F4V9T2B7KD3M9${String.fromCharCode(65 + i % 26)}$i',
       ];
       final repo = _repo(pinned: full);
-      final c = container(repo);
+      final c = appContainer(repo: repo);
       await c.read(prefsControllerProvider.future);
 
       final refusal = await c
@@ -260,20 +235,11 @@ void _showPinGroup() {
       tester.view.physicalSize = const Size(900, 1800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(repo),
-            audioEngineProvider.overrideWithValue(FakeEngine()),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-            artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-          ],
-          child: routedHost(const ShowScreen(pid: _show)),
-        ),
+      await pumpApp(
+        tester,
+        const ShowScreen(pid: _show),
+        container: appContainer(repo: repo),
       );
-      await tester.pumpAndSettle();
       await tester.tap(_byId(SemanticsIds.showOverflow));
       await tester.pumpAndSettle();
     }

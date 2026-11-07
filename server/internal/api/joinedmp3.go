@@ -29,7 +29,7 @@ func (s *Server) serveJoinedMP3(w http.ResponseWriter, r *http.Request, pid, mt 
 	}
 	parts, err := s.svc.StreamParts(r.Context(), pid)
 	if err != nil {
-		refuseJoin(w, err)
+		refuseJoin(w, s.kindOf(err))
 		return
 	}
 	if !service.JoinableMP3(parts) {
@@ -75,8 +75,8 @@ func (s *Server) serveJoinedMP3(w http.ResponseWriter, r *http.Request, pid, mt 
 // refuseJoin answers a book the join could not lay out, as ServeDownload
 // answers a source it could not resolve: only a book that is gone is not
 // found, since that one tells the client to stop asking.
-func refuseJoin(w http.ResponseWriter, err error) {
-	switch service.KindOf(err) {
+func refuseJoin(w http.ResponseWriter, kind service.ErrorKind) {
+	switch kind {
 	case service.KindNotFound, service.KindInvalid:
 		writeError(w, http.StatusNotFound, "not-found", "no such download")
 	case service.KindMaintenance:

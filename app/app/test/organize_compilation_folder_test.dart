@@ -1,26 +1,23 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
 Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
   tester.view.physicalSize = const Size(1200, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-      child: localizedHost(const OrganizeScreen()),
-    ),
+  await pumpApp(
+    tester,
+    const OrganizeScreen(),
+    container: appContainer(repo: repo),
+    routed: false,
   );
-  await tester.pumpAndSettle();
 }
 
 Future<void> _newProfile(WidgetTester tester, String name) async {

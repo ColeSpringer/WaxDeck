@@ -1,14 +1,12 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'disclosure_glyph.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 
 /// The editable identify query: three fields and a Search again, offered
 /// on any pending entry rather than gated on poor results.
@@ -34,9 +32,11 @@ ReviewEntryDetail _entry({
   suggested: suggested,
 );
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: localizedHost(const ReviewEntryScreen(entryId: 'rv-1')),
+Future<void> _mount(WidgetTester tester, FakeRepository repo) => mountApp(
+  tester,
+  const ReviewEntryScreen(entryId: 'rv-1'),
+  container: appContainer(repo: repo),
+  routed: false,
 );
 
 FakeRepository _repo(ReviewEntryDetail detail) {
@@ -64,7 +64,7 @@ void main() {
   testWidgets('the group is offered on a pending entry, collapsed', (
     tester,
   ) async {
-    await tester.pumpWidget(_host(_repo(_entry())));
+    await _mount(tester, _repo(_entry()));
     await tester.pumpAndSettle();
 
     expect(
@@ -81,7 +81,7 @@ void main() {
   });
 
   testWidgets('the toggle points right closed and down open', (tester) async {
-    await tester.pumpWidget(_host(_repo(_entry())));
+    await _mount(tester, _repo(_entry()));
     await tester.pumpAndSettle();
     final toggle = find.bySemanticsIdentifier(
       SemanticsIds.reviewIdentifyToggle,
@@ -96,15 +96,14 @@ void main() {
   testWidgets('a stored override opens the group and prefills it', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _host(
-        _repo(
-          _entry(
-            stored: const ReviewOverride(
-              artist: 'Nas',
-              album: 'Stillmatic',
-              title: "How Ya Livin'",
-            ),
+    await _mount(
+      tester,
+      _repo(
+        _entry(
+          stored: const ReviewOverride(
+            artist: 'Nas',
+            album: 'Stillmatic',
+            title: "How Ya Livin'",
           ),
         ),
       ),
@@ -120,7 +119,7 @@ void main() {
 
   testWidgets('Search again sends what was typed', (tester) async {
     final repo = _repo(_entry());
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Search for something else'));
@@ -147,7 +146,7 @@ void main() {
         stored: const ReviewOverride(artist: 'Nas', title: 'Wrong'),
       ),
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await tester.enterText(_field('artist'), '');
@@ -162,7 +161,7 @@ void main() {
   });
 
   testWidgets('a decided entry is not offered the search', (tester) async {
-    await tester.pumpWidget(_host(_repo(_entry(status: 'as-is'))));
+    await _mount(tester, _repo(_entry(status: 'as-is')));
     await tester.pumpAndSettle();
 
     expect(
@@ -186,7 +185,7 @@ void main() {
       createdAt: DateTime.utc(2026, 8, 1),
       identifyOverride: const ReviewOverride(artist: 'Nas'),
     );
-    await tester.pumpWidget(_host(_repo(detail)));
+    await _mount(tester, _repo(detail));
     // Pumped rather than settled: an identifying entry draws a spinner,
     // and pumpAndSettle waits for an animation that never ends.
     await tester.pump();
@@ -207,7 +206,7 @@ void main() {
         suggested: const ReviewOverride(artist: 'Nas', title: "How Ya Livin'"),
       ),
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     expect(_field('artist'), findsOne, reason: 'a guess is worth showing');
@@ -226,15 +225,14 @@ void main() {
   testWidgets('a stored override wins over the suggestion, field by field', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _host(
-        _repo(
-          _entry(
-            stored: const ReviewOverride(artist: 'Nas Escobar'),
-            suggested: const ReviewOverride(
-              artist: 'Nas',
-              title: "How Ya Livin'",
-            ),
+    await _mount(
+      tester,
+      _repo(
+        _entry(
+          stored: const ReviewOverride(artist: 'Nas Escobar'),
+          suggested: const ReviewOverride(
+            artist: 'Nas',
+            title: "How Ya Livin'",
           ),
         ),
       ),
@@ -251,7 +249,7 @@ void main() {
   });
 
   testWidgets('a multi-file unit is not offered a track title', (tester) async {
-    await tester.pumpWidget(_host(_repo(_entry(trackCount: 4))));
+    await _mount(tester, _repo(_entry(trackCount: 4)));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Search for something else'));
@@ -268,7 +266,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo(_entry(stored: const ReviewOverride(artist: 'Nas')));
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
     expect(find.text('Nas'), findsOne);
 
@@ -286,7 +284,7 @@ void main() {
     tester,
   ) async {
     final repo = _repo(_entry(stored: const ReviewOverride(artist: 'Nas')));
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     // Half a sentence in, a refetch lands with a different value.

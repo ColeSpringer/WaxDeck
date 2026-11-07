@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -66,26 +67,20 @@ func (s *Server) tooFast(uc *service.UserCtx) bool {
 	return !s.uploads.allow(uc.ID)
 }
 
-// pacedOut is the body every paced endpoint answers with, so the next
+// pacedOut is the refusal every paced endpoint answers with, so the next
 // one added reaches for this rather than pasting the sentence again.
-func pacedOut() Error {
-	return errObj("rate-limited", "too many upload requests; retry shortly")
+func pacedOut() error {
+	return refuse(http.StatusTooManyRequests, "rate-limited", "too many upload requests; retry shortly")
 }
 
 func (s *Server) ListUploads(ctx context.Context, req ListUploadsRequestObject) (ListUploadsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 50, 200)
 	if err != nil {
 		return nil, err
 	}
-	limit, ok := pageLimit(req.Params.Limit, 50, 200)
-	if !ok {
-		return ListUploads400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit out of range"))}, nil
-	}
 	uploads, next, quota, err := s.svc.ListUploadsPage(ctx, uc, deref(req.Params.Cursor), limit)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ListUploads400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	page := UploadPage{Uploads: make([]Upload, 0, len(uploads))}
@@ -108,15 +103,9 @@ func (s *Server) ListUploads(ctx context.Context, req ListUploadsRequestObject) 
 // rather than by admin, which is why it is its own narrow operation and
 // not a relaxed listLibraries.
 func (s *Server) ListUploadTargets(ctx context.Context, _ ListUploadTargetsRequestObject) (ListUploadTargetsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	targets, err := s.svc.UploadTargets(ctx, uc)
 	if err != nil {
-		if service.KindOf(err) == service.KindForbidden {
-			return ListUploadTargets403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := UploadTargets{Targets: make([]UploadTarget, 0, len(targets))}
@@ -133,15 +122,12 @@ func (s *Server) ListUploadTargets(ctx context.Context, _ ListUploadTargetsReque
 }
 
 func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject) (CreateUploadResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if s.tooFast(uc) {
-		return CreateUpload429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
+		return nil, pacedOut()
 	}
 	if req.Body == nil {
-		return CreateUpload400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an upload body is required"))}, nil
+		return nil, errNoBody()
 	}
 	u, err := s.svc.CreateUpload(ctx, uc, service.UploadCreateParams{
 		FileName:   req.Body.FileName,
@@ -154,19 +140,8 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 		Identify:   req.Body.Identify,
 	})
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid, service.KindNotFound:
-			return CreateUpload400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return CreateUpload403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindQuota:
-			return CreateUpload413JSONResponse{QuotaExceededJSONResponse(errObj("quota-exceeded", err.Error()))}, nil
-		case service.KindStorageFull:
-			return CreateUpload507JSONResponse{StorageFullJSONResponse(errObj("storage-full", err.Error()))}, nil
-		case service.KindFormat:
-			return CreateUpload415JSONResponse{UnsupportedFormatJSONResponse(errObj("unsupported-format", err.Error()))}, nil
-		case service.KindDRM:
-			return CreateUpload415JSONResponse{UnsupportedFormatJSONResponse(errObj("drm-protected", err.Error()))}, nil
+		if k := service.KindOf(err); k == service.KindInvalid || k == service.KindNotFound {
+			return nil, refuse(http.StatusBadRequest, "invalid-request", serviceMessage(err))
 		}
 		return nil, err
 	}
@@ -174,44 +149,26 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 }
 
 func (s *Server) GetUpload(ctx context.Context, req GetUploadRequestObject) (GetUploadResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	u, err := s.svc.GetUpload(ctx, uc, string(req.UploadId))
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetUpload404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such upload"))}, nil
-		}
 		return nil, err
 	}
 	return GetUpload200JSONResponse(uploadJSON(u)), nil
 }
 
 func (s *Server) DeleteUpload(ctx context.Context, req DeleteUploadRequestObject) (DeleteUploadResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DeleteUpload(ctx, uc, string(req.UploadId)); err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return DeleteUpload404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such upload"))}, nil
-		case service.KindConflict:
-			return DeleteUpload409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return DeleteUpload204Response{}, nil
 }
 
 func (s *Server) PutUploadData(ctx context.Context, req PutUploadDataRequestObject) (PutUploadDataResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return PutUploadData400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a chunk body is required"))}, nil
+		return nil, errNoBody()
 	}
 	// Refused at the header, where refusing is free. Reading an
 	// over-cap body to find out how big it is writes a chunk's worth to
@@ -220,49 +177,29 @@ func (s *Server) PutUploadData(ctx context.Context, req PutUploadDataRequestObje
 	// still streaming hundreds of megabytes is cut off long before the
 	// server's own drain gives up on the rest of the body.
 	if n := declaredBodyBytes(ctx); n > service.MaxUploadChunk {
-		return PutUploadData400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", fmt.Sprintf(
-			"a chunk may carry at most %d bytes; this one declares %d", service.MaxUploadChunk, n)))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", fmt.Sprintf(
+			"a chunk may carry at most %d bytes; this one declares %d", service.MaxUploadChunk, n))
 	}
 	u, err := s.svc.AppendUploadData(ctx, uc, string(req.UploadId), req.Params.Offset, req.Body)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return PutUploadData400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return PutUploadData404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such upload"))}, nil
-		case service.KindConflict:
-			return PutUploadData409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PutUploadData200JSONResponse(uploadJSON(u)), nil
 }
 
 func (s *Server) CompleteUpload(ctx context.Context, req CompleteUploadRequestObject) (CompleteUploadResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if s.tooFast(uc) {
-		return CompleteUpload429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
+		return nil, pacedOut()
 	}
 	u, err := s.svc.CompleteUpload(ctx, uc, string(req.UploadId))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return CompleteUpload404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such upload"))}, nil
-		case service.KindConflict:
-			e := errObj("conflict", err.Error())
-			if errors.Is(err, service.ErrChecksumMismatch) {
-				e.Params = &map[string]string{"reason": "checksum-mismatch"}
-			}
-			return CompleteUpload409JSONResponse{ConflictJSONResponse(e)}, nil
-		case service.KindFormat:
-			e := errObj("unsupported-format", err.Error())
-			if errors.Is(err, service.ErrUnreadableUpload) {
-				e.Params = &map[string]string{"reason": "unreadable"}
-			}
-			return CompleteUpload415JSONResponse{UnsupportedFormatJSONResponse(e)}, nil
+		kind := service.KindOf(err)
+		if kind == service.KindConflict && errors.Is(err, service.ErrChecksumMismatch) {
+			return nil, refuseParams(http.StatusConflict, "conflict", serviceMessage(err), map[string]string{"reason": "checksum-mismatch"})
+		}
+		if kind == service.KindFormat && errors.Is(err, service.ErrUnreadableUpload) {
+			return nil, refuseParams(http.StatusUnsupportedMediaType, "unsupported-format", serviceMessage(err), map[string]string{"reason": "unreadable"})
 		}
 		return nil, err
 	}
@@ -288,15 +225,12 @@ func uploadBatchJSON(b service.UploadBatchDTO) UploadBatch {
 }
 
 func (s *Server) CreateUploadBatch(ctx context.Context, req CreateUploadBatchRequestObject) (CreateUploadBatchResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if s.tooFast(uc) {
-		return CreateUploadBatch429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
+		return nil, pacedOut()
 	}
 	if req.Body == nil {
-		return CreateUploadBatch400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a batch body is required"))}, nil
+		return nil, errNoBody()
 	}
 	b, err := s.svc.CreateUploadBatch(ctx, uc, service.UploadBatchCreateParams{
 		Grouping:   string(req.Body.Grouping),
@@ -305,11 +239,8 @@ func (s *Server) CreateUploadBatch(ctx context.Context, req CreateUploadBatchReq
 		Identify:   req.Body.Identify,
 	})
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid, service.KindNotFound:
-			return CreateUploadBatch400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return CreateUploadBatch403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		if k := service.KindOf(err); k == service.KindInvalid || k == service.KindNotFound {
+			return nil, refuse(http.StatusBadRequest, "invalid-request", serviceMessage(err))
 		}
 		return nil, err
 	}
@@ -317,36 +248,24 @@ func (s *Server) CreateUploadBatch(ctx context.Context, req CreateUploadBatchReq
 }
 
 func (s *Server) CompleteUploadBatch(ctx context.Context, req CompleteUploadBatchRequestObject) (CompleteUploadBatchResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if s.tooFast(uc) {
-		return CompleteUploadBatch429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
+		return nil, pacedOut()
 	}
 	b, err := s.svc.CompleteUploadBatch(ctx, uc, string(req.BatchId))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return CompleteUploadBatch404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such upload batch"))}, nil
-		case service.KindConflict:
-			return CompleteUploadBatch409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return CompleteUploadBatch200JSONResponse(uploadBatchJSON(b)), nil
 }
 
 func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionRequestObject) (CreateAcquisitionResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if s.tooFast(uc) {
-		return CreateAcquisition429JSONResponse{RateLimitedJSONResponse(pacedOut())}, nil
+		return nil, pacedOut()
 	}
 	if req.Body == nil {
-		return CreateAcquisition400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an acquisition body is required"))}, nil
+		return nil, errNoBody()
 	}
 	format := ""
 	if req.Body.Format != nil {
@@ -354,13 +273,8 @@ func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionReq
 	}
 	task, err := s.svc.StartAcquisition(ctx, uc, req.Body.Url, string(req.Body.MediaType), deref(req.Body.LibraryPid), format, req.Body.Identify)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid, service.KindNotFound:
-			return CreateAcquisition400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return CreateAcquisition403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindUnsupported:
-			return CreateAcquisition501JSONResponse{SourceUnavailableJSONResponse(errObj("source-unavailable", err.Error()))}, nil
+		if k := service.KindOf(err); k == service.KindInvalid || k == service.KindNotFound {
+			return nil, refuse(http.StatusBadRequest, "invalid-request", serviceMessage(err))
 		}
 		return nil, err
 	}
@@ -368,22 +282,14 @@ func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionReq
 }
 
 func (s *Server) RematchItem(ctx context.Context, req RematchItemRequestObject) (RematchItemResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
-		return RematchItem403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
+		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	entryID, err := s.svc.RematchItem(ctx, uc, string(req.Pid))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return RematchItem404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such item"))}, nil
-		case service.KindConflict:
-			return RematchItem409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		case service.KindInvalid:
-			return RematchItem409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		if service.KindOf(err) == service.KindInvalid {
+			return nil, refuse(http.StatusConflict, "conflict", serviceMessage(err))
 		}
 		return nil, err
 	}

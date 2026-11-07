@@ -11,10 +11,7 @@ import (
 // and the manual sync trigger.
 
 func (s *Server) GetPlaylistSource(ctx context.Context, req GetPlaylistSourceRequestObject) (GetPlaylistSourceResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	src, err := s.svc.GetPlaylistSource(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
@@ -23,12 +20,9 @@ func (s *Server) GetPlaylistSource(ctx context.Context, req GetPlaylistSourceReq
 }
 
 func (s *Server) SetPlaylistSource(ctx context.Context, req SetPlaylistSourceRequestObject) (SetPlaylistSourceResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetPlaylistSource400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	src, err := s.svc.SetPlaylistSource(ctx, uc, req.Pid, playlistSourceUpdateFromWire(*req.Body))
 	if err != nil {
@@ -38,10 +32,7 @@ func (s *Server) SetPlaylistSource(ctx context.Context, req SetPlaylistSourceReq
 }
 
 func (s *Server) UnbindPlaylistSource(ctx context.Context, req UnbindPlaylistSourceRequestObject) (UnbindPlaylistSourceResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.UnbindPlaylistSource(ctx, uc, req.Pid); err != nil {
 		return nil, err
 	}
@@ -49,10 +40,7 @@ func (s *Server) UnbindPlaylistSource(ctx context.Context, req UnbindPlaylistSou
 }
 
 func (s *Server) PreviewPlaylistSync(ctx context.Context, req PreviewPlaylistSyncRequestObject) (PreviewPlaylistSyncResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	var in *service.PlaylistSourceUpdateDTO
 	// A JSON `null` body decodes to the zero value; either spelling of
 	// "no body" previews the stored binding. Field-wise rather than a
@@ -71,10 +59,7 @@ func (s *Server) PreviewPlaylistSync(ctx context.Context, req PreviewPlaylistSyn
 }
 
 func (s *Server) SyncPlaylistSource(ctx context.Context, req SyncPlaylistSourceRequestObject) (SyncPlaylistSourceResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	task, err := s.svc.SyncPlaylistSourceNow(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err

@@ -9,6 +9,7 @@ import '../books/book_dimension.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../search/search_chrome.dart';
@@ -564,15 +565,16 @@ class _BucketRow extends ConsumerWidget {
     // neither dragged nor given a menu.
     final books = domain == BrowseDomain.books;
     final copy = _IndexCopy(context, dimension, domain);
-    final title = bucket.unknown ? copy.unknownName : bucket.label;
+    final tile = bucketTile(
+      bucket,
+      unknownTitle: copy.unknownName,
+      caption: copy.bucketCaption(bucket.count),
+      artwork: artwork,
+      shape: dimension.shape,
+      semanticsId: SemanticsIds.indexBucket(index),
+    );
     final row = MediaListRow(
-      data: MediaTileData(
-        title: title,
-        subtitle: copy.bucketCaption(bucket.count),
-        artwork: artwork,
-        shape: dimension.shape,
-        semanticsId: SemanticsIds.indexBucket(index),
-      ),
+      data: tile,
       onTap: onTap,
       // Acting without opening first. Only where the bucket stands
       // for an entity: a genre or a year is a filter, not a thing,
@@ -607,7 +609,7 @@ class _BucketRow extends ConsumerWidget {
       // arrive when the drop lands, under the scope the count was
       // taken over.
       drop: QueueDrop.bucket(
-        label: title,
+        label: tile.title,
         repository: ref.watch(repositoryProvider),
         facet: dimension.wireName,
         facetKey: bucket.key,

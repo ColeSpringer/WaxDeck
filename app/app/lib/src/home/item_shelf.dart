@@ -8,8 +8,8 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_play.dart';
-import '../media_view.dart';
 import '../player/play_progress.dart';
+import '../presenters/media_tiles.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../sync/streamed_play_states.dart';
@@ -125,31 +125,12 @@ class ItemShelf extends ConsumerWidget {
     final wax = context.waxL10n;
     final tiles = <MediaTileData>[
       for (final item in items)
-        MediaTileData(
-          title: item.title,
-          // The album joins the artist on the caption line: a shelf of
-          // singles from one artist is otherwise a row of identical
-          // captions saying nothing about which release each came from.
-          // Deduplicated, because an episode's artist and album are
-          // both the show's title, and empty stays null rather than
-          // becoming an empty caption line with a comma in the spoken
-          // label.
-          subtitle: _caption(item),
-          // The card clamps every line, so the full name lives on the
-          // hover tooltip.
-          tooltip: <String?>[item.title, _caption(item)].nonNulls.join('\n'),
-          artwork: waxArtwork(store, item.artUrl),
-          domain: waxDomainOf(item.mediaType),
-          shape: waxShapeOf(item.mediaType),
-          progress: withProgress
-              ? positionOf(item.pid).fractionOf(item.durationMs)
-              : null,
-          trailingText: withProgress
-              ? _left(l10n, wax, positionOf(item.pid), item, short: true)
-              : null,
-          trailingSpoken: withProgress
-              ? _left(l10n, wax, positionOf(item.pid), item, short: false)
-              : null,
+        itemCardTile(
+          item,
+          l10n: l10n,
+          wax: wax,
+          store: store,
+          progress: withProgress ? positionOf(item.pid) : null,
           // Scoped by shelf, because the shelves overlap by construction:
           // a fresh unplayed track is on Recently added and on Never
           // played at once, and one handle on two cards makes a click a
@@ -260,35 +241,6 @@ class ItemShelf extends ConsumerWidget {
       for (final item in items)
         if (!ahead.contains(item.pid)) item,
     ];
-  }
-
-  /// The caption under a card: the artist, and the album where it says
-  /// something the artist line does not. Null rather than empty when
-  /// the item carries neither.
-  static String? _caption(ItemSummary item) {
-    final parts = <String>[
-      ?item.artist,
-      if (item.album case final album? when album != item.artist) album,
-    ];
-    return parts.isEmpty ? null : parts.join(' · ');
-  }
-
-  /// "12 min left", and the spelled form a screen reader hears. Two
-  /// tables: the design system spells the duration, as every read-out
-  /// span does, and the frame around it is this screen's own.
-  static String? _left(
-    AppLocalizations l10n,
-    WaxLocalizations wax,
-    PlayProgress progress,
-    ItemSummary item, {
-    required bool short,
-  }) {
-    final remaining = progress.remainingOf(item.durationMs);
-    if (remaining == null) return null;
-    final span = short
-        ? wax.formatSpan(remaining)
-        : wax.spellDuration(remaining);
-    return l10n.homeShelfRemaining(span);
   }
 }
 

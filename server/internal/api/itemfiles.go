@@ -3,24 +3,16 @@ package api
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 func (s *Server) GetItemFiles(ctx context.Context, req GetItemFilesRequestObject) (GetItemFilesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	files, err := s.svc.ItemFiles(ctx, uc, req.Pid)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindForbidden:
-		return GetItemFiles403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-	case service.KindNotFound:
-		return GetItemFiles404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	out := ItemFiles{Files: make([]ItemFile, 0, len(files))}
@@ -68,12 +60,9 @@ func itemFileJSON(f service.ItemFileDTO) ItemFile {
 }
 
 func (s *Server) DeleteItemFiles(ctx context.Context, req DeleteItemFilesRequestObject) (DeleteItemFilesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return DeleteItemFiles400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	mode := ""
 	if req.Body.Mode != nil {
@@ -81,26 +70,13 @@ func (s *Server) DeleteItemFiles(ctx context.Context, req DeleteItemFilesRequest
 	}
 	filePIDs, bad := bareFilePIDs(req.Body.FilePids)
 	if bad != "" {
-		return DeleteItemFiles400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "bad file pid "+bad))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "bad file pid "+bad)
 	}
 	res, err := s.svc.DeleteItemFiles(ctx, uc, req.Pid, filePIDs, mode, derefBool(req.Body.DryRun))
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		e := errObj("invalid-request", err.Error())
-		if errors.Is(err, service.ErrCueRipPart) {
-			e.Params = cueRipParams(err)
+	if err != nil {
+		if service.KindOf(err) == service.KindInvalid && errors.Is(err, service.ErrCueRipPart) {
+			return nil, refuseParams(http.StatusBadRequest, "invalid-request", serviceMessage(err), cueRipParams(err))
 		}
-		return DeleteItemFiles400JSONResponse{InvalidRequestJSONResponse(e)}, nil
-	case service.KindForbidden:
-		return DeleteItemFiles403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-	case service.KindNotFound:
-		return DeleteItemFiles404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-	case service.KindReadOnly:
-		return DeleteItemFiles409JSONResponse(errObj("read-only", err.Error())), nil
-	case service.KindCatalogBusy, service.KindStorageUnwritable:
-		return DeleteItemFiles409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
-	default:
 		return nil, err
 	}
 	return DeleteItemFiles200JSONResponse(deleteResultJSON(res)), nil
@@ -108,13 +84,13 @@ func (s *Server) DeleteItemFiles(ctx context.Context, req DeleteItemFilesRequest
 
 // cueRipParams are a partial cue rip delete's refusal params: the reason,
 // and every track of the rip when the refusal names them.
-func cueRipParams(err error) *map[string]string {
+func cueRipParams(err error) map[string]string {
 	params := map[string]string{"reason": "cue-rip"}
 	var rip *service.CueRipTracks
 	if errors.As(err, &rip) && len(rip.Tracks) > 0 {
 		params["tracks"] = strings.Join(rip.Tracks, ",")
 	}
-	return &params
+	return params
 }
 
 // bareFilePIDs reads the file pids a request names into the catalog's

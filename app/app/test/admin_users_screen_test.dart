@@ -1,35 +1,33 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/users_screen.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 /// The editor is a console location, and the console refuses an account
 /// without the role, so the fake has to hold an administrator's session
 /// for a row to open into anything.
-Widget _host(FakeRepository repo, {List<Override> overrides = const []}) {
+Future<void> _mount(
+  WidgetTester tester,
+  FakeRepository repo, {
+  List<Override> overrides = const [],
+}) {
   repo.sessionState = const SessionState(
     authenticated: true,
     user: WaxDeckUser(id: 'us-0', username: 'admin', roles: ['admin']),
   );
-  return ProviderScope(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ...overrides,
-    ],
-    child: routedHost(const UsersScreen()),
+  return mountApp(
+    tester,
+    const UsersScreen(),
+    container: appContainer(repo: repo, extra: overrides),
   );
 }
 
@@ -64,7 +62,7 @@ void main() {
       username: 'lotho',
       disabled: true,
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     final adminRow = find.bySemanticsIdentifier(SemanticsIds.userRow('us-1'));
@@ -97,7 +95,7 @@ void main() {
       username: 'pippin',
       pending: true,
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Requests'));
@@ -143,7 +141,7 @@ void main() {
       username: 'wormtongue',
       pending: true,
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Requests'));
@@ -161,7 +159,7 @@ void main() {
 
   testWidgets('creating an invite shows the one-time token', (tester) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Invites'));
@@ -187,7 +185,7 @@ void main() {
       usedCount: 2,
       createdAt: DateTime.utc(2026, 7, 1),
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Invites'));
@@ -223,7 +221,7 @@ void main() {
     addTearDown(tester.view.reset);
     final repo = FakeRepository();
     repo.usersById['us-3'] = _account('us-3', username: 'merry');
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userRow('us-3')));
@@ -260,7 +258,7 @@ void main() {
     addTearDown(tester.view.reset);
     final repo = FakeRepository();
     repo.usersById['us-3'] = _account('us-3', username: 'merry');
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userRow('us-3')));
@@ -278,18 +276,17 @@ void main() {
   ) async {
     final never = Completer<List<Object>>();
     addTearDown(() => never.complete(const []));
-    await tester.pumpWidget(
-      _host(
-        FakeRepository(),
-        overrides: [
-          signupRequestsProvider.overrideWith(
-            (ref) => never.future.then((_) => <UserAccount>[]),
-          ),
-          invitesProvider.overrideWith(
-            (ref) => never.future.then((_) => <Invite>[]),
-          ),
-        ],
-      ),
+    await _mount(
+      tester,
+      FakeRepository(),
+      overrides: [
+        signupRequestsProvider.overrideWith(
+          (ref) => never.future.then((_) => <UserAccount>[]),
+        ),
+        invitesProvider.overrideWith(
+          (ref) => never.future.then((_) => <Invite>[]),
+        ),
+      ],
     );
     await tester.pump(const Duration(milliseconds: 500));
 
@@ -314,15 +311,14 @@ void main() {
     addTearDown(tester.view.reset);
     final never = Completer<void>();
     addTearDown(() => never.complete());
-    await tester.pumpWidget(
-      _host(
-        FakeRepository(),
-        overrides: [
-          signupRequestsProvider.overrideWith(
-            (ref) => never.future.then((_) => <UserAccount>[]),
-          ),
-        ],
-      ),
+    await _mount(
+      tester,
+      FakeRepository(),
+      overrides: [
+        signupRequestsProvider.overrideWith(
+          (ref) => never.future.then((_) => <UserAccount>[]),
+        ),
+      ],
     );
     await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.text('Requests'));
@@ -343,7 +339,7 @@ void main() {
   ]) {
     testWidgets('a failed load on ${tab ?? 'Users'} says so at once, '
         'while it retries', (tester) async {
-      await tester.pumpWidget(_host(_DownRepository()));
+      await _mount(tester, _DownRepository());
       await tester.pump();
       if (tab != null) {
         await tester.tap(find.text(tab));
@@ -367,7 +363,7 @@ void main() {
     tester.view.physicalSize = const Size(900, 220);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(_host(_DownRepository()));
+    await _mount(tester, _DownRepository());
     // Past the first retry's delay: the read asks again behind the face,
     // whose Try again spins meanwhile.
     await tester.pump();
@@ -388,7 +384,7 @@ void main() {
     addTearDown(tester.view.reset);
     final repo = FakeRepository();
     repo.usersById['us-3'] = _account('us-3', username: 'merry');
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userRow('us-3')));
     await tester.pumpAndSettle();
@@ -420,7 +416,7 @@ void main() {
     addTearDown(tester.view.reset);
     final repo = FakeRepository();
     repo.usersById['us-3'] = _account('us-3', username: 'merry');
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.userRow('us-3')));

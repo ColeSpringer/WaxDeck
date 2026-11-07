@@ -1,37 +1,37 @@
-import 'localized_host.dart';
-
 import 'dart:typed_data';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_box.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck_data/waxdeck_data.dart' show OwedPin;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
+
 const _art = 'https://deck.local/api/v1/items/tr-1/art';
 
-Widget _host(_RecordingStore store, Widget child) => ProviderScope(
-  overrides: [artworkStoreProvider.overrideWithValue(store)],
-  child: localizedHost(Scaffold(body: Center(child: child))),
-);
+Future<void> _mount(WidgetTester tester, _RecordingStore store, Widget child) =>
+    mountApp(
+      tester,
+      Scaffold(body: Center(child: child)),
+      container: appContainer(artwork: store),
+      routed: false,
+    );
 
 void main() {
   testWidgets('a box asks for the pixels it turned out to be', (tester) async {
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     final store = _RecordingStore();
-    await tester.pumpWidget(
-      _host(
-        store,
-        const SizedBox(
-          width: 48,
-          height: 48,
-          child: ArtworkBox(
-            artUrl: _art,
-            placeholder: ColoredBox(color: Color(0xFF000000)),
-          ),
+    await _mount(
+      tester,
+      store,
+      const SizedBox(
+        width: 48,
+        height: 48,
+        child: ArtworkBox(
+          artUrl: _art,
+          placeholder: ColoredBox(color: Color(0xFF000000)),
         ),
       ),
     );
@@ -44,16 +44,15 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final store = _RecordingStore();
-    await tester.pumpWidget(
-      _host(
-        store,
-        const SizedBox(
-          width: 120,
-          height: 180,
-          child: ArtworkBox(
-            artUrl: _art,
-            placeholder: ColoredBox(color: Color(0xFF000000)),
-          ),
+    await _mount(
+      tester,
+      store,
+      const SizedBox(
+        width: 120,
+        height: 180,
+        child: ArtworkBox(
+          artUrl: _art,
+          placeholder: ColoredBox(color: Color(0xFF000000)),
         ),
       ),
     );
@@ -64,14 +63,13 @@ void main() {
     tester,
   ) async {
     final store = _RecordingStore();
-    await tester.pumpWidget(
-      _host(
-        store,
-        const SizedBox(
-          width: 48,
-          height: 48,
-          child: ArtworkBox(artUrl: null, placeholder: Text('no cover')),
-        ),
+    await _mount(
+      tester,
+      store,
+      const SizedBox(
+        width: 48,
+        height: 48,
+        child: ArtworkBox(artUrl: null, placeholder: Text('no cover')),
       ),
     );
     expect(find.text('no cover'), findsOneWidget);

@@ -10,6 +10,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
@@ -282,14 +283,10 @@ class _UpNextShelf extends ConsumerWidget {
     final l10n = context.l10n;
     final tiles = <MediaTileData>[
       for (final row in rows)
-        MediaTileData(
-          title: row.episode.title,
-          subtitle: row.showTitle,
-          artwork: store.source(row.episode.artUrl),
-          domain: WaxDomain.podcasts,
-          progress: row.progress.fractionOf(row.episode.durationMs),
-          trailingText: _remaining(l10n, row),
-          downloaded: row.episode.downloaded,
+        episodeContinueTile(
+          row,
+          l10n: l10n,
+          store: store,
           // Its own handle, not the row identifier the Latest list and
           // the show's own list use. The same episode can be drawn by
           // more than one shelf on this screen, and one handle on two
@@ -327,12 +324,6 @@ class _UpNextShelf extends ConsumerWidget {
         },
       ),
     );
-  }
-
-  static String? _remaining(AppLocalizations l10n, ShelfEpisode row) {
-    final left = row.episode.durationMs - row.progress.positionMs;
-    if (left <= 0) return null;
-    return l10n.podcastTimeLeft(formatTimecode(Duration(milliseconds: left)));
   }
 
   /// Resumes where the listener stopped, through the same verb every
@@ -548,23 +539,11 @@ class _ShowTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final show = subscription.show;
-    final unplayed = subscription.unplayedCount;
-    final count = show.episodeCount;
     return MediaCard(
-      data: MediaTileData(
-        title: show.title,
-        subtitle: show.author,
-        artwork: ref.watch(artworkStoreProvider).source(show.artUrl),
-        domain: WaxDomain.podcasts,
-        // What is waiting, which is the number a listener opens a show
-        // for. The episode count is the fallback for a server that
-        // predates the field, and for a show with nothing waiting.
-        trailingText: switch ((unplayed, count)) {
-          (final int n, _) when n > 0 => context.l10n.podcastUnplayedCount(n),
-          (_, final int n) => context.l10n.podcastEpisodeCount(n),
-          _ => null,
-        },
-        unplayed: (unplayed ?? 0) > 0,
+      data: showTile(
+        subscription,
+        l10n: context.l10n,
+        store: ref.watch(artworkStoreProvider),
         semanticsId: SemanticsIds.podcast(show.pid),
       ),
       width: width,

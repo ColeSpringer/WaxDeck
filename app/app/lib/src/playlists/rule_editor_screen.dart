@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
@@ -1074,16 +1075,7 @@ class _PreviewPane extends StatelessWidget {
               style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
             )
           else
-            for (final item in items)
-              MediaListRow(
-                data: MediaTileData(
-                  title: item.title,
-                  subtitle: item.artist,
-                  trailingText: item.durationMs > 0
-                      ? formatTimecode(Duration(milliseconds: item.durationMs))
-                      : null,
-                ),
-              ),
+            for (final item in items) MediaListRow(data: rulePreviewTile(item)),
         ],
       ),
     );

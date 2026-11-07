@@ -1381,6 +1381,9 @@ func (l *Library) getShow(ctx context.Context, apiShowPID string) (*model.Podcas
 	}
 	pod, err := l.lib.Podcasts().Get(ctx, pid)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return nil, errNotFound("no show with pid " + apiShowPID)
+		}
 		return nil, classify(err)
 	}
 	return pod, nil
@@ -1394,6 +1397,9 @@ func (l *Library) getEpisode(ctx context.Context, apiEpisodePID string) (*model.
 	}
 	det, err := l.lib.Podcasts().Episode(ctx, pid)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return nil, errNotFound("no episode with pid " + apiEpisodePID)
+		}
 		return nil, classify(err)
 	}
 	return det, nil

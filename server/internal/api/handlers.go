@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -97,7 +98,7 @@ type Server struct {
 	// trusted is the reverse-proxy hop list the client-IP walk begins
 	// from. Empty is today's behaviour exactly: the socket address, and
 	// no header believed.
-	trusted trustedProxies
+	trusted TrustedProxies
 	// wsPingEvery is the socket keepalive, which is also when a socket
 	// re-checks that its session is alive; tests shorten it.
 	wsPingEvery time.Duration
@@ -147,7 +148,7 @@ type Options struct {
 	WorkerTokens []string
 	// TrustedProxies is the parsed WAXDECK_TRUSTED_PROXIES list. Empty
 	// keeps the socket address authoritative.
-	TrustedProxies trustedProxies
+	TrustedProxies TrustedProxies
 	// ProcCtx lives for the process rather than for a request: work
 	// that has to outlive the request that started it, and still end
 	// when the process is asked to stop, is spawned on this. Nil
@@ -277,14 +278,17 @@ const (
 const authFailureLog = "auth failure"
 
 func (s *Server) Login(ctx context.Context, req LoginRequestObject) (LoginResponseObject, error) {
-	if req.Body == nil || req.Body.Username == "" || req.Body.Password == "" {
-		return Login400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "username and password are required"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
+	}
+	if req.Body.Username == "" || req.Body.Password == "" {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "username and password are required")
 	}
 	ip := remoteIPFromContext(ctx)
 	ipKey := "login-ip:" + ip
 	acctKey := "login-acct:" + strings.ToLower(req.Body.Username)
 	if !s.limiter.Allowed(ipKey) || !s.limiter.Allowed(acctKey) {
-		return Login429JSONResponse{RateLimitedJSONResponse(errObj("rate-limited", "too many login attempts; retry later"))}, nil
+		return nil, refuse(http.StatusTooManyRequests, "rate-limited", "too many login attempts; retry later")
 	}
 	user, err := s.svc.VerifyLocalLogin(ctx, req.Body.Username, req.Body.Password)
 	if err != nil {
@@ -294,7 +298,7 @@ func (s *Server) Login(ctx context.Context, req LoginRequestObject) (LoginRespon
 		s.limiter.Failure(ipKey)
 		s.limiter.Failure(acctKey)
 		s.log.Warn(authFailureLog, "user", req.Body.Username, "ip", ip)
-		return Login401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "invalid credentials"))}, nil
+		return nil, refuse(http.StatusUnauthorized, "unauthenticated", "invalid credentials")
 	}
 	s.limiter.Success(ipKey)
 	s.limiter.Success(acctKey)
@@ -397,43 +401,34 @@ func (s *Server) ListItems(ctx context.Context, req ListItemsRequestObject) (Lis
 	// The generated binding enforces neither enum membership nor the
 	// spec's limit bounds on query params, so both are checked here.
 	if req.Params.MediaType != nil && !req.Params.MediaType.Valid() {
-		return ListItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown mediaType"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown mediaType")
 	}
-	limit, ok := pageLimit(req.Params.Limit, 100, 500)
-	if !ok {
-		return ListItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
-	}
-	uc, _, err := s.requireUserCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
 	if err != nil {
 		return nil, err
 	}
+	uc := userCtx(ctx)
 	filter := itemFilterOf(req.Params.MediaType, req.Params.Facet, req.Params.FacetKey)
 	page, err := s.svc.Items(ctx, uc, filter, deref(req.Params.Cursor), limit)
 	if err != nil {
-		if kind := service.KindOf(err); kind == service.KindInvalid {
-			return ListItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return ListItems200JSONResponse(pageJSON(page)), nil
 }
 
 func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (ListFacetsResponseObject, error) {
-	limit, ok := pageLimit(req.Params.Limit, 100, 500)
-	if !ok {
-		return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
-	}
-	uc, _, err := s.requireUserCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
 	if err != nil {
 		return nil, err
 	}
+	uc := userCtx(ctx)
 	sort := ""
 	if req.Params.Sort != nil {
 		sort = string(*req.Params.Sort)
 	}
 	order, err := service.ParseFacetSort(sort)
 	if err != nil {
-		return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", serviceMessage(err))
 	}
 	facet := ""
 	if req.Params.Facet != nil {
@@ -449,9 +444,6 @@ func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (L
 		Limit:     limit,
 	})
 	if err != nil {
-		if kind := service.KindOf(err); kind == service.KindInvalid {
-			return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := FacetPage{
@@ -481,11 +473,11 @@ func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (L
 
 func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (BrowseListResponseObject, error) {
 	if !req.Params.List.Valid() {
-		return BrowseList400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown list"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown list")
 	}
-	limit, ok := pageLimit(req.Params.Limit, 100, 500)
-	if !ok {
-		return BrowseList400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
+	if err != nil {
+		return nil, err
 	}
 	// An omitted seed on the random list gets a fresh one, returned on
 	// the page so later pages keep the same shuffled order. Seed zero
@@ -497,16 +489,10 @@ func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (B
 	if req.Params.List == DiscoveryListRandom && req.Params.Seed == nil && req.Params.Cursor == nil {
 		seed = rand.Int64()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	filter := itemFilterOf(req.Params.MediaType, req.Params.Facet, req.Params.FacetKey)
 	page, err := s.svc.Browse(ctx, uc, string(req.Params.List), filter, seed, deref(req.Params.Cursor), limit)
 	if err != nil {
-		if kind := service.KindOf(err); kind == service.KindInvalid {
-			return BrowseList400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := pageJSON(page)
@@ -518,16 +504,13 @@ func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (B
 
 func (s *Server) Search(ctx context.Context, req SearchRequestObject) (SearchResponseObject, error) {
 	if strings.TrimSpace(req.Params.Q) == "" {
-		return Search400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "q is required"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "q is required")
 	}
-	limit, ok := pageLimit(req.Params.Limit, 20, 100)
-	if !ok {
-		return Search400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 100"))}, nil
-	}
-	uc, _, err := s.requireUserCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 20, 100)
 	if err != nil {
 		return nil, err
 	}
+	uc := userCtx(ctx)
 	res, err := s.svc.Search(ctx, uc, req.Params.Q, limit)
 	if err != nil {
 		return nil, err
@@ -544,18 +527,12 @@ func (s *Server) Search(ctx context.Context, req SearchRequestObject) (SearchRes
 }
 
 func (s *Server) ResolveEntities(ctx context.Context, req ResolveEntitiesRequestObject) (ResolveEntitiesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return ResolveEntities400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	cards, departed, err := s.svc.EntityCards(ctx, uc, req.Body.Pids)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ResolveEntities400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := EntityCardList{Entities: make([]EntityCard, 0, len(cards))}
@@ -581,18 +558,12 @@ func (s *Server) ResolveEntities(ctx context.Context, req ResolveEntitiesRequest
 }
 
 func (s *Server) ResolveItems(ctx context.Context, req ResolveItemsRequestObject) (ResolveItemsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return ResolveItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	items, departed, err := s.svc.ResolveItems(ctx, uc, req.Body.Pids)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ResolveItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := ItemResolution{Items: make([]ItemSummary, 0, len(items))}
@@ -606,15 +577,9 @@ func (s *Server) ResolveItems(ctx context.Context, req ResolveItemsRequestObject
 }
 
 func (s *Server) GetAlbum(ctx context.Context, req GetAlbumRequestObject) (GetAlbumResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	d, err := s.svc.Album(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetAlbum404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no album with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return GetAlbum200JSONResponse(albumJSON(d)), nil
@@ -656,15 +621,9 @@ func albumJSON(d service.AlbumDetail) AlbumDetail {
 }
 
 func (s *Server) GetItem(ctx context.Context, req GetItemRequestObject) (GetItemResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	d, err := s.svc.Item(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetItem404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return GetItem200JSONResponse(itemJSON(d)), nil
@@ -771,29 +730,19 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 		// own. The spec carries the same pair as schema bounds; this is
 		// what a client that ignores them meets.
 		if size < minArtSize || size > service.ArtSizeMax {
-			return GetItemArt400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", fmt.Sprintf("size must be between %d and %d", minArtSize, service.ArtSizeMax)))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", fmt.Sprintf("size must be between %d and %d", minArtSize, service.ArtSizeMax))
 		}
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	blob, err := s.svc.Art(ctx, uc, req.Pid, enumStr(req.Params.Role), size)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return GetItemArt404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artwork for pid "+req.Pid))}, nil
-		case service.KindInvalid:
-			return GetItemArt400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	// A thumbnail slot is not where an unscaled original belongs; see
 	// maxUnscaledArtBytes. Before the validator, so a caller cannot
 	// revalidate its way into the bytes this refuses.
 	if artTooBigForSize(blob) {
-		return GetItemArt404JSONResponse{NotFoundJSONResponse(errObj("not-found",
-			"no thumbnail of that size for pid "+req.Pid))}, nil
+		return nil, refuse(http.StatusNotFound, "not-found", "no thumbnail of that size for pid "+req.Pid)
 	}
 	// The validator is the source image hash scoped by the rung that
 	// answered: same source, different rungs, different bytes. Scoping
@@ -862,15 +811,9 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 }
 
 func (s *Server) GetItemArtRoles(ctx context.Context, req GetItemArtRolesRequestObject) (GetItemArtRolesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	infos, err := s.svc.ItemArtRoles(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetItemArtRoles404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artwork for pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	out := ArtRoles{
@@ -933,15 +876,9 @@ func artSourceJSON(a service.ArtSourceDTO) *ArtSource {
 }
 
 func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObject) (GetItemLyricsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	ly, err := s.svc.ItemLyrics(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetItemLyrics404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no lyrics for pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	out := Lyrics{Pid: ly.PID, Source: ly.Source}
@@ -964,18 +901,15 @@ func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObje
 // --- admin -----------------------------------------------------------------------
 
 func (s *Server) RescanLibrary(ctx context.Context, req RescanLibraryRequestObject) (RescanLibraryResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return RescanLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	force := req.Body != nil && req.Body.Force != nil && *req.Body.Force
 	job, err := s.svc.RescanFor(ctx, uc, force)
 	if err != nil {
 		if service.KindOf(err) == service.KindConflict {
-			return RescanLibrary409JSONResponse{ConflictJSONResponse(errObj("conflict", "a conflicting catalog job is already running"))}, nil
+			return nil, refuse(http.StatusConflict, "conflict", "a conflicting catalog job is already running")
 		}
 		return nil, err
 	}
@@ -983,12 +917,9 @@ func (s *Server) RescanLibrary(ctx context.Context, req RescanLibraryRequestObje
 }
 
 func (s *Server) AnalyzeLibrary(ctx context.Context, _ AnalyzeLibraryRequestObject) (AnalyzeLibraryResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return AnalyzeLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	job, err := s.svc.AnalyzeFor(ctx, uc)
 	if err != nil {
@@ -998,7 +929,7 @@ func (s *Server) AnalyzeLibrary(ctx context.Context, _ AnalyzeLibraryRequestObje
 			// another analyze pass. Telling an administrator that some
 			// unnamed catalog job is in the way would send them looking
 			// at the scan.
-			return AnalyzeLibrary409JSONResponse{ConflictJSONResponse(errObj("conflict", "the analyze pass is already running"))}, nil
+			return nil, refuse(http.StatusConflict, "conflict", "the analyze pass is already running")
 		}
 		return nil, err
 	}
@@ -1006,10 +937,8 @@ func (s *Server) AnalyzeLibrary(ctx context.Context, _ AnalyzeLibraryRequestObje
 }
 
 func (s *Server) GetJob(ctx context.Context, req GetJobRequestObject) (GetJobResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
+	p, _ := principalFromContext(ctx)
 	// Timeline-measurement jobs live in the bridge, not the catalog;
 	// they answer here so one job surface covers both, and only to the
 	// account whose queue they measure.
@@ -1019,13 +948,7 @@ func (s *Server) GetJob(ctx context.Context, req GetJobRequestObject) (GetJobRes
 		}
 	}
 	job, err := s.svc.JobStatusFor(ctx, uc, req.Pid)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindNotFound:
-		return GetJob404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no job with pid "+req.Pid))}, nil
-	case service.KindForbidden:
-		return GetJob403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	return GetJob200JSONResponse(jobJSON(job)), nil
@@ -1034,18 +957,13 @@ func (s *Server) GetJob(ctx context.Context, req GetJobRequestObject) (GetJobRes
 // --- playback --------------------------------------------------------------------
 
 func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) (GetPlayInfoResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
+	p, _ := principalFromContext(ctx)
 	// Visibility gates the mint: an item outside the caller's libraries
 	// must not yield a stream URL. The same read says whether the item is
 	// a book, the one kind that can lay out in parts.
 	book, err := s.svc.VisibleBook(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 
@@ -1066,8 +984,7 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	if req.Params.MaxBitrateKbps != nil {
 		maxKbps = *req.Params.MaxBitrateKbps
 		if maxKbps < flow.MinStreamBitrateKbps || maxKbps > flow.MaxStreamBitrateKbps {
-			return GetPlayInfo400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request",
-				fmt.Sprintf("maxBitrateKbps must be between %d and %d", flow.MinStreamBitrateKbps, flow.MaxStreamBitrateKbps)))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", fmt.Sprintf("maxBitrateKbps must be between %d and %d", flow.MinStreamBitrateKbps, flow.MaxStreamBitrateKbps))
 		}
 	}
 
@@ -1103,12 +1020,6 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	if err != nil {
 		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, sessionCred(p), req.Pid, err); ok {
 			return out, nil
-		}
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindConflict:
-			return GetPlayInfo409JSONResponse(errObj("conflict", err.Error())), nil
 		}
 		return nil, err
 	}
@@ -1152,12 +1063,6 @@ func (s *Server) directPlayInfo(ctx context.Context, uc *service.UserCtx, p *aut
 		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, sessionCred(p), pid, err); ok {
 			return out, nil
 		}
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+pid))}, nil
-		case service.KindConflict:
-			return GetPlayInfo409JSONResponse(errObj("conflict", err.Error())), nil
-		}
 		return nil, err
 	}
 	token, exp := s.media.MintFor(auth.MediaClaims{
@@ -1189,15 +1094,9 @@ func (s *Server) directPlayInfo(ctx context.Context, uc *service.UserCtx, p *aut
 }
 
 func (s *Server) GetPlayState(ctx context.Context, req GetPlayStateRequestObject) (GetPlayStateResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	st, err := s.svc.PlayState(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetPlayState404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return GetPlayState200JSONResponse(playStateJSON(st)), nil
@@ -1241,38 +1140,28 @@ func playStateJSON(st service.PlayState) PlayState {
 
 func (s *Server) PutPlayState(ctx context.Context, req PutPlayStateRequestObject) (PutPlayStateResponseObject, error) {
 	if req.Body == nil {
-		return PutPlayState400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	// A skipped replay is still a 204: the winning state is already in
 	// the caller's event stream, so there is nothing to report.
-	_, err = s.svc.Checkpoint(ctx, uc, req.Pid, req.Body.PositionMs, req.Body.RecordedAt)
-	switch service.KindOf(err) {
-	case "":
-		return PutPlayState204Response{}, nil
-	case service.KindNotFound:
-		return PutPlayState404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-	case service.KindInvalid:
-		return PutPlayState400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	default:
+	if _, err := s.svc.Checkpoint(ctx, uc, req.Pid, req.Body.PositionMs, req.Body.RecordedAt); err != nil {
 		return nil, err
 	}
+	return PutPlayState204Response{}, nil
 }
 
 func (s *Server) ReportListens(ctx context.Context, req ReportListensRequestObject) (ReportListensResponseObject, error) {
-	if req.Body == nil || len(req.Body.Sessions) == 0 {
-		return ReportListens400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "sessions must not be empty"))}, nil
+	if req.Body == nil {
+		return nil, errNoBody()
+	}
+	if len(req.Body.Sessions) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "sessions must not be empty")
 	}
 	if len(req.Body.Sessions) > 500 {
-		return ReportListens400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "at most 500 sessions per report"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "at most 500 sessions per report")
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	sessions := make([]service.ListenSession, 0, len(req.Body.Sessions))
 	for _, in := range req.Body.Sessions {
 		s := service.ListenSession{
@@ -1588,15 +1477,15 @@ func derefInt64(p *int64) int64 {
 }
 
 // pageLimit validates an optional limit param against [1, max],
-// defaulting when absent.
-func pageLimit(p *int, def, max int) (int, bool) {
+// defaulting when absent; the refusal states the bound it checked.
+func pageLimit(p *int, def, max int) (int, error) {
 	if p == nil {
-		return def, true
+		return def, nil
 	}
 	if *p < 1 || *p > max {
-		return 0, false
+		return 0, refuse(http.StatusBadRequest, "invalid-request", fmt.Sprintf("limit must be between 1 and %d", max))
 	}
-	return *p, true
+	return *p, nil
 }
 
 // errStreamingUnavailable reports play-info without a configured
@@ -1741,7 +1630,7 @@ func authCandidates(r *http.Request) []credential {
 }
 
 // remoteIP is the connection's source address, and nothing else. What
-// the limiter actually counts goes through trustedProxies.clientIP,
+// the limiter actually counts goes through TrustedProxies.clientIP,
 // which starts here and only believes a forwarded header when this
 // address is a hop the operator configured.
 func remoteIP(r *http.Request) string {
@@ -1790,25 +1679,6 @@ func clientFromContext(ctx context.Context) string {
 func pageStringsFromContext(ctx context.Context) *pagetext.Strings {
 	header, _ := ctx.Value(ctxAcceptLanguage).(string)
 	return pagetext.For(pagetext.Negotiate(header))
-}
-
-// requireUserCtx is the caller the user-context middleware resolved, or
-// the principal resolved here for a handler reached without it.
-// AuthMiddleware guarantees a principal on protected paths; the error
-// covers a future miswiring, not a reachable state.
-func (s *Server) requireUserCtx(ctx context.Context) (*service.UserCtx, *auth.Principal, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok {
-		return nil, nil, &service.Error{Kind: service.KindInternal, Msg: "no principal in request context"}
-	}
-	if uc := userCtx(ctx); uc != nil {
-		return uc, p, nil
-	}
-	uc, err := s.svc.UserCtx(ctx, p.User)
-	if err != nil {
-		return nil, nil, err
-	}
-	return uc, p, nil
 }
 
 // writeError writes the spec's Error schema; used by the API middleware and by
@@ -1860,47 +1730,47 @@ func requestFailure(err error) string {
 	return "the request could not be read"
 }
 
-// ResponseErrorHandler reports handler-returned errors by kind. While the
-// CLI holds the catalog, a failure the service could not class is the
-// hand-off too: it answers the maintenance 503 and is logged. A handler's
-// own refusal is classed, so it keeps its answer.
+// ResponseErrorHandler reports handler-returned errors through
+// responseError, a failure during a catalog hand-off as the hand-off (see
+// handedOff), logged.
 func (s *Server) ResponseErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	var refusal *wireError
-	if !errors.As(err, &refusal) && service.KindOf(err) == service.KindInternal && s.svc != nil && s.svc.Maintenance() {
+	if s.handedOff(err) {
 		s.log.Warn("a request failed during catalog maintenance", "path", r.URL.Path, "err", err)
-		writeMaintenance(w)
-		return
+		err = maintenanceAnswer()
 	}
 	responseError(w, err)
 }
 
-func writeMaintenance(w http.ResponseWriter) {
-	c := kindCodes[service.KindMaintenance]
-	writeError(w, c.status, c.code, c.fallback)
+// handedOff reports a failure the service could not class while the CLI
+// holds the catalog: it is the hand-off too, answered as the maintenance by
+// the strict handlers' writer, the socket's command frame, a bulk edit's
+// part refusal and, through kindOf, the raw routes. A refusal is classed,
+// so it keeps its answer.
+func (s *Server) handedOff(err error) bool {
+	var refusal *wireError
+	return !errors.As(err, &refusal) && service.KindOf(err) == service.KindInternal && s.svc != nil && s.svc.Maintenance()
 }
 
-// responseError writes a handler's refusal as it stands and anything else
-// by its kind. Handlers map expected kinds to typed responses themselves;
-// the table keeps the status honest when one slips through.
+// kindOf is err's kind as a raw route answers it: handedOff's failures are
+// the maintenance.
+func (s *Server) kindOf(err error) service.ErrorKind {
+	if s.handedOff(err) {
+		return service.KindMaintenance
+	}
+	return service.KindOf(err)
+}
+
+func writeMaintenance(w http.ResponseWriter) {
+	responseError(w, maintenanceAnswer())
+}
+
+// responseError writes err as answerTo answers it, Retry-After included.
 func responseError(w http.ResponseWriter, err error) {
-	var refusal *wireError
-	if errors.As(err, &refusal) {
-		writeErrorParams(w, refusal.Status, refusal.Code, refusal.Message, refusal.Params)
-		return
+	answer := answerTo(err)
+	if answer.RetryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(answer.RetryAfter))
 	}
-	kind := service.KindOf(err)
-	c, known := kindCodes[kind]
-	switch {
-	case kind == service.KindMaintenance:
-		writeMaintenance(w)
-	case !known:
-		// A kind the table does not know answers as internal, without
-		// its own words.
-		c = kindCodes[service.KindInternal]
-		writeError(w, c.status, c.code, c.fallback)
-	default:
-		writeErrorParams(w, c.status, c.code, kindMessage(err, c.fallback), service.RefusalParams(err))
-	}
+	writeErrorParams(w, answer.Status, answer.Code, answer.Message, answer.Params)
 }
 
 // kindMessage returns the service error's own message when it carries
@@ -1916,10 +1786,6 @@ func kindMessage(err error, fallback string) string {
 }
 
 // --- helpers ----------------------------------------------------------------------
-
-func errObj(code, message string) Error {
-	return Error{Code: code, Message: message}
-}
 
 // itemFilterOf maps the media-type and facet parameters the item listing
 // and the discovery lists both take. Keyed on facet alone: an absent

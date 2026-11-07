@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/settings/client_settings/browser_settings_store.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
@@ -13,8 +11,8 @@ import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/shell/adaptive_shell.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
 
@@ -314,15 +312,13 @@ void main() {
 
   group('stored preferences', () {
     ProviderContainer containerOver(ClientSettingsStore store) {
-      final container = ProviderContainer(
-        overrides: [
-          clientSettingsStoreProvider.overrideWithValue(store),
+      return appContainer(
+        settings: store,
+        extra: [
           // The recent searches are filed under whoever is signed in.
           signedInAccountProvider.overrideWithValue(_ann.id),
         ],
       );
-      addTearDown(container.dispose);
-      return container;
     }
 
     test('the sidebar starts expanded and collapses once the store '
@@ -589,15 +585,7 @@ void main() {
           user: signedIn ? user : null,
         )
         ..prefs = Prefs(theme: account);
-      final container = ProviderContainer(
-        overrides: [
-          clientSettingsStoreProvider.overrideWithValue(store),
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-      );
-      addTearDown(container.dispose);
-      return container;
+      return appContainer(repo: repo, settings: store);
     }
 
     /// A launch: build the notifier, let the document and the store
@@ -729,14 +717,10 @@ void main() {
   group('recent searches belong to an account', () {
     /// A launch on [store] with [account] signed in.
     ProviderContainer launchAs(ClientSettingsStore store, String account) {
-      final container = ProviderContainer(
-        overrides: [
-          clientSettingsStoreProvider.overrideWithValue(store),
-          signedInAccountProvider.overrideWithValue(account),
-        ],
+      return appContainer(
+        settings: store,
+        extra: [signedInAccountProvider.overrideWithValue(account)],
       );
-      addTearDown(container.dispose);
-      return container;
     }
 
     Future<List<String>> searchesIn(ProviderContainer container) async {
@@ -749,16 +733,7 @@ void main() {
     /// over [store].
     (ProviderContainer, _Accounts) client(ClientSettingsStore store) {
       final server = _Accounts();
-      final container = ProviderContainer(
-        overrides: [
-          clientSettingsStoreProvider.overrideWithValue(store),
-          repositoryProvider.overrideWithValue(server),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-      );
-      addTearDown(container.dispose);
-      return (container, server);
+      return (appContainer(repo: server, settings: store), server);
     }
 
     Future<void> signIn(
@@ -823,15 +798,14 @@ void main() {
       // A write still on its way for Ann's list fails after the list has
       // moved to Ben: the console has to name Ann's slot.
       final store = _LateFailingWrites();
-      final container = ProviderContainer(
-        overrides: [
-          clientSettingsStoreProvider.overrideWithValue(store),
+      final container = appContainer(
+        settings: store,
+        extra: [
           signedInAccountProvider.overrideWith(
             (ref) => ref.watch(_whoProvider),
           ),
         ],
       );
-      addTearDown(container.dispose);
       final held = container.listen(recentSearchesProvider, (_, _) {});
       addTearDown(held.close);
 
@@ -869,20 +843,12 @@ void main() {
 
   group('signing out', () {
     ProviderContainer signedIn(ClientSettingsStore store) {
-      final container = ProviderContainer(
-        overrides: [
-          clientSettingsStoreProvider.overrideWithValue(store),
-          repositoryProvider.overrideWithValue(
-            FakeRepository(
-              sessionState: const SessionState(authenticated: true, user: _ann),
-            ),
-          ),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
+      return appContainer(
+        repo: FakeRepository(
+          sessionState: const SessionState(authenticated: true, user: _ann),
+        ),
+        settings: store,
       );
-      addTearDown(container.dispose);
-      return container;
     }
 
     test('forgets the account\'s recent searches and keeps the rest', () async {

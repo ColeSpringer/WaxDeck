@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"net/http"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -11,10 +12,7 @@ import (
 // bulk fixes, duplicates, and quality upgrades.
 
 func (s *Server) GetLibraryHealth(ctx context.Context, _ GetLibraryHealthRequestObject) (GetLibraryHealthResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	sum, err := s.svc.HealthSummaryFor(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -45,19 +43,13 @@ func (s *Server) GetLibraryHealth(ctx context.Context, _ GetLibraryHealthRequest
 }
 
 func (s *Server) ListHealthIssues(ctx context.Context, req ListHealthIssuesRequestObject) (ListHealthIssuesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
 	if err != nil {
 		return nil, err
 	}
-	limit, ok := pageLimit(req.Params.Limit, 100, 500)
-	if !ok {
-		return ListHealthIssues400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit out of range"))}, nil
-	}
 	items, next, err := s.svc.ListHealthIssuesFor(ctx, uc, deref(req.Params.Rule), deref(req.Params.Cursor), limit)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ListHealthIssues400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	page := HealthIssuePage{Items: make([]HealthIssue, 0, len(items))}
@@ -89,26 +81,17 @@ func (s *Server) ListHealthIssues(ctx context.Context, req ListHealthIssuesReque
 }
 
 func (s *Server) SweepLibraryHealth(ctx context.Context, _ SweepLibraryHealthRequestObject) (SweepLibraryHealthResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.QueueHealthSweep(ctx, uc); err != nil {
-		if service.KindOf(err) == service.KindForbidden {
-			return SweepLibraryHealth403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SweepLibraryHealth202Response{}, nil
 }
 
 func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequestObject) (FixHealthIssuesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return FixHealthIssues400JSONResponse(errObj("invalid-request", "a fix body is required")), nil
+		return nil, errNoBody()
 	}
 	var pids []string
 	if req.Body.ItemPids != nil {
@@ -116,16 +99,6 @@ func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequest
 	}
 	start, err := s.svc.StartHealthFix(ctx, uc, req.Body.Rule, pids)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return FixHealthIssues400JSONResponse(errObj("invalid-request", err.Error())), nil
-		case service.KindForbidden:
-			return FixHealthIssues403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindConflict:
-			return FixHealthIssues409JSONResponse(errObj("conflict", err.Error())), nil
-		case service.KindReadOnly:
-			return FixHealthIssues409JSONResponse(errObj("read-only", err.Error())), nil
-		}
 		return nil, err
 	}
 	out := HealthFixResult{Queued: start.Queued}
@@ -139,15 +112,9 @@ func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequest
 }
 
 func (s *Server) ListDuplicates(ctx context.Context, _ ListDuplicatesRequestObject) (ListDuplicatesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	groups, err := s.svc.ListDuplicateGroups(ctx, uc)
 	if err != nil {
-		if service.KindOf(err) == service.KindForbidden {
-			return ListDuplicates403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := DuplicateGroups{Groups: make([]DuplicateGroup, 0, len(groups))}
@@ -169,41 +136,24 @@ func (s *Server) ListDuplicates(ctx context.Context, _ ListDuplicatesRequestObje
 }
 
 func (s *Server) MergeDuplicates(ctx context.Context, req MergeDuplicatesRequestObject) (MergeDuplicatesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return MergeDuplicates400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a merge body is required"))}, nil
+		return nil, errNoBody()
 	}
 	if !req.Body.EntityType.Valid() {
-		return MergeDuplicates400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown entity type"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown entity type")
 	}
 	res, err := s.svc.MergeDuplicates(ctx, uc, string(req.Body.EntityType), req.Body.SurvivorPid, req.Body.LoserPids)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return MergeDuplicates400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return MergeDuplicates403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return MergeDuplicates404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such entity"))}, nil
-		}
 		return nil, err
 	}
 	return MergeDuplicates200JSONResponse(MergeResult{Merged: res.Merged, ChildrenMoved: res.ChildrenMoved, Folds: res.Folds}), nil
 }
 
 func (s *Server) ListUpgrades(ctx context.Context, _ ListUpgradesRequestObject) (ListUpgradesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	groups, err := s.svc.ListUpgradeGroups(ctx, uc)
 	if err != nil {
-		if service.KindOf(err) == service.KindForbidden {
-			return ListUpgrades403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := UpgradeGroups{Groups: make([]UpgradeGroup, 0, len(groups))}
@@ -241,12 +191,9 @@ func (s *Server) ListUpgrades(ctx context.Context, _ ListUpgradesRequestObject) 
 }
 
 func (s *Server) ResolveUpgrade(ctx context.Context, req ResolveUpgradeRequestObject) (ResolveUpgradeResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return ResolveUpgrade400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a resolve body is required"))}, nil
+		return nil, errNoBody()
 	}
 	body := service.UpgradeResolveDTO{KeepItemPID: req.Body.KeepItemPid}
 	if req.Body.RemoveItemPids != nil {
@@ -255,36 +202,21 @@ func (s *Server) ResolveUpgrade(ctx context.Context, req ResolveUpgradeRequestOb
 	if req.Body.KeepFilePid != nil {
 		keep, bad := bareFilePIDs([]string{*req.Body.KeepFilePid})
 		if bad != "" {
-			return ResolveUpgrade400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "bad file pid "+bad))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", "bad file pid "+bad)
 		}
 		body.KeepFilePID = keep[0]
 	}
 	if req.Body.RemoveFilePids != nil {
 		remove, bad := bareFilePIDs(*req.Body.RemoveFilePids)
 		if bad != "" {
-			return ResolveUpgrade400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "bad file pid "+bad))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", "bad file pid "+bad)
 		}
 		body.RemoveFilePIDs = remove
 	}
 	trashed, err := s.svc.ResolveUpgrade(ctx, uc, body)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			e := errObj("invalid-request", err.Error())
-			if errors.Is(err, service.ErrCueRipPart) {
-				e.Params = &map[string]string{"reason": "cue-rip"}
-			}
-			return ResolveUpgrade400JSONResponse{InvalidRequestJSONResponse(e)}, nil
-		case service.KindForbidden:
-			return ResolveUpgrade403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return ResolveUpgrade404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		case service.KindReadOnly:
-			return ResolveUpgrade409JSONResponse(errObj("read-only", err.Error())), nil
-		case service.KindCatalogBusy, service.KindStorageUnwritable:
-			return ResolveUpgrade409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
-		case service.KindConflict:
-			return ResolveUpgrade409JSONResponse(errObj("conflict", err.Error())), nil
+		if service.KindOf(err) == service.KindInvalid && errors.Is(err, service.ErrCueRipPart) {
+			return nil, refuseParams(http.StatusBadRequest, "invalid-request", serviceMessage(err), map[string]string{"reason": "cue-rip"})
 		}
 		return nil, err
 	}

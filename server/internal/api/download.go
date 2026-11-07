@@ -63,7 +63,7 @@ func (s *Server) ServeDownload(w http.ResponseWriter, r *http.Request) {
 		var src flow.Source
 		src, f, err = s.sources.StreamDownloadSource(r.Context(), pid, q.Get("f"))
 		if err != nil {
-			writeDownloadSourceError(w, err)
+			writeDownloadSourceError(w, s.kindOf(err))
 			return
 		}
 		if !s.streamOpensDownload(src, bound) {
@@ -71,7 +71,7 @@ func (s *Server) ServeDownload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if f, err = s.sources.DownloadSource(r.Context(), pid, q.Get("f")); err != nil {
-		writeDownloadSourceError(w, err)
+		writeDownloadSourceError(w, s.kindOf(err))
 		return
 	}
 	if id := q.Get("id"); id != "" && id != f.ETag {
@@ -118,9 +118,9 @@ func (s *Server) streamOpensDownload(src flow.Source, bound url.Values) bool {
 }
 
 // writeDownloadSourceError answers a download whose file could not be
-// resolved.
-func writeDownloadSourceError(w http.ResponseWriter, err error) {
-	switch service.KindOf(err) {
+// resolved, by the failure's kind.
+func writeDownloadSourceError(w http.ResponseWriter, kind service.ErrorKind) {
+	switch kind {
 	case service.KindNotFound, service.KindInvalid, service.KindConflict:
 		writeError(w, http.StatusNotFound, "not-found", "no such download")
 	case service.KindMaintenance:
@@ -165,9 +165,8 @@ const (
 // zip beside its final name and renames it in, so a row that lists at
 // all names a complete file.
 func (s *Server) ServeBackupArchive(w http.ResponseWriter, r *http.Request) {
-	p, ok := principalFromContext(r.Context())
-	if !ok || !p.IsAdmin() {
-		writeError(w, http.StatusForbidden, "forbidden", "administrators only")
+	if err := requireAdmin(r.Context()); err != nil {
+		responseError(w, err)
 		return
 	}
 	id := r.PathValue("backupId")
@@ -180,7 +179,7 @@ func (s *Server) ServeBackupArchive(w http.ResponseWriter, r *http.Request) {
 			// A running or failed backup has no archive yet. The spec
 			// declares this code; the generated shape answered it as an
 			// unhandled internal error.
-			writeError(w, http.StatusConflict, "conflict", err.Error())
+			writeError(w, http.StatusConflict, "conflict", serviceMessage(err))
 		default:
 			writeError(w, http.StatusInternalServerError, "internal", "resolving the backup archive failed")
 		}

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/desktop/discord_binder.dart';
 import 'package:waxdeck/src/desktop/discord_cover.dart';
@@ -11,15 +10,14 @@ import 'package:waxdeck/src/desktop/discord_ipc_io.dart';
 import 'package:waxdeck/src/desktop/discord_presence.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/now_playing_slot.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// A Discord that records what it was told, and can refuse to be there.
@@ -540,15 +538,13 @@ void main() {
     const pid = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK1';
     final port = _FakeDiscord();
     final repo = FakeRepository(items: [testItem(pid)]);
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
+    final container = appContainer(
+      repo: repo,
+      extra: [
         localeOverrideProvider.overrideWithValue(null),
         discordPresencePortProvider.overrideWithValue(port),
       ],
     );
-    addTearDown(container.dispose);
     final binding = container.listen(discordPresenceProvider, (_, _) {});
     addTearDown(binding.close);
     container.read(nowPlayingProvider.notifier).play([
@@ -581,15 +577,12 @@ void main() {
 
   test('the covers switch leaves presence connected', () async {
     final port = _FakeDiscord();
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(FakeRepository()),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
+    final container = appContainer(
+      extra: [
         localeOverrideProvider.overrideWithValue(null),
         discordPresencePortProvider.overrideWithValue(port),
       ],
     );
-    addTearDown(container.dispose);
     container.read(discordPresenceEnabledProvider.notifier).set(true);
     final binding = container.listen(discordPresenceProvider, (_, _) {});
     addTearDown(binding.close);

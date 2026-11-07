@@ -1,15 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 const _pony = ItemSummary(
@@ -58,17 +56,16 @@ const _preview = M3uPreview(
   ],
 );
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: routedHost(const PlaylistsScreen(), pushed: true),
-);
-
 Finder _id(String id) => find.bySemanticsIdentifier(id);
 
 /// Opens the M3U paste box, names the playlist and pastes [_document].
 Future<void> _paste(WidgetTester tester, FakeRepository repo) async {
-  await tester.pumpWidget(_host(repo));
-  await tester.pumpAndSettle();
+  await pumpApp(
+    tester,
+    const PlaylistsScreen(),
+    container: appContainer(repo: repo),
+    pushed: true,
+  );
   await _open(tester);
 }
 

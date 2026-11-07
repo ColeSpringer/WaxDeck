@@ -5,14 +5,13 @@ import 'package:flutter/services.dart'
     show HardwareKeyboard, LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
-import '../media_view.dart';
 import '../player/now_playing_controller.dart';
+import '../presenters/media_tiles.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -941,18 +940,10 @@ class QueueRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final item = ref.watch(queueItemProvider(entry.pid)).value;
-    // An unresolved row still says where it sits and still answers a
-    // tap: a queue that cannot be driven until every title has landed
-    // is worse than one with a placeholder in it.
-    final data = MediaTileData(
-      title: item?.title ?? context.l10n.commonLoadingTitle,
-      subtitle: item?.artist,
-      artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
-      domain: waxDomainOf(item?.mediaType ?? MediaType.music),
-      shape: waxShapeOf(item?.mediaType ?? MediaType.music),
-      trailingText: item == null
-          ? null
-          : formatTimecode(Duration(milliseconds: item.durationMs)),
+    final data = queueRowTile(
+      item,
+      l10n: context.l10n,
+      store: ref.watch(artworkStoreProvider),
       semanticsId: semanticsId ?? SemanticsIds.queueEntry(entry.queueId),
     );
     return Row(

@@ -11,6 +11,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 
@@ -30,16 +31,15 @@ ItemSummary _track(String pid, int number) => ItemSummary(
 /// A ref to call the verbs with, the way a tile's build hands one over.
 Future<WidgetRef> _ref(WidgetTester tester, ProviderContainer container) async {
   late WidgetRef ref;
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: Consumer(
-        builder: (_, r, _) {
-          ref = r;
-          return const SizedBox();
-        },
-      ),
+  await mountHost(
+    tester,
+    Consumer(
+      builder: (_, r, _) {
+        ref = r;
+        return const SizedBox();
+      },
     ),
+    container: container,
   );
   return ref;
 }
@@ -71,7 +71,6 @@ void main() {
     expect(queue.source.kind, QueueSourceKind.album);
     expect(queue.source.pid, _album);
     expect(queue.source.label, 'Salt Harbour');
-    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('an album plays under the name its card showed', (tester) async {
@@ -89,7 +88,6 @@ void main() {
       container.read(queueControllerProvider).source.label,
       'Salt Harbour Deluxe',
     );
-    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('an album with nothing in it leaves the queue alone', (
@@ -130,7 +128,6 @@ void main() {
     expect(queue.source.kind, QueueSourceKind.playlist);
     expect(queue.source.pid, playlist.pid);
     expect(queue.source.label, 'Road');
-    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('a long playlist starts from its first page', (tester) async {
@@ -158,7 +155,6 @@ void main() {
     await playPlaylistPid(ref, playlist.pid, shuffle: true);
     await tester.pumpAndSettle();
     expect(repo.playlistItemPageCalls, hasLength(2));
-    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('a playlist that will not load says so at once', (tester) async {

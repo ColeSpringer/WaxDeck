@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/auth/oidc_flow.dart';
 import 'package:waxdeck/src/metadata/artwork_manager.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
@@ -15,12 +14,11 @@ import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'entity_header_bar.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'secondary_click.dart';
 import 'wax_finders.dart';
 
@@ -44,22 +42,14 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-      if (opener != null) urlOpenerProvider.overrideWithValue(opener),
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const ShowScreen(pid: showPid)),
+  return pumpApp(
+    tester,
+    const ShowScreen(pid: showPid),
+    container: appContainer(
+      repo: repo,
+      extra: [if (opener != null) urlOpenerProvider.overrideWithValue(opener)],
     ),
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 /// Stops what a test started: a playing engine keeps a ticker running,
@@ -1125,7 +1115,7 @@ void main() {
   testWidgets('the overflow offers the cover manager to a podcast curator', (
     tester,
   ) async {
-    await _pumpAs(tester, _curatorRepo(managePodcasts: true));
+    await _pump(tester, _curatorRepo(managePodcasts: true));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.showOverflow));
     await tester.pumpAndSettle();
@@ -1144,7 +1134,7 @@ void main() {
   testWidgets('the overflow hides the cover entry without the permission', (
     tester,
   ) async {
-    await _pumpAs(tester, _curatorRepo(managePodcasts: false));
+    await _pump(tester, _curatorRepo(managePodcasts: false));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.showOverflow));
     await tester.pumpAndSettle();
@@ -1211,25 +1201,6 @@ FakeRepository _curatorRepo({required bool managePodcasts}) =>
       ..episodesByShow[showPid] = <EpisodeSummary>[
         testEpisode(downloadedPid, title: 'Fetched Episode'),
       ];
-
-/// _pump plus the credential store the auth controller reads on
-/// non-web, which the session-gated tests need.
-Future<void> _pumpAs(WidgetTester tester, FakeRepository repo) async {
-  tester.view.physicalSize = const Size(900, 1800);
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-      child: routedHost(const ShowScreen(pid: showPid)),
-    ),
-  );
-  await tester.pumpAndSettle();
-}
 
 /// Records what the app asked the platform to open.
 class _Opener implements UrlOpenerPort {

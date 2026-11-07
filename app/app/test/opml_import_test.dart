@@ -1,17 +1,14 @@
 import 'dart:convert';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _opml = '<opml version="2.0"><body><outline xmlUrl="x"/></body></opml>';
 
@@ -60,17 +57,14 @@ Future<String?> _import(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final repo = FakeRepository()..opmlOutcomes = outcomes;
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        filePickerProvider.overrideWithValue(_OpmlPicker()),
-      ],
-      child: routedHost(const PodcastsScreen()),
+  await pumpApp(
+    tester,
+    const PodcastsScreen(),
+    container: appContainer(
+      repo: repo,
+      extra: [filePickerProvider.overrideWithValue(_OpmlPicker())],
     ),
   );
-  await tester.pumpAndSettle();
   repo.listError = reloadError;
   await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastOverflow));
   await tester.pumpAndSettle();

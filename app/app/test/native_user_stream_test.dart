@@ -4,24 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/first_run_wizard.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/player/entity_play_state_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/shell/server_health.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
 import 'package:waxdeck/src/sync/refresh_pacing.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// A native session with the binder mounted over [engine]'s mirror,
@@ -47,19 +43,13 @@ _bind({
     channelFactory: deadChannelFactory(),
   );
   addTearDown(engine.dispose);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      mirrorDatabaseProvider.overrideWithValue(db),
-      downloadManagerProvider.overrideWithValue(downloads),
-      artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-      syncEngineProvider.overrideWithValue(engine),
-    ],
+  final container = appContainer(
+    repo: repo,
+    downloads: downloads,
+    sync: engine,
+    mirror: db,
     observers: observers,
   );
-  addTearDown(container.dispose);
   final alive = container.listen(syncBinderProvider, (_, _) {});
   addTearDown(alive.close);
   container.listen(prefsControllerProvider, (_, _) {});
@@ -223,18 +213,12 @@ void main() {
       channelFactory: deadChannelFactory(),
     );
     addTearDown(engine.dispose);
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        mirrorDatabaseProvider.overrideWithValue(db),
-        downloadManagerProvider.overrideWithValue(downloads),
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-        syncEngineProvider.overrideWithValue(engine),
-      ],
+    final container = appContainer(
+      repo: repo,
+      downloads: downloads,
+      mirror: db,
+      sync: engine,
     );
-    addTearDown(container.dispose);
     final alive = container.listen(syncBinderProvider, (_, _) {});
     addTearDown(alive.close);
     container.listen(prefsControllerProvider, (_, _) {});

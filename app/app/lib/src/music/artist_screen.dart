@@ -15,6 +15,7 @@ import '../library/item_play.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
@@ -278,10 +279,13 @@ class _AppearsOn extends ConsumerWidget {
     final l10n = context.l10n;
     final tiles = <MediaTileData>[
       for (final album in albums)
-        MediaTileData(
-          title: album.label,
-          subtitle: l10n.musicTrackCount(album.count),
-          artwork: store.source(repository.artUrlFor(album.entityPid!)),
+        releaseTile(
+          album.label,
+          trackCount: album.count,
+          pid: album.entityPid!,
+          l10n: l10n,
+          store: store,
+          repository: repository,
           semanticsId: SemanticsIds.entityAlbum(album.entityPid!),
         ),
     ];
@@ -370,12 +374,13 @@ class _Body extends ConsumerWidget {
     final moreTracks = tracks.length > top.length || (state?.hasMore ?? false);
     final tiles = <MediaTileData>[
       for (final album in albums)
-        MediaTileData(
-          title: album.title,
-          subtitle: l10n.musicTrackCount(album.tracks.length),
-          artwork: album.pid == null
-              ? null
-              : store.source(repository.artUrlFor(album.pid!)),
+        releaseTile(
+          album.title,
+          trackCount: album.tracks.length,
+          pid: album.pid,
+          l10n: l10n,
+          store: store,
+          repository: repository,
           semanticsId: album.pid == null
               ? null
               : SemanticsIds.entityAlbum(album.pid!),
@@ -476,13 +481,9 @@ class _Body extends ConsumerWidget {
               child: QueueDraggable(
                 drop: QueueDrop.item(top[i]),
                 child: MediaListRow(
-                  data: MediaTileData(
-                    title: top[i].title,
-                    subtitle: top[i].album,
-                    artwork: store.source(top[i].artUrl),
-                    trailingText: formatTimecode(
-                      Duration(milliseconds: top[i].durationMs),
-                    ),
+                  data: topTrackRowTile(
+                    top[i],
+                    store: store,
                     semanticsId: SemanticsIds.indexItem(i),
                   ),
                   onTap: () => _play(ref, tracks, i),
@@ -528,11 +529,9 @@ class _Books extends ConsumerWidget {
     final progress = watchPlayProgress(ref, books);
     final tiles = <MediaTileData>[
       for (final book in books)
-        MediaTileData(
-          title: book.title,
-          artwork: store.source(book.artUrl),
-          domain: WaxDomain.audiobooks,
-          shape: ArtworkShape.portrait,
+        bookShelfTile(
+          book,
+          store: store,
           semanticsId: SemanticsIds.book(book.pid),
         ),
     ];

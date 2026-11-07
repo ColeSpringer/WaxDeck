@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_drag.dart';
 import 'package:waxdeck/src/queue/queue_panel.dart';
@@ -11,12 +10,10 @@ import 'package:waxdeck/src/queue/queue_view.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'player_host.dart';
-import 'routed_host.dart';
 
 ItemSummary _track(String pid, String title) =>
     testItem(pid, title: title, durationMs: 180000);
@@ -54,21 +51,11 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = const Size(1400, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-    ],
+  return pumpApp(
+    tester,
+    _rowBesidePanel(drop),
+    container: appContainer(repo: repo),
   );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(_rowBesidePanel(drop)),
-    ),
-  );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 /// Picks the row up with a mouse and drops it on the panel.
@@ -129,7 +116,6 @@ void main() {
       shellMessageText(container.read(shellMessengerProvider)),
       'Added Alpha Song to the queue',
     );
-    await endEditedPlayback(tester, container);
   });
 
   // A drop lands where it was released, not at the end: the row under
@@ -166,7 +152,6 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-1', 'tr-2', 'tr-new', 'tr-3'],
     );
-    await endEditedPlayback(tester, container);
   });
 
   testWidgets('a drop below a row lands after it', (tester) async {
@@ -195,7 +180,6 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-1', 'tr-2', 'tr-new', 'tr-3'],
     );
-    await endEditedPlayback(tester, container);
   });
 
   // The gesture is pointer-only by decision: a touch drag would collide
@@ -263,7 +247,6 @@ void main() {
       shellMessageText(container.read(shellMessengerProvider)),
       'Added 2 tracks to the queue',
     );
-    await endEditedPlayback(tester, container);
   });
 
   // The playing row is the likeliest row to aim at, and the one a
@@ -300,7 +283,6 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-1', 'tr-new', 'tr-2', 'tr-3'],
     );
-    await endEditedPlayback(tester, container);
   });
 
   // The slot is aimed before the fetch and applied after it, so it is
@@ -346,7 +328,6 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-1', 'tr-3', 'tr-new', 'tr-4'],
     );
-    await endEditedPlayback(tester, container);
   });
 
   // A bucket resolves over the network, and the panel it was dropped on
@@ -376,12 +357,7 @@ void main() {
     await _dragRowOntoPanel(tester);
 
     // Gone, with the fetch still out.
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const SizedBox.shrink()),
-      ),
-    );
+    await leaveScreen(tester, container);
     await tester.pumpAndSettle();
 
     gate.complete(<ItemSummary>[_track('tr-1', 'Alpha Song')]);
@@ -391,7 +367,6 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>['tr-9', 'tr-1'],
     );
-    await endEditedPlayback(tester, container);
   });
 
   // The one drop that reaches the network is the one that can fail on

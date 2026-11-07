@@ -1,16 +1,13 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'bundled_type.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 Finder _row(String id) => find.bySemanticsIdentifier(SemanticsIds.taskRow(id));
 
@@ -50,16 +47,11 @@ void main() {
           progressPct: 100,
           createdAt: DateTime.utc(2026, 7, 1, 1),
         );
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              repositoryProvider.overrideWithValue(repo),
-              credentialStoreProvider.overrideWithValue(
-                InMemoryCredentialStore(),
-              ),
-            ],
-            child: routedHost(const TasksScreen(), locale: locale),
-          ),
+        await mountApp(
+          tester,
+          const TasksScreen(),
+          container: appContainer(repo: repo),
+          locale: locale,
         );
         await tester.pump();
         await tester.pump();

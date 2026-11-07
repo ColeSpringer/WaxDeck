@@ -4,8 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
@@ -16,7 +14,6 @@ import 'package:waxdeck/src/music/index_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/music/music_hub_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_drag.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
@@ -25,9 +22,9 @@ import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 
@@ -137,7 +134,6 @@ Future<ProviderContainer> _pump(
   Widget screen,
   FakeRepository repository, {
   Size size = const Size(900, 1200),
-  bool engine = false,
   Prefs? prefs,
   FakeArtworkStore? artwork,
   FilePickerPort? picker,
@@ -145,31 +141,19 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repository),
-      // The session is read by anything gated on a right, and the real
-      // store would go to the keychain.
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      if (engine) audioEngineProvider.overrideWithValue(FakeEngine()),
-      if (prefs != null)
-        prefsControllerProvider.overrideWith(() => _StubPrefs(prefs)),
-      if (artwork != null) artworkStoreProvider.overrideWithValue(artwork),
-      if (picker != null) filePickerProvider.overrideWithValue(picker),
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      // A fresh tree per container: a second pump in one test replaces the
-      // first's scope rather than handing its elements a new container.
-      key: ObjectKey(container),
-      container: container,
-      child: routedHost(screen),
+  return pumpApp(
+    tester,
+    screen,
+    container: appContainer(
+      repo: repository,
+      artwork: artwork,
+      extra: [
+        if (prefs != null)
+          prefsControllerProvider.overrideWith(() => _StubPrefs(prefs)),
+        if (picker != null) filePickerProvider.overrideWithValue(picker),
+      ],
     ),
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 /// The Music > Artists index's sort.
@@ -454,9 +438,9 @@ void main() {
         segment: 'ge-1',
       ),
       repository,
-      engine: true,
     );
 
+    // A playing row never settles (its bars repeat), so pump frames here.
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -491,7 +475,6 @@ void main() {
         segment: 'ge-1',
       ),
       repository,
-      engine: true,
     );
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
@@ -520,7 +503,6 @@ void main() {
       tester,
       const MusicListingScreen(),
       repository,
-      engine: true,
     );
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
@@ -664,13 +646,7 @@ void main() {
       ProviderContainer container,
       Widget screen,
     ) async {
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(screen),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await pumpApp(tester, screen, container: container);
     }
 
     testWidgets('sorting Books > Authors leaves Music > Artists alone', (
@@ -775,7 +751,6 @@ void main() {
           _track('Bravo'),
           _track('Charlie'),
         ]),
-      engine: true,
     );
 
     await tester.tap(find.text('Bravo'));
@@ -811,7 +786,6 @@ void main() {
           for (var i = 0; i <= MusicItemsController.pageSize; i++)
             _track('T${i.toString().padLeft(4, '0')}'),
         ]),
-      engine: true,
     );
 
     await tester.tap(find.text('T0000'));
@@ -851,9 +825,6 @@ void main() {
           _track('Alpha', artist: 'Ada Author'),
           _track('Bravo', artist: 'Ada Author'),
         ],
-      // Playing needs an engine, and a playing row never settles: its
-      // bars repeat for as long as it plays.
-      engine: true,
     );
 
     await tester.tap(find.text('Bravo'));
@@ -885,18 +856,14 @@ void main() {
     tester.view.physicalSize = const Size(900, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MediaQuery(
-          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-          child: routedHost(const MusicHubScreen()),
-        ),
+    final container = appContainer();
+    await mountHost(
+      tester,
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+        child: routedHost(const MusicHubScreen()),
       ),
+      container: container,
     );
     await tester.pumpAndSettle();
 
@@ -1597,16 +1564,7 @@ void main() {
             for (var i = 0; i < 600; i++)
               _artist('Artist ${i.toString().padLeft(3, '0')}'),
           ];
-        final container = ProviderContainer(
-          overrides: [
-            repositoryProvider.overrideWithValue(repo),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-          ],
-        );
-        addTearDown(container.dispose);
-        return (container, repo);
+        return (appContainer(repo: repo), repo);
       }
 
       /// Starts a page read, closes the index under it, then lets the
@@ -1702,20 +1660,9 @@ void main() {
         WidgetTester tester,
         ProviderContainer container,
       ) async {
-        await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: const SizedBox(),
-          ),
-        );
+        await leaveScreen(tester, container);
         await tester.pumpAndSettle();
-        await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: routedHost(screen),
-          ),
-        );
-        await tester.pumpAndSettle();
+        await pumpApp(tester, screen, container: container);
       }
 
       testWidgets('an index opened empty shows a book that arrived since', (
@@ -1920,18 +1867,12 @@ void main() {
           tester.view.physicalSize = const Size(900, 1200);
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
-          await tester.pumpWidget(
-            ProviderScope(
-              overrides: [
-                repositoryProvider.overrideWithValue(repo),
-                credentialStoreProvider.overrideWithValue(
-                  InMemoryCredentialStore(),
-                ),
-              ],
-              child: routedHost(screen, at: WaxRoute.bookIndex(dimension)),
-            ),
+          await pumpApp(
+            tester,
+            screen,
+            at: WaxRoute.bookIndex(dimension),
+            container: appContainer(repo: repo),
           );
-          await tester.pumpAndSettle();
         }
 
         FakeRepository seeded() =>

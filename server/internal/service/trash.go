@@ -120,6 +120,9 @@ func (l *Library) RestoreTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID
 			e.Err = err
 			return e
 		}
+		if KindOf(err) == KindNotFound {
+			return errNotFound("no trash entry with id " + apiTrashID)
+		}
 		return classify(err)
 	}
 	l.Audit(ctx, uc, "trash.restore", target, detail)

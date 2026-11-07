@@ -11,8 +11,8 @@ import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 const _admin = WaxDeckUser(
@@ -67,22 +67,14 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = const Size(1280, 2000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      if (clock != null) wallClockProvider.overrideWithValue(clock),
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const HealthScreen()),
+  return pumpApp(
+    tester,
+    const HealthScreen(),
+    container: appContainer(
+      repo: repo,
+      extra: [if (clock != null) wallClockProvider.overrideWithValue(clock)],
     ),
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 /// The section over the server at [a]'s address, which [switchTo] moves to
@@ -106,14 +98,7 @@ Future<Future<void> Function()> _pumpSwitching(
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
     ],
   );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const HealthScreen()),
-    ),
-  );
-  await tester.pumpAndSettle();
+  await pumpApp(tester, const HealthScreen(), container: container);
   return () async {
     await container.read(serverAddressProvider.notifier).adopt(b.baseUrl);
     await tester.pumpAndSettle();

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/connect_server_screen.dart';
@@ -14,29 +13,31 @@ import 'package:waxdeck/src/downloads/download_notices.dart';
 import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
-import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 void main() {
   const health = ServerHealth(status: 'ok', version: 'test', apiVersion: 1);
 
-  Widget host({
+  Future<void> mount(
+    WidgetTester tester, {
     required CredentialStorePort store,
     required Future<ServerHealth> Function(String) probe,
-  }) => ProviderScope(
-    overrides: [
-      repositoryProvider.overrideWithValue(FakeRepository()),
-      credentialStoreProvider.overrideWithValue(store),
-      bootServerAddressProvider.overrideWithValue(null),
-      serverProbeProvider.overrideWithValue(probe),
-    ],
-    child: routedHost(const ConnectServerScreen()),
+  }) => mountApp(
+    tester,
+    const ConnectServerScreen(),
+    container: appContainer(
+      credentials: store,
+      extra: [
+        bootServerAddressProvider.overrideWithValue(null),
+        serverProbeProvider.overrideWithValue(probe),
+      ],
+    ),
   );
 
   testWidgets('a reachable address is adopted and the token dropped', (
@@ -44,18 +45,14 @@ void main() {
   ) async {
     final store = InMemoryCredentialStore()..token = 'stale-token';
     final probed = <String>[];
-    await tester.pumpWidget(
-      host(
-        store: store,
-        probe: (base) async {
-          probed.add(base);
-          if (base == 'http://wax.example.com') return health;
-          throw const WaxDeckApiException(
-            code: 'transport',
-            message: 'no route',
-          );
-        },
-      ),
+    await mount(
+      tester,
+      store: store,
+      probe: (base) async {
+        probed.add(base);
+        if (base == 'http://wax.example.com') return health;
+        throw const WaxDeckApiException(code: 'transport', message: 'no route');
+      },
     );
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.connectServerAddress),
@@ -80,13 +77,12 @@ void main() {
     tester,
   ) async {
     final store = InMemoryCredentialStore();
-    await tester.pumpWidget(
-      host(
-        store: store,
-        probe: (_) async => throw const WaxDeckApiException(
-          code: 'transport-timeout',
-          message: 'timed out',
-        ),
+    await mount(
+      tester,
+      store: store,
+      probe: (_) async => throw const WaxDeckApiException(
+        code: 'transport-timeout',
+        message: 'timed out',
       ),
     );
     await tester.enterText(
@@ -107,14 +103,13 @@ void main() {
 
   testWidgets('junk is refused before any probe fires', (tester) async {
     var probes = 0;
-    await tester.pumpWidget(
-      host(
-        store: InMemoryCredentialStore(),
-        probe: (_) async {
-          probes++;
-          return health;
-        },
-      ),
+    await mount(
+      tester,
+      store: InMemoryCredentialStore(),
+      probe: (_) async {
+        probes++;
+        return health;
+      },
     );
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.connectServerAddress),
@@ -134,8 +129,10 @@ void main() {
   testWidgets('forgetting is offered only for a stored address', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      host(store: InMemoryCredentialStore(), probe: (_) async => health),
+    await mount(
+      tester,
+      store: InMemoryCredentialStore(),
+      probe: (_) async => health,
     );
 
     expect(
@@ -189,25 +186,19 @@ void main() {
     );
     addTearDown(downloads.dispose);
     final artwork = FakeArtworkStore();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository()),
-          credentialStoreProvider.overrideWithValue(store),
-          bootServerAddressProvider.overrideWithValue(address),
-          serverProbeProvider.overrideWithValue((_) async => health),
-          mirrorDatabaseProvider.overrideWithValue(db),
-          downloadManagerProvider.overrideWithValue(downloads),
-          artworkStoreProvider.overrideWithValue(artwork),
-        ],
-        child: routedHost(const ConnectServerScreen()),
-      ),
+    final container = appContainer(
+      credentials: store,
+      artwork: artwork,
+      downloads: downloads,
+      mirror: db,
+      extra: [
+        bootServerAddressProvider.overrideWithValue(address),
+        serverProbeProvider.overrideWithValue((_) async => health),
+      ],
     );
+    await mountApp(tester, const ConnectServerScreen(), container: container);
     // The app has read the session by the time this screen is reachable,
     // and the stored token is dead: its account's covers went then.
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(ConnectServerScreen)),
-    );
     await tester.runAsync(() => container.read(authControllerProvider.future));
     final forgottenAtLaunch = artwork.forgotten;
     expect(forgottenAtLaunch, 1);
@@ -302,28 +293,21 @@ void main() {
       ArtworkStore? artwork,
     }) async {
       probes = 0;
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(FakeRepository()),
-            credentialStoreProvider.overrideWithValue(store),
-            bootServerAddressProvider.overrideWithValue(address),
-            serverProbeProvider.overrideWithValue((_) async {
-              probes++;
-              return health;
-            }),
-            mirrorDatabaseProvider.overrideWithValue(db),
-            downloadManagerProvider.overrideWithValue(downloads),
-            artworkStoreProvider.overrideWithValue(
-              artwork ?? FakeArtworkStore(),
-            ),
-          ],
-          child: routedHost(const ConnectServerScreen()),
-        ),
+      final container = appContainer(
+        credentials: store,
+        artwork: artwork,
+        downloads: downloads,
+        mirror: db,
+        extra: [
+          bootServerAddressProvider.overrideWithValue(address),
+          serverProbeProvider.overrideWithValue((_) async {
+            probes++;
+            return health;
+          }),
+        ],
       );
-      return ProviderScope.containerOf(
-        tester.element(find.byType(ConnectServerScreen)),
-      );
+      await mountApp(tester, const ConnectServerScreen(), container: container);
+      return container;
     }
 
     /// Confirms a forget and lets its real file IO run out.

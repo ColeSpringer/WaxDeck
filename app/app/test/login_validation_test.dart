@@ -1,17 +1,17 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/login_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: localizedHost(const LoginScreen()),
+Future<void> _mount(WidgetTester tester, FakeRepository repo) => mountApp(
+  tester,
+  const LoginScreen(),
+  container: appContainer(repo: repo),
+  routed: false,
 );
 
 void main() {
@@ -19,7 +19,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.loginSubmit));
     await tester.pump();
@@ -31,7 +31,7 @@ void main() {
 
   testWidgets('only the missing field is flagged', (tester) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.loginUsername),
@@ -57,7 +57,7 @@ void main() {
         message: 'invalid credentials',
         statusCode: 401,
       );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.loginUsername),

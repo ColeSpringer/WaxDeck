@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
@@ -13,15 +11,9 @@ import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
-
-Widget _host(FakeRepository repo, String entryId) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: localizedHost(ReviewEntryScreen(entryId: entryId)),
-);
 
 ReviewEntryDetail _detail({String status = 'pending'}) => ReviewEntryDetail(
   id: 'rv-1',
@@ -111,13 +103,28 @@ class _HeldDecisions extends FakeRepository {
 
 /// Tall enough for the diff to be laid out below the candidate list
 /// without the decision bar overrunning it.
-Future<void> _pump(WidgetTester tester, Widget host) async {
+Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
   tester.view.physicalSize = const Size(700, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(host);
-  await tester.pumpAndSettle();
+  await pumpApp(
+    tester,
+    const ReviewEntryScreen(entryId: 'rv-1'),
+    container: appContainer(repo: repo),
+    routed: false,
+  );
 }
+
+/// The review surface open on the entry, settled.
+Future<void> _pumpSurface(WidgetTester tester, FakeRepository repo) => pumpApp(
+  tester,
+  const ReviewSurface(openEntryId: 'rv-1'),
+  container: appContainer(repo: repo),
+);
+
+/// A blank page, for a test that navigates to the review locations itself.
+Future<void> _mountBlank(WidgetTester tester, FakeRepository repo) =>
+    mountApp(tester, const Scaffold(), container: appContainer(repo: repo));
 
 /// The pane at one exact width, which is what the review screen's
 /// two-pane threshold hands it.
@@ -129,25 +136,22 @@ Future<void> _pumpAtWidth(
   tester.view.physicalSize = Size(width + 200, 2000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-      // Over a Scaffold, which is what the review screen mounts it in:
-      // the rows carry ink and ink needs a Material above it.
-      child: localizedHost(
-        Scaffold(
-          body: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: width,
-              child: const ReviewEntryView(entryId: 'rv-1'),
-            ),
-          ),
+  await pumpApp(
+    tester,
+    // Over a Scaffold, which is what the review screen mounts it in:
+    // the rows carry ink and ink needs a Material above it.
+    Scaffold(
+      body: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: width,
+          child: const ReviewEntryView(entryId: 'rv-1'),
         ),
       ),
     ),
+    container: appContainer(repo: repo),
+    routed: false,
   );
-  await tester.pumpAndSettle();
 }
 
 /// How far the diff table's own scroller can move. Zero is a table that
@@ -170,10 +174,7 @@ double _diffOverflow(WidgetTester tester) => tester
 void main() {
   group('an entry that cannot be shown', () {
     test('one that is gone settles at once', () async {
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer();
       final entry = reviewEntryProvider('rv-gone');
       final sub = container.listen(entry, (_, _) {});
       addTearDown(sub.close);
@@ -189,7 +190,11 @@ void main() {
     ) async {
       // A decided entry can be gone by the time a link to it is opened,
       // and it answers 404 on every ask after that.
-      await tester.pumpWidget(_host(FakeRepository(), 'rv-gone'));
+      await mountApp(
+        tester,
+        const ReviewEntryScreen(entryId: 'rv-gone'),
+        routed: false,
+      );
       await tester.pump();
       await tester.pump();
 
@@ -205,7 +210,12 @@ void main() {
           code: 'transport',
           message: 'connection refused',
         );
-      await tester.pumpWidget(_host(repo, 'rv-1'));
+      await mountApp(
+        tester,
+        const ReviewEntryScreen(entryId: 'rv-1'),
+        container: appContainer(repo: repo),
+        routed: false,
+      );
       await tester.pump();
       await tester.pump();
 
@@ -244,7 +254,7 @@ void main() {
 
   testWidgets('renders candidates and the track diff', (tester) async {
     final repo = _repoWith(_detail());
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.candidate('mb-1')),
@@ -334,7 +344,7 @@ void main() {
         tracks: full.tracks.take(1).toList(),
       ),
     );
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     final band = find.bySemanticsIdentifier(SemanticsIds.diffMissingBand);
     expect(band, findsOneWidget);
@@ -349,7 +359,7 @@ void main() {
     // The second candidate proposes nothing this unit does not already
     // have, so there is no second group and nothing to separate.
     final repo = _repoWith(_detail());
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.candidate('mb-2')),
@@ -364,7 +374,7 @@ void main() {
 
   testWidgets('approve sends the selected candidate', (tester) async {
     final repo = _repoWith(_detail());
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.candidate('mb-2')),
@@ -387,7 +397,7 @@ void main() {
       testReviewEntry(detail.id, status: detail.status, origin: detail.origin),
     ];
     repo.reviewEntryDetails[detail.id] = detail;
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     WaxButton button(String id) =>
         tester.widget<WaxButton>(waxControl<WaxButton>(id));
@@ -417,7 +427,7 @@ void main() {
     tester,
   ) async {
     final repo = _repoWith(_detail());
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
     repo.reviewError = const WaxDeckApiException(
       code: 'conflict',
       message: 'a.flac: destination already exists in the library',
@@ -436,7 +446,7 @@ void main() {
 
   testWidgets('a busy library offers the same decision again', (tester) async {
     final repo = _repoWith(_detail());
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
     repo.reviewError = const WaxDeckApiException(
       code: 'catalog-busy',
       message: 'a conflicting catalog job is already running',
@@ -461,7 +471,7 @@ void main() {
     tester,
   ) async {
     final repo = _repoWith(_detail());
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     // Upload entries expose Discard next to the standard actions.
     expect(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs), findsOneWidget);
@@ -512,7 +522,7 @@ void main() {
         ],
       ),
     );
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     final banner = find.bySemanticsIdentifier(SemanticsIds.reviewDuplicate);
     expect(banner, findsOneWidget);
@@ -585,7 +595,7 @@ void main() {
         ],
       ),
     );
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     // A name match is a guess: the banner says the file may be there.
     expect(
@@ -635,7 +645,7 @@ void main() {
         ],
       ),
     );
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     expect(
       find.descendant(
@@ -662,13 +672,7 @@ void main() {
     tester.view.physicalSize = const Size(1400, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: routedHost(const ReviewSurface(openEntryId: 'rv-1')),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pumpSurface(tester, repo);
 
     // The queue keeps its rows and its keys while the entry is open.
     expect(find.bySemanticsIdentifier(SemanticsIds.reviewPane), findsOneWidget);
@@ -693,12 +697,7 @@ void main() {
     tester.view.physicalSize = const Size(1400, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: routedHost(const Scaffold()),
-      ),
-    );
+    await _mountBlank(tester, repo);
     final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
     router.go(WaxRoute.review);
     await tester.pumpAndSettle();
@@ -736,12 +735,7 @@ void main() {
     tester.view.physicalSize = const Size(1400, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: routedHost(const Scaffold()),
-      ),
-    );
+    await _mountBlank(tester, repo);
     final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
     router.go(WaxRoute.reviewEntry('rv-1'));
     await tester.pumpAndSettle();
@@ -763,13 +757,7 @@ void main() {
     tester.view.physicalSize = const Size(1400, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: routedHost(const ReviewSurface(openEntryId: 'rv-1')),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pumpSurface(tester, repo);
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.candidate('mb-2')),
@@ -797,13 +785,7 @@ void main() {
     tester.view.physicalSize = const Size(1400, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: routedHost(const ReviewSurface(openEntryId: 'rv-1')),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pumpSurface(tester, repo);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
     await tester.pump();
@@ -834,13 +816,7 @@ void main() {
     tester.view.physicalSize = const Size(700, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: routedHost(const ReviewSurface(openEntryId: 'rv-1')),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pumpSurface(tester, repo);
 
     expect(find.bySemanticsIdentifier(SemanticsIds.reviewPane), findsNothing);
     expect(
@@ -855,7 +831,7 @@ void main() {
 
   testWidgets('applied entries show status and revert', (tester) async {
     final repo = _repoWith(_detail(status: 'applied'));
-    await _pump(tester, _host(repo, 'rv-1'));
+    await _pump(tester, repo);
 
     expect(find.text('Decided: Applied'), findsOneWidget);
     expect(

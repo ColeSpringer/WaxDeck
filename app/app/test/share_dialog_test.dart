@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/sharing/share_dialog.dart';
@@ -11,10 +10,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'player_host.dart';
-import 'routed_host.dart';
 
 const _trackPid = 'tr-01JZX5N8QW3F4V9T2B7KDSHARE1';
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
@@ -47,7 +45,7 @@ void main() {
     final repo = FakeRepository(items: [testItem(_trackPid)]);
     final engine = FakeEngine();
     final copied = _captureClipboard(tester);
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -88,7 +86,6 @@ void main() {
     ));
     expect(copied.single, 'http://server.test/s/FAKESECRET0');
     expect(shellMessageText(raisedMessage(tester)), 'Link copied');
-    await harness.endPlayback(tester);
   });
 
   testWidgets('an episode share can start at the current position', (
@@ -102,7 +99,7 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
     final copied = _captureClipboard(tester);
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -131,7 +128,6 @@ void main() {
     expect(repo.createShareCalls.single.positionMs, 95000);
     expect(repo.createShareCalls.single.expiresInHours, isNull);
     expect(copied, hasLength(1));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('an episode with nothing to play through a link says so', (
@@ -148,24 +144,17 @@ void main() {
             'none to relay; fetch it first',
         statusCode: 409,
       );
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(
-          Builder(
-            builder: (context) => WaxButton(
-              label: 'Share it',
-              onPressed: () => showShareLinkDialog(context, pid: _episodePid),
-            ),
-          ),
+    final container = appContainer(repo: repo);
+    await pumpApp(
+      tester,
+      Builder(
+        builder: (context) => WaxButton(
+          label: 'Share it',
+          onPressed: () => showShareLinkDialog(context, pid: _episodePid),
         ),
       ),
+      container: container,
     );
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Share it'));
     await tester.pumpAndSettle();
     await tester.tap(_byId(SemanticsIds.shareCreate));
@@ -186,27 +175,20 @@ void main() {
     final repo = FakeRepository(items: [testItem(_trackPid)])
       ..createShareGate = gate;
     final copied = _captureClipboard(tester);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     // A shares screen left open behind the dialog.
     final listing = container.listen(sharesProvider, (_, _) {});
     addTearDown(listing.close);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(
-          Builder(
-            builder: (context) => WaxButton(
-              label: 'Share it',
-              onPressed: () => showShareLinkDialog(context, pid: _trackPid),
-            ),
-          ),
+    await pumpApp(
+      tester,
+      Builder(
+        builder: (context) => WaxButton(
+          label: 'Share it',
+          onPressed: () => showShareLinkDialog(context, pid: _trackPid),
         ),
       ),
+      container: container,
     );
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Share it'));
     await tester.pumpAndSettle();
     await tester.tap(_byId(SemanticsIds.shareCreate));
@@ -233,30 +215,24 @@ void main() {
     final repo = FakeRepository(items: [testItem(_trackPid)])
       ..createShareGate = gate;
     _captureClipboard(tester);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: localizedHost(
-          Builder(
-            builder: (context) => WaxButton(
-              label: 'Open',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (context) => WaxButton(
-                    label: 'Share it',
-                    onPressed: () =>
-                        showShareLinkDialog(context, pid: _trackPid),
-                  ),
-                ),
+    final container = appContainer(repo: repo);
+    await mountApp(
+      tester,
+      Builder(
+        builder: (context) => WaxButton(
+          label: 'Open',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => WaxButton(
+                label: 'Share it',
+                onPressed: () => showShareLinkDialog(context, pid: _trackPid),
               ),
             ),
           ),
         ),
       ),
+      container: container,
+      routed: false,
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();

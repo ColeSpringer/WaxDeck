@@ -14,8 +14,8 @@ import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// A session that records everything published to it, which is the whole
@@ -228,12 +228,9 @@ void main() {
   /// client also drives a session on another endpoint.
   Future<({ProviderContainer container, _RecordingSession recorded})>
   drivingElsewhere(String pid) async {
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(
-          FakeRepository(items: [testItem(pid)]),
-        ),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
+    final container = appContainer(
+      repo: FakeRepository(items: [testItem(pid)]),
+      extra: [
         localeOverrideProvider.overrideWithValue(null),
         remoteSessionProvider.overrideWithBuild(
           (ref, _) => RemoteSession(
@@ -256,7 +253,6 @@ void main() {
         ),
       ],
     );
-    addTearDown(container.dispose);
     container.read(systemLocalesProvider.notifier).locales = const [
       Locale('en'),
     ];
@@ -393,16 +389,10 @@ void main() {
   test('the rows follow the app language', () async {
     const known = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
     const unknown = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKB';
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(
-          FakeRepository(items: [testItem(known)]),
-        ),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        localeOverrideProvider.overrideWithValue(null),
-      ],
+    final container = appContainer(
+      repo: FakeRepository(items: [testItem(known)]),
+      extra: [localeOverrideProvider.overrideWithValue(null)],
     );
-    addTearDown(container.dispose);
     container.read(systemLocalesProvider.notifier).locales = const [
       Locale('en'),
     ];
@@ -433,14 +423,10 @@ void main() {
     () async {
       const pid = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
       final repo = FakeRepository(items: [testItem(pid)]);
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-          localeOverrideProvider.overrideWithValue(null),
-        ],
+      final container = appContainer(
+        repo: repo,
+        extra: [localeOverrideProvider.overrideWithValue(null)],
       );
-      addTearDown(container.dispose);
       container.read(systemLocalesProvider.notifier).locales = const [
         Locale('en'),
       ];
@@ -472,16 +458,10 @@ void main() {
 
   test('a station stopped over a parked queue publishes nothing', () async {
     const pid = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(
-          FakeRepository(items: [testItem(pid)]),
-        ),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
-        localeOverrideProvider.overrideWithValue(null),
-      ],
+    final container = appContainer(
+      repo: FakeRepository(items: [testItem(pid)]),
+      extra: [localeOverrideProvider.overrideWithValue(null)],
     );
-    addTearDown(container.dispose);
     container.read(systemLocalesProvider.notifier).locales = const [
       Locale('en'),
     ];

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -10,23 +11,20 @@ import (
 
 func (s *Server) ImportPlaylist(ctx context.Context, req ImportPlaylistRequestObject) (ImportPlaylistResponseObject, error) {
 	if req.Body == nil {
-		return ImportPlaylist400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a request body is required"))}, nil
+		return nil, errNoBody()
 	}
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	in := service.PlaylistImportInput{
 		Source:  string(req.Body.Source),
 		Name:    deref(req.Body.Name),
 		Payload: deref(req.Body.Payload),
 	}
 	if len(in.Payload) > 4000000 {
-		return ImportPlaylist400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "payload must be at most 4000000 characters"))}, nil
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "payload must be at most 4000000 characters")
 	}
 	if req.Body.Refs != nil {
 		if len(*req.Body.Refs) > 10000 {
-			return ImportPlaylist400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "at most 10000 refs"))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", "at most 10000 refs")
 		}
 		in.Refs = make([]service.PortableRefDTO, 0, len(*req.Body.Refs))
 		for _, r := range *req.Body.Refs {
@@ -34,11 +32,7 @@ func (s *Server) ImportPlaylist(ctx context.Context, req ImportPlaylistRequestOb
 		}
 	}
 	res, err := s.svc.ImportStreamingPlaylist(ctx, uc, in)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindInvalid:
-		return ImportPlaylist400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	out := PlaylistImportResult{
@@ -63,18 +57,9 @@ func (s *Server) ImportPlaylist(ctx context.Context, req ImportPlaylistRequestOb
 }
 
 func (s *Server) ExportPlaylistPortable(ctx context.Context, req ExportPlaylistPortableRequestObject) (ExportPlaylistPortableResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	name, refs, err := s.svc.ExportPlaylistPortable(ctx, uc, req.Pid)
-	switch service.KindOf(err) {
-	case "":
-	case service.KindNotFound:
-		return ExportPlaylistPortable404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-	case service.KindConflict:
-		return ExportPlaylistPortable409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
 	out := PortablePlaylist{Name: name, Refs: []PortableRef{}}

@@ -3,16 +3,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
-
-Widget _host(FakeRepository repo) => _hostOf(repo, const OrganizeScreen());
 
 /// A history whose first page is refused while [firstPageError] is set.
 class _HistoryDown extends FakeRepository {
@@ -30,20 +27,25 @@ class _HistoryDown extends FakeRepository {
   }
 }
 
-/// [child] under the same scope, so a test can leave the screen and come
-/// back to it with the providers it left behind.
-Widget _hostOf(FakeRepository repo, Widget child) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: localizedHost(child),
-);
-
-/// Wide enough for the plan to be a table rather than a card list.
-Future<void> _pump(WidgetTester tester, Widget host) async {
+/// Wide enough for the plan to be a table rather than a card list. The
+/// container comes back so a test can leave the screen and return to it
+/// with the providers it left behind.
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  FakeRepository repo, {
+  Widget screen = const OrganizeScreen(),
+  Locale locale = const Locale('en'),
+}) {
   tester.view.physicalSize = const Size(1200, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(host);
-  await tester.pumpAndSettle();
+  return pumpApp(
+    tester,
+    screen,
+    container: appContainer(repo: repo),
+    routed: false,
+    locale: locale,
+  );
 }
 
 void main() {
@@ -52,7 +54,7 @@ void main() {
   ) async {
     final repo = FakeRepository();
     repo.organizeProfiles = const [];
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
 
     expect(find.text('No organize profiles'), findsOneWidget);
     // The title says it; no line repeats it.
@@ -79,7 +81,7 @@ void main() {
           sample: OrganizeSample(music: 'Title.flac'),
         ),
       ];
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     expect(find.text("Each library's own profile"), findsOneWidget);
     expect(find.text('waxbin-native (built in)'), findsOneWidget);
     expect(find.text('Artist/Album/01 - Title.flac'), findsOneWidget);
@@ -107,7 +109,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
     );
@@ -140,7 +142,7 @@ void main() {
   testWidgets('a save still lands once its sheet is dismissed', (tester) async {
     final gate = Completer<void>();
     final repo = FakeRepository()..organizeProfileGate = gate;
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
     );
@@ -176,7 +178,7 @@ void main() {
         OrganizeProfile(name: 'default', builtIn: true),
         OrganizeProfile(name: 'flat'),
       ];
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
     );
@@ -206,7 +208,7 @@ void main() {
       ..organizeProfiles = const [
         OrganizeProfile(name: 'default', builtIn: true),
       ];
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('default')),
     );
@@ -222,7 +224,7 @@ void main() {
   });
 
   testWidgets('the hint says nothing moves until applied', (tester) async {
-    await _pump(tester, _host(FakeRepository()));
+    await _pump(tester, FakeRepository());
 
     expect(
       find.textContaining('Nothing moves until you apply'),
@@ -234,7 +236,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository()..organizeManagedLibraries = 0;
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
 
     expect(find.text('No managed library'), findsOneWidget);
     expect(
@@ -257,7 +259,7 @@ void main() {
         held: 2,
         heldByCode: {'read-only': 2},
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
 
@@ -281,7 +283,7 @@ void main() {
           OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
         ],
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
 
@@ -307,7 +309,7 @@ void main() {
         readOnlyLibraries: 2,
         failed: 0,
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
     const line = '2 read-only libraries left alone';
@@ -341,7 +343,7 @@ void main() {
         held: 2,
         failed: 0,
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
@@ -379,7 +381,7 @@ void main() {
           OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
         ],
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
     expect(
@@ -420,7 +422,7 @@ void main() {
           OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
         ],
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     Future<void> previewFlat() async {
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
@@ -485,7 +487,7 @@ void main() {
           OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
         ],
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
     );
@@ -523,7 +525,7 @@ void main() {
         OrganizeProfile(name: 'default', builtIn: true),
         OrganizeProfile(name: 'flat'),
       ];
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
     );
@@ -553,7 +555,7 @@ void main() {
           saved: OrganizeTemplates(music: '{title}.{ext}'),
         ),
       ];
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
     );
@@ -595,7 +597,7 @@ void main() {
           ),
         ),
       ];
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
     );
@@ -617,7 +619,7 @@ void main() {
           : Future.value(
               OrganizeSample(music: music, audiobook: 'a', podcast: 'b'),
             );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
     );
@@ -647,7 +649,7 @@ void main() {
         message: 'a template is at most 1024 characters',
         statusCode: 400,
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
     );
@@ -673,7 +675,7 @@ void main() {
   testWidgets('the picker names its group', (tester) async {
     final repo = FakeRepository()
       ..organizeProfiles = const [OrganizeProfile(name: 'flat')];
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     expect(find.bySemanticsLabel('Organize profile'), findsOneWidget);
   });
 
@@ -695,7 +697,7 @@ void main() {
         ),
       ],
     );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
@@ -730,7 +732,7 @@ void main() {
       failed: 1,
       failures: [OrganizeFailure(path: '/old/b.flac', reason: 'target exists')],
     );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
 
     // Apply is refused until a plan says what would move.
     expect(
@@ -790,7 +792,7 @@ void main() {
         ),
       ],
     );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
@@ -817,7 +819,7 @@ void main() {
         const FakeAccessibilityFeatures(disableAnimations: true);
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     final repo = FakeRepository()..previewOrganizeGate = Completer<void>();
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pump();
     WaxButton preview() => tester.widget<WaxButton>(
@@ -843,10 +845,8 @@ void main() {
       );
     await _pump(
       tester,
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: localizedHost(const OrganizeScreen(previewOnOpen: true)),
-      ),
+      repo,
+      screen: const OrganizeScreen(previewOnOpen: true),
     );
     expect(repo.previewOrganizeCalls, hasLength(1));
     expect(repo.previewOrganizeCalls.single.profile, isNull);
@@ -869,14 +869,17 @@ void main() {
           OrganizeAction(itemPid: 'tr-1', from: 'a.flac', to: 'A/a.flac'),
         ],
       );
-    await _pump(tester, _host(repo));
+    final container = await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
     );
     await tester.pumpAndSettle();
     // The console keeps the page when its location asks for the dry run.
-    await tester.pumpWidget(
-      _hostOf(repo, const OrganizeScreen(previewOnOpen: true)),
+    await mountApp(
+      tester,
+      const OrganizeScreen(previewOnOpen: true),
+      container: container,
+      routed: false,
     );
     await tester.pumpAndSettle();
     expect(repo.previewOrganizeCalls.single.profile, isNull);
@@ -912,7 +915,7 @@ void main() {
           OrganizeAction(itemPid: 'tr-1', from: 'a.flac', to: 'A/a.flac'),
         ],
       );
-    await _pump(tester, _host(repo));
+    final container = await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
     );
@@ -925,8 +928,11 @@ void main() {
       code: 'internal',
       message: 'the catalog is closed',
     );
-    await tester.pumpWidget(
-      _hostOf(repo, const OrganizeScreen(previewOnOpen: true)),
+    await mountApp(
+      tester,
+      const OrganizeScreen(previewOnOpen: true),
+      container: container,
+      routed: false,
     );
     await tester.pumpAndSettle();
     expect(repo.previewOrganizeCalls.map((c) => c.profile), ['flat', null]);
@@ -977,7 +983,7 @@ void main() {
           ),
         ],
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
 
@@ -1068,7 +1074,7 @@ void main() {
             ),
           ],
         );
-      await _pump(tester, _host(repo));
+      await _pump(tester, repo);
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.organizePreview),
       );
@@ -1143,7 +1149,7 @@ void main() {
         skipped: 0,
         failed: 0,
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.organizeHistory),
@@ -1242,7 +1248,7 @@ void main() {
         failed: 0,
         dirsPruned: 2,
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
@@ -1303,7 +1309,7 @@ void main() {
           ),
         ],
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.organizeUndo('jb-2')),
     );
@@ -1358,16 +1364,7 @@ void main() {
           committed: 1,
         ),
       ];
-    await _pump(
-      tester,
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: localizedHost(
-          const OrganizeScreen(),
-          locale: const Locale('es'),
-        ),
-      ),
-    );
+    await _pump(tester, repo, locale: const Locale('es'));
     expect(find.textContaining('Organizar - 1 movido - '), findsOneWidget);
     expect(find.textContaining('Deshacer - 1 devuelto - '), findsOneWidget);
   });
@@ -1384,12 +1381,17 @@ void main() {
       undoable: true,
     );
     final repo = FakeRepository()..organizeHistory = [run('jb-1')];
-    await _pump(tester, _host(repo));
-    await tester.pumpWidget(_hostOf(repo, const SizedBox()));
+    final container = await _pump(tester, repo);
+    await leaveScreen(tester, container);
     await tester.pumpAndSettle();
     // A run made elsewhere meanwhile: a fix from Health, another session.
     repo.organizeHistory = [run('jb-2'), run('jb-1')];
-    await tester.pumpWidget(_host(repo));
+    await mountApp(
+      tester,
+      const OrganizeScreen(),
+      container: container,
+      routed: false,
+    );
     await tester.pumpAndSettle();
     expect(
       find.bySemanticsIdentifier(SemanticsIds.organizeHistoryRow('jb-2')),
@@ -1415,7 +1417,7 @@ void main() {
         skipped: 0,
         failed: 0,
       );
-    await _pump(tester, _host(repo));
+    final container = await _pump(tester, repo);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
@@ -1427,11 +1429,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
     await tester.pump();
-    await tester.pumpWidget(_hostOf(repo, const SizedBox()));
+    await leaveScreen(tester, container);
     await tester.pumpAndSettle();
     repo.applyOrganizeGate!.complete();
     await tester.pumpAndSettle();
-    await tester.pumpWidget(_host(repo));
+    await mountApp(
+      tester,
+      const OrganizeScreen(),
+      container: container,
+      routed: false,
+    );
     await tester.pumpAndSettle();
     expect(
       find.bySemanticsIdentifier(SemanticsIds.organizeHistoryRow('jb-7')),
@@ -1441,7 +1448,7 @@ void main() {
 
   testWidgets('with no run yet there is no history', (tester) async {
     final repo = FakeRepository();
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.organizeHistory),
       findsNothing,
@@ -1463,7 +1470,7 @@ void main() {
     final repo = FakeRepository()
       ..organizeHistory = [run('jb-3'), run('jb-2'), run('jb-1')]
       ..organizeHistoryPageCap = 2;
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     Finder row(String pid) =>
         find.bySemanticsIdentifier(SemanticsIds.organizeHistoryRow(pid));
     expect(row('jb-3'), findsOneWidget);
@@ -1499,7 +1506,7 @@ void main() {
         message: 'not an administrator',
         statusCode: 403,
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     final retry = find.descendant(
       of: find.bySemanticsIdentifier(SemanticsIds.organizeHistory),
       matching: find.widgetWithText(WaxButton, 'Try again'),
@@ -1537,7 +1544,7 @@ void main() {
         code: 'transport',
         message: 'connection refused',
       );
-    await _pump(tester, _host(repo));
+    await _pump(tester, repo);
     Finder row(String pid) =>
         find.bySemanticsIdentifier(SemanticsIds.organizeHistoryRow(pid));
     final more = find.bySemanticsIdentifier(SemanticsIds.organizeHistoryMore);

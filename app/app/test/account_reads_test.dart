@@ -2,14 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/books_controller.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
 import 'package:waxdeck/src/metadata/metadata_controller.dart';
 import 'package:waxdeck/src/playlists/playlist_sync_controller.dart';
 import 'package:waxdeck/src/playlists/playlists_controller.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/settings/integrations_controller.dart';
@@ -20,6 +18,7 @@ import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
 import 'package:waxdeck/src/uploads/uploads_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// What one account read is read again for the next one on the same
@@ -502,13 +501,7 @@ void main() {
       ]) {
     test('reads $name again for the next account on the server', () async {
       final repo = _PerCaller();
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo);
       await container.read(authControllerProvider.future);
       // Kept alive, as the screen showing it would.
       final held = container.listen(provider, (_, _) {});
@@ -583,13 +576,7 @@ void main() {
         sessionState: const SessionState(authenticated: true, user: _ann),
       );
       _holdFor(repo, _ann);
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo);
       await container.read(authControllerProvider.future);
       // Kept alive, as the screen showing it would.
       final held = container.listen(provider, (_, _) {});

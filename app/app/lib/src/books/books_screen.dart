@@ -11,6 +11,7 @@ import '../library/hub_tiles.dart';
 import '../library/item_play.dart';
 import '../music/music_controllers.dart';
 import '../player/play_progress.dart';
+import '../presenters/media_tiles.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
@@ -286,27 +287,12 @@ class _ContinueShelf extends ConsumerWidget {
 
     final tiles = <MediaTileData>[
       for (final book in reading)
-        MediaTileData(
-          title: book.title,
-          subtitle: book.artist,
-          artwork: store.source(book.artUrl),
-          domain: WaxDomain.audiobooks,
-          shape: ArtworkShape.portrait,
-          progress: progress[book.pid].fractionOf(book.durationMs),
-          trailingText: _left(
-            l10n,
-            wax,
-            progress[book.pid],
-            book.durationMs,
-            short: true,
-          ),
-          trailingSpoken: _left(
-            l10n,
-            wax,
-            progress[book.pid],
-            book.durationMs,
-            short: false,
-          ),
+        bookContinueTile(
+          book,
+          l10n: l10n,
+          wax: wax,
+          store: store,
+          progress: progress[book.pid],
           // Its own handle, not the grid card's. A half-heard book is on
           // this shelf *and* in the grid below, so one handle would name
           // two controls and leave a spec picking by document order
@@ -344,23 +330,6 @@ class _ContinueShelf extends ConsumerWidget {
       ),
     );
   }
-
-  /// "6 hr left". A span rather than a timecode, which would read as a
-  /// clock time. [short] draws it; the long form is what a screen reader
-  /// hears.
-  static String? _left(
-    AppLocalizations l10n,
-    WaxLocalizations wax,
-    PlayProgress? progress,
-    int durationMs, {
-    required bool short,
-  }) {
-    final remaining = progress?.remainingOf(durationMs);
-    if (remaining == null) return null;
-    return l10n.booksTimeLeft(
-      short ? wax.formatSpan(remaining) : wax.spellDuration(remaining),
-    );
-  }
 }
 
 /// The series the shelf's books belong to, and the way into the index.
@@ -383,14 +352,9 @@ class _SeriesShelf extends ConsumerWidget {
     final shown = series.take(kBookSeriesShelf).toList(growable: false);
     final tiles = <MediaTileData>[
       for (final row in shown)
-        MediaTileData(
-          title: row.name,
-          // Zero is what a restricted account reads back, and a "0
-          // books" caption on a series it can open is a lie.
-          subtitle: row.bookCount > 0
-              ? l10n.bookSeriesBookCount(row.bookCount)
-              : null,
-          domain: WaxDomain.audiobooks,
+        seriesCardTile(
+          row,
+          l10n: l10n,
           semanticsId: SemanticsIds.bookSeriesCard(row.pid),
         ),
     ];
@@ -463,27 +427,12 @@ class BookGrid extends ConsumerWidget {
               final state = progress[book.pid];
               return MediaCard(
                 key: _bookKey(book),
-                data: MediaTileData(
-                  title: book.title,
-                  subtitle: book.artist,
-                  artwork: store.source(book.artUrl),
-                  domain: WaxDomain.audiobooks,
-                  shape: ArtworkShape.portrait,
-                  progress: state.fractionOf(book.durationMs),
-                  trailingText: _caption(
-                    l10n,
-                    wax,
-                    state,
-                    book.durationMs,
-                    short: true,
-                  ),
-                  trailingSpoken: _caption(
-                    l10n,
-                    wax,
-                    state,
-                    book.durationMs,
-                    short: false,
-                  ),
+                data: bookCardTile(
+                  book,
+                  l10n: l10n,
+                  wax: wax,
+                  store: store,
+                  progress: state,
                   semanticsId: SemanticsIds.book(book.pid),
                 ),
                 width: grid.width,
@@ -499,27 +448,6 @@ class BookGrid extends ConsumerWidget {
         },
       ),
     );
-  }
-
-  /// What the cover says under the author: how much is left of a book in
-  /// progress, that it is finished, or how long it is.
-  ///
-  /// [short] draws it, abbreviated to what a cell has room for; the long
-  /// form is what a screen reader hears.
-  static String? _caption(
-    AppLocalizations l10n,
-    WaxLocalizations wax,
-    PlayProgress state,
-    int durationMs, {
-    required bool short,
-  }) {
-    String span(Duration d) => short ? wax.formatSpan(d) : wax.spellDuration(d);
-    if (state.finished) return l10n.booksFinished;
-    final remaining = state.remainingOf(durationMs);
-    if (state.inProgress && remaining != null) {
-      return l10n.booksTimeLeft(span(remaining));
-    }
-    return durationMs > 0 ? span(Duration(milliseconds: durationMs)) : null;
   }
 }
 

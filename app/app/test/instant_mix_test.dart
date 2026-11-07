@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/discovery/discovery_actions.dart';
 import 'package:waxdeck/src/discovery/track_list_screen.dart';
@@ -10,6 +9,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
@@ -107,7 +107,6 @@ void main() {
     expect(message?.actionLabel, 'Open');
     expect(message?.actionSemanticsId, SemanticsIds.queueOpen);
     expect(find.text('Instant mix'), findsNothing);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('with nothing queued the mix plays and opens its list', (
@@ -125,13 +124,11 @@ void main() {
     final harness = PlayerHarness(
       playbackContainer(repo: repo, engine: engine),
     );
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: harness.container,
-        child: routedHost(_MixLauncher(seed: testItem(_seedPid))),
-      ),
+    await pumpApp(
+      tester,
+      _MixLauncher(seed: testItem(_seedPid)),
+      container: harness.container,
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Mix from here'));
     await tester.pumpAndSettle();
@@ -153,7 +150,6 @@ void main() {
     );
     expect(find.bySemanticsIdentifier(SemanticsIds.playerBack), findsNothing);
     expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('playing from the mix list stays put and raises the dock', (
@@ -191,13 +187,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: harness.container,
-        child: routedHost(screen),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, screen, container: harness.container);
     expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsNothing);
 
     await tester.tap(rowWithIdentifier(SemanticsIds.scopedItem('mix', 1)));
@@ -210,7 +200,6 @@ void main() {
     expect(find.text('Instant mix'), findsOneWidget);
     expect(find.bySemanticsIdentifier(SemanticsIds.playerBack), findsNothing);
     expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the chosen adventurousness is remembered for the next mix', (
@@ -222,7 +211,7 @@ void main() {
         items: [testItem(_mixPid1)],
       );
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -236,7 +225,6 @@ void main() {
 
     expect(repo.instantMixCalls, hasLength(2));
     expect(repo.instantMixCalls.last.adventurousness, closeTo(1.0, 0.001));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('an empty mix answers with a snackbar instead of a screen', (
@@ -244,7 +232,7 @@ void main() {
   ) async {
     final repo = FakeRepository(items: [testItem(_seedPid)]);
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -262,7 +250,6 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.mixBasis('mix')),
       findsNothing,
     );
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a mix excludes what is coming, not what has played', (
@@ -300,7 +287,6 @@ void main() {
       _seedPid,
       _upcomingPid,
     ]);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('an all-excluded empty mix says the queue already has it', (
@@ -312,7 +298,7 @@ void main() {
         excluded: 12,
       );
     final engine = FakeEngine();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -326,6 +312,5 @@ void main() {
       shellMessageText(raisedMessage(tester)),
       'Everything similar is already in your queue',
     );
-    await harness.endPlayback(tester);
   });
 }

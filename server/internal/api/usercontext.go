@@ -19,6 +19,14 @@ func userCtx(ctx context.Context) *service.UserCtx {
 	return uc
 }
 
+// requireAdmin refuses any caller but an administrator.
+func requireAdmin(ctx context.Context) error {
+	if p, ok := principalFromContext(ctx); !ok || !p.IsAdmin() {
+		return refuse(http.StatusForbidden, "forbidden", "administrators only")
+	}
+	return nil
+}
+
 // opAccess is whom an operation's security admits. The zero value is
 // secured, so an operation or route the contract does not name counts as
 // one.

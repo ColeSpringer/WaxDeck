@@ -2,13 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/notifications/notifications_binder.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
@@ -16,6 +13,7 @@ import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 ServerSyncEvent _marker(String kind, {String pid = 'rv-1'}) =>
@@ -46,8 +44,7 @@ ServerNotification _inboxRow(
 );
 
 /// A container whose account is signed in, so the inbox is read.
-ProviderContainer _signedIn(FakeRepository repo) =>
-    ProviderContainer(overrides: [repositoryProvider.overrideWithValue(repo)]);
+ProviderContainer _signedIn(FakeRepository repo) => appContainer(repo: repo);
 
 void main() {
   group('the vocabulary a row is addressed by', () {
@@ -295,7 +292,6 @@ void main() {
         sessionState: const SessionState(authenticated: true, user: _user),
       );
       container = _signedIn(repo);
-      addTearDown(container.dispose);
       await container.read(authControllerProvider.future);
     });
 
@@ -511,7 +507,6 @@ void main() {
         sessionState: const SessionState(authenticated: true, user: _user),
       );
       final other = _signedIn(broken);
-      addTearDown(other.dispose);
       await other.read(authControllerProvider.future);
       other
           .read(localNotificationsProvider.notifier)
@@ -533,7 +528,6 @@ void main() {
         sessionState: const SessionState(authenticated: true, user: _user),
       );
       container = _signedIn(repo);
-      addTearDown(container.dispose);
       await container.read(authControllerProvider.future);
     });
 
@@ -623,7 +617,6 @@ void main() {
       ),
     );
     final container = _signedIn(repo);
-    addTearDown(container.dispose);
     // Kept alive so the rebuild below is observable rather than a fresh
     // read of a provider nobody was listening to.
     final alive = container.listen(localNotificationsProvider, (_, _) {});
@@ -648,16 +641,14 @@ void main() {
 
   test("the binder announces this device's own finished transfers", () async {
     final downloads = FakeDownloads();
-    final container = ProviderContainer(
-      overrides: [
-        downloadManagerProvider.overrideWithValue(downloads),
+    final container = appContainer(
+      downloads: downloads,
+      extra: [
         // Web's shape: no engine, so the download listener has to be
         // registered before the puller branch returns.
         syncEngineProvider.overrideWithValue(null),
-        repositoryProvider.overrideWithValue(FakeRepository()),
       ],
     );
-    addTearDown(container.dispose);
     final alive = container.listen(notificationsBinderProvider, (_, _) {});
     addTearDown(alive.close);
 
@@ -837,20 +828,8 @@ void main() {
     );
     final first = _inboxRow('signup-requested');
     repo.inbox = <ServerNotification>[first];
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const WaxDeckApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    final container = appContainer(repo: repo);
+    await pumpWholeApp(tester, container: container);
     final router = container.read(routerProvider);
     // Held open, as the bell holds it.
     final inbox = container.listen(notificationsProvider, (_, _) {});

@@ -1,9 +1,8 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
@@ -48,10 +47,7 @@ void main() {
           locale: 'en-US',
           theme: ThemePref.system,
         );
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo);
 
       // Tap a setting before the initial prefs fetch has resolved. The
       // stored document must survive: the endpoint replaces the whole
@@ -81,10 +77,7 @@ void main() {
     final repo = FakeRepository()
       ..sessionState = const SessionState(authenticated: true, user: _user)
       ..prefs = const Prefs(browseSorts: sorts);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
 
     await container.read(prefsControllerProvider.notifier).setAutoplay(false);
 
@@ -104,10 +97,7 @@ void main() {
         final repo = FakeRepository()
           ..sessionState = const SessionState(authenticated: true, user: _user)
           ..prefs = _stored;
-        final container = ProviderContainer(
-          overrides: [repositoryProvider.overrideWithValue(repo)],
-        );
-        addTearDown(container.dispose);
+        final container = appContainer(repo: repo);
 
         await subject.clear(container.read(prefsControllerProvider.notifier));
 

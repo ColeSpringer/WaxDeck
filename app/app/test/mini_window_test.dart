@@ -14,8 +14,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'player_host.dart';
 
 /// A window layer that answers whatever a compositor was going to, and
@@ -68,13 +68,8 @@ class _FakeWindow implements MiniWindowPort {
   }
 }
 
-ProviderContainer _container(_FakeWindow window) {
-  final container = ProviderContainer(
-    overrides: [miniWindowPortProvider.overrideWithValue(window)],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
+ProviderContainer _container(_FakeWindow window) =>
+    appContainer(extra: [miniWindowPortProvider.overrideWithValue(window)]);
 
 void main() {
   group('the mini window', () {
@@ -102,14 +97,12 @@ void main() {
           'tr-A',
         ], source: QueueSource.none),
       );
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: localizedHost(
-            const MiniWindowGate(child: SizedBox()),
-            theme: buildWaxTheme(),
-          ),
-        ),
+      await mountApp(
+        tester,
+        const MiniWindowGate(child: SizedBox()),
+        container: container,
+        routed: false,
+        theme: buildWaxTheme(),
       );
       await tester.pump();
       expect(find.text('Loading…'), findsOneWidget);
@@ -143,16 +136,13 @@ void main() {
         'tr-A',
         'tr-B',
       ], source: QueueSource.none);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: localizedHost(
-            const MiniWindowGate(child: SizedBox()),
-            theme: buildWaxTheme(),
-          ),
-        ),
+      await pumpApp(
+        tester,
+        const MiniWindowGate(child: SizedBox()),
+        container: container,
+        routed: false,
+        theme: buildWaxTheme(),
       );
-      await tester.pumpAndSettle();
       DeckBarActions actions() =>
           tester.widget<MiniPlayer>(find.byType(MiniPlayer)).actions;
       expect(actions().onNext, isNotNull);
@@ -213,16 +203,13 @@ void main() {
       PlayerHarness(container).play([
         testItem(bookPid, mediaType: MediaType.audiobook),
       ], positionMs: 2700000);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: localizedHost(
-            const MiniWindowGate(child: SizedBox()),
-            theme: buildWaxTheme(),
-          ),
-        ),
+      await pumpApp(
+        tester,
+        const MiniWindowGate(child: SizedBox()),
+        container: container,
+        routed: false,
+        theme: buildWaxTheme(),
       );
-      await tester.pumpAndSettle();
       NowPlayingData drawn() =>
           tester.widget<MiniPlayer>(find.byType(MiniPlayer)).now;
       expect(drawn().duration, const Duration(minutes: 30));
@@ -290,9 +277,7 @@ void main() {
 
     test('a container torn down while small puts the window back', () async {
       final window = _FakeWindow(const MiniWindowCapabilities(available: true));
-      final container = ProviderContainer(
-        overrides: [miniWindowPortProvider.overrideWithValue(window)],
-      );
+      final container = _container(window);
       container.read(miniWindowProvider);
       await container.pump();
       await container.read(miniWindowProvider.notifier).enter();

@@ -1,10 +1,9 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
@@ -21,13 +20,7 @@ void main() {
           statusCode: 401,
         );
       final store = InMemoryCredentialStore()..token = 'stored-token';
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(store),
-        ],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repo, credentials: store);
 
       // The probe itself succeeds (the token dies between probe and
       // rotation), so build reports signed in.
@@ -57,13 +50,7 @@ void main() {
         statusCode: 500,
       );
     final store = InMemoryCredentialStore()..token = 'stored-token';
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(store),
-      ],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo, credentials: store);
 
     final session = await container.read(authControllerProvider.future);
     expect(session.authenticated, isTrue);

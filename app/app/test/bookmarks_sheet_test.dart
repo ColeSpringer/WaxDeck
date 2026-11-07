@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/player/bookmarks.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
@@ -13,6 +12,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 
@@ -94,11 +94,10 @@ class _Rig {
   late final MirrorDatabase db;
   late final FakeRepository repo;
   late final SyncEngine sync;
-  late PlayerHarness harness;
 
   Future<void> pump(WidgetTester tester) async {
     final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-    harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -169,7 +168,6 @@ void main() {
     expect(queued.payload, matches(RegExp(r'"id":"bm-[0-7][0-9A-Z]{25}"')));
     // Tried under the id it waits with.
     expect(queued.payload, contains(rig.repo.createBookmarkCalls.single.id!));
-    await rig.harness.endPlayback(tester);
   });
 
   testWidgets('a mark the server cannot be reached for waits too', (
@@ -193,7 +191,6 @@ void main() {
       findsOneWidget,
     );
     expect(raisedMessage(tester), isNull);
-    await rig.harness.endPlayback(tester);
   });
 
   testWidgets('a mark sent from the outbox loses its caption', (tester) async {
@@ -209,7 +206,6 @@ void main() {
 
     expect(rig.repo.createBookmarkCalls, hasLength(2));
     expect(_state(0), findsNothing);
-    await rig.harness.endPlayback(tester);
   });
 
   testWidgets('a mark the server refused says why, in its words', (
@@ -243,7 +239,6 @@ void main() {
       ),
       findsOneWidget,
     );
-    await rig.harness.endPlayback(tester);
   });
 
   testWidgets('a refusal the app has words for is said in them', (
@@ -273,7 +268,6 @@ void main() {
       ),
       findsOneWidget,
     );
-    await rig.harness.endPlayback(tester);
   });
 
   test('a list dropped while it reads leaves nothing listening', () async {
@@ -288,15 +282,14 @@ void main() {
       sync.dispose();
       await db.close();
     });
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        syncEngineProvider.overrideWithValue(sync),
+    final container = appContainer(
+      repo: repo,
+      sync: sync,
+      extra: [
         signedInAccountProvider.overrideWithValue(_me),
         offlineProvider.overrideWithValue(false),
       ],
     );
-    addTearDown(container.dispose);
 
     final listen = container.listen(bookmarksProvider(_bookPid), (_, _) {});
     await Future<void>.delayed(Duration.zero);
@@ -325,7 +318,6 @@ void main() {
     }
 
     expect(find.text('That is not here any more.'), findsOneWidget);
-    await rig.harness.endPlayback(tester);
   });
 
   testWidgets('offline, the sheet reads the marks this device holds', (
@@ -345,7 +337,6 @@ void main() {
     );
     expect(tester.getSemantics(row).label, contains('the riddle'));
     expect(_state(0), findsNothing);
-    await rig.harness.endPlayback(tester);
   });
 
   testWidgets('what is marked and removed online is mirrored too', (
@@ -369,7 +360,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(rig.repo.deleteBookmarkCalls, hasLength(1));
     expect(await mirrored(), isEmpty);
-    await rig.harness.endPlayback(tester);
   });
 
   testWidgets('removing a mark offline queues its removal', (tester) async {
@@ -390,7 +380,6 @@ void main() {
       findsNothing,
     );
     expect((await rig.outbox()).single.kind, 'bookmark-delete');
-    await rig.harness.endPlayback(tester);
   });
 
   testWidgets('a full book refuses the mark here, in the app language', (
@@ -411,7 +400,6 @@ void main() {
       'mark another.',
     );
     expect(await rig.outbox(), isEmpty);
-    await rig.harness.endPlayback(tester);
   });
 
   group('natively', () {
@@ -434,18 +422,16 @@ void main() {
     });
 
     ProviderContainer session({bool offline = false}) {
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          syncEngineProvider.overrideWithValue(sync),
+      return appContainer(
+        repo: repo,
+        sync: sync,
+        extra: [
           signedInAccountProvider.overrideWithValue(_me),
           offlineProvider.overrideWith(
             (ref) => offline || ref.watch(_linkDown),
           ),
         ],
       );
-      addTearDown(container.dispose);
-      return container;
     }
 
     Future<BookmarksController> opened(ProviderContainer container) async {
@@ -573,15 +559,13 @@ void main() {
     setUp(() => repo = FakeRepository());
 
     ProviderContainer session({ServerEventBus? bus}) {
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
+      return appContainer(
+        repo: repo,
+        extra: [
           syncEngineProvider.overrideWithValue(null),
           if (bus != null) serverEventBusProvider.overrideWith((ref) => bus),
         ],
       );
-      addTearDown(container.dispose);
-      return container;
     }
 
     test('a read that fails in passing is asked again', () async {

@@ -9,6 +9,7 @@ import 'package:waxdeck/src/uploads/upload_phase.dart';
 import 'package:waxdeck/src/uploads/uploads_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// Pages the session list by cursor, each page held until its gate
@@ -281,18 +282,14 @@ void main() {
   ProviderContainer host(
     FakeRepository repo, {
     Duration Function()? monotonic,
-  }) {
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        uploadRetryBackoffProvider.overrideWithValue((_) => Duration.zero),
-        if (monotonic != null)
-          monotonicClockProvider.overrideWithValue(monotonic),
-      ],
-    );
-    addTearDown(container.dispose);
-    return container;
-  }
+  }) => appContainer(
+    repo: repo,
+    extra: [
+      uploadRetryBackoffProvider.overrideWithValue((_) => Duration.zero),
+      if (monotonic != null)
+        monotonicClockProvider.overrideWithValue(monotonic),
+    ],
+  );
 
   test('a path upload streams in chunk-sized windows', () async {
     // Two full chunks plus a remainder: three windowed reads, never
@@ -690,16 +687,15 @@ void main() {
     test('a wire that stays down stalls after three tries', () async {
       final repo = FakeRepository();
       final waits = <int>[];
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
+      final container = appContainer(
+        repo: repo,
+        extra: [
           uploadRetryBackoffProvider.overrideWithValue((attempt) {
             waits.add(attempt);
             return Duration.zero;
           }),
         ],
       );
-      addTearDown(container.dispose);
       await container.read(uploadsProvider.future);
       var puts = 0;
       repo.onPutUploadData = () {

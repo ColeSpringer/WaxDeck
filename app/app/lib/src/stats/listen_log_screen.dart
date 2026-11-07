@@ -3,7 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
-import '../media_view.dart';
+import '../presenters/media_tiles.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/paged_scroll.dart';
 import '../shell/routes.dart';
@@ -113,33 +113,9 @@ class _ListenLogRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final played = l10n.formatListenTime(entry.msPlayed);
-    final details = <String>[
-      ?entry.artist,
-      // Skipped when empty, the way the filter above skips it: a radio
-      // row is measured by the server and names no client, and joining
-      // an empty string in leads the subtitle with a bare separator.
-      if (entry.client.isNotEmpty) entry.client,
-      l10n.formatStamp(entry.startedAt),
-    ];
     return MediaListRow(
       key: Key('listen-log-row-$index'),
-      data: MediaTileData(
-        // A session outlives the item it was about: a track deleted
-        // since is still a listen that happened.
-        title: entry.title ?? l10n.statsLogRemovedItem,
-        subtitle: details.join(' · '),
-        domain: waxDomainOfStats(entry.mediaType),
-        shape: waxShapeOfStats(entry.mediaType),
-        trailingText: played,
-        // The tick is the whole of what "finished" means here, and the
-        // row reads it out rather than leaving it to a glyph.
-        trailingSpoken: entry.finished
-            ? l10n.statsLogFinishedSpoken(played)
-            : played,
-        badge: entry.finished ? l10n.statsLogFinished : null,
-      ),
+      data: listenLogTile(entry, l10n: context.l10n),
     );
   }
 }

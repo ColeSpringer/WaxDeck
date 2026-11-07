@@ -7,8 +7,8 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
-import '../media_view.dart';
 import '../player/now_playing_controller.dart';
+import '../presenters/media_tiles.dart';
 import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -94,15 +94,9 @@ class TrackListScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final item = items[index];
               return MediaListRow(
-                data: MediaTileData(
-                  title: item.title,
-                  subtitle: item.artist,
-                  artwork: waxArtwork(store, item.artUrl),
-                  domain: waxDomainOf(item.mediaType),
-                  shape: waxShapeOf(item.mediaType),
-                  trailingText: formatTimecode(
-                    Duration(milliseconds: item.durationMs),
-                  ),
+                data: itemRowTile(
+                  item,
+                  store: store,
                   // Addressed by position: this is a running order, and
                   // the same item can answer more than one mix.
                   semanticsId: SemanticsIds.scopedItem(idPrefix, index),

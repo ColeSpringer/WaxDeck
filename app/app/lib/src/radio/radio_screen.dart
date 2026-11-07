@@ -9,6 +9,7 @@ import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../player/output_volume.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
@@ -440,8 +441,8 @@ class _StationTile extends ConsumerWidget {
     // same glyph eight pixels apart on a pointer, and neither aligned
     // to anything.
     return MediaCard(
-      data: MediaTileData(
-        title: station.name,
+      data: stationTile(
+        station,
         subtitle: stationLine(
           l10n,
           playing: playing,
@@ -449,8 +450,6 @@ class _StationTile extends ConsumerWidget {
           nowPlaying: nowPlaying,
         ),
         artwork: artwork,
-        domain: WaxDomain.radio,
-        shape: ArtworkShape.circle,
         semanticsId: SemanticsIds.radio(station.pid),
       ),
       width: width,

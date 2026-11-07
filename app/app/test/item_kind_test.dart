@@ -24,9 +24,9 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 const _a = 'tr-01JZX5N8QW3F4V9T2B7KDKINDA1';
@@ -86,13 +86,11 @@ Future<PlayerHarness> _pump(
   );
   // Signed in, as the app is wherever a kind change is offered.
   await tester.runAsync(() => container.read(authControllerProvider.future));
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(_Starter(pids: pids, to: to)),
-    ),
+  await pumpApp(
+    tester,
+    _Starter(pids: pids, to: to),
+    container: container,
   );
-  await tester.pumpAndSettle();
   return PlayerHarness(container);
 }
 
@@ -421,7 +419,6 @@ void main() {
     // offer back at the next launch.
     final queue = harness.container.read(queueControllerProvider);
     expect(queue.entries, isEmpty);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('what follows a folded item that was playing waits, unplayed', (
@@ -448,7 +445,6 @@ void main() {
     expect([for (final e in queue.entries) e.pid], [d]);
     expect(queue.currentEntry?.pid, d);
     expect(engine.playing, isFalse, reason: 'it waits rather than starting');
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a queued track that became a book starts as one', (
@@ -483,7 +479,6 @@ void main() {
     final now = harness.container.read(nowPlayingProvider);
     expect(now.entry?.pid, _a);
     expect(now.session?.item.mediaType, MediaType.audiobook);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a change that ends after its dialog stopped watching still '
@@ -544,11 +539,6 @@ void main() {
     expect(now.session?.item.mediaType, MediaType.audiobook);
     row.close();
     binder.close();
-    await harness.endPlayback(tester);
-    // The engine's reconnect is a timer: the session ends here.
-    await tester.pumpWidget(const SizedBox());
-    harness.container.dispose();
-    await tester.pump();
   });
 
   testWidgets('a change that failed part way lets go of what it folded, '
@@ -592,7 +582,6 @@ void main() {
       'The change could not be made: a file of the item is not on disk',
     );
     expect(find.byType(BookScreen), findsNothing);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a station tuned over a folded entry plays on, unremarked', (
@@ -631,8 +620,6 @@ void main() {
     );
     expect(engine.playing, isTrue);
     expect(raisedMessage(tester), isNull);
-    await harness.container.read(radioPlaybackProvider.notifier).stop();
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a folded entry a station parked goes, and nothing starts', (
@@ -678,7 +665,6 @@ void main() {
     expect(raisedMessage(tester), isNull);
     final queue = harness.container.read(queueControllerProvider);
     expect([for (final e in queue.entries) e.pid], [_c]);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a folded entry under a station is not offered back after it', (
@@ -718,7 +704,6 @@ void main() {
     final queue = harness.container.read(queueControllerProvider);
     expect([for (final e in queue.entries) e.pid], [_c]);
     expect(engine.playing, isFalse);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a dialog opened over the running change is left standing', (

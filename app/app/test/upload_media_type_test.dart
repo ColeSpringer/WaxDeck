@@ -2,17 +2,15 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/add_to_library.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 // What the add flows offer as a medium. A podcast is a feed's show, so
 // neither the file dialog nor the link dialog lists it, and a caller that
@@ -66,28 +64,6 @@ FakeRepository _repo() =>
     FakeRepository()
       ..sessionState = const SessionState(authenticated: true, user: _user);
 
-/// A host that opens one of the add flows from a button.
-Widget _host(
-  FakeRepository repo,
-  Future<void> Function(BuildContext, WidgetRef) open, {
-  FilePickerPort? picker,
-}) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    filePickerProvider.overrideWithValue(picker ?? _Picker()),
-  ],
-  child: routedHost(
-    Consumer(
-      builder: (context, ref, _) => Scaffold(
-        body: Center(
-          child: WaxButton(label: 'Open', onPressed: () => open(context, ref)),
-        ),
-      ),
-    ),
-  ),
-);
-
 Finder _option(MediaType type) => find.bySemanticsIdentifier(
   SemanticsIds.uploadMediaTypeOption(type.wireName),
 );
@@ -105,8 +81,27 @@ Future<void> _expectTwoMedia(WidgetTester tester, MediaType choose) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _openDialog(WidgetTester tester, Widget host) async {
-  await tester.pumpWidget(host);
+/// Opens one of the add flows from a button, then taps it.
+Future<void> _openDialog(
+  WidgetTester tester,
+  FakeRepository repo,
+  Future<void> Function(BuildContext, WidgetRef) open, {
+  FilePickerPort? picker,
+}) async {
+  await mountApp(
+    tester,
+    Consumer(
+      builder: (context, ref, _) => Scaffold(
+        body: Center(
+          child: WaxButton(label: 'Open', onPressed: () => open(context, ref)),
+        ),
+      ),
+    ),
+    container: appContainer(
+      repo: repo,
+      extra: [filePickerProvider.overrideWithValue(picker ?? _Picker())],
+    ),
+  );
   await tester.tap(find.text('Open'));
   await tester.pumpAndSettle();
 }
@@ -139,11 +134,9 @@ void main() {
     final repo = _repo();
     await _openDialog(
       tester,
-      _host(
-        repo,
-        (context, ref) =>
-            uploadPickedFiles(context, ref, <PickedAudioFile>[_file('a.m4b')]),
-      ),
+      repo,
+      (context, ref) =>
+          uploadPickedFiles(context, ref, <PickedAudioFile>[_file('a.m4b')]),
     );
 
     await _expectTwoMedia(tester, MediaType.audiobook);
@@ -161,7 +154,8 @@ void main() {
     final repo = _repo();
     await _openDialog(
       tester,
-      _host(repo, (context, ref) => acquireFromUrl(context, ref)),
+      repo,
+      (context, ref) => acquireFromUrl(context, ref),
     );
 
     expect(
@@ -190,12 +184,10 @@ void main() {
     final repo = _repo();
     await _openDialog(
       tester,
-      _host(
-        repo,
-        (context, ref) => uploadPickedFiles(context, ref, <PickedAudioFile>[
-          _file('a.flac'),
-        ], fixed: MediaType.podcast),
-      ),
+      repo,
+      (context, ref) => uploadPickedFiles(context, ref, <PickedAudioFile>[
+        _file('a.flac'),
+      ], fixed: MediaType.podcast),
     );
 
     expect(find.text('Music'), findsOneWidget);
@@ -213,11 +205,9 @@ void main() {
     final repo = _repo();
     await _openDialog(
       tester,
-      _host(
-        repo,
-        (context, ref) =>
-            showAddToLibrarySheet(context, ref, fixed: MediaType.podcast),
-      ),
+      repo,
+      (context, ref) =>
+          showAddToLibrarySheet(context, ref, fixed: MediaType.podcast),
     );
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addFromUrl));
@@ -241,15 +231,13 @@ void main() {
   testWidgets('an audiobook folder offers book grouping', (tester) async {
     await _openDialog(
       tester,
-      _host(
-        _repo(),
-        (context, ref) => showDialog<void>(
-          context: context,
-          builder: (_) => const MediaTypeDialog(
-            initial: MediaType.audiobook,
-            fileCount: 3,
-            initialIdentify: false,
-          ),
+      _repo(),
+      (context, ref) => showDialog<void>(
+        context: context,
+        builder: (_) => const MediaTypeDialog(
+          initial: MediaType.audiobook,
+          fileCount: 3,
+          initialIdentify: false,
         ),
       ),
     );
@@ -267,12 +255,10 @@ void main() {
     final repo = _repo();
     await _openDialog(
       tester,
-      _host(
-        repo,
-        (context, ref) =>
-            showAddToLibrarySheet(context, ref, fixed: MediaType.audiobook),
-        picker: _Picker([_file('01.mp3', 'Book'), _file('02.mp3', 'Book')]),
-      ),
+      repo,
+      (context, ref) =>
+          showAddToLibrarySheet(context, ref, fixed: MediaType.audiobook),
+      picker: _Picker([_file('01.mp3', 'Book'), _file('02.mp3', 'Book')]),
     );
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addUploadFolder));
     await tester.pumpAndSettle();
@@ -298,12 +284,10 @@ void main() {
     final repo = _repo();
     await _openDialog(
       tester,
-      _host(
-        repo,
-        (context, ref) =>
-            showAddToLibrarySheet(context, ref, fixed: MediaType.music),
-        picker: _Picker([_file('01.flac', 'Album'), _file('02.flac', 'Album')]),
-      ),
+      repo,
+      (context, ref) =>
+          showAddToLibrarySheet(context, ref, fixed: MediaType.music),
+      picker: _Picker([_file('01.flac', 'Album'), _file('02.flac', 'Album')]),
     );
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addUploadFolder));
     await tester.pumpAndSettle();
@@ -327,14 +311,9 @@ void main() {
     final repo = _repo();
     await _openDialog(
       tester,
-      _host(
-        repo,
-        (context, ref) => showAddToLibrarySheet(context, ref),
-        picker: _Picker([
-          _file('book.m4b', 'Book'),
-          _file('notes.mp3', 'Book'),
-        ]),
-      ),
+      repo,
+      (context, ref) => showAddToLibrarySheet(context, ref),
+      picker: _Picker([_file('book.m4b', 'Book'), _file('notes.mp3', 'Book')]),
     );
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addUploadFolder));
     await tester.pumpAndSettle();
@@ -362,14 +341,9 @@ void main() {
     final repo = _repo();
     await _openDialog(
       tester,
-      _host(
-        repo,
-        (context, ref) => showAddToLibrarySheet(context, ref),
-        picker: _Picker([
-          _file('book.m4b', 'Book'),
-          _file('notes.mp3', 'Book'),
-        ]),
-      ),
+      repo,
+      (context, ref) => showAddToLibrarySheet(context, ref),
+      picker: _Picker([_file('book.m4b', 'Book'), _file('notes.mp3', 'Book')]),
     );
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addUploadFolder));
     await tester.pumpAndSettle();
@@ -393,11 +367,9 @@ void main() {
     final repo = _repo();
     await _openDialog(
       tester,
-      _host(
-        repo,
-        (context, ref) =>
-            showAddToLibrarySheet(context, ref, fixed: MediaType.audiobook),
-      ),
+      repo,
+      (context, ref) =>
+          showAddToLibrarySheet(context, ref, fixed: MediaType.audiobook),
     );
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addFromUrl));
     await tester.pumpAndSettle();
@@ -428,10 +400,8 @@ void main() {
     ]) {
       await _openDialog(
         tester,
-        _host(
-          _repo(),
-          (context, ref) => showAddToLibrarySheet(context, ref, fixed: kind),
-        ),
+        _repo(),
+        (context, ref) => showAddToLibrarySheet(context, ref, fixed: kind),
       );
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addUploadFile));
       await tester.pumpAndSettle();

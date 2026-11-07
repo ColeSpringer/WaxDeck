@@ -1,16 +1,13 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
 import 'package:waxdeck/src/library/item_facts_sheet.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 ItemSummary _item(String pid, MediaType mediaType) => ItemSummary(
   pid: pid,
@@ -37,22 +34,15 @@ Future<void> _pump(
   String pid = 'tr-1',
   MediaType mediaType = MediaType.music,
 }) async {
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repository),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-      // A scaffold for the ink a copy's delete draws, as the modal sheet
-      // provides it.
-      child: routedHost(
-        Scaffold(
-          body: ItemFactsSheet(pid: pid, mediaType: mediaType),
-        ),
-      ),
+  // A scaffold for the ink a copy's delete draws, as the modal sheet
+  // provides it.
+  await pumpApp(
+    tester,
+    Scaffold(
+      body: ItemFactsSheet(pid: pid, mediaType: mediaType),
     ),
+    container: appContainer(repo: repository),
   );
-  await tester.pumpAndSettle();
 }
 
 void main() {

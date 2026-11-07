@@ -13,7 +13,6 @@ import 'package:waxdeck/src/queue/queue_state.dart' as queue_state;
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/queue/queue_view.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -22,12 +21,11 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'direction_glyph.dart';
 import 'disclosure_glyph.dart';
 import 'fakes.dart';
-import 'player_host.dart';
-import 'routed_host.dart';
 import 'row_finders.dart';
 
 const _album = QueueSource(
@@ -73,29 +71,19 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(
-        repository ?? FakeRepository(items: _tracks),
-      ),
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-      if (settings != null)
-        clientSettingsStoreProvider.overrideWithValue(settings),
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const QueueScreen(), locale: locale),
+  return pumpApp(
+    tester,
+    const QueueScreen(),
+    container: appContainer(
+      repo: repository ?? FakeRepository(items: _tracks),
+      settings: settings,
     ),
+    locale: locale,
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 /// The queue screen over a router arranged the way the app arranges it,
-/// which the plain [routedHost] cannot be: the key map has to sit inside
+/// which the plain `routedHost` cannot be: the key map has to sit inside
 /// the router and above the navigator the screen is on, and a shell
 /// route is where the app satisfies both.
 Widget _keyboardHost(Widget screen) {
@@ -153,7 +141,6 @@ void main() {
       // the current one pinned at the top.
       expect(find.text('PREVIOUSLY (1)'), findsOneWidget);
       expect(_rowTitles(tester), hasLength(2));
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the seam is drawn once, ahead of the listener', (
@@ -239,7 +226,6 @@ void main() {
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.queueHistory));
       await tester.pumpAndSettle();
       expect(_rowTitles(tester), hasLength(3));
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the played head points right closed and down open', (
@@ -260,7 +246,6 @@ void main() {
       await tester.tap(head);
       await tester.pumpAndSettle();
       expectDisclosure(tester, head, open: true);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a row drops out when its remove is pressed', (tester) async {
@@ -278,7 +263,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(queueControllerProvider).pids, ['tr-1', 'tr-2']);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a swipe drops a row too', (tester) async {
@@ -294,7 +278,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(queueControllerProvider).pids, ['tr-1', 'tr-3']);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a drag reorders what is up next, not the played head', (
@@ -329,7 +312,6 @@ void main() {
         'tr-4',
         'tr-3',
       ]);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a drag down moves an entry past the one below it', (
@@ -363,7 +345,6 @@ void main() {
         'tr-3',
         'tr-2',
       ]);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('an earlier session can be put back from here', (tester) async {
@@ -383,7 +364,6 @@ void main() {
       final queue = container.read(queueControllerProvider);
       expect(queue.pids, ['tr-9', 'tr-8']);
       expect(queue.currentPid, 'tr-8');
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the queue and its earlier sessions read in the listener\'s '
@@ -428,7 +408,6 @@ void main() {
         raised.map(shellMessageText),
         contains('Se ha restaurado 3 elementos en cola'),
       );
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a lone entry on a device says only where', (tester) async {
@@ -480,7 +459,6 @@ void main() {
       final queue = container.read(queueControllerProvider);
       expect(queue.pids, ['tr-1', 'tr-2']);
       expect(queue.currentPid, 'tr-2');
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a restore\'s undo takes back that restore or nothing', (
@@ -512,7 +490,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(container.read(queueControllerProvider).pids, ['tr-5', 'tr-6']);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a server with no history offers nothing', (tester) async {
@@ -530,20 +507,11 @@ void main() {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository(items: _tracks)),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
+      final container = await pumpApp(
+        tester,
+        const QueuePanel(),
+        container: appContainer(repo: FakeRepository(items: _tracks)),
       );
-      addTearDown(container.dispose);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const QueuePanel()),
-        ),
-      );
-      await tester.pumpAndSettle();
       expect(find.text('Nothing queued'), findsOneWidget);
 
       container.read(queueControllerProvider.notifier).playNow([
@@ -618,7 +586,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('1 selected'), findsOneWidget);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the kebab opens the row menu while long press selects', (
@@ -770,7 +737,6 @@ void main() {
       // Removing clears the selection: what was picked is gone.
       expect(container.read(queueControllerProvider).pids, ['tr-1', 'tr-2']);
       expect(find.textContaining('selected'), findsNothing);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the bar\'s moves point where they send the rows', (
@@ -795,7 +761,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.queueSelectionBottom),
         up: false,
       );
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('shift+click extends a range from the last row touched', (
@@ -836,7 +801,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(container.read(queueControllerProvider).pids, ['tr-1']);
-      await endEditedPlayback(tester, container);
     });
 
     // Where a dragged block lands, at the edges of the coordinate space
@@ -912,7 +876,6 @@ void main() {
         'tr-2',
         'tr-3',
       ]);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('un-ticking the last row leaves no anchor behind', (
@@ -944,7 +907,6 @@ void main() {
       // Just the row clicked - not a range running back to a row that
       // was un-ticked out of the previous selection.
       expect(find.text('1 selected'), findsOneWidget);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('a swipe is inert while a set is picked', (tester) async {
@@ -970,7 +932,6 @@ void main() {
         'tr-2',
         'tr-3',
       ]);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the clear button and Escape both end the selection', (
@@ -990,7 +951,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('selected'), findsNothing);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('Escape ends the selection, and only while there is one', (
@@ -1002,18 +962,11 @@ void main() {
       tester.view.physicalSize = const Size(500, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository(items: _tracks)),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-      );
-      addTearDown(container.dispose);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: _keyboardHost(const QueueScreen()),
-        ),
+      final container = appContainer(repo: FakeRepository(items: _tracks));
+      await mountHost(
+        tester,
+        _keyboardHost(const QueueScreen()),
+        container: container,
       );
       container.read(queueControllerProvider.notifier).playNow([
         'tr-1',
@@ -1039,7 +992,6 @@ void main() {
       expect(find.textContaining('selected'), findsNothing);
       // Still on the queue: Escape ended a mode rather than the screen.
       expect(find.byType(QueueScreen), findsOneWidget);
-      await endEditedPlayback(tester, container);
     });
 
     testWidgets('the same selection drives the panel', (tester) async {
@@ -1049,19 +1001,8 @@ void main() {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(FakeRepository(items: _tracks)),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-      );
-      addTearDown(container.dispose);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const QueuePanel()),
-        ),
-      );
+      final container = appContainer(repo: FakeRepository(items: _tracks));
+      await mountApp(tester, const QueuePanel(), container: container);
       container.read(queueControllerProvider.notifier).playNow([
         'tr-1',
         'tr-2',
@@ -1073,7 +1014,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('1 selected'), findsOneWidget);
       expect(container.read(queueSelectionProvider), hasLength(1));
-      await endEditedPlayback(tester, container);
     });
   });
 
@@ -1085,10 +1025,7 @@ void main() {
           ..sessionHistory = <PlaybackSessionHistoryEntry>[
             _session('ps-1', pids: ['tr-1', 'tr-2'], index: 1),
           ];
-        final container = ProviderContainer(
-          overrides: [repositoryProvider.overrideWithValue(repository)],
-        );
-        addTearDown(container.dispose);
+        final container = appContainer(repo: repository);
 
         final offer = await container.read(queueRestoreProvider.future);
 
@@ -1110,13 +1047,7 @@ void main() {
         );
         final repository = FakeRepository()
           ..sessionHistory = <PlaybackSessionHistoryEntry>[_session('ps-1')];
-        final container = ProviderContainer(
-          overrides: [
-            repositoryProvider.overrideWithValue(repository),
-            clientSettingsStoreProvider.overrideWithValue(settings),
-          ],
-        );
-        addTearDown(container.dispose);
+        final container = appContainer(repo: repository, settings: settings);
 
         expect(await container.read(queueRestoreProvider.future), isNull);
       },
@@ -1128,13 +1059,7 @@ void main() {
         final settings = MemoryClientSettingsStore();
         final repository = FakeRepository(items: _tracks)
           ..sessionHistory = <PlaybackSessionHistoryEntry>[_session('ps-7')];
-        final container = ProviderContainer(
-          overrides: [
-            repositoryProvider.overrideWithValue(repository),
-            clientSettingsStoreProvider.overrideWithValue(settings),
-          ],
-        );
-        addTearDown(container.dispose);
+        final container = appContainer(repo: repository, settings: settings);
         await container.read(queueRestoreProvider.future);
 
         await container.read(queueRestoreProvider.notifier).dismiss();
@@ -1157,16 +1082,8 @@ void main() {
           _session('ps-new', stoppedAt: DateTime.utc(2026, 7, 28, 12)),
           _session('ps-old', stoppedAt: DateTime.utc(2026, 7, 28, 9)),
         ];
-      ProviderContainer launch() {
-        final container = ProviderContainer(
-          overrides: [
-            repositoryProvider.overrideWithValue(repository),
-            clientSettingsStoreProvider.overrideWithValue(settings),
-          ],
-        );
-        addTearDown(container.dispose);
-        return container;
-      }
+      ProviderContainer launch() =>
+          appContainer(repo: repository, settings: settings);
 
       final first = launch();
       await first.read(queueRestoreProvider.future);
@@ -1192,10 +1109,7 @@ void main() {
             code: 'internal',
             message: 'offline',
           );
-        final container = ProviderContainer(
-          overrides: [repositoryProvider.overrideWithValue(repository)],
-        );
-        addTearDown(container.dispose);
+        final container = appContainer(repo: repository);
 
         expect(await container.read(queueRestoreProvider.future), isNull);
       });
@@ -1207,10 +1121,7 @@ void main() {
           _session('ps-1', pids: const []),
           _session('ps-2', pids: const ['tr-5']),
         ];
-      final container = ProviderContainer(
-        overrides: [repositoryProvider.overrideWithValue(repository)],
-      );
-      addTearDown(container.dispose);
+      final container = appContainer(repo: repository);
 
       final offer = await container.read(queueRestoreProvider.future);
 
@@ -1223,10 +1134,7 @@ void main() {
           ..sessionHistory = <PlaybackSessionHistoryEntry>[
             _session('ps-1', pids: const ['bk-1']),
           ];
-        final container = ProviderContainer(
-          overrides: [repositoryProvider.overrideWithValue(repository)],
-        );
-        addTearDown(container.dispose);
+        final container = appContainer(repo: repository);
 
         final offer = await container.read(queueRestoreProvider.future);
 

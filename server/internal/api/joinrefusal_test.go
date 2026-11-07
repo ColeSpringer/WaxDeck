@@ -25,7 +25,7 @@ func TestJoinRefusalsSayWhyTheBookCannotBeLaidOut(t *testing.T) {
 		{&service.Error{Kind: service.KindInternal, Err: errors.New("database is locked")}, 500, "internal"},
 	} {
 		rec := httptest.NewRecorder()
-		refuseJoin(rec, c.err)
+		refuseJoin(rec, service.KindOf(c.err))
 		var body struct{ Code string }
 		json.Unmarshal(rec.Body.Bytes(), &body)
 		if rec.Code != c.status || body.Code != c.code {

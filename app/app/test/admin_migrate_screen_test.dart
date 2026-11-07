@@ -3,15 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/migrate_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 /// A picker resolving pickFile to one fixed archive, standing in for
@@ -54,22 +53,16 @@ Future<void> _pump(
   tester.view.physicalSize = const Size(1200, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final scope =
-      container ??
-      ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          filePickerProvider.overrideWithValue(_ZipPicker()),
-        ],
-      );
-  addTearDown(scope.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: scope,
-      child: routedHost(const MigrateScreen()),
-    ),
+  await pumpApp(
+    tester,
+    const MigrateScreen(),
+    container:
+        container ??
+        appContainer(
+          repo: repo,
+          extra: [filePickerProvider.overrideWithValue(_ZipPicker())],
+        ),
   );
-  await tester.pumpAndSettle();
 }
 
 /// The Start import button, found by its handle.
@@ -99,9 +92,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
+    final container = appContainer(repo: repo);
     await _pump(tester, repo, container);
 
     await tester.enterText(

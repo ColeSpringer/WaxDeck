@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
@@ -15,16 +16,10 @@ import (
 // Shapes convert here; behavior lives in the service.
 
 func (s *Server) ListSubscriptions(ctx context.Context, req ListSubscriptionsRequestObject) (ListSubscriptionsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
 	if err != nil {
 		return nil, err
-	}
-	limit := 100
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
-	}
-	if limit < 1 || limit > 500 {
-		return ListSubscriptions400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
 	}
 	cursor := ""
 	if req.Params.Cursor != nil {
@@ -32,9 +27,6 @@ func (s *Server) ListSubscriptions(ctx context.Context, req ListSubscriptionsReq
 	}
 	subs, next, err := s.svc.Subscriptions(ctx, uc, cursor, limit, true)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ListSubscriptions400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	page := SubscriptionPage{Items: make([]Subscription, 0, len(subs))}
@@ -48,12 +40,9 @@ func (s *Server) ListSubscriptions(ctx context.Context, req ListSubscriptionsReq
 }
 
 func (s *Server) SubscribePodcast(ctx context.Context, req SubscribePodcastRequestObject) (SubscribePodcastResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SubscribePodcast400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a request body is required"))}, nil
+		return nil, errNoBody()
 	}
 	sr := service.SubscribeRequest{URL: req.Body.Url}
 	if req.Body.SourceType != nil {
@@ -70,17 +59,15 @@ func (s *Server) SubscribePodcast(ctx context.Context, req SubscribePodcastReque
 	}
 	sub, created, err := s.svc.Subscribe(ctx, uc, sr)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SubscribePodcast400JSONResponse{InvalidRequestJSONResponse(feedErrObj("invalid-request", err))}, nil
-		case service.KindForbidden:
-			return SubscribePodcast403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindUnsupported:
-			return SubscribePodcast501JSONResponse(errObj("source-unavailable", err.Error())), nil
-		case service.KindFeature:
-			return SubscribePodcast501JSONResponse(featureErrObj(err)), nil
-		case service.KindUpstream:
-			return SubscribePodcast502JSONResponse{FeedUnreachableJSONResponse(feedErrObj("feed-unreachable", err))}, nil
+		kind := service.KindOf(err)
+		if kind == service.KindInvalid {
+			return nil, refuseParams(http.StatusBadRequest, "invalid-request", serviceMessage(err), feedParams(err))
+		}
+		if kind == service.KindFeature {
+			return nil, featureRefusal(err)
+		}
+		if kind == service.KindUpstream {
+			return nil, refuseParams(http.StatusBadGateway, "feed-unreachable", serviceMessage(err), feedParams(err))
 		}
 		return nil, err
 	}
@@ -94,12 +81,9 @@ func (s *Server) SubscribePodcast(ctx context.Context, req SubscribePodcastReque
 // carries the feed URL to subscribe with, so a match needs no source
 // kind: a directory hit is always RSS.
 func (s *Server) SearchPodcastDirectory(ctx context.Context, req SearchPodcastDirectoryRequestObject) (SearchPodcastDirectoryResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
+	limit, err := pageLimit(req.Params.Limit, 25, 100)
+	if err != nil {
 		return nil, err
-	}
-	limit := 25
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
 	}
 	entries, err := s.svc.SearchPodcastDirectory(ctx, req.Params.Query, limit)
 	if err != nil {
@@ -120,15 +104,9 @@ func (s *Server) SearchPodcastDirectory(ctx context.Context, req SearchPodcastDi
 }
 
 func (s *Server) GetPodcast(ctx context.Context, req GetPodcastRequestObject) (GetPodcastResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	det, err := s.svc.PodcastDetailFor(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetPodcast404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no show with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	out := PodcastDetail{Show: showJSON(det.Show), Subscribed: det.Subscribed}
@@ -140,49 +118,31 @@ func (s *Server) GetPodcast(ctx context.Context, req GetPodcastRequestObject) (G
 }
 
 func (s *Server) UnsubscribePodcast(ctx context.Context, req UnsubscribePodcastRequestObject) (UnsubscribePodcastResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	removeDownloads := req.Params.RemoveDownloads != nil && *req.Params.RemoveDownloads
 	if err := s.svc.Unsubscribe(ctx, uc, req.Pid, removeDownloads); err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return UnsubscribePodcast404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no show with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return UnsubscribePodcast204Response{}, nil
 }
 
 func (s *Server) PutSubscriptionSettings(ctx context.Context, req PutSubscriptionSettingsRequestObject) (PutSubscriptionSettingsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return PutSubscriptionSettings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a request body is required"))}, nil
+		return nil, errNoBody()
 	}
 	sub, err := s.svc.PutSubscriptionSettings(ctx, uc, req.Pid, settingsFromJSON(*req.Body))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return PutSubscriptionSettings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return PutSubscriptionSettings404JSONResponse(errObj("not-found", err.Error())), nil
-		}
 		return nil, err
 	}
 	return PutSubscriptionSettings200JSONResponse(subscriptionJSON(sub)), nil
 }
 
 func (s *Server) ListSubscribedEpisodes(ctx context.Context, req ListSubscribedEpisodesRequestObject) (ListSubscribedEpisodesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
 	if err != nil {
 		return nil, err
-	}
-	limit, ok := pageLimit(req.Params.Limit, 100, 500)
-	if !ok {
-		return ListSubscribedEpisodes400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
 	}
 	filter := service.EpisodesLatest
 	if req.Params.Filter != nil {
@@ -190,9 +150,6 @@ func (s *Server) ListSubscribedEpisodes(ctx context.Context, req ListSubscribedE
 	}
 	eps, next, err := s.svc.SubscribedEpisodes(ctx, uc, filter, deref(req.Params.Cursor), limit)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ListSubscribedEpisodes400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	page := EpisodePage{Items: make([]EpisodeSummary, 0, len(eps))}
@@ -206,16 +163,10 @@ func (s *Server) ListSubscribedEpisodes(ctx context.Context, req ListSubscribedE
 }
 
 func (s *Server) ListEpisodes(ctx context.Context, req ListEpisodesRequestObject) (ListEpisodesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
 	if err != nil {
 		return nil, err
-	}
-	limit := 100
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
-	}
-	if limit < 1 || limit > 500 {
-		return ListEpisodes400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
 	}
 	cursor := ""
 	if req.Params.Cursor != nil {
@@ -223,12 +174,6 @@ func (s *Server) ListEpisodes(ctx context.Context, req ListEpisodesRequestObject
 	}
 	eps, next, err := s.svc.Episodes(ctx, uc, req.Pid, cursor, limit)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return ListEpisodes400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return ListEpisodes404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no show with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	page := EpisodePage{Items: make([]EpisodeSummary, 0, len(eps))}
@@ -242,15 +187,9 @@ func (s *Server) ListEpisodes(ctx context.Context, req ListEpisodesRequestObject
 }
 
 func (s *Server) GetEpisode(ctx context.Context, req GetEpisodeRequestObject) (GetEpisodeResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	det, err := s.svc.EpisodeDetailFor(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetEpisode404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no episode with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	sum := episodeSummaryJSON(det.EpisodeSummary)
@@ -298,19 +237,11 @@ func (s *Server) GetEpisode(ctx context.Context, req GetEpisodeRequestObject) (G
 }
 
 func (s *Server) GetEpisodeTranscript(ctx context.Context, req GetEpisodeTranscriptRequestObject) (GetEpisodeTranscriptResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	tx, err := s.svc.Transcript(ctx, uc, req.Pid)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindForbidden:
-			return GetEpisodeTranscript403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return GetEpisodeTranscript404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		case service.KindUpstream:
-			return GetEpisodeTranscript502JSONResponse{FeedUnreachableJSONResponse(feedErrObj("feed-unreachable", err))}, nil
+		if service.KindOf(err) == service.KindUpstream {
+			return nil, refuseParams(http.StatusBadGateway, "feed-unreachable", serviceMessage(err), feedParams(err))
 		}
 		return nil, err
 	}
@@ -331,18 +262,10 @@ func (s *Server) GetEpisodeTranscript(ctx context.Context, req GetEpisodeTranscr
 }
 
 func (s *Server) CaptureEpisodeTranscript(ctx context.Context, req CaptureEpisodeTranscriptRequestObject) (CaptureEpisodeTranscriptResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.CaptureEpisodeTranscript(ctx, uc, req.Pid); err != nil {
-		switch service.KindOf(err) {
-		case service.KindForbidden:
-			return CaptureEpisodeTranscript403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return CaptureEpisodeTranscript404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		case service.KindUpstream:
-			return CaptureEpisodeTranscript502JSONResponse{FeedUnreachableJSONResponse(feedErrObj("feed-unreachable", err))}, nil
+		if service.KindOf(err) == service.KindUpstream {
+			return nil, refuseParams(http.StatusBadGateway, "feed-unreachable", serviceMessage(err), feedParams(err))
 		}
 		return nil, err
 	}
@@ -350,19 +273,12 @@ func (s *Server) CaptureEpisodeTranscript(ctx context.Context, req CaptureEpisod
 }
 
 func (s *Server) RefreshPodcast(ctx context.Context, req RefreshPodcastRequestObject) (RefreshPodcastResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	added, err := s.svc.RefreshPodcast(ctx, uc, req.Pid)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return RefreshPodcast404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no show with pid "+req.Pid))}, nil
-		case service.KindForbidden:
-			return RefreshPodcast403JSONResponse(errObj("forbidden", err.Error())), nil
-		case service.KindUpstream:
-			return RefreshPodcast502JSONResponse{FeedUnreachableJSONResponse(feedErrObj("feed-unreachable", err))}, nil
+		kind := service.KindOf(err)
+		if kind == service.KindUpstream {
+			return nil, refuseParams(http.StatusBadGateway, "feed-unreachable", serviceMessage(err), feedParams(err))
 		}
 		return nil, err
 	}
@@ -370,50 +286,23 @@ func (s *Server) RefreshPodcast(ctx context.Context, req RefreshPodcastRequestOb
 }
 
 func (s *Server) FetchEpisode(ctx context.Context, req FetchEpisodeRequestObject) (FetchEpisodeResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.QueueEpisodeFetch(ctx, uc, req.Pid); err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return FetchEpisode404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no episode with pid "+req.Pid))}, nil
-		case service.KindForbidden:
-			return FetchEpisode403JSONResponse(errObj("forbidden", err.Error())), nil
-		}
 		return nil, err
 	}
 	return FetchEpisode202Response{}, nil
 }
 
 func (s *Server) RemoveEpisodeDownload(ctx context.Context, req RemoveEpisodeDownloadRequestObject) (RemoveEpisodeDownloadResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.RemoveEpisodeDownload(ctx, uc, req.Pid); err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return RemoveEpisodeDownload404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no episode with pid "+req.Pid))}, nil
-		case service.KindForbidden:
-			return RemoveEpisodeDownload403JSONResponse(errObj("forbidden", err.Error())), nil
-		case service.KindConflict:
-			return RemoveEpisodeDownload409JSONResponse(errObj("conflict", err.Error())), nil
-		case service.KindCatalogBusy:
-			// Same status, different code: only this one is worth an
-			// unattended retry.
-			return RemoveEpisodeDownload409JSONResponse(errObj(string(service.KindCatalogBusy), err.Error())), nil
-		}
 		return nil, err
 	}
 	return RemoveEpisodeDownload204Response{}, nil
 }
 
 func (s *Server) ExportOpml(ctx context.Context, req ExportOpmlRequestObject) (ExportOpmlResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	doc, err := s.svc.ExportOPML(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -425,22 +314,14 @@ func (s *Server) ExportOpml(ctx context.Context, req ExportOpmlRequestObject) (E
 }
 
 func (s *Server) ImportOpml(ctx context.Context, req ImportOpmlRequestObject) (ImportOpmlResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return ImportOpml400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a request body is required"))}, nil
+		return nil, errNoBody()
 	}
 	results, err := s.svc.ImportOPML(ctx, uc, []byte(req.Body.Opml))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return ImportOpml400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return ImportOpml403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindFeature:
-			return ImportOpml501JSONResponse{FeatureUnavailableJSONResponse(featureErrObj(err))}, nil
+		if service.KindOf(err) == service.KindFeature {
+			return nil, featureRefusal(err)
 		}
 		return nil, err
 	}
@@ -468,36 +349,29 @@ func (s *Server) ImportOpml(ctx context.Context, req ImportOpmlRequestObject) (I
 	return ImportOpml200JSONResponse(out), nil
 }
 
-// featureErrObj is a refusal of a feature this server is not running,
-// naming podcasts when they are the one turned off.
-func featureErrObj(err error) Error {
-	e := errObj("feature-unavailable", err.Error())
+// featureRefusal refuses a feature this server is not running, naming
+// podcasts when they are the one turned off.
+func featureRefusal(err error) error {
+	var params map[string]string
 	if errors.Is(err, service.ErrPodcastsOff) {
-		e.Params = &map[string]string{"feature": "podcasts"}
+		params = map[string]string{"feature": "podcasts"}
 	}
-	return e
+	return refuseParams(http.StatusNotImplemented, "feature-unavailable", serviceMessage(err), params)
 }
 
-// feedErrObj is a feed failure's body: the service's sentence, and the
-// failure's reason when it carries one.
-func feedErrObj(code string, err error) Error {
-	e := errObj(code, err.Error())
+// feedParams is a feed failure's reason, for the refusal that carries
+// the service's sentence; none when the failure names no reason.
+func feedParams(err error) map[string]string {
 	if reason := service.FeedFailureReason(err); reason != "" {
-		e.Params = &map[string]string{"reason": reason}
+		return map[string]string{"reason": reason}
 	}
-	return e
+	return nil
 }
 
 func (s *Server) GetBook(ctx context.Context, req GetBookRequestObject) (GetBookResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	bd, err := s.svc.BookDetailFor(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetBook404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no book with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	out := BookDetail{
@@ -546,19 +420,13 @@ func (s *Server) GetBook(ctx context.Context, req GetBookRequestObject) (GetBook
 // drains the whole list, the hub's shelf stops as soon as it has
 // enough tiles to draw.
 func (s *Server) ListBookSeries(ctx context.Context, req ListBookSeriesRequestObject) (ListBookSeriesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc := userCtx(ctx)
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
 	if err != nil {
 		return nil, err
 	}
-	limit, ok := pageLimit(req.Params.Limit, 100, 500)
-	if !ok {
-		return ListBookSeries400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
-	}
 	page, err := s.svc.ListBookSeries(ctx, uc, deref(req.Params.Cursor), limit)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ListBookSeries400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := BookSeriesPage{Series: make([]BookSeries, 0, len(page.Series))}
@@ -580,15 +448,9 @@ func (s *Server) ListBookSeries(ctx context.Context, req ListBookSeriesRequestOb
 
 // GetBookSeries reads one series and the books in it.
 func (s *Server) GetBookSeries(ctx context.Context, req GetBookSeriesRequestObject) (GetBookSeriesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	detail, err := s.svc.BookSeriesDetailFor(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetBookSeries404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := BookSeriesDetail{
@@ -613,15 +475,9 @@ func (s *Server) GetBookSeries(ctx context.Context, req GetBookSeriesRequestObje
 }
 
 func (s *Server) GetBookResume(ctx context.Context, req GetBookResumeRequestObject) (GetBookResumeResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	rp, err := s.svc.BookResumeFor(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetBookResume404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no book with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	out := BookResume{PositionMs: rp.PositionMS}
@@ -637,12 +493,9 @@ func (s *Server) GetBookResume(ctx context.Context, req GetBookResumeRequestObje
 }
 
 func (s *Server) PutBookSettings(ctx context.Context, req PutBookSettingsRequestObject) (PutBookSettingsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return PutBookSettings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a request body is required"))}, nil
+		return nil, errNoBody()
 	}
 	stored, err := s.svc.PutBookSettings(ctx, uc, req.Pid, service.BookSettings{
 		Speed:       req.Body.Speed,
@@ -650,27 +503,15 @@ func (s *Server) PutBookSettings(ctx context.Context, req PutBookSettingsRequest
 		TrimSilence: req.Body.TrimSilence,
 	})
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return PutBookSettings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindNotFound:
-			return PutBookSettings404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no book with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	return PutBookSettings200JSONResponse(bookSettingsJSON(stored)), nil
 }
 
 func (s *Server) ListBookmarks(ctx context.Context, req ListBookmarksRequestObject) (ListBookmarksResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	marks, err := s.svc.BookmarksFor(ctx, uc, req.Pid)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return ListBookmarks404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no book with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	out := BookmarkList{Bookmarks: make([]Bookmark, 0, len(marks))}
@@ -681,28 +522,19 @@ func (s *Server) ListBookmarks(ctx context.Context, req ListBookmarksRequestObje
 }
 
 func (s *Server) CreateBookmark(ctx context.Context, req CreateBookmarkRequestObject) (CreateBookmarkResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return CreateBookmark400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a request body is required"))}, nil
+		return nil, errNoBody()
 	}
 	mark, err := s.svc.CreateBookmark(ctx, uc, req.Pid, deref(req.Body.Id), req.Body.PositionMs, deref(req.Body.Note))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			// The cap among them: a refusal the listener acts on
-			// ("delete one first").
-			return CreateBookmark400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindConflict:
-			e := errObj("conflict", err.Error())
+		kind := service.KindOf(err)
+		if kind == service.KindConflict {
+			var params map[string]string
 			if errors.Is(err, service.ErrBookmarkRemoved) {
-				e.Params = &map[string]string{"reason": "removed"}
+				params = map[string]string{"reason": "removed"}
 			}
-			return CreateBookmark409JSONResponse{ConflictJSONResponse(e)}, nil
-		case service.KindNotFound:
-			return CreateBookmark404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no book with pid "+req.Pid))}, nil
+			return nil, refuseParams(http.StatusConflict, "conflict", serviceMessage(err), params)
 		}
 		return nil, err
 	}
@@ -710,18 +542,9 @@ func (s *Server) CreateBookmark(ctx context.Context, req CreateBookmarkRequestOb
 }
 
 func (s *Server) DeleteBookmark(ctx context.Context, req DeleteBookmarkRequestObject) (DeleteBookmarkResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if err := s.svc.DeleteBookmark(ctx, uc, req.Pid, req.BookmarkId); err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			// The service's own sentence: two things can be missing
-			// here, the book and the bookmark, and a fixed message
-			// tells a caller its bookmark is gone when what it named
-			// was a book it cannot see.
-			return DeleteBookmark404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		}
+		// The service's not-found names which is missing, book or bookmark.
 		return nil, err
 	}
 	return DeleteBookmark204Response{}, nil
@@ -738,27 +561,23 @@ func bookmarkJSON(m service.Bookmark) Bookmark {
 }
 
 func (s *Server) GetSkipMap(ctx context.Context, req GetSkipMapRequestObject) (GetSkipMapResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	partIndex := 0
 	if req.Params.PartIndex != nil {
 		partIndex = *req.Params.PartIndex
 	}
 	m, err := s.svc.SkipMapFor(ctx, uc, req.Pid, partIndex)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return GetSkipMap404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindInvalid:
+		kind := service.KindOf(err)
+		if kind == service.KindInvalid {
 			// The typed 400 is not declared for this endpoint; range
 			// errors on partIndex answer not-found semantics instead of
 			// leaking a 500.
-			return GetSkipMap404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		case service.KindFeature:
+			return nil, refuse(http.StatusNotFound, "not-found", serviceMessage(err))
+		}
+		if kind == service.KindFeature {
 			// Only an engine that is away refuses a read: its analysis waits.
-			return GetSkipMap503JSONResponse{toolEngineAway(err)}, nil
+			return nil, toolEngineAway(err)
 		}
 		return nil, err
 	}
@@ -797,10 +616,7 @@ func (s *Server) GetSkipMap(ctx context.Context, req GetSkipMapRequestObject) (G
 const waveformCacheControl = artCacheControl
 
 func (s *Server) GetWaveform(ctx context.Context, req GetWaveformRequestObject) (GetWaveformResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	partIndex := 0
 	if req.Params.PartIndex != nil {
 		partIndex = *req.Params.PartIndex
@@ -808,20 +624,21 @@ func (s *Server) GetWaveform(ctx context.Context, req GetWaveformRequestObject) 
 	// The whole-item span ignores partIndex by contract: a book's
 	// timeline is the book, and naming a part inside it names nothing.
 	wholeItem := req.Params.Span != nil && *req.Params.Span == GetWaveformParamsSpanItem
-	var wf service.WaveformResult
+	var (
+		wf  service.WaveformResult
+		err error
+	)
 	if wholeItem {
 		wf, err = s.svc.WaveformForItem(ctx, uc, req.Pid)
 	} else {
 		wf, err = s.svc.WaveformFor(ctx, uc, req.Pid, partIndex)
 	}
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return GetWaveform404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		case service.KindInvalid:
+		kind := service.KindOf(err)
+		if kind == service.KindInvalid {
 			// No 400 declared here, as on the skip map: a partIndex range
 			// error answers not-found rather than leaking a 500.
-			return GetWaveform404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+			return nil, refuse(http.StatusNotFound, "not-found", serviceMessage(err))
 		}
 		return nil, err
 	}

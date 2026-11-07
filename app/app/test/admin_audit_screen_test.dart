@@ -1,18 +1,18 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/audit_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'disclosure_glyph.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: localizedHost(const AuditScreen()),
+Future<void> _pump(WidgetTester tester, FakeRepository repo) => pumpApp(
+  tester,
+  const AuditScreen(),
+  container: appContainer(repo: repo),
+  routed: false,
 );
 
 void main() {
@@ -31,8 +31,7 @@ void main() {
       ),
     ];
     final semantics = tester.ensureSemantics();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
     expect(find.byType(WaxInkTappable), findsWidgets);
     final row = find.bySemanticsIdentifier(SemanticsIds.auditRow('au-1'));
 
@@ -84,8 +83,7 @@ void main() {
         createdAt: DateTime.now().toUtc().subtract(const Duration(days: 3)),
       ),
     ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     final row = find.bySemanticsIdentifier(SemanticsIds.auditRow('au-1'));
     expect(row, findsOneWidget);
@@ -132,8 +130,7 @@ void main() {
         createdAt: DateTime.now().toUtc().subtract(const Duration(days: 1)),
       ),
     ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     // Collapsed, a row is its action and who did it, nothing more.
     expect(find.textContaining(' -> '), findsNothing);
@@ -184,8 +181,7 @@ void main() {
         createdAt: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
       ),
     ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.auditRow('au-1')));
     await tester.pumpAndSettle();
@@ -209,8 +205,7 @@ void main() {
         createdAt: DateTime.utc(2026, 7, 19),
       ),
     ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, repo);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.auditRow('au-2')),
       findsOneWidget,

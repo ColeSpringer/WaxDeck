@@ -20,6 +20,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
 
@@ -71,14 +72,11 @@ _harness({
     items: items ?? [testItem(_a), testItem(_b), testItem(_c)],
   );
   engine ??= FakeEngine(mediaDuration: const Duration(milliseconds: _trackMs));
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(engine),
-      if (clock != null) wallClockProvider.overrideWithValue(clock),
-    ],
+  final container = appContainer(
+    repo: repo,
+    engine: engine,
+    extra: [if (clock != null) wallClockProvider.overrideWithValue(clock)],
   );
-  addTearDown(container.dispose);
   return (container: container, repo: repo, engine: engine);
 }
 
@@ -2286,14 +2284,13 @@ void main() {
       final engine = FakeEngine(
         mediaDuration: const Duration(milliseconds: _trackMs),
       );
-      final container = ProviderContainer(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(engine),
+      final container = appContainer(
+        repo: repo,
+        engine: engine,
+        extra: [
           signedInAccountProvider.overrideWith((ref) => ref.watch(_account)),
         ],
       );
-      addTearDown(container.dispose);
       final link = container.read(liveLinkProvider.notifier)
         ..report(connected: true);
       container.playback;

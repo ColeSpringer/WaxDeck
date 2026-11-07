@@ -1,7 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/app.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/desktop/desktop_ports.dart';
 import 'package:waxdeck/src/desktop/tray_binder.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
@@ -15,8 +12,8 @@ import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -255,25 +252,23 @@ void main() {
       sessions: [testSession('se-1', current: true)],
     );
 
+    final container = appContainer(
+      repo: repo,
+      extra: [
+        // The harness pins the target platform to Android, so a
+        // desktop-only row would be absent and this check would
+        // read that as a registered setting nothing draws. Standing
+        // on a desktop is what makes the assertion cover every
+        // entry rather than most of them.
+        desktopProvider.overrideWithValue(true),
+      ],
+    );
     for (final section in SettingsSection.values) {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(repo),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-            // The harness pins the target platform to Android, so a
-            // desktop-only row would be absent and this check would
-            // read that as a registered setting nothing draws. Standing
-            // on a desktop is what makes the assertion cover every
-            // entry rather than most of them.
-            desktopProvider.overrideWithValue(true),
-          ],
-          child: routedHost(SettingsSectionScreen(section: section)),
-        ),
+      await pumpApp(
+        tester,
+        SettingsSectionScreen(section: section),
+        container: container,
       );
-      await tester.pumpAndSettle();
 
       for (final entry in entries.where(
         // Native-only settings are drawn on this platform: the widget
@@ -314,18 +309,11 @@ void main() {
             createdAt: DateTime.utc(2026, 7, 15),
             libraryAccess: const LibraryAccess(mode: 'all'),
           );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-        child: routedHost(
-          const SettingsSectionScreen(section: SettingsSection.library),
-        ),
-      ),
+    await pumpApp(
+      tester,
+      const SettingsSectionScreen(section: SettingsSection.library),
+      container: appContainer(repo: repo),
     );
-    await tester.pumpAndSettle();
     final entry = entries.firstWhere((e) => e.id == 'library-access');
     expect(find.bySemanticsIdentifier(entry.semanticsId), findsWidgets);
     expect(find.text('All libraries'), findsOneWidget);
@@ -338,25 +326,15 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(
-            FakeRepository(
-              sessionState: const SessionState(
-                authenticated: true,
-                user: _admin,
-              ),
-            ),
-          ),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-        child: routedHost(
-          const SettingsSectionScreen(section: SettingsSection.playback),
+    await pumpApp(
+      tester,
+      const SettingsSectionScreen(section: SettingsSection.playback),
+      container: appContainer(
+        repo: FakeRepository(
+          sessionState: const SessionState(authenticated: true, user: _admin),
         ),
       ),
     );
-    await tester.pumpAndSettle();
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.setting('artwork-cycle')),
@@ -391,22 +369,16 @@ void main() {
 
     // Web-only rows are not drawn on the VM; the browser suite anchors
     // them.
+    final container = appContainer(
+      repo: repo,
+      extra: [desktopProvider.overrideWithValue(true)],
+    );
     for (final entry in entries.where((e) => !e.webOnly)) {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            repositoryProvider.overrideWithValue(repo),
-            credentialStoreProvider.overrideWithValue(
-              InMemoryCredentialStore(),
-            ),
-            desktopProvider.overrideWithValue(true),
-          ],
-          child: routedHost(
-            SettingsSectionScreen(section: entry.section, setting: entry.id),
-          ),
-        ),
+      await pumpApp(
+        tester,
+        SettingsSectionScreen(section: entry.section, setting: entry.id),
+        container: container,
       );
-      await tester.pumpAndSettle();
 
       final row = find.bySemanticsIdentifier(entry.semanticsId).first;
       // The wrapper by name, not just the effect: a row near the top of
@@ -652,27 +624,17 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(
-          FakeRepository(
-            sessionState: const SessionState(authenticated: true, user: _admin),
-          ),
-        ),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    final container = appContainer(
+      repo: FakeRepository(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      ),
+      extra: [
         desktopProvider.overrideWithValue(true),
         // The real tray would load the host's native library.
         trayPortProvider.overrideWithValue(const NoTray()),
       ],
     );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const WaxDeckApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: container);
 
     final router = container.read(routerProvider);
     Future<void> goTo(String setting) async {
@@ -714,29 +676,19 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(
-            FakeRepository(
-              sessionState: const SessionState(
-                authenticated: true,
-                user: _admin,
-              ),
-            ),
-          ),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-          desktopProvider.overrideWithValue(true),
-        ],
-        child: routedHost(
-          const SettingsSectionScreen(
-            section: SettingsSection.playback,
-            setting: 'no-such-setting',
-          ),
+    await pumpApp(
+      tester,
+      const SettingsSectionScreen(
+        section: SettingsSection.playback,
+        setting: 'no-such-setting',
+      ),
+      container: appContainer(
+        repo: FakeRepository(
+          sessionState: const SessionState(authenticated: true, user: _admin),
         ),
+        extra: [desktopProvider.overrideWithValue(true)],
       ),
     );
-    await tester.pumpAndSettle();
 
     // The section is up, showing its first rows, with nothing said about
     // the id that named nothing.

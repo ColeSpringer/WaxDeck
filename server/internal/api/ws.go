@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"time"
 	"unicode/utf8"
@@ -333,7 +332,8 @@ func (s *Server) dispatchWS(ctx context.Context, conn *events.Conn, link *connec
 		}
 		snap, err := s.connect.HandleCommand(ctx, link, f.SessionID, f.Verb, args)
 		if err != nil {
-			enqueue(wsErrorFrame{Type: "error", ID: f.ID, Code: wsErrorCode(err), Message: err.Error(), Params: refusalParams(err)})
+			code, message, params := s.wsRefusal(err)
+			enqueue(wsErrorFrame{Type: "error", ID: f.ID, Code: code, Message: message, Params: params})
 			return
 		}
 		ack := wsAckFrame{Type: "ack", ID: f.ID}
@@ -403,41 +403,19 @@ func indexOrZero(v *int) int {
 	return *v
 }
 
-// wsErrorCode maps connect errors onto the wire vocabulary. This is
-// the seam the app's own control verbs come back through, so a
-// refusal that arrived carrying a code leaves carrying the same one.
-func wsErrorCode(err error) string {
-	var inv connect.InvalidError
-	switch {
-	case errors.Is(err, connect.ErrNotFound):
-		return "not-found"
-	case errors.Is(err, connect.ErrEndpointOffline):
-		return "endpoint-offline"
-	case errors.Is(err, connect.ErrForbidden):
-		return "forbidden"
-	case errors.Is(err, connect.ErrTimeout):
-		return "timeout"
-	case errors.As(err, &inv):
-		_, code := refusalStatus(inv.Code)
-		return code
-	default:
-		return "invalid-request"
+// wsRefusal is a refused command's code, words and params, as REST answers
+// the same error: the refusal the hub words, a failure during a hand-off
+// as the hand-off, anything else by its kind. This is the seam the app's
+// own control verbs come back through, so a refusal that arrived carrying
+// a code leaves carrying the same one.
+func (s *Server) wsRefusal(err error) (code, message string, params map[string]string) {
+	if refusal := connectRefusal(err); refusal != nil {
+		err = refusal
+	} else if s.handedOff(err) {
+		err = maintenanceAnswer()
 	}
-}
-
-// refusalParams is the machine detail behind a refusal, for the codes
-// that cover more than one cause. Nil for everything else, which the
-// frame's omitempty turns into an absent field, and nil for a code the
-// whitelist rejected, for the reason connectHTTP withholds it there.
-func refusalParams(err error) map[string]string {
-	var inv connect.InvalidError
-	if !errors.As(err, &inv) || len(inv.Params) == 0 {
-		return nil
-	}
-	if _, code := refusalStatus(inv.Code); code != inv.Code {
-		return nil
-	}
-	return inv.Params
+	answer := answerTo(err)
+	return answer.Code, answer.Message, answer.Params
 }
 
 // sessionIDOf names the session a principal authenticated with, "" for

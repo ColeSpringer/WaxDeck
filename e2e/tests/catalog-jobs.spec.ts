@@ -133,10 +133,31 @@ test('a scan started from the dashboard runs in Tasks and ends in the bell', asy
   expect(kept.state).toBe('done');
 });
 
+/// Puts the title the stub lyrics source knows back into the missing-lyrics
+/// rule. A catalog pass that ran earlier (a kept stack's nightly enrichment
+/// schedule, say) has filled it, and the health index, which an edit does
+/// not touch, then counts one title fewer than the fix can ever fill. A
+/// requested sweep grades the item again.
+async function stubTitleMissingLyrics(app: App): Promise<void> {
+  const { pid } = await app.seed.item('Alpha Song');
+  const held = await app.api.raw.get('/items/{pid}/lyrics', { path: { pid } });
+  if (held.status() === 404) return;
+  expect(held.status(), 'the lyrics read answers 200 or 404').toBe(200);
+  expect((await app.api.raw.delete('/items/{pid}/lyrics', { path: { pid } })).status()).toBe(204);
+  expect((await app.api.raw.post('/library/health/sweep')).status()).toBe(202);
+  await expect
+    .poll(async () => (await app.api.get('/library/health')).sweeping, {
+      timeout: T.analyze,
+      message: 'the requested sweep should land',
+    })
+    .toBe(false);
+}
+
 test('a rule the server cannot fix says why, and one it can runs as a job', async ({ app }) => {
   test.setTimeout(J.long);
   await catalogIdle(app);
   await sweptOnce(app);
+  await stubTitleMissingLyrics(app);
   // Read over the API, so the assertions follow what this stack holds: no
   // enrichment contact (genres wait on one), and the stub source run-stack
   // registers, which answers lyrics for one fixture title.

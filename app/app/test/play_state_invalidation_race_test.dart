@@ -1,11 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/play_state_controller.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 // The optimistic-star race: server events (a playing session's own
@@ -20,10 +19,7 @@ const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
 void main() {
   test('a family invalidation mid-star keeps the optimistic value', () async {
     final repo = FakeRepository(items: [testItem(pid)]);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final provider = playStateControllerProvider(pid);
     // A live listener, like the widgets: invalidation rebuilds eagerly.
     final sub = container.listen(provider, (_, _) {});
@@ -74,10 +70,7 @@ void main() {
 
   test('a rejected write settles its intent even after a rebuild', () async {
     final repo = FakeRepository(items: [testItem(pid)]);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final provider = playStateControllerProvider(pid);
     final sub = container.listen(provider, (_, _) {});
     addTearDown(sub.close);
@@ -112,10 +105,7 @@ void main() {
 
   test('a non-API exception never strands the optimistic intent', () async {
     final repo = FakeRepository(items: [testItem(pid)]);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final provider = playStateControllerProvider(pid);
     final sub = container.listen(provider, (_, _) {});
     addTearDown(sub.close);

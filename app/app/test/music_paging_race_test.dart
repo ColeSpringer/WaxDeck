@@ -1,11 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// Blocks paging fetches (cursor calls) on [gate]; first-page builds pass
@@ -61,10 +60,7 @@ final _library = <ItemSummary>[
 void main() {
   test('a rebuild during loadMore is not overwritten', () async {
     final repo = GatedRepository(items: _library);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final keepAlive = container.listen(musicItemsProvider(_tracks), (_, _) {});
     addTearDown(keepAlive.close);
 
@@ -102,10 +98,7 @@ void main() {
     // still set would block every later page silently and permanently,
     // since the listing keeps its items and loadMore early-returns.
     final repo = GatedRepository(items: _library);
-    final container = ProviderContainer(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+    final container = appContainer(repo: repo);
     final keepAlive = container.listen(musicItemsProvider(_tracks), (_, _) {});
     addTearDown(keepAlive.close);
 

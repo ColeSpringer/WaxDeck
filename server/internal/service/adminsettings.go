@@ -365,6 +365,9 @@ func (l *Library) LibraryReadOnlySet(ctx context.Context, actor *UserCtx, apiLib
 		return errInvalid("bad library pid " + apiLibraryPID)
 	}
 	if _, err := l.lib.SetLibraryReadOnly(ctx, pid, readOnly); err != nil {
+		if KindOf(err) == KindNotFound {
+			return errNotFound("no library with pid " + apiLibraryPID)
+		}
 		return classify(err)
 	}
 	l.refreshLibraryState(ctx)
@@ -383,6 +386,9 @@ func (l *Library) LibraryFolderFallbackSet(ctx context.Context, actor *UserCtx, 
 	if on {
 		lib, err := l.libraryByPID(ctx, pid)
 		if err != nil {
+			if KindOf(err) == KindNotFound {
+				return errNotFound("no library with pid " + apiLibraryPID)
+			}
 			return err
 		}
 		var why string
@@ -397,6 +403,9 @@ func (l *Library) LibraryFolderFallbackSet(ctx context.Context, actor *UserCtx, 
 		}
 	}
 	if _, err := l.lib.SetLibraryFolderFallback(ctx, pid, on); err != nil {
+		if KindOf(err) == KindNotFound {
+			return errNotFound("no library with pid " + apiLibraryPID)
+		}
 		return classify(err)
 	}
 	l.refreshLibraryState(ctx)

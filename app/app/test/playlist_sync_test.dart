@@ -2,18 +2,16 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlist_sync_controller.dart';
 import 'package:waxdeck/src/playlists/playlist_sync_sheet.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -40,14 +38,24 @@ final _bound = PlaylistSource(
   lastSyncedAt: DateTime.utc(2026, 8, 20),
 );
 
-Widget _host(FakeRepository repo, Widget home) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    filePickerProvider.overrideWithValue(null),
-  ],
-  child: routedHost(home, pushed: true),
+ProviderContainer _container(FakeRepository repo) => appContainer(
+  repo: repo,
+  extra: [filePickerProvider.overrideWithValue(null)],
 );
+
+/// The screen of the playlist [pid] over [container], settled.
+Future<void> _pump(
+  WidgetTester tester,
+  String pid,
+  ProviderContainer container,
+) async {
+  await pumpApp(
+    tester,
+    PlaylistScreen(pid: pid),
+    container: container,
+    pushed: true,
+  );
+}
 
 Future<Playlist> _manualPlaylist(FakeRepository repo) =>
     repo.createPlaylist(name: 'Road Trip', kind: 'static');
@@ -69,8 +77,8 @@ void main() {
       sessionState: const SessionState(authenticated: true, user: _admin),
     );
     final manual = await _manualPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: manual.pid)));
-    await tester.pumpAndSettle();
+    final container = _container(repo);
+    await _pump(tester, manual.pid, container);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
     expect(
@@ -85,8 +93,7 @@ void main() {
       kind: 'smart',
       rule: const SmartRule(root: RuleNode.all([])),
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: smart.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, smart.pid, container);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
     expect(
@@ -108,21 +115,19 @@ void main() {
     final repo = FakeRepository(
       sessionState: const SessionState(authenticated: true, user: _admin),
     )..playlistSourceGate = gate;
-    await tester.pumpWidget(
-      _host(
-        repo,
-        Scaffold(
-          body: Builder(
-            builder: (context) => WaxButton(
-              label: 'open',
-              onPressed: () =>
-                  unawaited(showPlaylistSyncSheet(context, 'pl-1')),
-            ),
+    await pumpApp(
+      tester,
+      Scaffold(
+        body: Builder(
+          builder: (context) => WaxButton(
+            label: 'open',
+            onPressed: () => unawaited(showPlaylistSyncSheet(context, 'pl-1')),
           ),
         ),
       ),
+      container: _container(repo),
+      pushed: true,
     );
-    await tester.pumpAndSettle();
     tester.view.physicalSize = const Size(360, 200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -145,8 +150,7 @@ void main() {
       sessionState: const SessionState(authenticated: true, user: _admin),
     );
     final pl = await _manualPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncSheet),
@@ -203,8 +207,7 @@ void main() {
       sessionState: const SessionState(authenticated: true, user: _plain),
     );
     final pl = await _manualPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncMode));
     await tester.pumpAndSettle();
@@ -229,8 +232,7 @@ void main() {
       sessionState: const SessionState(authenticated: true, user: _admin),
     )..previewPlaylistSyncGate = gate;
     final pl = await _manualPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncUrl),
@@ -281,8 +283,7 @@ void main() {
     );
     final pl = await _manualPlaylist(repo);
     repo.playlistSources[pl.pid] = _bound;
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncPreview),
@@ -309,8 +310,7 @@ void main() {
     );
     final pl = await _manualPlaylist(repo);
     repo.playlistSources[pl.pid] = _bound;
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncNow));
@@ -343,8 +343,7 @@ void main() {
           );
     final pl = await _manualPlaylist(repo);
     repo.playlistSources[pl.pid] = _bound;
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncNow));
@@ -366,8 +365,8 @@ void main() {
     );
     final pl = await _manualPlaylist(repo);
     repo.playlistSources[pl.pid] = _bound;
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    final container = _container(repo);
+    await _pump(tester, pl.pid, container);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncChip),
       findsOneWidget,
@@ -375,8 +374,7 @@ void main() {
     expect(find.text('Synced'), findsOneWidget);
 
     final other = await repo.createPlaylist(name: 'Plain', kind: 'static');
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: other.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, other.pid, container);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncChip),
       findsNothing,
@@ -397,8 +395,7 @@ void main() {
       disabled: false,
       consecutiveFailures: 0,
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     expect(find.text('Sync scheduled'), findsOneWidget);
     expect(
       find.text('Synced'),
@@ -424,8 +421,7 @@ void main() {
       disabled: false,
       consecutiveFailures: 0,
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     expect(find.text('Matched'), findsOneWidget);
     expect(
       find.text('Sync scheduled'),
@@ -460,8 +456,7 @@ void main() {
         missing: 0,
       ),
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
     expect(find.text('The last sync failed: the tube is down'), findsOneWidget);
     expect(find.text('Last sync: 3 added, 1 removed'), findsOneWidget);
@@ -472,8 +467,7 @@ void main() {
       sessionState: const SessionState(authenticated: true, user: _admin),
     );
     final pl = await _manualPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave));
     await tester.pumpAndSettle();
@@ -506,8 +500,7 @@ void main() {
       consecutiveFailures: 2,
       lastError: 'the tube is down',
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     expect(find.text('Sync failing'), findsOneWidget);
   });
 
@@ -518,8 +511,7 @@ void main() {
       sessionState: const SessionState(authenticated: true, user: _admin),
     );
     final pl = await _manualPlaylist(repo);
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
 
     // The live arm is the default, so the URL field is what is drawn.
@@ -580,8 +572,7 @@ void main() {
       disabled: false,
       consecutiveFailures: 0,
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
 
     expect(
@@ -629,21 +620,8 @@ void main() {
       sessionState: const SessionState(authenticated: true, user: _admin),
     );
     final pl = await _manualPlaylist(repo);
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        filePickerProvider.overrideWithValue(null),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(PlaylistScreen(pid: pl.pid), pushed: true),
-      ),
-    );
-    await tester.pumpAndSettle();
+    final container = _container(repo);
+    await _pump(tester, pl.pid, container);
     await _openSheet(tester);
 
     repo.playlistSources[pl.pid] = const PlaylistSource(
@@ -677,8 +655,7 @@ void main() {
     );
     final pl = await _manualPlaylist(repo);
     repo.playlistSources[pl.pid] = _bound;
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
 
     await tester.enterText(
@@ -717,8 +694,7 @@ void main() {
       code: 'catalog-maintenance',
       message: 'the catalog is busy',
     );
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
 
     expect(
@@ -737,8 +713,7 @@ void main() {
     );
     final pl = await _manualPlaylist(repo);
     repo.playlistSources[pl.pid] = _bound;
-    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
-    await tester.pumpAndSettle();
+    await _pump(tester, pl.pid, _container(repo));
     await _openSheet(tester);
 
     await tester.tap(

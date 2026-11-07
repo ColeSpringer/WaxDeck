@@ -73,6 +73,9 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 		(it.Kind == model.KindEpisode && it.State != model.StatePresent) {
 		return SkipMapResult{State: skipStateUnavailable}, nil
 	}
+	if err := inTrash(it, apiItemPID); err != nil {
+		return SkipMapResult{}, err
+	}
 
 	filePID, partOut, err := l.resolvePart(ctx, it, partIndex)
 	if err != nil {

@@ -1,17 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/library/item_menu.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import 'fakes.dart';
-import 'routed_host.dart';
+import 'app_host.dart';
 
 const _book = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 const _episode = 'tr-01JZX5N8QW3F4V9T2B7KDEPISOD';
@@ -62,16 +59,7 @@ class _Opener extends ConsumerWidget {
 }
 
 Future<void> _open(WidgetTester tester, _Opener opener) async {
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(FakeRepository()),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-      child: routedHost(opener),
-    ),
-  );
-  await tester.pumpAndSettle();
+  await pumpApp(tester, opener);
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
   expect(_byId(SemanticsIds.itemMenuSheet(opener.pid)), findsOneWidget);

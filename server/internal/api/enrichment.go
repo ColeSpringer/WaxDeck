@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -11,15 +12,9 @@ import (
 // per-item fetch.
 
 func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusRequestObject) (GetEnrichmentStatusResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	st, err := s.svc.EnrichmentStatusFor(ctx, uc)
 	if err != nil {
-		if service.KindOf(err) == service.KindForbidden {
-			return GetEnrichmentStatus403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return GetEnrichmentStatus200JSONResponse(enrichmentStatusJSON(st)), nil
@@ -95,10 +90,7 @@ func enrichmentLastRun(r *service.EnrichmentLastRunDTO) *EnrichmentLastRun {
 }
 
 func (s *Server) RunEnrichment(ctx context.Context, req RunEnrichmentRequestObject) (RunEnrichmentResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	force := req.Body != nil && derefBool(req.Body.Force)
 	// Unchecked here: the service answers an unknown phase after its
 	// own admin check.
@@ -116,15 +108,8 @@ func (s *Server) RunEnrichment(ctx context.Context, req RunEnrichmentRequestObje
 	}
 	jobPid, err := s.svc.RunEnrichment(ctx, uc, force, phases, walk)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return RunEnrichment400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return RunEnrichment403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindConflict:
-			return RunEnrichment409JSONResponse{ConflictJSONResponse(errObj("conflict", "a conflicting catalog job is already running"))}, nil
-		case service.KindUnsupported:
-			return RunEnrichment501JSONResponse{SourceUnavailableJSONResponse(errObj("source-unavailable", err.Error()))}, nil
+		if service.KindOf(err) == service.KindConflict {
+			return nil, refuse(http.StatusConflict, "conflict", "a conflicting catalog job is already running")
 		}
 		return nil, err
 	}
@@ -132,30 +117,22 @@ func (s *Server) RunEnrichment(ctx context.Context, req RunEnrichmentRequestObje
 }
 
 func (s *Server) EnrichItem(ctx context.Context, req EnrichItemRequestObject) (EnrichItemResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
+	uc := userCtx(ctx)
+	if req.Body == nil {
+		return nil, errNoBody()
 	}
-	if req.Body == nil || len(req.Body.Want) == 0 {
-		return EnrichItem400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "want is required"))}, nil
+	if len(req.Body.Want) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "want is required")
 	}
 	wants := make([]string, 0, len(req.Body.Want))
 	for _, w := range req.Body.Want {
 		if !w.Valid() {
-			return EnrichItem400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown want "+string(w)))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown want "+string(w))
 		}
 		wants = append(wants, string(w))
 	}
 	applied, skipped, err := s.svc.EnrichItemFor(ctx, uc, string(req.Pid), wants, enrichProposalDTO(req.Body.Proposal))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return EnrichItem400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return EnrichItem403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return EnrichItem404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	if applied == nil {
@@ -168,30 +145,22 @@ func (s *Server) EnrichItem(ctx context.Context, req EnrichItemRequestObject) (E
 }
 
 func (s *Server) PreviewEnrichItem(ctx context.Context, req PreviewEnrichItemRequestObject) (PreviewEnrichItemResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
+	uc := userCtx(ctx)
+	if req.Body == nil {
+		return nil, errNoBody()
 	}
-	if req.Body == nil || len(req.Body.Want) == 0 {
-		return PreviewEnrichItem400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "want is required"))}, nil
+	if len(req.Body.Want) == 0 {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "want is required")
 	}
 	wants := make([]string, 0, len(req.Body.Want))
 	for _, w := range req.Body.Want {
 		if !w.Valid() {
-			return PreviewEnrichItem400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown want "+string(w)))}, nil
+			return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown want "+string(w))
 		}
 		wants = append(wants, string(w))
 	}
 	preview, err := s.svc.EnrichPreviewFor(ctx, uc, string(req.Pid), wants)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return PreviewEnrichItem400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return PreviewEnrichItem403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return PreviewEnrichItem404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
-		}
 		return nil, err
 	}
 	out := EnrichPreview{
@@ -254,12 +223,9 @@ func enrichCoverProposalJSON(c service.EnrichCoverProposalDTO) *EnrichCoverPropo
 }
 
 func (s *Server) PutEnrichmentSources(ctx context.Context, req PutEnrichmentSourcesRequestObject) (PutEnrichmentSourcesResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return PutEnrichmentSources400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	list := make([]service.EnrichmentSource, 0, len(req.Body.Sources))
 	for _, src := range req.Body.Sources {
@@ -267,12 +233,6 @@ func (s *Server) PutEnrichmentSources(ctx context.Context, req PutEnrichmentSour
 	}
 	st, err := s.svc.PutEnrichmentSources(ctx, uc, list)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return PutEnrichmentSources400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return PutEnrichmentSources403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PutEnrichmentSources200JSONResponse(enrichmentStatusJSON(st)), nil

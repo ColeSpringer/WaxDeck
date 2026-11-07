@@ -1,6 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -8,9 +6,9 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'player_host.dart';
 
 /// An engine whose media reports no length; it plays on all the same, to
@@ -45,12 +43,7 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: book,
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: book);
 
     expect(engine.loadedUrl, '/media/stream?pid=$pid&mt=test-token');
     expect(engine.position, const Duration(seconds: 60));
@@ -68,7 +61,6 @@ void main() {
           .label,
       'Pause',
     );
-    await harness.endPlayback(tester);
   });
 
   testWidgets('music starts at the head with a checkpoint standing', (
@@ -85,16 +77,10 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
 
     expect(engine.position, Duration.zero);
     expect(engine.playing, isTrue);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a finished item plays again from the top', (tester) async {
@@ -107,12 +93,7 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
 
     // Not a resume point: playing a finished item means playing it. On
     // web, loading media at the position it ends at fails the load
@@ -120,7 +101,6 @@ void main() {
     // error pane.
     expect(engine.position, Duration.zero);
     expect(engine.playing, isTrue);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a checkpoint past the end of the media starts over', (
@@ -134,15 +114,9 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
 
     expect(engine.position, Duration.zero);
-    await harness.endPlayback(tester);
   });
 
   group('an episode checkpointed at or past the length its feed declares', () {
@@ -152,7 +126,7 @@ void main() {
     // declares, which inserted ads can leave well short of the audio.
     const declaredMs = 30 * 60000;
 
-    Future<(FakeEngine, PlayerHarness)> resume(
+    Future<FakeEngine> resume(
       WidgetTester tester, {
       required Duration audio,
       required int checkpointMs,
@@ -173,13 +147,8 @@ void main() {
       final engine = lengthless
           ? _LengthlessEngine(audio)
           : FakeEngine(mediaDuration: audio);
-      final harness = await pumpPlayer(
-        tester,
-        repo: repo,
-        engine: engine,
-        item: episode,
-      );
-      return (engine, harness);
+      await pumpPlayer(tester, repo: repo, engine: engine, item: episode);
+      return engine;
     }
 
     /// Plays from the top and keeps playing, rather than resuming at an
@@ -197,68 +166,63 @@ void main() {
     }
 
     testWidgets('a relayed one resumes past that length', (tester) async {
-      final (engine, harness) = await resume(
+      final engine = await resume(
         tester,
         audio: const Duration(hours: 1),
         checkpointMs: 40 * 60000,
       );
       expect(engine.position, const Duration(minutes: 40));
       expect(engine.playing, isTrue);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a relayed one starts over from a checkpoint past the end of '
         'its audio', (tester) async {
-      final (engine, harness) = await resume(
+      final engine = await resume(
         tester,
         audio: const Duration(minutes: 35),
         checkpointMs: 40 * 60000,
       );
       await expectReplayFromTop(tester, engine);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a relayed one heard to the end of its audio replays from the '
         'top', (tester) async {
       // Where the last listen ended, give or take what another engine
       // makes of the same audio's length.
-      final (engine, harness) = await resume(
+      final engine = await resume(
         tester,
         audio: const Duration(hours: 1),
         checkpointMs: 60 * 60000 - 2000,
       );
       await expectReplayFromTop(tester, engine);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a relayed one finished at its declared length replays from '
         'the top', (tester) async {
       // The end a finish records when all it has is play-info's length:
       // the next item taking over, an outro cutoff.
-      final (engine, harness) = await resume(
+      final engine = await resume(
         tester,
         audio: const Duration(hours: 1),
         checkpointMs: declaredMs,
       );
       await expectReplayFromTop(tester, engine);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a relayed one whose feed declares no length, heard to its '
         'end, replays from the top', (tester) async {
-      final (engine, harness) = await resume(
+      final engine = await resume(
         tester,
         audio: const Duration(minutes: 30),
         checkpointMs: 30 * 60000,
         declared: 0,
       );
       await expectReplayFromTop(tester, engine);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a relayed one whose feed declares no length resumes where '
         'it stood', (tester) async {
-      final (engine, harness) = await resume(
+      final engine = await resume(
         tester,
         audio: const Duration(hours: 1),
         checkpointMs: 10 * 60000,
@@ -266,7 +230,6 @@ void main() {
       );
       expect(engine.position, const Duration(minutes: 10));
       expect(engine.playing, isTrue);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a relayed one of no length at all resumes where it stood', (
@@ -274,7 +237,7 @@ void main() {
     ) async {
       // Neither the feed nor the audio says how long it is, so there is
       // no end to hold the checkpoint against.
-      final (engine, harness) = await resume(
+      final engine = await resume(
         tester,
         audio: const Duration(hours: 1),
         checkpointMs: 10 * 60000,
@@ -283,21 +246,19 @@ void main() {
       );
       expect(engine.position, const Duration(minutes: 10));
       expect(engine.playing, isTrue);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a downloaded one checkpointed at its end replays from the '
         'top', (tester) async {
       // Its play-info length is the audio's, measured, and the engine
       // reads the same audio a few milliseconds longer.
-      final (engine, harness) = await resume(
+      final engine = await resume(
         tester,
         audio: const Duration(milliseconds: declaredMs + 400),
         checkpointMs: declaredMs,
         downloaded: true,
       );
       await expectReplayFromTop(tester, engine);
-      await harness.endPlayback(tester);
     });
   });
 
@@ -305,16 +266,10 @@ void main() {
     final repo = FakeRepository(items: [testItem(pid)]);
     final engine = FakeEngine();
 
-    final harness = await pumpPlayer(
-      tester,
-      repo: repo,
-      engine: engine,
-      item: testItem(pid),
-    );
+    await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
 
     expect(engine.position, Duration.zero);
     expect(engine.playing, isTrue);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('playback survives the player screen being closed', (
@@ -335,12 +290,11 @@ void main() {
 
     // Leaving the player is not leaving the item: the session belongs to
     // the app now, so nothing here checkpoints or reports.
-    await tester.pumpWidget(const SizedBox());
+    await leaveScreen(tester, harness.container);
     await tester.pumpAndSettle();
 
     expect(engine.playing, isTrue);
     expect(repo.reportedSessions, isEmpty);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('checkpoints and reports the listen session when the queue '
@@ -430,18 +384,12 @@ void main() {
         );
       final engine = FakeEngine();
 
-      final harness = await pumpPlayer(
-        tester,
-        repo: repo,
-        engine: engine,
-        item: testItem(pid),
-      );
+      await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
 
       expect(find.byKey(const Key('player-error')), findsOneWidget);
       // The code's sentence, not the server's: a start that failed is a
       // failed operation rather than a refusal of something just typed.
       expect(find.text('That is not here any more.'), findsOneWidget);
-      await harness.endPlayback(tester);
     });
   });
 
@@ -460,12 +408,7 @@ void main() {
           message: 'too many streams',
         );
 
-      final harness = await pumpPlayer(
-        tester,
-        repo: repo,
-        engine: engine,
-        item: testItem(pid),
-      );
+      await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
 
       expect(find.byKey(const Key('player-error')), findsOneWidget);
       expect(
@@ -474,8 +417,6 @@ void main() {
         ),
         findsOneWidget,
       );
-      engine.failEveryLoad = false;
-      await harness.endPlayback(tester);
     });
   });
 
@@ -488,7 +429,7 @@ void main() {
         );
       final engine = FakeEngine();
 
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: engine,
@@ -512,7 +453,6 @@ void main() {
       expect(engine.playing, isTrue);
       expect(engine.position, const Duration(seconds: 30));
       expect(find.byKey(const Key('player-error')), findsNothing);
-      await harness.endPlayback(tester);
     });
   });
 
@@ -531,12 +471,7 @@ void main() {
         );
       final engine = FakeEngine();
 
-      final harness = await pumpPlayer(
-        tester,
-        repo: repo,
-        engine: engine,
-        item: testItem(pid),
-      );
+      await pumpPlayer(tester, repo: repo, engine: engine, item: testItem(pid));
       expect(find.byKey(const Key('player-error')), findsOneWidget);
 
       repo.playInfoError = null;
@@ -545,7 +480,6 @@ void main() {
 
       expect(engine.loadedUrl, contains(pid));
       expect(engine.position, Duration.zero);
-      await harness.endPlayback(tester);
     });
   });
 
@@ -554,13 +488,7 @@ void main() {
       repo: FakeRepository(),
       engine: FakeEngine(),
     );
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: localizedHost(const PlayerScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpPlayerInto(tester, PlayerHarness(container));
 
     expect(find.byKey(const Key('player-idle')), findsOneWidget);
   });

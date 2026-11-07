@@ -77,6 +77,9 @@ func (l *Library) streamItem(ctx context.Context, apiItemPID, filePID string) (*
 	if unfetchedEpisode(it) {
 		return nil, flow.Source{}, nil, notFetchedEpisode()
 	}
+	if err := inTrash(it, apiItemPID); err != nil {
+		return nil, flow.Source{}, nil, err
+	}
 
 	src := flow.Source{
 		Codec:      it.Codec,
@@ -600,6 +603,9 @@ func (l *Library) DirectPlayInfo(ctx context.Context, uc *UserCtx, apiItemPID, f
 	// caller falls back to enclosure passthrough or reports the conflict.
 	if unfetchedEpisode(it) {
 		return DirectPlayResolution{}, notFetchedEpisode()
+	}
+	if err := inTrash(it, apiItemPID); err != nil {
+		return DirectPlayResolution{}, err
 	}
 	out := DirectPlayResolution{DurationMS: it.DurationMS}
 	if filePID != "" {

@@ -3,9 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/stats/share_card_export.dart';
@@ -14,8 +12,8 @@ import 'package:waxdeck/src/stats/year_in_review_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 import 'wax_finders.dart';
 
 /// Keeps whatever it is handed, so a test can read the card back.
@@ -54,24 +52,23 @@ ProviderContainer _container(
   FakeRepository repo, {
   ShareCardExporter? exporter,
   ArtworkStore? artwork,
-}) {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      artworkStoreProvider.overrideWithValue(artwork ?? FakeArtworkStore()),
-      if (exporter != null)
-        shareCardExporterProvider.overrideWithValue(exporter),
-    ],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
+}) => appContainer(
+  repo: repo,
+  artwork: artwork,
+  extra: [
+    if (exporter != null) shareCardExporterProvider.overrideWithValue(exporter),
+  ],
+);
 
-Widget _host(
-  FakeRepository repo, {
-  ShareCardExporter? exporter,
-  ArtworkStore? artwork,
-}) => _hosted(_container(repo, exporter: exporter, artwork: artwork));
+/// The recap screen over [container], settled.
+Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
+  await pumpApp(
+    tester,
+    const YearInReviewScreen(),
+    container: container,
+    routed: false,
+  );
+}
 
 /// A one-pixel opaque PNG, so a cover is really fetched, really decoded,
 /// and really painted into the captured frame. The card's whole
@@ -88,11 +85,6 @@ final _onePixelPng = Uint8List.fromList(<int>[
   0xb0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
   0x44, 0xae, 0x42, 0x60, 0x82,
 ]);
-
-Widget _hosted(ProviderContainer container) => UncontrolledProviderScope(
-  container: container,
-  child: localizedHost(const YearInReviewScreen()),
-);
 
 YearInReview _recap(int year) => YearInReview(
   year: year,
@@ -146,8 +138,7 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository()..yearInReview = _recap(DateTime.now().year);
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     expect(
       find.descendant(
@@ -173,7 +164,12 @@ void main() {
     tester,
   ) async {
     final repo = _RecapDown();
-    await tester.pumpWidget(_host(repo));
+    await mountApp(
+      tester,
+      const YearInReviewScreen(),
+      container: _container(repo),
+      routed: false,
+    );
     await tester.pump();
     // Past the first retry's delay: the read is loading again.
     await tester.pump(const Duration(seconds: 1));
@@ -192,7 +188,12 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repo = FakeRepository()..yearInReview = _recap(DateTime.now().year);
-    await tester.pumpWidget(_host(repo));
+    await mountApp(
+      tester,
+      const YearInReviewScreen(),
+      container: _container(repo),
+      routed: false,
+    );
     expect(find.byType(SkeletonShapes), findsOneWidget);
     expect(tester.takeException(), isNull);
     // Within the window's width, under the bar rather than behind it.
@@ -208,7 +209,12 @@ void main() {
 
   testWidgets('the recap waits behind a ghost of its list', (tester) async {
     final repo = FakeRepository()..yearInReview = _recap(DateTime.now().year);
-    await tester.pumpWidget(_host(repo));
+    await mountApp(
+      tester,
+      const YearInReviewScreen(),
+      container: _container(repo),
+      routed: false,
+    );
     expect(find.byType(SkeletonShapes), findsOneWidget);
 
     await tester.pumpAndSettle();
@@ -233,8 +239,7 @@ void main() {
           sessions: 2,
         ),
       ]);
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     final split = find.byKey(const Key('yir-media-split'));
     expect(split, findsOneWidget);
@@ -265,8 +270,7 @@ void main() {
           sessions: 1,
         ),
       ]);
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     expect(find.byKey(const Key('yir-media-split')), findsNothing);
   });
@@ -274,8 +278,7 @@ void main() {
   testWidgets('the chevrons step the year and refetch', (tester) async {
     final thisYear = DateTime.now().year;
     final repo = FakeRepository()..yearInReview = _recap(thisYear);
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     expect(repo.yearInReviewCalls.last, thisYear);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.yirPrevYear));
@@ -298,8 +301,7 @@ void main() {
           TopEntry(name: 'Weathertop Quartet', plays: 40, ms: 3600000),
         ],
       );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.yirServer));
     await tester.pumpAndSettle();
@@ -319,8 +321,7 @@ void main() {
   testWidgets('an all-zero year says nothing played', (tester) async {
     // No canned recap: the fake answers an all-zero year.
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _container(repo));
 
     expect(find.byKey(const Key('yir-nothing-played')), findsOneWidget);
     expect(find.text('Nothing played this year'), findsOneWidget);
@@ -343,8 +344,7 @@ void main() {
     final repo = FakeRepository()..yearInReview = _recap(DateTime.now().year);
     final exporter = _FakeExporter();
     final container = _container(repo, exporter: exporter);
-    await tester.pumpWidget(_hosted(container));
-    await tester.pumpAndSettle();
+    await _pump(tester, container);
 
     final door = find.bySemanticsIdentifier(SemanticsIds.shareCardOpen);
     await tester.ensureVisible(door);
@@ -408,8 +408,7 @@ void main() {
     final container = _container(repo, exporter: exporter, artwork: artwork);
 
     await tester.runAsync(() async {
-      await tester.pumpWidget(_hosted(container));
-      await tester.pumpAndSettle();
+      await _pump(tester, container);
 
       final door = find.bySemanticsIdentifier(SemanticsIds.shareCardOpen);
       await tester.ensureVisible(door);
@@ -482,8 +481,7 @@ void main() {
     );
 
     await tester.runAsync(() async {
-      await tester.pumpWidget(_hosted(container));
-      await tester.pumpAndSettle();
+      await _pump(tester, container);
       final door = find.bySemanticsIdentifier(SemanticsIds.shareCardOpen);
       await tester.ensureVisible(door);
       await tester.pumpAndSettle();
@@ -511,10 +509,10 @@ void main() {
     addTearDown(tester.view.reset);
 
     final repo = FakeRepository()..yearInReview = _recap(DateTime.now().year);
-    await tester.pumpWidget(
-      _host(repo, exporter: _FakeExporter(canExport: false)),
+    await _pump(
+      tester,
+      _container(repo, exporter: _FakeExporter(canExport: false)),
     );
-    await tester.pumpAndSettle();
 
     final door = find.bySemanticsIdentifier(SemanticsIds.shareCardOpen);
     await tester.ensureVisible(door);

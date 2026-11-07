@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/books/book_dimension.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/library/item_kind.dart';
@@ -14,18 +13,16 @@ import 'package:waxdeck/src/music/entity_facts.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'entity_header_bar.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'secondary_click.dart';
 import 'wax_finders.dart';
 
@@ -66,22 +63,9 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repository),
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-      // The preference document a pin lives in is only fetched for an
-      // authenticated session, and the session needs somewhere to keep a
-      // credential.
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(container: container, child: routedHost(screen)),
-  );
-  await tester.pumpAndSettle();
-  return container;
+  // The preference document a pin lives in is only fetched for an
+  // authenticated session.
+  return pumpApp(tester, screen, container: appContainer(repo: repository));
 }
 
 /// Stops what a test started. A playing engine keeps a position ticker

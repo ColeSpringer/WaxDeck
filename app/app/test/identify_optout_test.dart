@@ -2,8 +2,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/add_to_library.dart';
@@ -11,9 +9,8 @@ import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 /// The per-submission identification choice, from the sheet that asks it
@@ -40,33 +37,26 @@ Finder _switchWithId(String id) => find.ancestor(
   matching: find.byType(WaxSwitch),
 );
 
-/// A host that opens one of the add sheets from a button, so the flow
-/// under test is the real one rather than the dialog alone.
-Widget _host(
+/// Mounts a button that opens one of the add sheets, so the flow under
+/// test is the real one rather than the dialog alone.
+///
+/// Over the real route table: the acquire flow reaches for the router to
+/// offer its "Tasks" action.
+Future<void> _mount(
+  WidgetTester tester,
   FakeRepository repo,
   Future<void> Function(BuildContext, WidgetRef) open,
-) {
-  return ProviderScope(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
-    // Over the real route table: the acquire flow reaches for the router
-    // to offer its "Tasks" action.
-    child: routedHost(
-      Consumer(
-        builder: (context, ref, _) => Scaffold(
-          body: Center(
-            child: WaxButton(
-              label: 'Open',
-              onPressed: () => open(context, ref),
-            ),
-          ),
-        ),
+) => mountApp(
+  tester,
+  Consumer(
+    builder: (context, ref, _) => Scaffold(
+      body: Center(
+        child: WaxButton(label: 'Open', onPressed: () => open(context, ref)),
       ),
     ),
-  );
-}
+  ),
+  container: appContainer(repo: repo),
+);
 
 FakeRepository _repo({bool? optOut}) => FakeRepository()
   ..sessionState = const SessionState(authenticated: true, user: _user)
@@ -77,12 +67,11 @@ void main() {
     tester,
   ) async {
     final repo = _repo(optOut: true);
-    await tester.pumpWidget(
-      _host(
-        repo,
-        (context, ref) =>
-            uploadPickedFiles(context, ref, <PickedAudioFile>[_file('a.flac')]),
-      ),
+    await _mount(
+      tester,
+      repo,
+      (context, ref) =>
+          uploadPickedFiles(context, ref, <PickedAudioFile>[_file('a.flac')]),
     );
     // The controller has to have read prefs before the sheet opens; the
     // provider is lazy, so the flow's own read is what seeds the switch.
@@ -113,12 +102,11 @@ void main() {
     tester,
   ) async {
     final repo = _repo(optOut: true);
-    await tester.pumpWidget(
-      _host(
-        repo,
-        (context, ref) =>
-            uploadPickedFiles(context, ref, <PickedAudioFile>[_file('a.flac')]),
-      ),
+    await _mount(
+      tester,
+      repo,
+      (context, ref) =>
+          uploadPickedFiles(context, ref, <PickedAudioFile>[_file('a.flac')]),
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
@@ -135,14 +123,13 @@ void main() {
 
   testWidgets('a batch carries the choice for its members', (tester) async {
     final repo = _repo();
-    await tester.pumpWidget(
-      _host(
-        repo,
-        (context, ref) => uploadPickedFiles(context, ref, <PickedAudioFile>[
-          _file('a.flac'),
-          _file('b.flac'),
-        ]),
-      ),
+    await _mount(
+      tester,
+      repo,
+      (context, ref) => uploadPickedFiles(context, ref, <PickedAudioFile>[
+        _file('a.flac'),
+        _file('b.flac'),
+      ]),
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
@@ -167,9 +154,7 @@ void main() {
 
   testWidgets('the Add-from-URL sheet sends the choice', (tester) async {
     final repo = _repo(optOut: true);
-    await tester.pumpWidget(
-      _host(repo, (context, ref) => acquireFromUrl(context, ref)),
-    );
+    await _mount(tester, repo, (context, ref) => acquireFromUrl(context, ref));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
@@ -197,12 +182,11 @@ void main() {
     // MusicBrainz; it does open a review entry, so whether that waits for
     // a decision is still asked, and an opt-out is sent as one.
     final repo = _repo(optOut: true);
-    await tester.pumpWidget(
-      _host(
-        repo,
-        (context, ref) =>
-            acquireFromUrl(context, ref, initial: MediaType.audiobook),
-      ),
+    await _mount(
+      tester,
+      repo,
+      (context, ref) =>
+          acquireFromUrl(context, ref, initial: MediaType.audiobook),
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
@@ -226,9 +210,7 @@ void main() {
   testWidgets('the Add-from-URL switch follows a medium changed in the '
       'sheet', (tester) async {
     final repo = _repo();
-    await tester.pumpWidget(
-      _host(repo, (context, ref) => acquireFromUrl(context, ref)),
-    );
+    await _mount(tester, repo, (context, ref) => acquireFromUrl(context, ref));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     expect(find.text('Identify against MusicBrainz'), findsOne);
@@ -276,13 +258,12 @@ void main() {
       createdAt: DateTime.utc(2026, 8, 1),
       identifyDeclined: true,
     );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: localizedHost(const ReviewEntryScreen(entryId: 'rv-1')),
-      ),
+    await pumpApp(
+      tester,
+      const ReviewEntryScreen(entryId: 'rv-1'),
+      container: appContainer(repo: repo),
+      routed: false,
     );
-    await tester.pumpAndSettle();
 
     expect(find.text('Identification was skipped'), findsOne);
     expect(find.text('No candidates found'), findsNothing);
@@ -300,13 +281,12 @@ void main() {
       trackCount: 1,
       createdAt: DateTime.utc(2026, 8, 1),
     );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: localizedHost(const ReviewEntryScreen(entryId: 'rv-2')),
-      ),
+    await pumpApp(
+      tester,
+      const ReviewEntryScreen(entryId: 'rv-2'),
+      container: appContainer(repo: repo),
+      routed: false,
     );
-    await tester.pumpAndSettle();
 
     expect(find.text('No candidates found'), findsOne);
     expect(find.text('Identification was skipped'), findsNothing);
@@ -316,13 +296,12 @@ void main() {
     // The switch has always been drawn for books, and the identify
     // worker has never taken one to the engine.
     final repo = _repo();
-    await tester.pumpWidget(
-      _host(
-        repo,
-        (context, ref) => uploadPickedFiles(context, ref, <PickedAudioFile>[
-          _file('a.m4b'),
-        ], fixed: MediaType.audiobook),
-      ),
+    await _mount(
+      tester,
+      repo,
+      (context, ref) => uploadPickedFiles(context, ref, <PickedAudioFile>[
+        _file('a.m4b'),
+      ], fixed: MediaType.audiobook),
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();

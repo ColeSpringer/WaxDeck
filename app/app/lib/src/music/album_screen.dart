@@ -18,6 +18,7 @@ import '../sharing/share_dialog.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
+import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
@@ -505,15 +506,9 @@ class _TrackList extends ConsumerWidget {
           child: QueueDraggable(
             drop: QueueDrop.item(track),
             child: MediaListRow(
-              data: MediaTileData(
-                title: track.title,
-                // The album's own artist is in the header; a row names its
-                // own only where it differs, which is what makes a
-                // compilation readable and an ordinary release quiet.
-                subtitle: track.artist == albumArtist ? null : track.artist,
-                trailingText: formatTimecode(
-                  Duration(milliseconds: track.durationMs),
-                ),
+              data: trackRowTile(
+                track,
+                albumArtist: albumArtist,
                 // Nothing at all on a track nobody has finished, so an
                 // unplayed release is a clean column rather than a
                 // stripe of zeroes - which is also why the spoken form

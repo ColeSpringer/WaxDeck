@@ -2,9 +2,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/off_tree.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 ProviderContainer _container({required List<Locale> system, String? stored}) {
@@ -15,10 +15,7 @@ ProviderContainer _container({required List<Locale> system, String? stored}) {
     ),
   );
   if (stored != null) repo.prefs = Prefs(locale: stored);
-  final container = ProviderContainer(
-    overrides: [repositoryProvider.overrideWithValue(repo)],
-  );
-  addTearDown(container.dispose);
+  final container = appContainer(repo: repo);
   container.read(systemLocalesProvider.notifier).locales = system;
   return container;
 }

@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
@@ -15,6 +14,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
@@ -53,18 +53,10 @@ void main() {
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
       );
-      final harness = PlayerHarness(container);
-      harness.play([testItem(_pid)]);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const VisualizerScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+      PlayerHarness(container).play([testItem(_pid)]);
+      await pumpApp(tester, const VisualizerScreen(), container: container);
 
       expect(find.byType(VisualizerStage), findsOneWidget);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('says so rather than spinning when nothing was measured', (
@@ -78,20 +70,12 @@ void main() {
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
       );
-      final harness = PlayerHarness(container);
-      harness.play([testItem(_pid)]);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const VisualizerScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+      PlayerHarness(container).play([testItem(_pid)]);
+      await pumpApp(tester, const VisualizerScreen(), container: container);
 
       expect(find.byType(VisualizerStage), findsNothing);
       expect(find.text('No shape to draw'), findsOneWidget);
       expect(find.byType(WaxSpinner), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('draws only its frame while the shape is being read', (
@@ -103,14 +87,8 @@ void main() {
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
       );
-      final harness = PlayerHarness(container);
-      harness.play([testItem(_pid)]);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const VisualizerScreen()),
-        ),
-      );
+      PlayerHarness(container).play([testItem(_pid)]);
+      await mountApp(tester, const VisualizerScreen(), container: container);
 
       // The first frame, before the read lands: the back control and the
       // backdrop, and neither a stage, a ring, a ghost nor the empty note.
@@ -124,7 +102,6 @@ void main() {
       expect(find.text('No shape to draw'), findsNothing);
       await tester.pumpAndSettle();
       expect(find.text('No shape to draw'), findsOneWidget);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the chrome goes away, and any touch brings it back', (
@@ -136,15 +113,8 @@ void main() {
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
       );
-      final harness = PlayerHarness(container);
-      harness.play([testItem(_pid)]);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const VisualizerScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+      PlayerHarness(container).play([testItem(_pid)]);
+      await pumpApp(tester, const VisualizerScreen(), container: container);
 
       AnimatedOpacity chrome() =>
           tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity).first);
@@ -158,7 +128,6 @@ void main() {
       await tester.tapAt(const Offset(200, 300));
       await tester.pump();
       expect(chrome().opacity, 1);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('and stays put for a screen reader, which has no way to '
@@ -169,19 +138,17 @@ void main() {
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
       );
-      final harness = PlayerHarness(container);
-      harness.play([testItem(_pid)]);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: MediaQuery(
-            data: const MediaQueryData(
-              size: Size(400, 800),
-              accessibleNavigation: true,
-            ),
-            child: routedHost(const VisualizerScreen()),
+      PlayerHarness(container).play([testItem(_pid)]);
+      await mountHost(
+        tester,
+        MediaQuery(
+          data: const MediaQueryData(
+            size: Size(400, 800),
+            accessibleNavigation: true,
           ),
+          child: routedHost(const VisualizerScreen()),
         ),
+        container: container,
       );
       await tester.pumpAndSettle();
 
@@ -192,7 +159,6 @@ void main() {
             .opacity,
         1,
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('holds the screen awake, and lets it go on the way out', (
@@ -206,26 +172,13 @@ void main() {
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
         extra: [wakePortProvider.overrideWithValue(wake)],
       );
-      final harness = PlayerHarness(container);
-      harness.play([testItem(_pid)]);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const VisualizerScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+      PlayerHarness(container).play([testItem(_pid)]);
+      await pumpApp(tester, const VisualizerScreen(), container: container);
       expect(wake.calls, <bool>[true]);
 
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const SizedBox.shrink()),
-        ),
-      );
+      await leaveScreen(tester, container);
       await tester.pumpAndSettle();
       expect(wake.calls, <bool>[true, false]);
-      await harness.endPlayback(tester);
     });
   });
 
@@ -241,15 +194,8 @@ void main() {
         engine: engine,
         extra: [wakePortProvider.overrideWithValue(wake)],
       );
-      final harness = PlayerHarness(container);
-      harness.play([testItem(_pid)]);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const CarModeScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+      PlayerHarness(container).play([testItem(_pid)]);
+      await pumpApp(tester, const CarModeScreen(), container: container);
 
       expect(wake.calls, <bool>[true]);
       expect(find.text('Prancing Pony Blues'), findsOneWidget);
@@ -258,7 +204,6 @@ void main() {
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.carToggle));
       await tester.pumpAndSettle();
       expect(engine.playing, isFalse);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('opened in silence, it offers the way out rather than a '
@@ -268,13 +213,7 @@ void main() {
         repo: FakeRepository(),
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
       );
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: routedHost(const CarModeScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await pumpApp(tester, const CarModeScreen(), container: container);
 
       expect(find.text('Nothing is playing'), findsOneWidget);
       expect(find.bySemanticsIdentifier(SemanticsIds.carExit), findsOneWidget);
@@ -329,12 +268,11 @@ void main() {
       );
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a spoken-word face is offered no visualizer', (tester) async {
       _phone(tester);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: FakeRepository(),
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -353,7 +291,6 @@ void main() {
       );
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     testWidgets('an unmeasured track gets the row greyed with a reason', (
@@ -365,7 +302,7 @@ void main() {
       // vanished would say nothing about why.
       _phone(tester);
       final repo = FakeRepository();
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -393,7 +330,6 @@ void main() {
 
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a read that never landed leaves the row alone', (
@@ -408,7 +344,7 @@ void main() {
           message: 'the catalog is being rebuilt',
           statusCode: 503,
         );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -430,7 +366,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.visualizerClose),
       );
       await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the menu row opens the visualizer over the player', (
@@ -438,7 +373,7 @@ void main() {
     ) async {
       _phone(tester);
       final repo = FakeRepository()..waveforms[_pid] = _measured();
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -461,7 +396,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byType(VisualizerScreen), findsNothing);
-      await harness.endPlayback(tester);
     });
 
     testWidgets('the metadata door follows the server, not a role', (
@@ -508,7 +442,6 @@ void main() {
         ).state.uri.toString(),
         WaxRoute.metadata(_pid),
       );
-      await harness.endPlayback(tester);
     });
   });
 
@@ -518,7 +451,7 @@ void main() {
     ) async {
       _phone(tester);
       final repo = FakeRepository();
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -545,14 +478,13 @@ void main() {
         tester.widget<BookScreen>(find.byType(BookScreen)).pid,
         'bk-${_pid.substring(3)}',
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a listener who may not edit the track is not offered it', (
       tester,
     ) async {
       _phone(tester);
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: FakeRepository(sessionState: testListenerSession())
           ..mayCurateItems = false,
@@ -568,17 +500,15 @@ void main() {
       );
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
-      await harness.endPlayback(tester);
     });
   });
 
   group('the wake lock', () {
     test('two holders, one lock', () {
       final wake = RecordingWake();
-      final container = ProviderContainer(
-        overrides: [wakePortProvider.overrideWithValue(wake)],
+      final container = appContainer(
+        extra: [wakePortProvider.overrideWithValue(wake)],
       );
-      addTearDown(container.dispose);
       final lock = container.read(wakeLockProvider);
 
       lock.hold();
@@ -602,8 +532,8 @@ void main() {
 
     test('a container torn down while held lets the screen go', () {
       final wake = RecordingWake();
-      final container = ProviderContainer(
-        overrides: [wakePortProvider.overrideWithValue(wake)],
+      final container = appContainer(
+        extra: [wakePortProvider.overrideWithValue(wake)],
       );
       container.read(wakeLockProvider).hold();
       container.dispose();

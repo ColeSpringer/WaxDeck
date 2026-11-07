@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck/src/uploads/uploads_controller.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 // What pickers and drop zones filter against: the health payload's
@@ -22,16 +22,15 @@ void main() {
     // real timeout, and a timer minted in the test zone would wait on
     // pumps that never come.
     late WidgetRef captured;
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: Consumer(
-          builder: (context, ref, _) {
-            captured = ref;
-            return const SizedBox.shrink();
-          },
-        ),
+    await mountHost(
+      tester,
+      Consumer(
+        builder: (context, ref, _) {
+          captured = ref;
+          return const SizedBox.shrink();
+        },
       ),
+      container: appContainer(repo: repo),
     );
     await tester.runAsync(() => body(captured));
   }

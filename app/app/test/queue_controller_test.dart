@@ -7,6 +7,8 @@ import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck_api/waxdeck_api.dart' show MediaType;
 import 'package:waxdeck_data/waxdeck_data.dart';
 
+import 'app_host.dart';
+
 const _album = QueueSource(
   kind: QueueSourceKind.album,
   label: 'Kind of Blue',
@@ -25,10 +27,9 @@ List<String> _tracks(int count) => [for (var i = 0; i < count; i++) 'tr-$i'];
 ({ProviderContainer container, QueueController queue}) _harness({
   int seed = 7,
 }) {
-  final container = ProviderContainer(
-    overrides: [queueRandomProvider.overrideWithValue(Random(seed))],
+  final container = appContainer(
+    extra: [queueRandomProvider.overrideWithValue(Random(seed))],
   );
-  addTearDown(container.dispose);
   return (
     container: container,
     queue: container.read(queueControllerProvider.notifier),

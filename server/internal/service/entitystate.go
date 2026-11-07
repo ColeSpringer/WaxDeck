@@ -64,17 +64,25 @@ func (l *Library) resolveEntity(ctx context.Context, uc *UserCtx, apiEntityPID s
 		return "", "", errNotFound("no such entity " + apiEntityPID)
 	}
 	// Only the gate's own verdict is a not-found. Folding a failed read in
-	// here would answer "no such entity" while the catalog is suspended
-	// for maintenance, where the caller needs the retry-shortly the
+	// here would answer a not-found while the catalog is suspended for
+	// maintenance, where the caller needs the retry-shortly the
 	// maintenance kind renders.
 	visible, err := l.entityVisible(ctx, uc, prefix, pid)
 	if err != nil {
 		return "", "", err
 	}
 	if !visible {
-		return "", "", errNotFound("no such entity " + apiEntityPID)
+		return "", "", entityNotFound(kind, apiEntityPID)
 	}
 	return kind, pid, nil
+}
+
+// entityNotFound is the not-found an artist or album pid answers.
+func entityNotFound(kind model.MergeEntity, apiEntityPID string) error {
+	if kind == model.MergeArtist {
+		return errNotFound("no artist with pid " + apiEntityPID)
+	}
+	return errNotFound("no album with pid " + apiEntityPID)
 }
 
 // entityPlayStateDTO projects a catalog entity state onto the API DTO.
@@ -113,6 +121,9 @@ func (l *Library) EntityPlayStateFor(ctx context.Context, uc *UserCtx, apiEntity
 func (l *Library) entityStateFor(ctx context.Context, uc *UserCtx, apiEntityPID string, kind model.MergeEntity, pid model.PID) (EntityPlayState, error) {
 	st, err := l.lib.EntityPlayState(ctx, model.PID(uc.CatalogPID), kind, pid)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return EntityPlayState{}, entityNotFound(kind, apiEntityPID)
+		}
 		return EntityPlayState{}, classify(err)
 	}
 	return entityPlayStateDTO(apiEntityPID, st), nil
@@ -129,6 +140,9 @@ func (l *Library) SetEntityStar(ctx context.Context, uc *UserCtx, apiEntityPID s
 	}
 	changed, err := l.lib.SetEntityStar(ctx, model.PID(uc.CatalogPID), kind, pid, starred, asOfNS(recordedAt))
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return EntityPlayState{}, entityNotFound(kind, apiEntityPID)
+		}
 		return EntityPlayState{}, classify(err)
 	}
 	if changed {
@@ -149,6 +163,9 @@ func (l *Library) SetEntityRating(ctx context.Context, uc *UserCtx, apiEntityPID
 	}
 	changed, err := l.lib.SetEntityRating(ctx, model.PID(uc.CatalogPID), kind, pid, rating, asOfNS(recordedAt))
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return EntityPlayState{}, entityNotFound(kind, apiEntityPID)
+		}
 		return EntityPlayState{}, classify(err)
 	}
 	if changed {

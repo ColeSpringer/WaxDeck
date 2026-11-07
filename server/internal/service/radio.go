@@ -665,6 +665,10 @@ var radioLogoMimes = map[string]string{
 func (l *Library) RadioStationLogo(ctx context.Context, apiStationPID string) (RadioLogo, error) {
 	row, err := l.radioStationRow(ctx, apiStationPID)
 	if err != nil {
+		// A station that is not there has no picture either.
+		if KindOf(err) == KindNotFound {
+			return RadioLogo{}, errNotFound("no logo for station " + apiStationPID)
+		}
 		return RadioLogo{}, err
 	}
 	l.warmRadioLogo(apiStationPID, row)

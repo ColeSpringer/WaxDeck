@@ -65,7 +65,7 @@ void main() {
           peaks: List<int>.generate(1000, (i) => i % 256),
           resolution: 1000,
         );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -78,7 +78,6 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerSeek),
         findsOneWidget,
       );
-      await harness.endPlayback(tester);
     });
 
     testWidgets('a podcast episode does not', (tester) async {
@@ -89,7 +88,7 @@ void main() {
         'tr-01JZX5N8QW3F4V9T2B7KDEP0001',
         mediaType: MediaType.podcast,
       );
-      final harness = await pumpPlayer(
+      await pumpPlayer(
         tester,
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(minutes: 30)),
@@ -98,7 +97,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.waveformCalls, isEmpty);
-      await harness.endPlayback(tester);
     });
 
     test('a refusal draws the bar rather than an error', () async {

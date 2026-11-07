@@ -247,9 +247,9 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), engine harnessEn
 		Media:    media,
 		Connect:  connectSvc,
 		Group:    group,
-		// The same value the session manager got, as main.go passes it:
-		// the two disagreeing would let a base a session tries turn up
-		// unlabelled in a preflight answer.
+		// The same value the session manager got, as wire_connect.go and
+		// wire_api.go pass it: the two disagreeing would let a base a
+		// session tries turn up unlabelled in a preflight answer.
 		Bases:   connect.Bases{LAN: h.lanBase, Loopback: h.lanBase},
 		Backups: h.backups,
 		// A real server always mints share tokens from its secret
@@ -268,9 +268,10 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), engine harnessEn
 	mux.HandleFunc("GET /media/art", srv.ServeMediaArt)
 	mux.HandleFunc("GET /media/probe.wav", srv.ServeProbeAudio)
 	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
-	// The public share surface, mounted as main.go mounts it (minus the
-	// metrics wrapper, which is main.go's own): the landing page reads
-	// its token out of the route pattern, so it needs the real pattern.
+	// The public share surface, mounted as wire_api.go mounts it (minus
+	// the metrics wrapper, which is wire_api.go's own): the landing page
+	// reads its token out of the route pattern, so it needs the real
+	// pattern.
 	mux.HandleFunc("GET /s/{token}", srv.ServeSharePage)
 	mux.HandleFunc("GET /s/{token}/stream", srv.ServeShareStream)
 	mux.HandleFunc("GET /s/{token}/art", srv.ServeShareArt)

@@ -1,15 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/app.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/lyrics.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_screen.dart';
 import 'package:waxdeck/src/shell/adaptive_shell.dart';
@@ -21,6 +16,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
@@ -54,7 +50,7 @@ void main() {
   testWidgets('the music face carries the lyrics control', (tester) async {
     _phone(tester);
     final repo = FakeRepository();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -69,13 +65,12 @@ void main() {
     // fetched words for every track would be a request per play for a
     // panel most listeners never open.
     expect(repo.lyricsCalls, isEmpty);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a spoken-word face does not', (tester) async {
     _phone(tester);
     final repo = FakeRepository();
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -86,7 +81,6 @@ void main() {
     );
 
     expect(find.bySemanticsIdentifier(SemanticsIds.playerLyrics), findsNothing);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the player overlays the words even where a panel would fit', (
@@ -111,7 +105,6 @@ void main() {
 
     expect(harness.container.read(sidePanelProvider), isNull);
     expect(find.text('The tide comes in'), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a failed read shows its error while it retries', (tester) async {
@@ -124,7 +117,7 @@ void main() {
         message: 'down',
         statusCode: 500,
       );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -147,7 +140,6 @@ void main() {
       ..lyricsError = null
       ..lyricsGate!.complete();
     await tester.pumpAndSettle();
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the words wait within a short window', (tester) async {
@@ -156,7 +148,7 @@ void main() {
     final repo = FakeRepository()
       ..lyrics[_pid] = _synced
       ..lyricsGate = gate;
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -175,7 +167,6 @@ void main() {
     tester.view.resetPhysicalSize();
     gate.complete();
     await tester.pumpAndSettle();
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a phone gets the words as an overlay too', (tester) async {
@@ -195,7 +186,6 @@ void main() {
     expect(harness.container.read(sidePanelProvider), isNull);
     expect(find.text('The tide comes in'), findsOneWidget);
     expect(repo.lyricsCalls, <String>[_pid]);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a track with no words says so, with a door for an admin', (
@@ -208,7 +198,7 @@ void main() {
         user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
       ),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -225,7 +215,6 @@ void main() {
 
     expect(find.text('No lyrics for this track'), findsOneWidget);
     expect(find.bySemanticsIdentifier(SemanticsIds.lyricsAdd), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('and offers a member no door into a room they cannot enter', (
@@ -238,7 +227,7 @@ void main() {
         user: WaxDeckUser(id: 'us-2', username: 'member', roles: ['user']),
       ),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -255,7 +244,6 @@ void main() {
 
     expect(find.text('No lyrics for this track'), findsOneWidget);
     expect(find.bySemanticsIdentifier(SemanticsIds.lyricsAdd), findsNothing);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a line seeks the engine to its own moment', (tester) async {
@@ -264,7 +252,7 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: engine,
@@ -278,7 +266,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(engine.position, const Duration(seconds: 12));
-    await harness.endPlayback(tester);
   });
 
   testWidgets('and the queue beside it does the same', (tester) async {
@@ -299,7 +286,6 @@ void main() {
 
     expect(harness.container.read(sidePanelProvider), isNull);
     expect(find.byType(QueueScreen), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('a record with nothing in it says so rather than drawing '
@@ -309,7 +295,7 @@ void main() {
     // took that on trust paints a blank page under a header.
     final repo = FakeRepository()
       ..lyrics[_pid] = const Lyrics(pid: _pid, source: 'lrc');
-    final harness = await pumpPlayer(
+    await pumpPlayer(
       tester,
       repo: repo,
       engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
@@ -320,7 +306,6 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerLyrics));
     await tester.pumpAndSettle();
     expect(find.text('No lyrics for this track'), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the sheet follows the queue rather than the track it was '
@@ -354,7 +339,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('A different song'), findsOneWidget);
     expect(find.text('The tide comes in'), findsNothing);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the door out of the sheet takes the sheet with it', (
@@ -385,7 +369,6 @@ void main() {
     // listener has walked away from.
     expect(find.byType(MetadataScreen), findsOneWidget);
     expect(find.text('No lyrics for this track'), findsNothing);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the door from the player overlay leaves it for the shell', (
@@ -400,24 +383,11 @@ void main() {
         user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
       ),
     );
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        audioEngineProvider.overrideWithValue(
-          FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
-        ),
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-      ],
+    final container = appContainer(
+      repo: repo,
+      engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
     );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const WaxDeckApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpWholeApp(tester, container: container);
     PlayerHarness(container).play([testItem(_pid)]);
     await tester.pumpAndSettle();
     container.read(routerProvider).push<void>(WaxRoute.nowPlaying);
@@ -454,13 +424,7 @@ void main() {
     );
     final harness = PlayerHarness(container);
     harness.play([testItem(_pid)]);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const LyricsPanel()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const LyricsPanel(), container: container);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.lyricsAdd));
     // Bounded rather than settled: the editor spins while its own reads
@@ -468,7 +432,6 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(MetadataScreen), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the panel draws what is playing, not what opened it', (
@@ -482,16 +445,9 @@ void main() {
     );
     final harness = PlayerHarness(container);
     harness.play([testItem(_pid)]);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const LyricsPanel()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await pumpApp(tester, const LyricsPanel(), container: container);
 
     expect(find.text('The tide comes in'), findsOneWidget);
-    await harness.endPlayback(tester);
   });
 
   testWidgets('the panel is titled in the listener\'s language', (
@@ -504,16 +460,14 @@ void main() {
     );
     final harness = PlayerHarness(container);
     harness.play([testItem(_pid)]);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: routedHost(const LyricsPanel(), locale: const Locale('es')),
-      ),
+    await pumpApp(
+      tester,
+      const LyricsPanel(),
+      container: container,
+      locale: const Locale('es'),
     );
-    await tester.pumpAndSettle();
 
     expect(find.text('Letra'), findsOneWidget);
     expect(find.text('Lyrics'), findsNothing);
-    await harness.endPlayback(tester);
   });
 }

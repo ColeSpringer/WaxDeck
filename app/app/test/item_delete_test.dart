@@ -1,16 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
 import 'package:waxdeck/src/library/item_delete.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'localized_host.dart';
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -21,42 +19,36 @@ const _admin = WaxDeckUser(
 /// A screen whose one button deletes [pids], or with [filePids] those
 /// files of the one item, drawn as every surface offering the verb draws
 /// it: only for an account holding the delete right.
-Widget _host(
+Future<void> _mount(
+  WidgetTester tester,
   FakeRepository repo, {
   List<String> pids = const ['tr-1'],
   List<String>? filePids,
   VoidCallback? onDeleted,
-}) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
-  child: localizedHost(
-    Scaffold(
-      body: Center(
-        child: Consumer(
-          builder: (context, ref, _) {
-            if (!canDeleteItems(ref)) return const SizedBox.shrink();
-            return TextButton(
-              onPressed: () => filePids == null
-                  ? confirmDeleteItems(
-                      context,
-                      pids: pids,
-                      onDeleted: onDeleted,
-                    )
-                  : confirmDeleteItem(
-                      context,
-                      pid: pids.single,
-                      filePids: filePids,
-                      onDeleted: onDeleted,
-                    ),
-              child: const Text('Delete'),
-            );
-          },
-        ),
+}) => mountApp(
+  tester,
+  Scaffold(
+    body: Center(
+      child: Consumer(
+        builder: (context, ref, _) {
+          if (!canDeleteItems(ref)) return const SizedBox.shrink();
+          return TextButton(
+            onPressed: () => filePids == null
+                ? confirmDeleteItems(context, pids: pids, onDeleted: onDeleted)
+                : confirmDeleteItem(
+                    context,
+                    pid: pids.single,
+                    filePids: filePids,
+                    onDeleted: onDeleted,
+                  ),
+            child: const Text('Delete'),
+          );
+        },
       ),
     ),
   ),
+  container: appContainer(repo: repo),
+  routed: false,
 );
 
 /// Asks for the delete, as a surface's delete row does.
@@ -87,7 +79,7 @@ void main() {
       files: 3,
       bytes: 5 * 1024 * 1024,
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -141,7 +133,7 @@ void main() {
       ],
       itemSurvives: true,
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -176,7 +168,7 @@ void main() {
       ],
       paths: ['Hum Collective/Shell Songs/01 - Prancing Pony Blues.m4a'],
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -215,7 +207,7 @@ void main() {
         'Hum Collective/Shell Songs/01 - Prancing Pony Blues.jpg',
       ],
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -273,7 +265,7 @@ void main() {
       paths: const ['Album/02.flac'],
       sidecars: [for (var i = 1; i <= 3; i++) 'Album/02-$i.jpg'],
     );
-    await tester.pumpWidget(_host(repo, pids: const ['tr-1', 'tr-2']));
+    await _mount(tester, repo, pids: const ['tr-1', 'tr-2']);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -312,7 +304,7 @@ void main() {
         sidecars: const ['Album/01.lrc'],
       );
     }
-    await tester.pumpWidget(_host(repo, pids: const ['tr-1', 'tr-2']));
+    await _mount(tester, repo, pids: const ['tr-1', 'tr-2']);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -334,7 +326,7 @@ void main() {
       bytes: 1024,
       paths: ['Album/01.flac'],
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -369,7 +361,7 @@ void main() {
             message: 'the library folder refused the write: permission denied',
             statusCode: 409,
           );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -399,7 +391,7 @@ void main() {
     );
     repo.deleteItemsFailed = 1;
     var left = false;
-    await tester.pumpWidget(_host(repo, onDeleted: () => left = true));
+    await _mount(tester, repo, onDeleted: () => left = true);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -430,7 +422,7 @@ void main() {
       bytes: 3 * 1024 * 1024,
     );
     repo.deleteItemsFailed = 1;
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -463,7 +455,7 @@ void main() {
       itemSurvives: true,
     );
     var left = false;
-    await tester.pumpWidget(_host(repo, onDeleted: () => left = true));
+    await _mount(tester, repo, onDeleted: () => left = true);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -489,7 +481,7 @@ void main() {
       bytes: 8 * 1024,
       paths: [for (var i = 1; i <= 8; i++) 'Album/0$i.flac'],
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -513,7 +505,7 @@ void main() {
     repo.deleteItemsRefusal = (pids, dryRun) =>
         pids.length == 1 ? _ripRefusal : null;
     var left = false;
-    await tester.pumpWidget(_host(repo, onDeleted: () => left = true));
+    await _mount(tester, repo, onDeleted: () => left = true);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -558,7 +550,7 @@ void main() {
       statusCode: 400,
       params: {'reason': 'cue-rip', 'tracks': 'tr-2,tr-1'},
     );
-    await tester.pumpWidget(_host(repo, pids: const ['tr-1', 'tr-2']));
+    await _mount(tester, repo, pids: const ['tr-1', 'tr-2']);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -629,7 +621,7 @@ void main() {
     );
     repo.deleteItemsRefusal = (pids, dryRun) =>
         pids.length == 1 ? _ripRefusal : null;
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -649,7 +641,7 @@ void main() {
       items: [testItem('tr-1'), testItem('tr-2'), testItem('tr-3')],
     );
     repo.deleteItemFilesRefusal = (filePids, dryRun) => _ripRefusal;
-    await tester.pumpWidget(_host(repo, filePids: ['fl-1']));
+    await _mount(tester, repo, filePids: ['fl-1']);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -676,7 +668,7 @@ void main() {
     repo.deleteItemsWarnings = const [
       "Prancing Pony Blues: pony.flac is now the item's main file",
     ];
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -697,7 +689,7 @@ void main() {
       sessionState: const SessionState(authenticated: true, user: _admin),
       items: [testItem('tr-1')],
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -727,7 +719,7 @@ void main() {
       paths: [for (var i = 1; i <= 8; i++) 'Album/0$i.flac'],
       itemSurvives: true,
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -758,7 +750,7 @@ void main() {
     );
     repo.deleteItemsRefusal = (pids, dryRun) =>
         pids.length == 1 ? _ripRefusal : null;
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);
@@ -792,7 +784,7 @@ void main() {
       files: 1,
       bytes: 1024,
     );
-    await tester.pumpWidget(_host(repo));
+    await _mount(tester, repo);
     await tester.pumpAndSettle();
 
     await _delete(tester);

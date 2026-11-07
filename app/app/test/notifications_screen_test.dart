@@ -1,18 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/notifications/notifications_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
 
@@ -20,30 +18,18 @@ Future<ProviderContainer> _pump(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1000, 2000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(
-        FakeRepository(
-          sessionState: const SessionState(
-            authenticated: true,
-            user: WaxDeckUser(id: 'us-1', username: 'sam', roles: <String>[]),
-          ),
+  return pumpApp(
+    tester,
+    const NotificationsScreen(),
+    container: appContainer(
+      repo: FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(id: 'us-1', username: 'sam', roles: <String>[]),
         ),
       ),
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      // A chosen row lands in the shell, and the shell hosts the deck bar.
-      audioEngineProvider.overrideWithValue(FakeEngine()),
-    ],
-  );
-  addTearDown(container.dispose);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: routedHost(const NotificationsScreen()),
     ),
   );
-  await tester.pumpAndSettle();
-  return container;
 }
 
 /// The router the screen is mounted in. Held before a tap that

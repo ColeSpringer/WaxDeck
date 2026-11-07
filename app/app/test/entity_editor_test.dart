@@ -1,16 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/metadata/entity_editor_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 import 'wax_finders.dart';
 
 // The artist and release-group editors: curation-seeded fields, sparse
@@ -41,16 +38,11 @@ Future<void> _pump(
   tester.view.physicalSize = const Size(800, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-      child: routedHost(EntityEditorScreen(entity: entity, pid: pid)),
-    ),
+  await pumpApp(
+    tester,
+    EntityEditorScreen(entity: entity, pid: pid),
+    container: appContainer(repo: repo),
   );
-  await tester.pumpAndSettle();
 }
 
 Finder _field(String name) =>
@@ -344,16 +336,10 @@ void main() {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-        child: routedHost(
-          const EntityEditorScreen(entity: EditableEntity.artist, pid: _artist),
-        ),
-      ),
+    await mountApp(
+      tester,
+      const EntityEditorScreen(entity: EditableEntity.artist, pid: _artist),
+      container: appContainer(repo: repo),
     );
     await tester.pump();
 

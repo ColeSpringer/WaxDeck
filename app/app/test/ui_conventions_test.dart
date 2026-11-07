@@ -618,6 +618,20 @@ void main() {
       );
     });
 
+    test('a media tile is built only in the presenters', () {
+      final rule = _rules.firstWhere((r) => r.name == 'raw-media-tile');
+      expect(count('raw-media-tile', 'MediaTileData(title: t)'), 1);
+      expect(count('raw-media-tile', 'const MediaTileData(title: t)'), 1);
+      expect(count('raw-media-tile', 'trackRowTile(track)'), 0);
+      expect(count('raw-media-tile', 'tile = MediaTileData.new(title: t)'), 1);
+      expect(rule.appliesTo('lib/src/music/album_screen.dart'), isTrue);
+      expect(rule.appliesTo('lib/src/presenters/media_tiles.dart'), isFalse);
+      expect(
+        rule.appliesTo('$_designSystem/src/components/view_data.dart'),
+        isFalse,
+      );
+    });
+
     test('a failed read is drawn explained', () {
       for (final code in [
         'AsyncValue(hasError: true) => Text(l10n.failed),',
@@ -1444,8 +1458,30 @@ final _rules = <_Rule>[
   _ErrorStateHomeRule(),
   _UnexplainedFailureRule(),
   _ProseSlotRule(),
+  _RawMediaTileRule(),
   _CopyRule(),
 ];
+
+/// The raw-tile rule: a `MediaTileData` built by hand in a screen. The
+/// presenters own every mapping from a model to view data, so a screen
+/// that builds one is a second spelling of a mapping that already has a
+/// home. Counted in app code alone: the design system declares the class
+/// and its goldens and catalogue build it directly.
+class _RawMediaTileRule extends _Rule {
+  _RawMediaTileRule()
+    : super(
+        name: 'raw-media-tile',
+        pattern: RegExp(r'\bMediaTileData(?:\.new)?\('),
+        fix:
+            'take the tile from a presenter in '
+            'lib/src/presenters/media_tiles.dart, adding one there when no '
+            'surface maps this model yet',
+      );
+
+  @override
+  bool appliesTo(String path) =>
+      path.startsWith('lib/') && !path.startsWith('lib/src/presenters/');
+}
 
 /// The error-only-face rule: an `AsyncError` pattern, and a `when` family
 /// call that does not skip loading on reload. Both hide an error that a

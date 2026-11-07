@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 /// Watches the progress of [items] the way a listing screen does, and hands
@@ -33,13 +33,12 @@ void main() {
     repo.playPositions['tr-115'] = 90000;
     late PlayProgressView view;
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: _Probe(items: items, onView: (v) => view = v),
-      ),
+    await pumpApp(
+      tester,
+      _Probe(items: items, onView: (v) => view = v),
+      container: appContainer(repo: repo),
+      routed: false,
     );
-    await tester.pumpAndSettle();
 
     expect(repo.playStateBatches.map((batch) => batch.length), <int>[
       50,

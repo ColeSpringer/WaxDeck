@@ -2,11 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/playback_session.dart';
 import 'package:waxdeck/src/player/timeline_scope.dart';
-import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 Duration _s(int seconds) => Duration(seconds: seconds);
@@ -89,13 +89,7 @@ void main() {
     test('starts at the chapter, toggles, and is read back by the next '
         'launch', () async {
       final store = MemoryClientSettingsStore();
-      ProviderContainer launch() {
-        final container = ProviderContainer(
-          overrides: [clientSettingsStoreProvider.overrideWithValue(store)],
-        );
-        addTearDown(container.dispose);
-        return container;
-      }
+      ProviderContainer launch() => appContainer(settings: store);
 
       final first = launch();
       expect(first.read(bookTimelineScopeProvider), BookTimelineScope.chapter);

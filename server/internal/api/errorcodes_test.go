@@ -58,9 +58,9 @@ func definedErrorCodes(t *testing.T) map[string]bool {
 }
 
 // Every code the package answers by kind, by the refusal whitelist, or as
-// a literal handed to refuse is one the contract documents; and refusals
-// are built only by refuse and refusalError, so none carries a code this
-// cannot read.
+// a literal handed to refuse or refuseParams is one the contract documents;
+// and refusals are built only by refuse, refuseParams and
+// refusalErrorParams, so none carries a code this cannot read.
 func TestErrorCodesAreDocumented(t *testing.T) {
 	t.Parallel()
 	defined := definedErrorCodes(t)
@@ -75,8 +75,10 @@ func TestErrorCodesAreDocumented(t *testing.T) {
 		}
 	}
 	refused := refuseLiterals(t)
-	if len(refused) == 0 {
-		t.Fatal("found no code literal handed to refuse; the walk is reading the wrong thing")
+	for _, fn := range []string{"refuse", "refuseParams"} {
+		if !slices.ContainsFunc(refused, func(r refuseLiteral) bool { return r.fn == fn }) {
+			t.Fatalf("found no code literal handed to %s; the walk is reading the wrong thing", fn)
+		}
 	}
 	for _, r := range refused {
 		if !defined[r.code] {
@@ -85,11 +87,11 @@ func TestErrorCodesAreDocumented(t *testing.T) {
 	}
 }
 
-type refuseLiteral struct{ code, at string }
+type refuseLiteral struct{ fn, code, at string }
 
 // refuseLiterals is each string literal the package's own code hands
-// refuse as its code. A refuse whose code is no literal, and a wireError
-// built outside wireerror.go, fail the test where they stand.
+// refuse or refuseParams as its code. A call whose code is no literal, and
+// a wireError built outside wireerror.go, fail the test where they stand.
 func refuseLiterals(t *testing.T) []refuseLiteral {
 	t.Helper()
 	names, err := filepath.Glob("*.go")
@@ -110,22 +112,29 @@ func refuseLiterals(t *testing.T) []refuseLiteral {
 			switch n := n.(type) {
 			case *ast.CompositeLit:
 				if typ, ok := n.Type.(*ast.Ident); ok && typ.Name == "wireError" && name != "wireerror.go" {
-					t.Errorf("%s builds a wireError; refuse through refuse or refusalError", fset.Position(n.Pos()))
+					t.Errorf("%s builds a wireError; refuse through refuse, refuseParams or refusalErrorParams", fset.Position(n.Pos()))
 				}
 			case *ast.CallExpr:
-				if fn, ok := n.Fun.(*ast.Ident); !ok || fn.Name != "refuse" || len(n.Args) != 3 {
+				fn, ok := n.Fun.(*ast.Ident)
+				if !ok {
+					return true
+				}
+				switch {
+				case fn.Name == "refuse" && len(n.Args) == 3:
+				case fn.Name == "refuseParams" && len(n.Args) == 4:
+				default:
 					return true
 				}
 				lit, ok := n.Args[1].(*ast.BasicLit)
 				if !ok || lit.Kind != token.STRING {
-					t.Errorf("%s hands refuse a code that is not a string literal", fset.Position(n.Args[1].Pos()))
+					t.Errorf("%s hands %s a code that is not a string literal", fset.Position(n.Args[1].Pos()), fn.Name)
 					return true
 				}
 				code, err := strconv.Unquote(lit.Value)
 				if err != nil {
 					t.Fatal(err)
 				}
-				out = append(out, refuseLiteral{code, fset.Position(lit.Pos()).String()})
+				out = append(out, refuseLiteral{fn.Name, code, fset.Position(lit.Pos()).String()})
 			}
 			return true
 		})
@@ -316,11 +325,11 @@ func TestResponseErrorCarriesWhatTheErrorHolds(t *testing.T) {
 
 	// The refusal whitelist codes a refusal, degrading a code it does not
 	// know and keeping the words either way.
-	if status, body, _ := responseOf(t, refusalError("queue-end", "nothing after this")); status != http.StatusConflict ||
+	if status, body, _ := responseOf(t, refusalErrorParams("queue-end", "nothing after this", nil)); status != http.StatusConflict ||
 		body.Code != "queue-end" || body.Message != "nothing after this" {
 		t.Errorf("whitelisted refusal: %d %+v, want 409 queue-end", status, body)
 	}
-	if status, body, _ := responseOf(t, refusalError("wat", "the client said no")); status != http.StatusBadRequest ||
+	if status, body, _ := responseOf(t, refusalErrorParams("wat", "the client said no", nil)); status != http.StatusBadRequest ||
 		body.Code != "invalid-request" || body.Message != "the client said no" {
 		t.Errorf("unlisted refusal: %d %+v, want 400 invalid-request", status, body)
 	}
@@ -346,6 +355,25 @@ func TestResponseErrorCarriesWhatTheErrorHolds(t *testing.T) {
 	} {
 		if _, _, fields := responseOf(t, err); fields["params"] != nil {
 			t.Errorf("%v: sent params %s, want the field left out", err, fields["params"])
+		}
+	}
+}
+
+// A refusal built with params answers them with its status, code and
+// message; none, or an empty set, leaves the field out.
+func TestRefuseParamsCarriesItsParams(t *testing.T) {
+	t.Parallel()
+	params := map[string]string{"reason": "incompatible-schema"}
+	err := fmt.Errorf("wrapped: %w", refuseParams(http.StatusBadRequest, "invalid-request", "the archive is from another schema", params))
+	status, body, _ := responseOf(t, err)
+	if status != http.StatusBadRequest || body.Code != "invalid-request" || body.Message != "the archive is from another schema" ||
+		body.Params == nil || !maps.Equal(*body.Params, params) {
+		t.Errorf("refusal with params: %d %+v, want 400 invalid-request carrying %v", status, body, params)
+	}
+	for _, none := range []map[string]string{nil, {}} {
+		status, body, fields := responseOf(t, refuseParams(http.StatusConflict, "conflict", "no", none))
+		if status != http.StatusConflict || body.Code != "conflict" || body.Message != "no" || fields["params"] != nil {
+			t.Errorf("refusal with params %v: %d %+v (params %s), want 409 conflict without the field", none, status, body, fields["params"])
 		}
 	}
 }
@@ -385,6 +413,159 @@ func TestEachMissingBodyRefusalIsItsOwn(t *testing.T) {
 	if status, body, _ := responseOf(t, errNoBody()); status != http.StatusBadRequest ||
 		body.Code != "invalid-request" || body.Message != "a request body is required" {
 		t.Errorf("after a caller changed its own: %d %+v, want 400 invalid-request", status, body)
+	}
+}
+
+// A service error answers in its own words or its kind's, under any
+// status a handler gives it, never in a wrapped error's text, which may
+// name internals.
+func TestServiceMessageNeverSendsRawText(t *testing.T) {
+	t.Parallel()
+	raw := errors.New("open /var/lib/waxdeck/catalog.db: permission denied")
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{&service.Error{Kind: service.KindConflict, Msg: "a merge is running", Err: raw}, "a merge is running"},
+		{&service.Error{Kind: service.KindConflict, Err: raw}, kindCodes[service.KindConflict].fallback},
+		{fmt.Errorf("resolving: %w", &service.Error{Kind: service.KindInvalid, Msg: "bad pid", Err: raw}), "bad pid"},
+		{raw, kindCodes[service.KindInternal].fallback},
+		{&service.Error{Kind: service.KindMaintenance, Msg: raw.Error()}, kindCodes[service.KindMaintenance].fallback},
+		{&service.Error{Kind: "made-up", Msg: "a detail for the log"}, kindCodes[service.KindInternal].fallback},
+	} {
+		if got := serviceMessage(c.err); got != c.want {
+			t.Errorf("serviceMessage(%v) = %q, want %q", c.err, got, c.want)
+		}
+	}
+}
+
+// No words a client reads come from the Error() of an error in hand, nor
+// from a variable holding it: a service error says them through
+// serviceMessage, and the few errors whose own text is the answer go
+// through ownWords, which names them. Read are the refusal builders, the
+// socket's error frame and the sign-in error page.
+func TestRefusalsNeverSendRawErrorText(t *testing.T) {
+	t.Parallel()
+	// Each builder of client-facing words, by the index of its message.
+	message := map[string]int{
+		"refuse": 2, "refuseParams": 2, "refusalErrorParams": 1, "refuseEngineAway": 0,
+		"writeError": 3, "writeErrorParams": 3, "oidcErrorPage": 1,
+	}
+	// rawText reports an in-hand error's Error() in e, or a variable that
+	// holds one.
+	rawText := func(e ast.Expr, held map[string]bool) bool {
+		found := false
+		ast.Inspect(e, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.CallExpr:
+				sel, ok := n.Fun.(*ast.SelectorExpr)
+				if ok && sel.Sel.Name == "Error" && len(n.Args) == 0 {
+					// An error in hand, not a named sentinel's fixed text.
+					_, inHand := sel.X.(*ast.Ident)
+					found = found || inHand
+				}
+			case *ast.Ident:
+				found = found || held[n.Name]
+			}
+			return !found
+		})
+		return found
+	}
+	names, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	walked := 0
+	for _, name := range names {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range f.Decls {
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok || fd.Body == nil {
+				continue
+			}
+			held := map[string]bool{}
+			ast.Inspect(fd.Body, func(n ast.Node) bool {
+				switch n := n.(type) {
+				case *ast.AssignStmt:
+					if len(n.Lhs) == len(n.Rhs) {
+						for i, rhs := range n.Rhs {
+							if id, ok := n.Lhs[i].(*ast.Ident); ok && rawText(rhs, held) {
+								held[id.Name] = true
+							}
+						}
+					}
+				case *ast.ValueSpec:
+					if len(n.Names) == len(n.Values) {
+						for i, value := range n.Values {
+							if rawText(value, held) {
+								held[n.Names[i].Name] = true
+							}
+						}
+					}
+				}
+				return true
+			})
+			flag := func(e ast.Expr) {
+				walked++
+				if rawText(e, held) {
+					t.Errorf("%s: %s words what a client reads with an error's own text; use serviceMessage, or ownWords for an error whose text is the answer",
+						fset.Position(e.Pos()), fd.Name.Name)
+				}
+			}
+			ast.Inspect(fd.Body, func(n ast.Node) bool {
+				switch n := n.(type) {
+				case *ast.CallExpr:
+					if fn, ok := n.Fun.(*ast.Ident); ok {
+						if at, builds := message[fn.Name]; builds && at < len(n.Args) {
+							flag(n.Args[at])
+						}
+					}
+				case *ast.CompositeLit:
+					if typ, ok := n.Type.(*ast.Ident); ok && typ.Name == "wsErrorFrame" {
+						for _, el := range n.Elts {
+							if kv, ok := el.(*ast.KeyValueExpr); ok {
+								if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Message" {
+									flag(kv.Value)
+								}
+							}
+						}
+					}
+				}
+				return true
+			})
+		}
+	}
+	if walked == 0 {
+		t.Fatal("found nothing to read; the walk is reading the wrong thing")
+	}
+}
+
+// A limit is the caller's or the default, and one outside [1, max] is
+// refused in words stating the bound that was checked.
+func TestPageLimitStatesItsBound(t *testing.T) {
+	t.Parallel()
+	if got, err := pageLimit(nil, 50, 200); got != 50 || err != nil {
+		t.Errorf("no limit: %d, %v; want the default 50", got, err)
+	}
+	one, most, zero, over := 1, 200, 0, 201
+	for _, p := range []*int{&one, &most} {
+		if got, err := pageLimit(p, 50, 200); got != *p || err != nil {
+			t.Errorf("limit %d: %d, %v; want it as given", *p, got, err)
+		}
+	}
+	for _, p := range []*int{&zero, &over} {
+		_, err := pageLimit(p, 50, 200)
+		if status, body, _ := responseOf(t, err); status != http.StatusBadRequest ||
+			body.Code != "invalid-request" || body.Message != "limit must be between 1 and 200" {
+			t.Errorf("limit %d: %d %+v, want 400 invalid-request stating the bound", *p, status, body)
+		}
 	}
 }
 

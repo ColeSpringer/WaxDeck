@@ -1,19 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/rendering.dart' show RenderParagraph;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/dashboard_screen.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'bundled_type.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 /// Every read the status tiles draw, failing as a restarting server's do,
 /// or held as an unanswered one's are.
@@ -125,14 +122,11 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     // A fresh scope for each server.
     await tester.pumpWidget(const SizedBox());
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-        child: routedHost(const AdminDashboardScreen(), locale: locale),
-      ),
+    await mountApp(
+      tester,
+      const AdminDashboardScreen(),
+      container: appContainer(repo: repo),
+      locale: locale,
     );
     await tester.pump();
   }

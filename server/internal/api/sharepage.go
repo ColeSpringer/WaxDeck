@@ -325,7 +325,7 @@ func (s *Server) relayShareEpisode(w http.ResponseWriter, r *http.Request, owner
 	defer release()
 	src, err := s.svc.EnclosureStreamSource(r.Context(), "", pid)
 	if err != nil {
-		switch service.KindOf(err) {
+		switch s.kindOf(err) {
 		case service.KindNotFound, service.KindInvalid, service.KindForbidden:
 			writeError(w, http.StatusNotFound, "not-found", "this entry has no audio to play yet")
 		case service.KindMaintenance:

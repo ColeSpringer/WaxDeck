@@ -1,15 +1,12 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/dashboard_screen.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
-import 'routed_host.dart';
 
 /// The dashboard says whether playback goes through the streaming engine:
 /// connected, unreachable (originals playing directly meanwhile), or a
@@ -24,16 +21,11 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repo = FakeRepository()..serverStreaming = streaming;
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
-        child: routedHost(const AdminDashboardScreen()),
-      ),
+    await pumpApp(
+      tester,
+      const AdminDashboardScreen(),
+      container: appContainer(repo: repo),
     );
-    await tester.pumpAndSettle();
   }
 
   Finder inTile(String text) =>

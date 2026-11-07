@@ -824,6 +824,9 @@ func (l *Library) Album(ctx context.Context, uc *UserCtx, apiAlbumPID string) (A
 	}
 	info, err := l.lib.EntityByPID(ctx, read.EntityAlbum, pid)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return AlbumDetail{}, errNotFound("no album with pid " + apiAlbumPID)
+		}
 		return AlbumDetail{}, classify(err)
 	}
 	if info == nil {
@@ -948,6 +951,9 @@ func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID, role string, siz
 	}
 	blob, err := l.lib.ResolveArt(ctx, ref, art, size)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return ArtBlob{}, errNotFound("no artwork for pid " + apiPID)
+		}
 		return ArtBlob{}, classify(err)
 	}
 	source := l.artSourceFor(ctx, ref, artSourceFromBlob(blob))
@@ -1127,6 +1133,14 @@ func (l *Library) artTarget(ctx context.Context, uc *UserCtx, apiPID string) (mo
 		}
 		return nil
 	}
+	// The entity's own miss is no artwork too, in whatever words its read
+	// gave it.
+	missing := func(err error) error {
+		if KindOf(err) == KindNotFound {
+			return errNotFound("no artwork for pid " + apiPID)
+		}
+		return err
+	}
 	switch {
 	case prefix == PrefixAlbum:
 		if err := gate(l.entityVisible(ctx, uc, PrefixAlbum, pid)); err != nil {
@@ -1148,13 +1162,13 @@ func (l *Library) artTarget(ctx context.Context, uc *UserCtx, apiPID string) (mo
 	case prefix == PrefixPlaylist:
 		pl, err := l.resolvePlaylist(ctx, uc, apiPID)
 		if err != nil {
-			return model.EntityRef{}, nil, err
+			return model.EntityRef{}, nil, missing(err)
 		}
 		return model.EntityRef{Type: model.ArtPlaylist, PID: pl.PID}, pl, nil
 	case itemPrefix(prefix):
 		it, err := l.getVisibleItem(ctx, uc, apiPID)
 		if err != nil {
-			return model.EntityRef{}, nil, err
+			return model.EntityRef{}, nil, missing(err)
 		}
 		return itemArtRef(it), nil, nil
 	default:
@@ -1206,6 +1220,9 @@ func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) 
 	}
 	infos, err := l.lib.ArtRoles(ctx, ref)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return ArtRolesDTO{}, errNotFound("no artwork for pid " + apiPID)
+		}
 		return ArtRolesDTO{}, classify(err)
 	}
 	out := ArtRolesDTO{
@@ -1245,10 +1262,16 @@ func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) 
 func (l *Library) ItemLyrics(ctx context.Context, uc *UserCtx, apiItemPID string) (Lyrics, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return Lyrics{}, errNotFound("no lyrics for pid " + apiItemPID)
+		}
 		return Lyrics{}, err
 	}
 	ly, err := l.lib.Lyrics(ctx, it.PID)
 	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return Lyrics{}, errNotFound("no lyrics for pid " + apiItemPID)
+		}
 		return Lyrics{}, classify(err)
 	}
 	out := Lyrics{PID: apiItemPID, Source: string(ly.Source), Provider: ly.Provider, Unsynced: ly.Unsynced}

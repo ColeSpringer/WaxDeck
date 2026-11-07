@@ -6,6 +6,7 @@ import 'package:waxdeck/src/queue/queue_source_pager.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _genre = QueueSource(
@@ -47,10 +48,9 @@ void main() {
   /// scope holds it: it is auto-disposing, so a container that only read
   /// it once would drop it before the queue ever drained.
   ProviderContainer harness(QueueSourcePager pager) {
-    final container = ProviderContainer(
-      overrides: [queueSourcePagerProvider.overrideWithValue(pager)],
+    final container = appContainer(
+      extra: [queueSourcePagerProvider.overrideWithValue(pager)],
     );
-    addTearDown(container.dispose);
     final subscription = container.listen(queueRefillProvider, (_, _) {});
     addTearDown(subscription.close);
     return container;

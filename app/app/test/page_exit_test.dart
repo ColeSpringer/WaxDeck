@@ -3,12 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/page_exit/page_exit.dart';
 import 'package:waxdeck/src/player/page_exit_binder.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 
 const _a = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
@@ -54,20 +54,14 @@ class _Harness {
     : engine = FakeEngine(),
       exit = _FakeExit(),
       repo = FakeRepository(items: [testItem(_a)]) {
-    container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(engine),
+    container = appContainer(
+      repo: repo,
+      engine: engine,
+      extra: [
         pageExitPortProvider.overrideWithValue(exit),
         webGaplessProvider.overrideWith(() => _Gapless(gapless)),
       ],
     );
-    // Registered at construction, not left to `end`: a container that
-    // outlives its test keeps a checkpoint timer firing into the rest
-    // of the suite, and `end` is the last statement of each of these -
-    // so an expectation above it would be exactly the failure that
-    // leaks one.
-    addTearDown(container.dispose);
   }
 
   final FakeEngine engine;

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -15,13 +16,12 @@ import (
 // --- audit -------------------------------------------------------------------------
 
 func (s *Server) ListAuditEvents(ctx context.Context, req ListAuditEventsRequestObject) (ListAuditEventsResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return ListAuditEvents403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
-	limit, okLimit := pageLimit(req.Params.Limit, 100, 500)
-	if !okLimit {
-		return ListAuditEvents400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
+	limit, err := pageLimit(req.Params.Limit, 100, 500)
+	if err != nil {
+		return nil, err
 	}
 	filter := wdb.AuditFilter{
 		Action:    deref(req.Params.Action),
@@ -30,9 +30,6 @@ func (s *Server) ListAuditEvents(ctx context.Context, req ListAuditEventsRequest
 	}
 	page, err := s.svc.AuditEvents(ctx, filter, deref(req.Params.Cursor), limit)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return ListAuditEvents400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	out := AuditEventPage{Events: make([]AuditEvent, 0, len(page.Events))}
@@ -76,9 +73,8 @@ func auditEventJSON(e service.AuditEventDTO) AuditEvent {
 // --- runtime settings --------------------------------------------------------------
 
 func (s *Server) GetAdminSettings(ctx context.Context, _ GetAdminSettingsRequestObject) (GetAdminSettingsResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return GetAdminSettings403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	st, err := s.svc.AdminSettingsGet(ctx)
 	if err != nil {
@@ -88,15 +84,12 @@ func (s *Server) GetAdminSettings(ctx context.Context, _ GetAdminSettingsRequest
 }
 
 func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsRequestObject) (PutAdminSettingsResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return PutAdminSettings403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return PutAdminSettings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	st, err := s.svc.AdminSettingsPut(ctx, uc, service.AdminSettingsChange{
 		SignupEnabled:       req.Body.SignupEnabled,
@@ -110,9 +103,6 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 		RadioExternalArt:    req.Body.RadioExternalArt,
 	})
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return PutAdminSettings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PutAdminSettings200JSONResponse(adminSettingsJSON(st)), nil
@@ -135,18 +125,16 @@ func adminSettingsJSON(st service.AdminSettings) AdminSettings {
 // --- transcoding limits ------------------------------------------------------------
 
 func (s *Server) GetTranscodingLimits(ctx context.Context, _ GetTranscodingLimitsRequestObject) (GetTranscodingLimitsResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return GetTranscodingLimits403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	lim := s.svc.TranscodingLimitsGet(ctx)
 	return GetTranscodingLimits200JSONResponse(transcodingLimitsJSON(lim)), nil
 }
 
 func (s *Server) GetTranscodingActivity(ctx context.Context, _ GetTranscodingActivityRequestObject) (GetTranscodingActivityResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return GetTranscodingActivity403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	activity := s.svc.ActiveTranscodeSessions()
 	timelines := activity.Timelines
@@ -157,15 +145,12 @@ func (s *Server) GetTranscodingActivity(ctx context.Context, _ GetTranscodingAct
 }
 
 func (s *Server) PutTranscodingLimits(ctx context.Context, req PutTranscodingLimitsRequestObject) (PutTranscodingLimitsResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return PutTranscodingLimits403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return PutTranscodingLimits400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	lim, err := s.svc.TranscodingLimitsPut(ctx, uc, service.TranscodingLimits{
 		MaxConcurrent:         req.Body.MaxConcurrent,
@@ -173,9 +158,6 @@ func (s *Server) PutTranscodingLimits(ctx context.Context, req PutTranscodingLim
 		DefaultMaxBitrateKbps: req.Body.DefaultMaxBitrateKbps,
 	})
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return PutTranscodingLimits400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PutTranscodingLimits200JSONResponse(transcodingLimitsJSON(lim)), nil
@@ -192,9 +174,8 @@ func transcodingLimitsJSON(lim service.TranscodingLimits) TranscodingLimits {
 // --- schedules ---------------------------------------------------------------------
 
 func (s *Server) ListSchedules(ctx context.Context, _ ListSchedulesRequestObject) (ListSchedulesResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return ListSchedules403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	rows := s.svc.Schedules(ctx)
 	out := ScheduleList{Schedules: make([]Schedule, 0, len(rows))}
@@ -205,21 +186,15 @@ func (s *Server) ListSchedules(ctx context.Context, _ ListSchedulesRequestObject
 }
 
 func (s *Server) PutSchedule(ctx context.Context, req PutScheduleRequestObject) (PutScheduleResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return PutSchedule403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return PutSchedule400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	row, err := s.svc.PutSchedule(ctx, uc, string(req.Kind), req.Body.Cron, req.Body.Enabled)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return PutSchedule400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PutSchedule200JSONResponse(scheduleJSON(row)), nil
@@ -249,16 +224,13 @@ func scheduleJSON(row service.ScheduleDTO) Schedule {
 // --- trash -------------------------------------------------------------------------
 
 func (s *Server) ListTrash(ctx context.Context, req ListTrashRequestObject) (ListTrashResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return ListTrash403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
-	limit, okLimit := pageLimit(req.Params.Limit, 200, 1000)
-	if !okLimit {
-		return ListTrash400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 1000"))}, nil
+	limit, err := pageLimit(req.Params.Limit, 200, 1000)
+	if err != nil {
+		return nil, err
 	}
 	entries, err := s.svc.TrashEntries(ctx, uc, derefBool(req.Params.IncludeRestored), limit)
 	if err != nil {
@@ -291,23 +263,14 @@ func (s *Server) ListTrash(ctx context.Context, req ListTrashRequestObject) (Lis
 }
 
 func (s *Server) RestoreTrashEntry(ctx context.Context, req RestoreTrashEntryRequestObject) (RestoreTrashEntryResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return RestoreTrashEntry403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if err := s.svc.RestoreTrashEntry(ctx, uc, string(req.TrashId)); err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return RestoreTrashEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no trash entry with id "+string(req.TrashId)))}, nil
-		case service.KindConflict, service.KindInvalid:
-			return RestoreTrashEntry409JSONResponse(errObj("conflict", err.Error())), nil
-		case service.KindReadOnly:
-			return RestoreTrashEntry409JSONResponse(errObj("read-only", err.Error())), nil
-		case service.KindStorageUnwritable:
-			return RestoreTrashEntry409JSONResponse(errObj("storage-unwritable", err.Error())), nil
+		kind := service.KindOf(err)
+		if kind == service.KindConflict || kind == service.KindInvalid {
+			return nil, refuse(http.StatusConflict, "conflict", serviceMessage(err))
 		}
 		return nil, err
 	}
@@ -315,12 +278,9 @@ func (s *Server) RestoreTrashEntry(ctx context.Context, req RestoreTrashEntryReq
 }
 
 func (s *Server) EmptyTrash(ctx context.Context, _ EmptyTrashRequestObject) (EmptyTrashResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return EmptyTrash403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	rep, err := s.svc.EmptyTrash(ctx, uc)
 	if err != nil {
@@ -335,19 +295,15 @@ func (s *Server) EmptyTrash(ctx context.Context, _ EmptyTrashRequestObject) (Emp
 }
 
 func (s *Server) PurgeTrashEntry(ctx context.Context, req PurgeTrashEntryRequestObject) (PurgeTrashEntryResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return PurgeTrashEntry403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	reclaimed, err := s.svc.PurgeTrashEntry(ctx, uc, string(req.TrashId))
 	if err != nil {
 		// A malformed or unknown trash id both read as "no such entry".
-		switch service.KindOf(err) {
-		case service.KindNotFound, service.KindInvalid:
-			return PurgeTrashEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no trash entry with id "+string(req.TrashId)))}, nil
+		if kind := service.KindOf(err); kind == service.KindNotFound || kind == service.KindInvalid {
+			return nil, refuse(http.StatusNotFound, "not-found", "no trash entry with id "+string(req.TrashId))
 		}
 		return nil, err
 	}
@@ -357,12 +313,9 @@ func (s *Server) PurgeTrashEntry(ctx context.Context, req PurgeTrashEntryRequest
 // --- thumbnail cache ---------------------------------------------------------------
 
 func (s *Server) GetThumbnailCache(ctx context.Context, _ GetThumbnailCacheRequestObject) (GetThumbnailCacheResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return GetThumbnailCache403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	rep, err := s.svc.ThumbCacheStats(ctx, uc)
 	if err != nil {
@@ -389,15 +342,12 @@ func (s *Server) GetThumbnailCache(ctx context.Context, _ GetThumbnailCacheReque
 }
 
 func (s *Server) PruneThumbnailCache(ctx context.Context, req PruneThumbnailCacheRequestObject) (PruneThumbnailCacheResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return PruneThumbnailCache403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return PruneThumbnailCache400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	// The two bounds are forwarded as they arrived, absences included:
 	// an absent field is unbounded on that axis and a zero is a real
@@ -405,9 +355,6 @@ func (s *Server) PruneThumbnailCache(ctx context.Context, req PruneThumbnailCach
 	// difference the service refuses on.
 	rep, err := s.svc.PruneThumbnails(ctx, uc, req.Body.OlderThanSeconds, req.Body.MaxBytes)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return PruneThumbnailCache400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PruneThumbnailCache200JSONResponse(ThumbnailPruneResult{
@@ -416,12 +363,9 @@ func (s *Server) PruneThumbnailCache(ctx context.Context, req PruneThumbnailCach
 }
 
 func (s *Server) GetEnrichmentCache(ctx context.Context, _ GetEnrichmentCacheRequestObject) (GetEnrichmentCacheResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return GetEnrichmentCache403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	rep, err := s.svc.EnrichmentCacheStats(ctx, uc)
 	if err != nil {
@@ -449,22 +393,16 @@ func enrichmentCacheReport(rep service.EnrichCacheDTO) EnrichmentCacheReport {
 }
 
 func (s *Server) PruneEnrichmentCache(ctx context.Context, req PruneEnrichmentCacheRequestObject) (PruneEnrichmentCacheResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return PruneEnrichmentCache403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return PruneEnrichmentCache400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	// Forwarded as they arrived: an absent bound and a zero one differ.
 	rep, err := s.svc.PruneEnrichmentCache(ctx, uc, req.Body.OlderThanSeconds, req.Body.MaxBytes)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return PruneEnrichmentCache400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PruneEnrichmentCache200JSONResponse(EnrichmentCachePruneResult{
@@ -475,12 +413,9 @@ func (s *Server) PruneEnrichmentCache(ctx context.Context, req PruneEnrichmentCa
 // --- deletion ----------------------------------------------------------------------
 
 func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsRequestObject) (DeleteLibraryItemsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return DeleteLibraryItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	mode := ""
 	if req.Body.Mode != nil {
@@ -488,21 +423,8 @@ func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsR
 	}
 	res, err := s.svc.DeleteItems(ctx, uc, req.Body.Pids, mode, derefBool(req.Body.DryRun))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			e := errObj("invalid-request", err.Error())
-			if errors.Is(err, service.ErrCueRipPart) {
-				e.Params = cueRipParams(err)
-			}
-			return DeleteLibraryItems400JSONResponse{InvalidRequestJSONResponse(e)}, nil
-		case service.KindForbidden:
-			return DeleteLibraryItems403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return DeleteLibraryItems404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		case service.KindReadOnly:
-			return DeleteLibraryItems409JSONResponse(errObj("read-only", err.Error())), nil
-		case service.KindCatalogBusy, service.KindStorageUnwritable:
-			return DeleteLibraryItems409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
+		if service.KindOf(err) == service.KindInvalid && errors.Is(err, service.ErrCueRipPart) {
+			return nil, refuseParams(http.StatusBadRequest, "invalid-request", serviceMessage(err), cueRipParams(err))
 		}
 		return nil, err
 	}
@@ -553,16 +475,13 @@ func deleteResultJSON(res service.DeleteItemsResultDTO) DeleteItemsResult {
 // --- catalog jobs ------------------------------------------------------------------
 
 func (s *Server) ListJobs(ctx context.Context, req ListJobsRequestObject) (ListJobsResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return ListJobs403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
-	limit, okLimit := pageLimit(req.Params.Limit, 50, 200)
-	if !okLimit {
-		return ListJobs400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 200"))}, nil
+	limit, err := pageLimit(req.Params.Limit, 50, 200)
+	if err != nil {
+		return nil, err
 	}
 	jobs, err := s.svc.Jobs(ctx, uc, limit)
 	if err != nil {
@@ -576,12 +495,9 @@ func (s *Server) ListJobs(ctx context.Context, req ListJobsRequestObject) (ListJ
 }
 
 func (s *Server) ClearFinishedJobs(ctx context.Context, _ ClearFinishedJobsRequestObject) (ClearFinishedJobsResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return ClearFinishedJobs403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	n, err := s.svc.ClearFinishedJobs(ctx, uc)
 	if err != nil {
@@ -593,46 +509,28 @@ func (s *Server) ClearFinishedJobs(ctx context.Context, _ ClearFinishedJobsReque
 // --- library read-only -------------------------------------------------------------
 
 func (s *Server) SetLibraryReadOnly(ctx context.Context, req SetLibraryReadOnlyRequestObject) (SetLibraryReadOnlyResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return SetLibraryReadOnly403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return SetLibraryReadOnly400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	if err := s.svc.LibraryReadOnlySet(ctx, uc, req.Pid, req.Body.ReadOnly); err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return SetLibraryReadOnly404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no library with pid "+req.Pid))}, nil
-		case service.KindInvalid:
-			return SetLibraryReadOnly400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetLibraryReadOnly200JSONResponse(LibraryReadOnly{ReadOnly: req.Body.ReadOnly, LibraryPid: ptr(req.Pid)}), nil
 }
 
 func (s *Server) SetLibraryFolderFallback(ctx context.Context, req SetLibraryFolderFallbackRequestObject) (SetLibraryFolderFallbackResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return SetLibraryFolderFallback403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return SetLibraryFolderFallback400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	if err := s.svc.LibraryFolderFallbackSet(ctx, uc, req.Pid, req.Body.FolderFallback); err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return SetLibraryFolderFallback404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no library with pid "+req.Pid))}, nil
-		case service.KindInvalid:
-			return SetLibraryFolderFallback400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetLibraryFolderFallback200JSONResponse(LibraryFolderFallback{
@@ -641,62 +539,39 @@ func (s *Server) SetLibraryFolderFallback(ctx context.Context, req SetLibraryFol
 }
 
 func (s *Server) SetLibraryMedia(ctx context.Context, req SetLibraryMediaRequestObject) (SetLibraryMediaResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return SetLibraryMedia403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return SetLibraryMedia400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	lib, err := s.svc.SetLibraryMedia(ctx, uc, req.Pid, string(req.Body.Media))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return SetLibraryMedia404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no library with pid "+req.Pid))}, nil
-		case service.KindInvalid:
-			return SetLibraryMedia400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetLibraryMedia200JSONResponse(libraryMediaChangedJSON(lib)), nil
 }
 
 func (s *Server) SetLibraryProfile(ctx context.Context, req SetLibraryProfileRequestObject) (SetLibraryProfileResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
 	if req.Body == nil {
-		return SetLibraryProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	lib, err := s.svc.SetLibraryProfile(ctx, uc, req.Pid, req.Body.Profile)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return SetLibraryProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return SetLibraryProfile403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return SetLibraryProfile404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return SetLibraryProfile200JSONResponse(libraryDTO(lib)), nil
 }
 
 func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObject) (CreateLibraryResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return CreateLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return CreateLibrary400JSONResponse(errObj("invalid-request", "a body is required")), nil
+		return nil, errNoBody()
 	}
 	in := service.AddLibraryInput{
 		Name:        req.Body.Name,
@@ -709,39 +584,18 @@ func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObje
 	}
 	lib, err := s.svc.AddLibrary(ctx, uc, in)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return CreateLibrary400JSONResponse(errObj("invalid-request", err.Error())), nil
-		case service.KindConflict:
-			return CreateLibrary409JSONResponse(errObj("conflict", err.Error())), nil
-		case service.KindForbidden:
-			return CreateLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return CreateLibrary201JSONResponse(libraryCreatedJSON(lib)), nil
 }
 
 func (s *Server) RemoveLibrary(ctx context.Context, req RemoveLibraryRequestObject) (RemoveLibraryResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return RemoveLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	job, err := s.svc.RemoveLibrary(ctx, uc, req.Pid)
 	if err != nil {
-		switch kind := service.KindOf(err); kind {
-		case service.KindInvalid:
-			return RemoveLibrary400JSONResponse(errObj("invalid-request", err.Error())), nil
-		case service.KindForbidden:
-			return RemoveLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		case service.KindNotFound:
-			return RemoveLibrary404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no library with pid "+req.Pid))}, nil
-		case service.KindConflict, service.KindCatalogBusy, service.KindReadOnly:
-			return RemoveLibrary409JSONResponse(errObj(string(kind), err.Error())), nil
-		}
 		return nil, err
 	}
 	return RemoveLibrary202JSONResponse(jobJSON(job)), nil
@@ -829,15 +683,12 @@ func libraryDTO(lib service.LibraryInfo) Library {
 // --- migration ---------------------------------------------------------------------
 
 func (s *Server) StageMigrationExport(ctx context.Context, req StageMigrationExportRequestObject) (StageMigrationExportResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return StageMigrationExport403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return StageMigrationExport400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an export body is required"))}, nil
+		return nil, errNoBody()
 	}
 	// The declared length, when the client gave one: room is checked
 	// before the body is read rather than after it is on disk. A chunked
@@ -845,31 +696,17 @@ func (s *Server) StageMigrationExport(ctx context.Context, req StageMigrationExp
 	declared := declaredBodyBytes(ctx)
 	export, err := s.svc.StageMigrationExport(ctx, uc, req.Body, declared)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return StageMigrationExport400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindQuota:
-			return StageMigrationExport413JSONResponse(errObj("quota-exceeded", err.Error())), nil
-		case service.KindStorageFull:
-			return StageMigrationExport507JSONResponse{StorageFullJSONResponse(errObj("storage-full", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return StageMigrationExport201JSONResponse(migrationExportJSON(export)), nil
 }
 
 func (s *Server) DiscardMigrationExport(ctx context.Context, req DiscardMigrationExportRequestObject) (DiscardMigrationExportResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return DiscardMigrationExport403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if err := s.svc.DiscardMigrationExport(ctx, uc, string(req.ExportId)); err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return DiscardMigrationExport404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return DiscardMigrationExport204Response{}, nil
@@ -891,15 +728,12 @@ func migrationExportJSON(e service.MigrationExportDTO) MigrationExport {
 }
 
 func (s *Server) CreateMigration(ctx context.Context, req CreateMigrationRequestObject) (CreateMigrationResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return CreateMigration403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return CreateMigration400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	in := service.MigrationRequest{
 		Source:    req.Body.Source,
@@ -928,12 +762,6 @@ func (s *Server) CreateMigration(ctx context.Context, req CreateMigrationRequest
 	}
 	task, err := s.svc.StartMigration(ctx, uc, in)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return CreateMigration400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return CreateMigration403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return CreateMigration202JSONResponse(toolTaskJSON(task)), nil
@@ -961,33 +789,24 @@ func genreTreeJSON(d service.GenreTreeDTO) GenreTree {
 }
 
 func (s *Server) GetGenreTree(ctx context.Context, req GetGenreTreeRequestObject) (GetGenreTreeResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return GetGenreTree403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	tree, err := s.svc.GenreTreeFor(ctx, uc)
 	if err != nil {
-		if service.KindOf(err) == service.KindForbidden {
-			return GetGenreTree403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return GetGenreTree200JSONResponse(genreTreeJSON(tree)), nil
 }
 
 func (s *Server) PutGenreTree(ctx context.Context, req PutGenreTreeRequestObject) (PutGenreTreeResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return PutGenreTree403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return PutGenreTree400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	nodes := make([]service.GenreNodeDTO, 0, len(req.Body.Genres))
 	for _, n := range req.Body.Genres {
@@ -999,24 +818,15 @@ func (s *Server) PutGenreTree(ctx context.Context, req PutGenreTreeRequestObject
 	}
 	tree, err := s.svc.PutGenreTree(ctx, uc, nodes)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return PutGenreTree400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return PutGenreTree403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PutGenreTree200JSONResponse(genreTreeJSON(tree)), nil
 }
 
 func (s *Server) CreateGenreNormalization(ctx context.Context, req CreateGenreNormalizationRequestObject) (CreateGenreNormalizationResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return CreateGenreNormalization403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	dryRun := false
 	if req.Body != nil {
@@ -1024,12 +834,6 @@ func (s *Server) CreateGenreNormalization(ctx context.Context, req CreateGenreNo
 	}
 	task, err := s.svc.StartGenreNormalize(ctx, uc, dryRun)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return CreateGenreNormalization400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindForbidden:
-			return CreateGenreNormalization403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return CreateGenreNormalization202JSONResponse(toolTaskJSON(task)), nil
@@ -1042,15 +846,10 @@ func (s *Server) CreateGenreNormalization(ctx context.Context, req CreateGenreNo
 // and blocks until it changes, so no goroutine is spawned and the
 // generated response writer's copy loop drives the pacing.
 func (s *Server) StreamToolTaskEvents(ctx context.Context, req StreamToolTaskEventsRequestObject) (StreamToolTaskEventsResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
+	uc := userCtx(ctx)
+	p, _ := principalFromContext(ctx)
 	task, err := s.svc.GetToolTaskFor(ctx, uc, string(req.TaskId))
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return StreamToolTaskEvents404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such task"))}, nil
-		}
 		return nil, err
 	}
 	return StreamToolTaskEvents200TexteventStreamResponse{
@@ -1149,9 +948,8 @@ func taskChanged(a, b service.ToolTaskDTO) bool {
 // --- backups -----------------------------------------------------------------------
 
 func (s *Server) ListBackups(ctx context.Context, _ ListBackupsRequestObject) (ListBackupsResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return ListBackups403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	rows, err := s.backups.List(ctx)
 	if err != nil {
@@ -1165,18 +963,12 @@ func (s *Server) ListBackups(ctx context.Context, _ ListBackupsRequestObject) (L
 }
 
 func (s *Server) CreateBackup(ctx context.Context, _ CreateBackupRequestObject) (CreateBackupResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return CreateBackup403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	row, err := s.backups.Create(ctx, uc, "manual")
 	if err != nil {
-		if service.KindOf(err) == service.KindConflict {
-			return CreateBackup409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	// The runner loop in main drains this; a full channel is fine (the
@@ -1191,35 +983,22 @@ func (s *Server) CreateBackup(ctx context.Context, _ CreateBackupRequestObject) 
 }
 
 func (s *Server) GetBackup(ctx context.Context, req GetBackupRequestObject) (GetBackupResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return GetBackup403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	row, err := s.backups.Get(ctx, string(req.BackupId))
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetBackup404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no backup with id "+string(req.BackupId)))}, nil
-		}
 		return nil, err
 	}
 	return GetBackup200JSONResponse(backupJSON(row)), nil
 }
 
 func (s *Server) DeleteBackup(ctx context.Context, req DeleteBackupRequestObject) (DeleteBackupResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return DeleteBackup403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if err := s.backups.Delete(ctx, uc, string(req.BackupId)); err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound:
-			return DeleteBackup404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no backup with id "+string(req.BackupId)))}, nil
-		case service.KindConflict:
-			return DeleteBackup409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return DeleteBackup204Response{}, nil
@@ -1241,51 +1020,31 @@ func (s *Server) DownloadBackup(ctx context.Context, req DownloadBackupRequestOb
 }
 
 func (s *Server) ImportBackup(ctx context.Context, req ImportBackupRequestObject) (ImportBackupResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return ImportBackup403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return ImportBackup400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an archive body is required"))}, nil
+		return nil, errNoBody()
 	}
 	const maxImportBytes = 16 << 30
 	row, err := s.backups.Import(ctx, uc, req.Body, maxImportBytes)
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			return ImportBackup400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		case service.KindQuota:
-			return ImportBackup413JSONResponse(errObj("quota-exceeded", err.Error())), nil
-		}
 		return nil, err
 	}
 	return ImportBackup201JSONResponse(backupJSON(row)), nil
 }
 
 func (s *Server) StageRestore(ctx context.Context, req StageRestoreRequestObject) (StageRestoreResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
-	}
-	if !p.IsAdmin() {
-		return StageRestore403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	plan, err := s.backups.StageRestore(ctx, uc, string(req.BackupId))
 	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindInvalid:
-			e := errObj("invalid-request", err.Error())
-			if errors.Is(err, service.ErrArchiveSchema) {
-				e.Params = &map[string]string{"reason": "incompatible-schema"}
-			}
-			return StageRestore400JSONResponse{InvalidRequestJSONResponse(e)}, nil
-		case service.KindNotFound:
-			return StageRestore404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no backup with id "+string(req.BackupId)))}, nil
-		case service.KindConflict:
-			return StageRestore409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		kind := service.KindOf(err)
+		if kind == service.KindInvalid && errors.Is(err, service.ErrArchiveSchema) {
+			return nil, refuseParams(http.StatusBadRequest, "invalid-request", serviceMessage(err), map[string]string{"reason": "incompatible-schema"})
 		}
 		return nil, err
 	}
@@ -1293,32 +1052,22 @@ func (s *Server) StageRestore(ctx context.Context, req StageRestoreRequestObject
 }
 
 func (s *Server) GetStagedRestore(ctx context.Context, _ GetStagedRestoreRequestObject) (GetStagedRestoreResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return GetStagedRestore403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	plan, err := s.backups.StagedRestore(ctx)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetStagedRestore404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no restore is staged"))}, nil
-		}
 		return nil, err
 	}
 	return GetStagedRestore200JSONResponse(restorePlanJSON(plan)), nil
 }
 
 func (s *Server) CancelStagedRestore(ctx context.Context, _ CancelStagedRestoreRequestObject) (CancelStagedRestoreResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return CancelStagedRestore403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if err := s.backups.CancelStagedRestore(ctx, uc); err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return CancelStagedRestore404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no restore is staged"))}, nil
-		}
 		return nil, err
 	}
 	return CancelStagedRestore204Response{}, nil
@@ -1365,29 +1114,22 @@ func restorePlanJSON(plan service.RestorePlan) RestorePlan {
 // --- scrobbling credentials ----------------------------------------------------
 
 func (s *Server) GetScrobblingConfig(ctx context.Context, _ GetScrobblingConfigRequestObject) (GetScrobblingConfigResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return GetScrobblingConfig403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
 	}
 	return GetScrobblingConfig200JSONResponse(scrobblingConfigJSON(s.svc.LastfmConfigGet(ctx))), nil
 }
 
 func (s *Server) PutScrobblingConfig(ctx context.Context, req PutScrobblingConfigRequestObject) (PutScrobblingConfigResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
+	uc := userCtx(ctx)
+	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if !p.IsAdmin() {
-		return PutScrobblingConfig403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
 	if req.Body == nil {
-		return PutScrobblingConfig400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return nil, errNoBody()
 	}
 	cfg, err := s.svc.LastfmConfigPut(ctx, uc, req.Body.LastfmApiKey, req.Body.LastfmSecret)
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
-			return PutScrobblingConfig400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
-		}
 		return nil, err
 	}
 	return PutScrobblingConfig200JSONResponse(scrobblingConfigJSON(cfg)), nil
