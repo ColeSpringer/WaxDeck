@@ -258,20 +258,9 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), engine harnessEn
 		// share link could not be minted.
 		Shares: auth.NewShareTokens(secret),
 	})
-	apiHandler := HandlerWithOptions(
-		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  RequestErrorHandler,
-			ResponseErrorHandlerFunc: srv.ResponseErrorHandler,
-		}),
-		StdHTTPServerOptions{
-			BaseURL:          "/api/v1",
-			Middlewares:      []MiddlewareFunc{srv.AuthMiddleware},
-			ErrorHandlerFunc: RequestErrorHandler,
-		},
-	)
 	h.srv = srv
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", apiHandler)
+	mux.Handle("/api/v1/", srv.Handler())
 	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
 	mux.Handle(BackupArchiveRoute, srv.AuthMiddleware(http.HandlerFunc(srv.ServeBackupArchive)))
 	mux.HandleFunc("GET /media/download", srv.ServeDownload)

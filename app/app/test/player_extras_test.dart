@@ -468,7 +468,8 @@ void main() {
       tester,
     ) async {
       _phone(tester);
-      final repo = FakeRepository()..mayCurateItems = false;
+      final repo = FakeRepository(sessionState: testListenerSession())
+        ..mayCurateItems = false;
       final harness = await pumpPlayer(
         tester,
         repo: repo,
@@ -553,7 +554,8 @@ void main() {
       _phone(tester);
       final harness = await pumpPlayer(
         tester,
-        repo: FakeRepository()..mayCurateItems = false,
+        repo: FakeRepository(sessionState: testListenerSession())
+          ..mayCurateItems = false,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
         item: testItem(_pid),
         host: (player) => routedHost(player),

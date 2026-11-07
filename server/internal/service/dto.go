@@ -4,8 +4,7 @@ import "time"
 
 // The service returns plain DTOs so the API layer never touches WaxBin
 // types: the ownership boundary (only service and below import waxbin)
-// is enforced by depguard-style linting, and these types are what cross
-// it.
+// is enforced by cmd/importlint, and these types are what cross it.
 
 // ItemSummary is the compact list-row shape. Virtual marks a track
 // carved out of a shared source file by a cue sheet: it plays a

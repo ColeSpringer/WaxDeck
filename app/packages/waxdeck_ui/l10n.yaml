@@ -1,7 +1,9 @@
 # gen-l10n's inputs and outputs for the design system's own strings.
-# `make generate` runs it; the output is committed and drift-checked, like
-# the app's. The pubspec's `generate: true` is a precondition of the
-# generator, not a second opinion about that - see the comment there.
+# `flutter pub get` and `make generate` run it; the output is not
+# committed, and a direct `flutter test`, `run` or `build` fails on a fresh
+# clone until `flutter pub get` has run (an app build never mints these).
+# The pubspec's `generate: true` is what lets the generator run - see the
+# comment there.
 arb-dir: lib/src/l10n/arb
 template-arb-file: wax_en.arb
 output-dir: lib/src/l10n/gen

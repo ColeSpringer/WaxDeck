@@ -65,8 +65,14 @@ const _unreachable = WaxDeckApiException(
 class _Rig {
   _Rig({required this.offline}) {
     db = inMemoryMirrorDatabase();
-    repo = FakeRepository()
-      ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
+    // Signed in as the listener: the session resolves in a test, and a
+    // signed-out one unbinds the engine from the account it queues for.
+    repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: _me, username: 'listener', roles: ['user']),
+      ),
+    )..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
     if (offline) {
       repo
         ..listBookmarksError = _unreachable

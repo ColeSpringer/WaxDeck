@@ -5,7 +5,6 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/connect/connect_bus.dart';
 import 'package:waxdeck/src/connect/connect_providers.dart';
 import 'package:waxdeck/src/connect/remote_session.dart';
@@ -30,6 +29,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
@@ -776,11 +776,7 @@ void main() {
         tester,
         repo: repo,
         engine: engine,
-        container: playbackContainer(
-          repo: repo,
-          engine: engine,
-          extra: [artworkStoreProvider.overrideWithValue(artwork)],
-        ),
+        container: appContainer(repo: repo, engine: engine, artwork: artwork),
       );
       await harness.container
           .read(radioPlaybackProvider.notifier)
@@ -833,11 +829,7 @@ void main() {
         tester,
         repo: repo,
         engine: engine,
-        container: playbackContainer(
-          repo: repo,
-          engine: engine,
-          extra: [artworkStoreProvider.overrideWithValue(artwork)],
-        ),
+        container: appContainer(repo: repo, engine: engine, artwork: artwork),
       );
       harness.play([testItem('tr-A')]);
       await tester.pumpAndSettle();

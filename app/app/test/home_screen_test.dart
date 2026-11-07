@@ -189,14 +189,7 @@ Future<ProviderContainer> _pumpPlaying(
   tester.view.physicalSize = const Size(1200, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = playbackContainer(
-    repo: repo,
-    engine: FakeEngine(),
-    extra: [
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
-    ],
-  );
+  final container = playbackContainer(repo: repo, engine: FakeEngine());
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
@@ -921,7 +914,7 @@ void main() {
   testWidgets('a listener without the upload right gets no add', (
     tester,
   ) async {
-    final repo = _repo();
+    final repo = _repo()..sessionState = testListenerSession();
     await _pumpHome(tester, repo);
     expect(_byId(SemanticsIds.homeAdd), findsNothing);
   });
@@ -1232,9 +1225,11 @@ void main() {
   testWidgets('a listener without the upload right sees no review door', (
     tester,
   ) async {
-    // The endpoint would answer them an empty queue anyway; the gate
-    // keeps home from even asking.
-    final repo = _repo()..reviewEntries = <ReviewEntry>[_pendingEntry('rv-1')];
+    // The fake counts the entry whoever asks, so only the upload gate
+    // keeps the door off home.
+    final repo = _repo()
+      ..sessionState = testListenerSession()
+      ..reviewEntries = <ReviewEntry>[_pendingEntry('rv-1')];
     await _pumpHome(tester, repo);
     expect(_byId(SemanticsIds.homeReviewPending), findsNothing);
   });

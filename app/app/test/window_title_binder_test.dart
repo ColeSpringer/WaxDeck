@@ -2,7 +2,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/connect/remote_session.dart';
 import 'package:waxdeck/src/desktop/desktop_ports.dart';
 import 'package:waxdeck/src/desktop/desktop_ports_io.dart'
@@ -426,7 +425,6 @@ void main() {
           windowTitlePortProvider.overrideWithValue(titles),
           desktopProvider.overrideWithValue(true),
           trayPortProvider.overrideWithValue(const NoTray()),
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
         ],
       );
       await tester.pumpWidget(

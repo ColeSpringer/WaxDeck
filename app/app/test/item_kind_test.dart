@@ -4,9 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/series_controller.dart';
 import 'package:waxdeck/src/books/series_merge.dart';
@@ -80,11 +77,9 @@ Future<PlayerHarness> _pump(
     repo: repo,
     engine: engine ?? FakeEngine(),
     extra: [
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
       if (sync != null) ...[
         mirrorDatabaseProvider.overrideWithValue(sync.db),
         downloadManagerProvider.overrideWithValue(downloads!),
-        artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
         syncEngineProvider.overrideWithValue(sync),
       ],
     ],

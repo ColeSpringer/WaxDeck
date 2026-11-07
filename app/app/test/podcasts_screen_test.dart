@@ -28,10 +28,13 @@ import 'routed_host.dart';
 import 'secondary_click.dart';
 import 'wax_finders.dart';
 
+/// Pass [credentials] for a session that answers: the real store never does
+/// under test, and the session stays loading.
 Future<void> _pump(
   WidgetTester tester,
   FakeRepository repo, {
   Size size = const Size(900, 1600),
+  CredentialStorePort? credentials,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -41,6 +44,8 @@ Future<void> _pump(
       overrides: [
         repositoryProvider.overrideWithValue(repo),
         audioEngineProvider.overrideWithValue(FakeEngine()),
+        if (credentials != null)
+          credentialStoreProvider.overrideWithValue(credentials),
       ],
       child: routedHost(const PodcastsScreen()),
     ),
@@ -343,9 +348,9 @@ void main() {
   testWidgets('a show card opens the show header\'s own actions', (
     tester,
   ) async {
-    final repo = FakeRepository()
+    final repo = FakeRepository(sessionState: testListenerSession())
       ..addSubscription(testShow('pc-A', title: 'Alpha Show'));
-    await _pump(tester, repo);
+    await _pump(tester, repo, credentials: InMemoryCredentialStore());
 
     await rightClick(
       tester,
@@ -359,6 +364,29 @@ void main() {
     await tester.tap(find.text('Check for new episodes'));
     await tester.pumpAndSettle();
     expect(repo.refreshPodcastCalls, <String>['pc-A']);
+  });
+
+  testWidgets('a show card offers its cover to an account that may curate', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-01JZX5N8QW3F4V9T2B7KDCURATE',
+          username: 'curator',
+          roles: ['user'],
+          managePodcasts: true,
+        ),
+      ),
+    )..addSubscription(testShow('pc-A', title: 'Alpha Show'));
+    await _pump(tester, repo, credentials: InMemoryCredentialStore());
+
+    await rightClick(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.podcast('pc-A')),
+    );
+    expect(find.text('Set cover'), findsOneWidget);
   });
 
   testWidgets('a position the stream reports moves an Up next ring at once '

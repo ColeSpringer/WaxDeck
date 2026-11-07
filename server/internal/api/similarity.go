@@ -17,15 +17,6 @@ import (
 // visibility. The audio pull is a raw media route (ServeAnalysisAudio)
 // authenticated with the same token.
 
-// workerPaths are the strict routes the worker token (and only the
-// worker token) opens. Session credentials are refused here: worker
-// endpoints ignore visibility, so a user session must never reach
-// them.
-var workerPaths = map[string]bool{
-	"/api/v1/similarity/work":       true,
-	"/api/v1/similarity/embeddings": true,
-}
-
 // workerAuthorized reports whether the request carries a configured
 // worker token as its bearer.
 func (s *Server) workerAuthorized(r *http.Request) bool {
@@ -50,7 +41,7 @@ func workerFromContext(ctx context.Context) bool {
 }
 
 // requireWorker guards the strict worker handlers (belt and braces
-// behind the middleware's path routing).
+// behind AuthMiddleware).
 func requireWorker(ctx context.Context) error {
 	if !workerFromContext(ctx) {
 		return &service.Error{Kind: service.KindInternal, Msg: "worker endpoint reached without worker auth"}

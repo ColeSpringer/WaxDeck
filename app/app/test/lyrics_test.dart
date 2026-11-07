@@ -216,12 +216,6 @@ void main() {
       container: playbackContainer(
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
-        // Without a store the session never resolves in a test, and the
-        // role behind the door would read as "not an admin" for a reason
-        // that has nothing to do with lyrics.
-        extra: [
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
       ),
       host: (player) => routedHost(player),
     );
@@ -252,12 +246,6 @@ void main() {
       container: playbackContainer(
         repo: repo,
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
-        // Without a store the session never resolves in a test, and the
-        // role behind the door would read as "not an admin" for a reason
-        // that has nothing to do with lyrics.
-        extra: [
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        ],
       ),
       host: (player) => routedHost(player),
     );
@@ -382,9 +370,6 @@ void main() {
     final container = playbackContainer(
       repo: repo,
       engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
-      extra: [
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
     );
     final harness = PlayerHarness(container);
     harness.play([testItem(_pid)]);
@@ -466,9 +451,6 @@ void main() {
     final container = playbackContainer(
       repo: repo,
       engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
-      extra: [
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
     );
     final harness = PlayerHarness(container);
     harness.play([testItem(_pid)]);

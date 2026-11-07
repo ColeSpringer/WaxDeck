@@ -1,7 +1,9 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+
+import 'ratchet.dart';
+import 'source_scan.dart';
 
 /// The conventions a compiler cannot see, as a ratchet.
 ///
@@ -50,65 +52,15 @@ void main() {
         }
       }
 
-      final allowlistFile = File('test/ui_conventions_allowlist.json');
-      if (Platform.environment['WAXDECK_UI_CONVENTIONS'] == 'write') {
-        allowlistFile.writeAsStringSync(
-          '${const JsonEncoder.withIndent('  ').convert(_sorted(counts))}\n',
-        );
-        return;
-      }
-
-      final allowed = (jsonDecode(allowlistFile.readAsStringSync()) as Map).map(
-        (file, rules) => MapEntry(
-          file as String,
-          (rules as Map).map(
-            (rule, count) => MapEntry(rule as String, count as int),
-          ),
-        ),
-      );
-
-      final failures = <String>[];
-      for (final file in <String>{
-        ...allowed.keys,
-        ...counts.keys,
-      }.toList()..sort()) {
-        if (!counts.containsKey(file) && !File(file).existsSync()) {
-          failures.add(
-            '$file: allowlisted, but there is no such file - drop the entry '
-            '(a rename must not carry its old tolerance along)',
-          );
-          continue;
-        }
-        final rules = <String>{
-          ...?allowed[file]?.keys,
-          ...?counts[file]?.keys,
-        }.toList()..sort();
-        for (final rule in rules) {
-          final budget = allowed[file]?[rule] ?? 0;
-          final actual = counts[file]?[rule] ?? 0;
-          if (actual > budget) {
-            final over = findings[file]!.where((f) => f.rule.name == rule);
-            failures.add(
-              '$file: $rule x$actual, allowed $budget\n'
-              '${over.map((f) => f.describe(file)).join('\n')}',
-            );
-          } else if (actual < budget) {
-            failures.add(
-              '$file: $rule x$actual, allowlist still says $budget - '
-              'ratchet: lower it to $actual'
-              '${actual == 0 ? ' (or drop the entry)' : ''}',
-            );
-          }
-        }
-      }
-
-      expect(
-        failures,
-        isEmpty,
-        reason:
-            'The allowlist in test/ui_conventions_allowlist.json only ever '
-            'shrinks; re-seed it with WAXDECK_UI_CONVENTIONS=write only when '
-            'adding a rule.\n\n${failures.join('\n\n')}',
+      checkRatchet(
+        allowlist: 'test/ui_conventions_allowlist.json',
+        writeVariable: 'WAXDECK_UI_CONVENTIONS',
+        reseedWhen: 'adding a rule',
+        counts: counts,
+        overBudget: (file, rule) => findings[file]!
+            .where((f) => f.rule.name == rule)
+            .map((f) => f.describe(file))
+            .join('\n'),
       );
     });
 
@@ -901,7 +853,7 @@ final _scans = <String, ({String source, String code})>{};
 ({String source, String code}) _scan(String path) =>
     _scans.putIfAbsent(path, () {
       final source = File(path).readAsStringSync();
-      return (source: source, code: _code(source));
+      return (source: source, code: blankComments(source));
     });
 
 List<File> _sources([List<String> roots = _roots]) => <File>[
@@ -1347,7 +1299,7 @@ class _CopyRule extends _Rule {
     var i = start;
     final raw = i < code.length && code[i] == 'r';
     if (raw) i++;
-    final quote = _quoteAt(code, i);
+    final quote = quoteAt(code, i);
     if (quote == null) return null;
     i += quote.length;
     final body = StringBuffer();
@@ -1700,155 +1652,4 @@ class _Finding {
   String describe(String file) =>
       '  $file:$line  $snippet\n'
       '    -> ${rule.fix}${hit.hint.isEmpty ? '' : ' (${hit.hint})'}';
-}
-
-/// One nesting level: a string literal being read, or the code inside
-/// one of its interpolations.
-class _Frame {
-  _Frame.string(this.quote, this.raw) : braces = 0;
-  _Frame.interpolation() : quote = null, raw = false, braces = 1;
-
-  final String? quote;
-  final bool raw;
-  int braces;
-
-  bool get inString => quote != null;
-}
-
-/// The source with its comments blanked out, so that a doc comment
-/// explaining a convention is not counted as a breach of it.
-///
-/// Offsets are preserved - a comment becomes spaces of the same width,
-/// not nothing - so a match's position is still the file's own. String
-/// literals are tracked only so that a `//` inside one does not start a
-/// comment.
-///
-/// Strings and interpolations nest, which is why this is a stack rather
-/// than a flag. `'${map['k']}'` is one string, holding code, holding
-/// another string: a scanner that closed at the quote before `k` would
-/// read `]}'` as the start of a fresh literal and put every boundary
-/// after it on the wrong side. That direction of error under-counts,
-/// and an under-count reports green.
-String _code(String source) {
-  final out = StringBuffer();
-  final stack = <_Frame>[];
-  var i = 0;
-
-  while (i < source.length) {
-    final frame = stack.isEmpty ? null : stack.last;
-
-    if (frame != null && frame.inString) {
-      final quote = frame.quote!;
-      if (!frame.raw && source[i] == r'\' && i + 1 < source.length) {
-        out.write(source.substring(i, i + 2));
-        i += 2;
-        continue;
-      }
-      // A raw string interpolates nothing; `$` is just a dollar there.
-      if (!frame.raw && source.startsWith(r'${', i)) {
-        out.write(r'${');
-        i += 2;
-        stack.add(_Frame.interpolation());
-        continue;
-      }
-      if (source.startsWith(quote, i)) {
-        out.write(quote);
-        i += quote.length;
-        stack.removeLast();
-        continue;
-      }
-      // A single-quoted string cannot span a line, so stopping at the
-      // newline keeps an unterminated one from swallowing the file.
-      if (quote.length == 1 && source[i] == '\n') {
-        stack.removeLast();
-        continue;
-      }
-      out.write(source[i]);
-      i++;
-      continue;
-    }
-
-    if (source.startsWith('//', i)) {
-      while (i < source.length && source[i] != '\n') {
-        out.write(' ');
-        i++;
-      }
-      continue;
-    }
-    if (source.startsWith('/*', i)) {
-      // Dart nests block comments, so the depth is counted rather than
-      // stopping at the first close.
-      var depth = 0;
-      while (i < source.length) {
-        if (source.startsWith('/*', i)) {
-          depth++;
-          out.write('  ');
-          i += 2;
-        } else if (source.startsWith('*/', i)) {
-          depth--;
-          out.write('  ');
-          i += 2;
-          if (depth == 0) break;
-        } else {
-          out.write(source[i] == '\n' ? '\n' : ' ');
-          i++;
-        }
-      }
-      continue;
-    }
-
-    final quote = _quoteAt(source, i);
-    if (quote != null) {
-      // `r` marks a raw string only where it starts a token - `[r'x']`,
-      // never the tail of an identifier. Compiling Dart cannot put an
-      // identifier against a quote at all, so the second half of this
-      // is unreachable; the scanner should not have to prove that about
-      // whatever it is pointed at.
-      final raw =
-          i > 0 &&
-          source[i - 1] == 'r' &&
-          (i == 1 || !_identifier.hasMatch(source[i - 2]));
-      out.write(quote);
-      i += quote.length;
-      stack.add(_Frame.string(quote, raw));
-      continue;
-    }
-
-    if (frame != null) {
-      if (source[i] == '{') frame.braces++;
-      if (source[i] == '}') {
-        frame.braces--;
-        if (frame.braces == 0) {
-          out.write('}');
-          i++;
-          stack.removeLast();
-          continue;
-        }
-      }
-    }
-
-    out.write(source[i]);
-    i++;
-  }
-  return out.toString();
-}
-
-final _identifier = RegExp(r'[\w$]');
-
-String? _quoteAt(String source, int i) {
-  for (final quote in <String>["'''", '"""', "'", '"']) {
-    if (source.startsWith(quote, i)) return quote;
-  }
-  return null;
-}
-
-Map<String, Map<String, int>> _sorted(Map<String, Map<String, int>> counts) {
-  final files = counts.keys.toList()..sort();
-  return <String, Map<String, int>>{
-    for (final file in files)
-      file: <String, int>{
-        for (final rule in counts[file]!.keys.toList()..sort())
-          rule: counts[file]![rule]!,
-      },
-  };
 }

@@ -24,6 +24,9 @@ const (
 	// KindForbidden marks an authenticated caller who is not allowed
 	// to do this (403 forbidden at the API).
 	KindForbidden ErrorKind = "forbidden"
+	// KindUnauthenticated marks a request that needs a signed-in caller
+	// and has none (401 unauthenticated at the API).
+	KindUnauthenticated ErrorKind = "unauthenticated"
 	// KindUpstream marks a failure of a server the request depends on
 	// but WaxDeck does not operate: a podcast feed's host answered an
 	// error, timed out, or returned something unparseable (502

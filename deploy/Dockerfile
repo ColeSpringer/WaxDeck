@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 # WaxDeck server image. Build context is the REPO ROOT (the root
 # .dockerignore admits only what these stages COPY). Generated code is
-# committed, so the only toolchains here are Flutter (web) and Go.
+# committed, except the l10n classes flutter pub get mints, so the only
+# toolchains here are Flutter (web) and Go.
 
 ## --- stage 1: Flutter web build ----------------------------------------------
 # Flutter from the official release archive (as tools/goldens.Dockerfile
@@ -50,6 +51,9 @@ COPY app/packages/waxdeck_ui/example/pubspec.yaml app/packages/waxdeck_ui/exampl
 RUN cd app && flutter pub get
 
 COPY app/ app/
+# The first pub get saw only pubspecs; this one mints the l10n classes,
+# which are not committed, from the sources just copied.
+RUN cd app && flutter pub get
 RUN cd app/app && flutter build web --wasm
 
 ## --- stage 2: Go server build -------------------------------------------------

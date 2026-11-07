@@ -141,18 +141,8 @@ func newOidcTestServer(t *testing.T, idp *fakeIdP) *httptest.Server {
 		OIDC:     oidc,
 		// PublicBase is stamped after the listener exists.
 	})
-	h := HandlerWithOptions(
-		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  RequestErrorHandler,
-			ResponseErrorHandlerFunc: srv.ResponseErrorHandler,
-		}),
-		StdHTTPServerOptions{
-			BaseURL:     "/api/v1",
-			Middlewares: []MiddlewareFunc{srv.AuthMiddleware},
-		},
-	)
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", h)
+	mux.Handle("/api/v1/", srv.Handler())
 	ts = httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 	srv.publicBase = ts.URL

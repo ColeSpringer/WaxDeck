@@ -4,13 +4,13 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 
@@ -25,17 +25,7 @@ ProviderContainer playbackContainer({
   required FakeRepository repo,
   required FakeEngine engine,
   List<Override> extra = const <Override>[],
-}) {
-  final container = ProviderContainer(
-    overrides: [
-      repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(engine),
-      ...extra,
-    ],
-  );
-  addTearDown(container.dispose);
-  return container;
-}
+}) => appContainer(repo: repo, engine: engine, extra: extra);
 
 /// A test's grip on playback, which lives in the container rather than
 /// in any screen: what is playing survives the player being mounted,

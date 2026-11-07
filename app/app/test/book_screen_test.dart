@@ -1219,7 +1219,12 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        _host(_repo()..mayCurateItems = false, FakeEngine()),
+        _host(
+          _repo()
+            ..sessionState = testListenerSession()
+            ..mayCurateItems = false,
+          FakeEngine(),
+        ),
       );
       await tester.pumpAndSettle();
       await openOverflow(tester);
@@ -1319,7 +1324,9 @@ void main() {
     testWidgets('the file tools are hidden from a listener', (tester) async {
       await tester.pumpWidget(
         _host(
-          _repo()..books[bookPid] = testBook(bookPid, partCount: 3),
+          _repo()
+            ..sessionState = testListenerSession()
+            ..books[bookPid] = testBook(bookPid, partCount: 3),
           FakeEngine(),
         ),
       );

@@ -34,7 +34,7 @@ import "net/http"
 // race waiting for the first goroutine that tries.
 //
 // Every key must appear in the spec's documented code list;
-// refusalcodes_test.go fails the build if one drifts out of it.
+// TestErrorCodesAreDocumented fails if one drifts out of it.
 var refusalCodes = map[string]int{
 	"invalid-request":     http.StatusBadRequest,
 	"conflict":            http.StatusConflict,

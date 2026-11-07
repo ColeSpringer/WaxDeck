@@ -1,7 +1,8 @@
-# gen-l10n's inputs and outputs. `make generate` runs it; the output is
-# committed and drift-checked, like the semantics identifiers. The
-# pubspec's `generate: true` is a precondition of the generator, not a
-# second opinion about that - see the comment there.
+# gen-l10n's inputs and outputs. `flutter pub get` and `make generate`
+# run it; the output is not committed, and a direct `flutter test`, `run`
+# or `build` fails on a fresh clone until `flutter pub get` has run. The
+# pubspec's `generate: true` is what lets the generator run - see the
+# comment there.
 # arb-dir holds the per-locale bundles tools/gen-l10n-bundle.dart merges
 # from the l10n/ fragments; edits go in l10n/<feature>/<locale>.arb.
 arb-dir: lib/src/l10n/arb

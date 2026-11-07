@@ -5,6 +5,7 @@
 // at each of them. A query built with query.New(query.EntityItems) or
 // query.New(query.EntityTracks) has skipped the helper and, unless it is
 // an audit or a sweep, is a listing that will answer with deleted items.
+// Test files are exempt; files the host's build leaves out are not.
 //
 // The allowlist below is the exception list: surfaces whose job is to
 // see everything the catalog holds. Adding to it is a decision, which is
@@ -15,12 +16,14 @@ package main
 
 import (
 	"go/ast"
+	"go/parser"
 	"go/token"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/singlechecker"
+
+	"github.com/colespringer/waxdeck/server/cmd/internal/lintsrc"
 )
 
 var analyzer = &analysis.Analyzer{
@@ -79,9 +82,13 @@ func run(pass *analysis.Pass) (any, error) {
 	if pass.Pkg.Path() != guardedPackage {
 		return nil, nil
 	}
-	for _, file := range pass.Files {
+	files, err := lintsrc.Files(pass, parser.SkipObjectResolution)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range files {
 		name := filepath.Base(pass.Fset.Position(file.Pos()).Filename)
-		if strings.HasSuffix(name, "_test.go") || name == helperFile {
+		if name == helperFile {
 			continue
 		}
 		// The whole file, not just its FuncDecls. A package-level var can

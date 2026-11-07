@@ -93,9 +93,11 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # On for gen-l10n's sake, not the build's: it refuses to run without
-  # this flag. `make generate` is what mints the localizations, and a
-  # build that regenerates them writes the same bytes.
+  # On for gen-l10n's sake: it refuses to run without this flag, and
+  # `flutter pub get` then mints the localizations, which are not committed.
+  # A build or run of the app mints only these, never waxdeck_ui's, and
+  # `flutter test` mints none: on a fresh clone run `flutter pub get` first
+  # (every make target that needs them mints them first).
   generate: true
 
   assets:

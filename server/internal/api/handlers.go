@@ -214,6 +214,28 @@ func NewServer(version string, opts Options) *Server {
 	}
 }
 
+// apiBaseURL is the path Handler serves the contract under.
+const apiBaseURL = "/api/v1"
+
+// Handler is the REST API under /api/v1: AuthMiddleware in front, the
+// caller resolved ahead of every secured operation, and failures in the
+// spec's Error schema. main and the tests mount this one.
+func (s *Server) Handler() http.Handler {
+	// Loads the contract now rather than on the first request.
+	contractAccess()
+	return HandlerWithOptions(
+		NewStrictHandlerWithOptions(s, []StrictMiddlewareFunc{s.userContextMiddleware}, StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  RequestErrorHandler,
+			ResponseErrorHandlerFunc: s.ResponseErrorHandler,
+		}),
+		StdHTTPServerOptions{
+			BaseURL:          apiBaseURL,
+			Middlewares:      []MiddlewareFunc{s.AuthMiddleware},
+			ErrorHandlerFunc: RequestErrorHandler,
+		},
+	)
+}
+
 type discardLogger struct{}
 
 func (discardLogger) Info(string, ...any) {}
@@ -1603,24 +1625,6 @@ const (
 	ctxContentLength
 )
 
-// publicPaths are reachable without a session (per the spec's per-operation
-// `security` overrides). They are also exempt from CSRF proof.
-var publicPaths = map[string]bool{
-	"/api/v1/health":              true,
-	"/api/v1/auth/login":          true,
-	"/api/v1/auth/session":        true,
-	"/api/v1/auth/logout":         true,
-	"/api/v1/auth/bootstrap":      true,
-	"/api/v1/auth/signup":         true,
-	"/api/v1/auth/oidc/providers": true,
-	"/api/v1/auth/oidc/start":     true,
-	"/api/v1/auth/oidc/callback":  true,
-	"/api/v1/auth/oidc/exchange":  true,
-	// The Last.fm redirect target authenticates by its one-time state,
-	// never by a session: the approving browser tab may not carry one.
-	"/api/v1/scrobble/lastfm/callback": true,
-}
-
 // pageVaryPaths answer HTML whose words follow Accept-Language. Set
 // here because their generated response types expose no header hook,
 // and needed because not every answer is single-use: a server with no
@@ -1633,10 +1637,12 @@ var pageVaryPaths = map[string]bool{
 }
 
 // AuthMiddleware resolves the session (cookie or bearer) into the
-// request context, rejects unauthenticated calls to protected
-// endpoints, and demands CSRF proof for cookie-authenticated
-// mutations. Request metadata (source IP, user agent) rides the
-// context for the login and device paths.
+// request context, rejects unauthenticated calls to secured
+// operations, and demands CSRF proof for cookie-authenticated
+// mutations. Whom a request's operation admits is the contract's, read
+// by the pattern the request was routed by; a pattern the contract does
+// not name is secured. Request metadata (source IP, user agent) rides
+// the context for the login and device paths.
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), ctxRemoteIP, s.trusted.clientIP(r))
@@ -1646,11 +1652,12 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 		if pageVaryPaths[r.URL.Path] {
 			w.Header().Set("Vary", "Accept-Language")
 		}
+		access := routeAccess()[r.Pattern]
 
 		// Worker endpoints take the worker token and nothing else: they
 		// ignore library visibility, so a user session must never open
 		// them, and the worker token opens nothing else.
-		if workerPaths[r.URL.Path] {
+		if access == opWorker {
 			if !s.workerAuthorized(r) {
 				writeError(w, http.StatusUnauthorized, "unauthenticated", "a worker token is required")
 				return
@@ -1680,7 +1687,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 		}
 		if principal != nil {
 			ctx = context.WithValue(ctx, ctxPrincipal, principal)
-		} else if !publicPaths[r.URL.Path] {
+		} else if access != opPublic {
 			writeError(w, http.StatusUnauthorized, "unauthenticated", "no valid session or token was presented")
 			return
 		}
@@ -1688,7 +1695,8 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 		// Cookie-borne credentials ride on every browser request, so a
 		// mutation needs proof the SPA itself sent it: the session's CSRF
 		// token echoed in a header, which a cross-site page cannot set.
-		if principal != nil && principal.FromCookie && mutatingMethod(r.Method) && !publicPaths[r.URL.Path] {
+		// Public operations are exempt.
+		if principal != nil && principal.FromCookie && mutatingMethod(r.Method) && access != opPublic {
 			if r.Header.Get(csrfHeader) != principal.Session.CSRFToken {
 				writeError(w, http.StatusForbidden, "forbidden", "missing or wrong CSRF token")
 				return
@@ -1784,13 +1792,17 @@ func pageStringsFromContext(ctx context.Context) *pagetext.Strings {
 	return pagetext.For(pagetext.Negotiate(header))
 }
 
-// requireUserCtx resolves the principal into the service-layer user
-// context. AuthMiddleware guarantees a principal on protected paths;
-// the error covers a future miswiring, not a reachable state.
+// requireUserCtx is the caller the user-context middleware resolved, or
+// the principal resolved here for a handler reached without it.
+// AuthMiddleware guarantees a principal on protected paths; the error
+// covers a future miswiring, not a reachable state.
 func (s *Server) requireUserCtx(ctx context.Context) (*service.UserCtx, *auth.Principal, error) {
 	p, ok := principalFromContext(ctx)
 	if !ok {
 		return nil, nil, &service.Error{Kind: service.KindInternal, Msg: "no principal in request context"}
+	}
+	if uc := userCtx(ctx); uc != nil {
+		return uc, p, nil
 	}
 	uc, err := s.svc.UserCtx(ctx, p.User)
 	if err != nil {
@@ -1800,11 +1812,9 @@ func (s *Server) requireUserCtx(ctx context.Context) (*service.UserCtx, *auth.Pr
 }
 
 // writeError writes the spec's Error schema; used by the API middleware and by
-// the strict handler's request/response error hooks in main.
+// the strict handler's request/response error hooks.
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(Error{Code: code, Message: message})
+	writeErrorParams(w, status, code, message, nil)
 }
 
 // RequestErrorHandler adapts strict-server binding failures (bad params, bad
@@ -1852,9 +1862,11 @@ func requestFailure(err error) string {
 
 // ResponseErrorHandler reports handler-returned errors by kind. While the
 // CLI holds the catalog, a failure the service could not class is the
-// hand-off too: it answers the maintenance 503 and is logged.
+// hand-off too: it answers the maintenance 503 and is logged. A handler's
+// own refusal is classed, so it keeps its answer.
 func (s *Server) ResponseErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	if service.KindOf(err) == service.KindInternal && s.svc != nil && s.svc.Maintenance() {
+	var refusal *wireError
+	if !errors.As(err, &refusal) && service.KindOf(err) == service.KindInternal && s.svc != nil && s.svc.Maintenance() {
 		s.log.Warn("a request failed during catalog maintenance", "path", r.URL.Path, "err", err)
 		writeMaintenance(w)
 		return
@@ -1863,62 +1875,31 @@ func (s *Server) ResponseErrorHandler(w http.ResponseWriter, r *http.Request, er
 }
 
 func writeMaintenance(w http.ResponseWriter) {
-	writeError(w, http.StatusServiceUnavailable, "catalog-maintenance",
-		"the catalog is temporarily under maintenance; retry shortly")
+	c := kindCodes[service.KindMaintenance]
+	writeError(w, c.status, c.code, c.fallback)
 }
 
-// responseError maps an error by kind. Handlers map expected kinds to
-// typed responses themselves; the not-found and invalid fallbacks here
-// keep the status honest when one slips through.
+// responseError writes a handler's refusal as it stands and anything else
+// by its kind. Handlers map expected kinds to typed responses themselves;
+// the table keeps the status honest when one slips through.
 func responseError(w http.ResponseWriter, err error) {
-	switch service.KindOf(err) {
-	case service.KindMaintenance:
+	var refusal *wireError
+	if errors.As(err, &refusal) {
+		writeErrorParams(w, refusal.Status, refusal.Code, refusal.Message, refusal.Params)
+		return
+	}
+	kind := service.KindOf(err)
+	c, known := kindCodes[kind]
+	switch {
+	case kind == service.KindMaintenance:
 		writeMaintenance(w)
-	case service.KindNotFound:
-		writeError(w, http.StatusNotFound, "not-found", kindMessage(err, "not found"))
-	case service.KindInvalid:
-		writeError(w, http.StatusBadRequest, "invalid-request", kindMessage(err, "invalid request"))
-	case service.KindConflict:
-		writeError(w, http.StatusConflict, "conflict", kindMessage(err, "a conflicting operation is running"))
-	case service.KindCatalogBusy:
-		writeError(w, http.StatusConflict, "catalog-busy", kindMessage(err, "another catalog job holds the file-mutation scope; retry shortly"))
-	case service.KindGone:
-		writeError(w, http.StatusGone, "sync-reset", kindMessage(err, "re-mirror from a fresh snapshot"))
-	case service.KindForbidden:
-		writeError(w, http.StatusForbidden, "forbidden", kindMessage(err, "not allowed"))
-	case service.KindUnsupported:
-		writeError(w, http.StatusNotImplemented, "source-unavailable", kindMessage(err, "this server is not running the needed integration"))
-	case service.KindUpstream:
-		writeError(w, http.StatusBadGateway, "feed-unreachable", kindMessage(err, "the upstream feed could not be fetched"))
-	case service.KindDirectory:
-		writeError(w, http.StatusBadGateway, "directory-unavailable", kindMessage(err, "the external directory could not be reached"))
-	case service.KindService:
-		writeError(w, http.StatusBadGateway, "service-unreachable", kindMessage(err, "an external service could not be reached"))
-	case service.KindQuota:
-		writeError(w, http.StatusRequestEntityTooLarge, "quota-exceeded", kindMessage(err, "the upload would exceed your storage quota"))
-	case service.KindStorageFull:
-		writeError(w, http.StatusInsufficientStorage, "storage-full", kindMessage(err, "the server has no room to stage this"))
-	case service.KindLocked:
-		writeError(w, http.StatusConflict, "field-locked", kindMessage(err, "the field is locked; pass force to override"))
-	case service.KindFormat:
-		writeError(w, http.StatusUnsupportedMediaType, "unsupported-format", kindMessage(err, "the file's format is not accepted"))
-	case service.KindDRM:
-		writeError(w, http.StatusUnsupportedMediaType, "drm-protected", kindMessage(err, "the file is DRM-encrypted and can never play"))
-	case service.KindFeature:
-		writeError(w, http.StatusNotImplemented, "feature-unavailable", kindMessage(err, "this server is not running the needed capability"))
-	case service.KindReadOnly:
-		writeError(w, http.StatusConflict, "read-only", kindMessage(err, "the server or the target library is read-only"))
-	case service.KindStorageUnwritable:
-		writeError(w, http.StatusConflict, "storage-unwritable", kindMessage(err, "a library folder refused the write"))
-	case service.KindTranscodeLimit:
-		writeError(w, http.StatusTooManyRequests, "transcode-limited", kindMessage(err, "the transcode session limit is reached"))
+	case !known:
+		// A kind the table does not know answers as internal, without
+		// its own words.
+		c = kindCodes[service.KindInternal]
+		writeError(w, c.status, c.code, c.fallback)
 	default:
-		var se *service.Error
-		if errors.As(err, &se) && se.Msg != "" && se.Kind == service.KindInternal {
-			writeError(w, http.StatusInternalServerError, "internal", se.Msg)
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal", "internal server error")
+		writeErrorParams(w, c.status, c.code, kindMessage(err, c.fallback), service.RefusalParams(err))
 	}
 }
 

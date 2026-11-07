@@ -3,18 +3,20 @@
 // supervise package's recover boundary keeps a panicking worker from
 // taking the process down, so it is the only sanctioned spawn path.
 // Both the go statement and sync.WaitGroup.Go are flagged outside it;
-// test files are exempt.
+// test files are exempt, files the host's build leaves out are not.
 //
 // Run as: go run ./cmd/spawnlint ./...
 package main
 
 import (
 	"go/ast"
+	"go/parser"
 	"go/types"
-	"strings"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/singlechecker"
+
+	"github.com/colespringer/waxdeck/server/cmd/internal/lintsrc"
 )
 
 var analyzer = &analysis.Analyzer{
@@ -29,11 +31,12 @@ func run(pass *analysis.Pass) (any, error) {
 	if pass.Pkg.Name() == "supervise" {
 		return nil, nil
 	}
-	for _, file := range pass.Files {
-		pos := pass.Fset.Position(file.Pos())
-		if strings.HasSuffix(pos.Filename, "_test.go") {
-			continue
-		}
+	// Files the host's build leaves out have no types, so a WaitGroup.Go in one goes unseen.
+	files, err := lintsrc.Files(pass, parser.SkipObjectResolution)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range files {
 		ast.Inspect(file, func(n ast.Node) bool {
 			switch stmt := n.(type) {
 			case *ast.GoStmt:

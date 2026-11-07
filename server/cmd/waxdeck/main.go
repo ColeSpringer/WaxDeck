@@ -1332,19 +1332,7 @@ func run() error {
 		// holds the shutdown open for the worker's whole budget.
 		ProcCtx: ctx,
 	})
-	apiHandler := api.HandlerWithOptions(
-		api.NewStrictHandlerWithOptions(srv, nil, api.StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  api.RequestErrorHandler,
-			ResponseErrorHandlerFunc: srv.ResponseErrorHandler,
-		}),
-		api.StdHTTPServerOptions{
-			BaseURL:     "/api/v1",
-			Middlewares: []api.MiddlewareFunc{srv.AuthMiddleware},
-			ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-				api.RequestErrorHandler(w, r, err)
-			},
-		},
-	)
+	apiHandler := srv.Handler()
 
 	// Request metrics ride the same registry the endpoint exposes, so a
 	// server with no metrics token instruments nothing at all: there is

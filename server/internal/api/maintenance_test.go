@@ -22,6 +22,7 @@ import (
 
 // While the CLI holds the catalog, a failure the service could not class
 // answers maintenance like the rest; outside a hand-off it stays internal.
+// A handler's own refusal is classed, so it keeps its answer either way.
 func TestAnUnclassedFailureInAHandOffAnswersMaintenance(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.DiscardHandler)
@@ -47,16 +48,16 @@ func TestAnUnclassedFailureInAHandOffAnswersMaintenance(t *testing.T) {
 	})
 	srv := NewServer("test", Options{Service: svc, Sessions: auth.NewSessions(store)})
 	failure := &service.Error{Kind: service.KindInternal, Err: errors.New("sql: connection is already closed")}
-	answer := func() (int, string) {
+	answer := func(err error) (int, string) {
 		rec := httptest.NewRecorder()
-		srv.ResponseErrorHandler(rec, httptest.NewRequest(http.MethodGet, "/api/v1/items", nil), failure)
+		srv.ResponseErrorHandler(rec, httptest.NewRequest(http.MethodGet, "/api/v1/items", nil), err)
 		var body Error
 		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 			t.Fatal(err)
 		}
 		return rec.Code, body.Code
 	}
-	if status, code := answer(); status != http.StatusInternalServerError || code != "internal" {
+	if status, code := answer(failure); status != http.StatusInternalServerError || code != "internal" {
 		t.Fatalf("outside a hand-off: %d %s, want 500 internal", status, code)
 	}
 
@@ -74,11 +75,15 @@ func TestAnUnclassedFailureInAHandOffAnswersMaintenance(t *testing.T) {
 	if err := c.MaintenanceBegin(ctx); err != nil {
 		t.Fatal(err)
 	}
-	status, code := answer()
+	status, code := answer(failure)
+	refusedStatus, refusedCode := answer(errNoBody())
 	if err := c.MaintenanceEnd(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if status != http.StatusServiceUnavailable || code != "catalog-maintenance" {
 		t.Fatalf("inside a hand-off: %d %s, want 503 catalog-maintenance", status, code)
+	}
+	if refusedStatus != http.StatusBadRequest || refusedCode != "invalid-request" {
+		t.Fatalf("a refusal inside a hand-off: %d %s, want 400 invalid-request", refusedStatus, refusedCode)
 	}
 }

@@ -1,0 +1,494 @@
+{
+  "test/account_binder_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/account_reads_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/adaptive_shell_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/admin_audit_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/admin_backups_screen_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/admin_console_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/admin_enrichment_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/admin_first_run_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/admin_libraries_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/admin_migrate_screen_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/admin_schedules_screen_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/admin_server_settings_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/admin_shares_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/admin_trash_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/admin_user_delete_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/admin_users_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/album_editor_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/app_host.dart": {
+    "provider-overrides": 1
+  },
+  "test/artwork_box_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/artwork_palette_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/auth_forms_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/auth_late_session_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/auth_read_only_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/auth_rotation_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/auth_session_end_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/auto_browse_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/book_bucket_screen_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/book_screen_test.dart": {
+    "provider-overrides": 5
+  },
+  "test/book_tool_dialog_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/bookmarks_sheet_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/books_screen_test.dart": {
+    "provider-overrides": 4
+  },
+  "test/boot_routing_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/catalog_check_section_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/client_settings_test.dart": {
+    "provider-overrides": 6
+  },
+  "test/command_palette_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/connect_endpoint_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/connect_server_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/dashboard_streaming_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/dashboard_tiles_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/deck_bar_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/defect_log_screen_test.dart": {
+    "provider-overrides": 5
+  },
+  "test/defect_log_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/desktop_close_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/diagnostics_screen_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/discord_presence_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/download_action_test.dart": {
+    "provider-overrides": 8
+  },
+  "test/download_notices_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/downloads_screen_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/entity_editor_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/entity_screens_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/entity_star_rating_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/episode_screen_test.dart": {
+    "provider-overrides": 7
+  },
+  "test/field_hints_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/folds_section_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/health_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/home_screen_test.dart": {
+    "provider-overrides": 4
+  },
+  "test/hub_counts_test.dart": {
+    "provider-overrides": 4
+  },
+  "test/identify_optout_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/integrations_settings_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/invalidation_pacing_test.dart": {
+    "provider-overrides": 9
+  },
+  "test/item_delete_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/item_facts_sheet_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/item_menu_episode_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/item_menu_open_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/item_menu_shell_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/l10n_pipeline_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/lifecycle_banners_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/listening_settings_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/live_invalidations_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/login_validation_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/lyrics_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/mark_older_played_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/media_session_feed_test.dart": {
+    "provider-overrides": 4
+  },
+  "test/metadata_editor_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/mini_window_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/music_index_test.dart": {
+    "provider-overrides": 4
+  },
+  "test/music_listing_pages_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/music_paging_race_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/native_user_stream_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/notifications_bell_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/notifications_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/notifications_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/now_playing_slot_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/now_playing_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/now_playing_timeline_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/off_tree_l10n_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/offline_home_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/opml_import_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/organize_compilation_folder_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/organize_route_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/organize_screen_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/outside_transport_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/page_exit_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/pinned_shelf_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/play_progress_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/play_state_invalidation_race_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/player_extras_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/playlist_import_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/playlist_m3u_preview_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/playlist_name_limit_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/playlist_sync_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/playlists_test.dart": {
+    "provider-overrides": 6
+  },
+  "test/podcasts_off_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/podcasts_screen_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/prefs_preserve_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/prefs_write_race_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/push_once_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/queue_continuation_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/queue_controller_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/queue_drag_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/queue_gateway_play_test.dart": {
+    "provider-overrides": 4
+  },
+  "test/queue_persistence_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/queue_recheck_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/queue_refill_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/queue_surface_test.dart": {
+    "provider-overrides": 11
+  },
+  "test/radio_face_test.dart": {
+    "provider-overrides": 5
+  },
+  "test/radio_hub_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/radio_saved_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/release_workbench_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/retry_policy_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/review_entry_test.dart": {
+    "provider-overrides": 9
+  },
+  "test/review_identify_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/review_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/route_table_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/routed_host_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/router_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/search_screen_test.dart": {
+    "provider-overrides": 5
+  },
+  "test/series_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/server_switch_downloads_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/settings_engine_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/settings_gapless_web_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/settings_registry_test.dart": {
+    "provider-overrides": 6
+  },
+  "test/settings_screen_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/share_dialog_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/share_intake_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/shares_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/shell_messages_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/show_screen_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/signup_flow_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/similar_tracks_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/sleep_timer_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/star_rating_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/stats_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/stream_quality_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/sync_reclaim_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/tasks_catalog_repair_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/tasks_import_ties_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/tasks_library_removal_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/tasks_organize_jobs_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/tasks_path_fix_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/tasks_row_type_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/tasks_scan_progress_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/tasks_screen_test.dart": {
+    "provider-overrides": 3
+  },
+  "test/timeline_scope_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/upload_folder_flow_test.dart": {
+    "provider-overrides": 5
+  },
+  "test/upload_format_sets_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/upload_media_type_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/upload_target_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/uploads_path_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/uploads_screen_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/widget_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/wifi_only_gate_test.dart": {
+    "provider-overrides": 1
+  },
+  "test/window_title_binder_test.dart": {
+    "provider-overrides": 2
+  },
+  "test/year_in_review_test.dart": {
+    "provider-overrides": 1
+  }
+}

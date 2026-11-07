@@ -1,4 +1,4 @@
-.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-l10n gen-mirror lint spec-lint workflow-lint shell-lint test test-server test-fixtures test-app test-app-chrome \
+.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-l10n gen-mirror app-deps lint dart-format-check spec-lint workflow-lint shell-lint test test-server test-fixtures test-app test-app-chrome \
         web build run images preflight up down reset logs drift-check oasdiff e2e e2e-desktop dist clean \
         path-doctor
 
@@ -69,15 +69,21 @@ gen-semantics:
 gen-api-types: spec-bundle
 	cd e2e && { test -d node_modules || npm ci --no-audit --no-fund; } && npm run --silent gen-types
 
-# The app's copy and the design system's, committed rather than built on
-# the fly, so a translation that fails to compile fails here and not in a
-# release. The app's table is authored as per-feature fragments in
-# app/app/l10n/, which the bundler merges into the per-locale files
-# gen-l10n reads. gen-l10n formats what it writes; nothing formats it again.
+# The app's copy and the design system's. The classes gen-l10n writes are
+# not committed (flutter pub get mints them too); generating them here
+# fails a translation that does not compile before a build does. The app's
+# table is authored as per-feature fragments in app/app/l10n/, which the
+# bundler merges into the per-locale files gen-l10n reads. gen-l10n
+# formats what it writes; nothing formats it again.
 gen-l10n:
 	dart run tools/gen-l10n-bundle.dart
 	cd app/app && flutter gen-l10n
 	cd app/packages/waxdeck_ui && flutter gen-l10n
+
+# Resolves the pub workspace, which also mints the l10n classes. The lint,
+# test and web targets depend on it so a fresh clone needs no earlier step.
+app-deps:
+	cd app && flutter pub get
 
 # The app version from the pubspec that declares it; Flutter answers no
 # version at runtime without a plugin, and a hand-typed copy goes stale.
@@ -139,14 +145,29 @@ goldens-linux:
 
 ## --- quality gates -----------------------------------------------------------
 
-lint: spec-lint workflow-lint shell-lint
+lint: spec-lint workflow-lint shell-lint app-deps
 	cd server && go vet ./... && test -z "$$(gofmt -l .)"
 	cd server && go run ./cmd/spawnlint ./...
 	cd server && go run ./cmd/querylint ./...
+	cd server && go run ./cmd/importlint ./...
 	cd fixtures && go vet ./... && test -z "$$(gofmt -l .)"
-	cd app && dart format --set-exit-if-changed app/lib app/test app/integration_test app/tool packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_player_testing/lib packages/waxdeck_player_testing/test packages/waxdeck_data/lib packages/waxdeck_data/test packages/waxdeck_ui/lib packages/waxdeck_ui/test packages/waxdeck_ui/example/lib packages/waxdeck_ui/example/test >/dev/null
+	$(MAKE) --no-print-directory dart-format-check
 	cd app && flutter analyze --no-pub
 	cd e2e && { test -d node_modules || npm ci --no-audit --no-fund; } && npm run --silent conform
+
+# The Dart sources `dart format` keeps formatted: one list for `make lint`
+# and CI's flutter job, which calls the target after its pub get.
+DART_FORMAT_PATHS := app/lib app/test app/integration_test app/tool packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_player_testing/lib packages/waxdeck_player_testing/test packages/waxdeck_data/lib packages/waxdeck_data/test packages/waxdeck_ui/lib packages/waxdeck_ui/test packages/waxdeck_ui/example/lib packages/waxdeck_ui/example/test
+
+# Rewrites any misformatted file in place and fails if it changed one,
+# printing dart format's report (the files it names) only then. It needs
+# the resolved workspace: each package's language version comes from the
+# package config, and without it dart format falls back to the old style
+# and rewrites most files, so it refuses to run without one. `lint` runs it
+# from its recipe, after app-deps.
+dart-format-check:
+	@test -f app/.dart_tool/package_config.json || { echo "dart-format-check: no app/.dart_tool/package_config.json; run flutter pub get (make app-deps) first" >&2; exit 1; }
+	cd app && out=$$(dart format --set-exit-if-changed $(DART_FORMAT_PATHS) 2>&1) || { printf '%s\n' "$$out"; exit 1; }
 
 # Lints the committed bundle as-is; freshness is drift-check's job. The
 # linter comes from e2e's lockfile rather than a bare npx: the CLI's own
@@ -188,7 +209,7 @@ test: test-server test-fixtures test-app
 # ('canvaskit/')` and fromUri hands back backslashes there. The web
 # engine never boots, so the suite never connects - a bare `flutter
 # create` project fails the same way, so there is nothing here to fix.
-test-app-chrome:
+test-app-chrome: app-deps
 	cd app/app && flutter test --platform chrome test/*_web_test.dart
 
 # The cap is a deadlock detector, not a budget. Go's default is 10
@@ -210,7 +231,7 @@ test-server:
 test-fixtures:
 	cd fixtures && go test ./...
 
-test-app:
+test-app: app-deps
 	cd app/packages/waxdeck_api && dart test
 	cd app/packages/waxdeck_ui && flutter test
 	cd app/packages/waxdeck_ui/example && flutter test
@@ -222,9 +243,7 @@ test-app:
 drift-check: generate
 	git diff --exit-code -- $(SPEC) server/internal/api app/packages/waxdeck_api_gen \
 		app/app/lib/src/shell/semantics_ids.dart e2e/tests/semantics-ids.ts \
-		e2e/tests/api-types.ts \
-		app/app/lib/src/l10n/arb app/app/lib/src/l10n/gen \
-		app/packages/waxdeck_ui/lib/src/l10n/gen \
+		app/app/lib/src/l10n/arb \
 		app/app/lib/src/shell/app_version.dart \
 		app/packages/waxdeck_data/lib/src/database.g.dart \
 		server/internal/notices/third_party_notices.txt app/app/LICENSE
@@ -248,7 +267,7 @@ oasdiff:
 ## --- build -------------------------------------------------------------------
 
 # Flutter web build -> server embed dir (WasmGC target with JS fallback).
-web:
+web: app-deps
 	cd app/app && flutter build web --wasm
 	rm -rf $(WEB_DIST) && mkdir -p $(WEB_DIST)
 	cp -r $(APP_WEB_OUT)/. $(WEB_DIST)/
@@ -373,7 +392,7 @@ endif
 
 # Desktop journey plus engine conformance against the real mpv backend.
 # Needs a display and audio sink; the runner documents headless wrapping.
-e2e-desktop:
+e2e-desktop: app-deps
 	bash e2e/run-desktop.sh
 
 

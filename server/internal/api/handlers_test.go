@@ -51,18 +51,8 @@ func newAuthTestServer(t *testing.T) *httptest.Server {
 		Service:  svc,
 		Sessions: auth.NewSessions(store),
 	})
-	h := HandlerWithOptions(
-		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  RequestErrorHandler,
-			ResponseErrorHandlerFunc: srv.ResponseErrorHandler,
-		}),
-		StdHTTPServerOptions{
-			BaseURL:     "/api/v1",
-			Middlewares: []MiddlewareFunc{srv.AuthMiddleware},
-		},
-	)
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", h)
+	mux.Handle("/api/v1/", srv.Handler())
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 	return ts

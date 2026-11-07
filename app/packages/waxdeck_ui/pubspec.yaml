@@ -44,9 +44,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # On for gen-l10n's sake, not the build's: it refuses to run without
-  # this flag. `make generate` is what mints the localizations, and a
-  # build that regenerates them writes the same bytes.
+  # On for gen-l10n's sake: it refuses to run without this flag, and
+  # `flutter pub get` then mints the localizations, which are not committed.
+  # Only an explicit `flutter pub get` mints these; an app build, run or
+  # test does not, so on a fresh clone run it first.
   generate: true
 
   # Variable fonts, declared once per family: the type tokens select

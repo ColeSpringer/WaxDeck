@@ -7,9 +7,9 @@ per locale:
 
 `make generate` merges the fragments into
 `lib/src/l10n/arb/app_<locale>.arb` - committed and drift-checked, like
-the OpenAPI bundle - and runs gen-l10n over the result, so the build
-never reads this tree directly and the merged files are never edited by
-hand.
+the OpenAPI bundle - and runs gen-l10n over the result (its classes are
+not committed; `flutter pub get` mints them too), so the build never
+reads this tree directly and the merged files are never edited by hand.
 
 A key files under the longest directory name that prefixes it:
 `playerSleepTimer` lives in `player/`, `booksTitle` lives in `book/` -

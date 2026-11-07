@@ -39,4 +39,8 @@ The API contract is the source of truth. Change the fragments in
 `api/spec/`, run `make generate`, and commit fragments, bundle, and
 regenerated code together; never hand-edit `api/openapi.yaml`,
 `server/internal/api/gen.go`, or `app/packages/waxdeck_api_gen/`. CI
-fails on generated-code drift and on breaking spec changes.
+fails on generated-code drift and on breaking spec changes. The gen-l10n
+classes and `e2e/tests/api-types.ts` are not committed: `flutter pub get`
+mints the classes (a direct `flutter test`, `run` or `build` does not, so
+run it first on a fresh clone), `npm run typecheck` the types, and
+`make generate` both.

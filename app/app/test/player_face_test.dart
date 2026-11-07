@@ -11,8 +11,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/artwork/artwork_palette.dart';
-import 'package:waxdeck/src/artwork/artwork_providers.dart';
-import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/desktop/desktop_ports.dart';
 import 'package:waxdeck/src/desktop/tray_binder.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
@@ -30,6 +28,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'app_host.dart';
 import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
@@ -80,10 +79,12 @@ Finder get _artwork => find.bySemanticsIdentifier(SemanticsIds.playerArtwork);
 String _caption(WidgetTester tester) =>
     tester.widget<ArtworkCaption>(find.byType(ArtworkCaption)).text;
 
-/// Plays [track] and opens the player over it with [extra] overrides.
+/// Plays [track] and opens the player over it, with [artwork] as the
+/// artwork store and [extra] overrides.
 Future<PlayerHarness> _pumpAlbumTrack(
   WidgetTester tester, {
   FakeRepository? repo,
+  FakeArtworkStore? artwork,
   List<Override> extra = const <Override>[],
   bool cycle = true,
   bool reducedMotion = false,
@@ -91,9 +92,10 @@ Future<PlayerHarness> _pumpAlbumTrack(
 }) {
   final track = _albumTrack(_first, 'Salt Harbour');
   final fakes = repo ?? _albumRepo([track]);
-  final container = playbackContainer(
+  final container = appContainer(
     repo: fakes,
     engine: FakeEngine(),
+    artwork: artwork,
     extra: extra,
   );
   if (!cycle) container.read(playerArtworkCycleProvider.notifier).set(false);
@@ -785,10 +787,8 @@ void main() {
       final store = FakeArtworkStore();
       final harness = await _pumpAlbumTrack(
         tester,
-        extra: [
-          artworkStoreProvider.overrideWithValue(store),
-          desktopProvider.overrideWithValue(true),
-        ],
+        artwork: store,
+        extra: [desktopProvider.overrideWithValue(true)],
       );
       // At the size the hero draws, so the warm lands on its rung.
       final hero = tester.getSize(
@@ -848,10 +848,7 @@ void main() {
       tester,
     ) async {
       final store = FakeArtworkStore();
-      final harness = await _pumpAlbumTrack(
-        tester,
-        extra: [artworkStoreProvider.overrideWithValue(store)],
-      );
+      final harness = await _pumpAlbumTrack(tester, artwork: store);
       expect(store.warmed, isEmpty);
 
       await tester.tap(_artwork);
@@ -886,11 +883,7 @@ void main() {
           ArtRoleInfo(role: 'back', format: 'jpeg', source: 'user'),
         ];
       final store = FakeArtworkStore();
-      final harness = await _pumpAlbumTrack(
-        tester,
-        repo: repo,
-        extra: [artworkStoreProvider.overrideWithValue(store)],
-      );
+      final harness = await _pumpAlbumTrack(tester, repo: repo, artwork: store);
 
       expect(_artwork, findsNothing);
       expect(_caption(tester), 'Back cover: Set by hand');
@@ -1024,7 +1017,6 @@ void main() {
         repo: repo,
         engine: FakeEngine(),
         extra: [
-          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
           desktopProvider.overrideWithValue(true),
           // The real tray would load the host's native library.
           trayPortProvider.overrideWithValue(const NoTray()),

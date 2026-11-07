@@ -3,51 +3,12 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/connect"
 )
-
-// The error vocabulary lives as prose in the spec preamble rather than
-// as a schema enum, so nothing structural catches refusalCodes drifting
-// out of it. This does, in the one direction that matters: a code the
-// server can put on the wire that the contract never documented.
-//
-// Against the authored fragment, not the generated bundle, so a code
-// deleted from the vocabulary fails here rather than passing on a stale
-// bundle. And against the code list alone rather than the whole
-// document: every one of these words also appears in ordinary prose
-// somewhere in the spec, so a whole-file substring search would pass
-// for a code nobody had defined.
-func TestRefusalCodesAreDocumented(t *testing.T) {
-	t.Parallel()
-	path := filepath.Join("..", "..", "..", "api", "spec", "_root.yaml")
-	spec, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading the spec preamble: %v", err)
-	}
-	const (
-		opens  = "currently defined codes:"
-		closes = "New codes may appear"
-	)
-	_, after, found := strings.Cut(string(spec), opens)
-	if !found {
-		t.Fatalf("%s no longer says %q; this guard is reading the wrong thing", path, opens)
-	}
-	list, _, found := strings.Cut(after, closes)
-	if !found {
-		t.Fatalf("%s no longer says %q; this guard is reading the wrong thing", path, closes)
-	}
-	for code := range refusalCodes {
-		if !strings.Contains(list, "`"+code+"`") {
-			t.Errorf("refusal code %q is not in the documented code list in %s; add it there or drop it from refusalCodes", code, path)
-		}
-	}
-}
 
 func TestRefusalStatusWhitelistsCodes(t *testing.T) {
 	t.Parallel()

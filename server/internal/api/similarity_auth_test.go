@@ -18,7 +18,7 @@ import (
 const testWorkerToken = "worker-token-for-tests"
 
 // newWorkerTestServer is newAuthTestServer with a configured worker
-// token, for the worker-path routing of AuthMiddleware.
+// token, for the worker access AuthMiddleware reads by route pattern.
 func newWorkerTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -46,18 +46,8 @@ func newWorkerTestServer(t *testing.T) *httptest.Server {
 		Sessions:     auth.NewSessions(store),
 		WorkerTokens: []string{testWorkerToken},
 	})
-	h := HandlerWithOptions(
-		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  RequestErrorHandler,
-			ResponseErrorHandlerFunc: srv.ResponseErrorHandler,
-		}),
-		StdHTTPServerOptions{
-			BaseURL:     "/api/v1",
-			Middlewares: []MiddlewareFunc{srv.AuthMiddleware},
-		},
-	)
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", h)
+	mux.Handle("/api/v1/", srv.Handler())
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 	return ts

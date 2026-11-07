@@ -118,9 +118,6 @@ Future<ProviderContainer> _pumpPlaying(
   final container = playbackContainer(
     repo: repo,
     engine: engine ?? FakeEngine(),
-    extra: [
-      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-    ],
   );
   await tester.pumpWidget(
     UncontrolledProviderScope(
@@ -200,7 +197,9 @@ void main() {
   testWidgets('a listener without the upload right gets no add', (
     tester,
   ) async {
-    await tester.pumpWidget(_host(_repo()));
+    await tester.pumpWidget(
+      _host(_repo()..sessionState = testListenerSession()),
+    );
     await tester.pumpAndSettle();
     expect(_byId(SemanticsIds.booksAdd), findsNothing);
   });
@@ -592,7 +591,9 @@ void main() {
   });
 
   testWidgets('an empty hub offers nothing to a listener', (tester) async {
-    await tester.pumpWidget(_host(FakeRepository()));
+    await tester.pumpWidget(
+      _host(FakeRepository(sessionState: testListenerSession())),
+    );
     await tester.pumpAndSettle();
     expect(find.text('No audiobooks yet'), findsOneWidget);
     expect(_emptyActions, findsNothing);
@@ -852,13 +853,7 @@ void main() {
 
   testWidgets('a book cover plays the book where it was left', (tester) async {
     final repo = _repo()..playPositions[_hobbit] = 900000;
-    final container = playbackContainer(
-      repo: repo,
-      engine: FakeEngine(),
-      extra: [
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
+    final container = playbackContainer(repo: repo, engine: FakeEngine());
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -887,13 +882,7 @@ void main() {
       ..playPositions[_hobbit] = 3600000
       ..finishedPids.add(_hobbit);
     final engine = FakeEngine();
-    final container = playbackContainer(
-      repo: repo,
-      engine: engine,
-      extra: [
-        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-      ],
-    );
+    final container = playbackContainer(repo: repo, engine: engine);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,

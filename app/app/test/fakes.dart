@@ -8008,6 +8008,14 @@ SessionState testUploaderSession({List<String> roles = const ['user']}) =>
       ),
     );
 
+/// A signed-in session whose user holds no rights: not an administrator,
+/// no upload, delete or podcast-curation right. For tests that a listener
+/// is refused something, since no session at all hides the same controls.
+SessionState testListenerSession() => const SessionState(
+  authenticated: true,
+  user: WaxDeckUser(id: 'us-listener', username: 'listener', roles: ['user']),
+);
+
 /// Handy audiobook factory for tests. With [partCount] above one the
 /// book splits into equal parts of [durationMs] / [partCount] each.
 BookDetail testBook(

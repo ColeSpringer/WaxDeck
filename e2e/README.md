@@ -34,7 +34,7 @@ Everything else is `app`:
 | | |
 | --- | --- |
 | `app.nav` | `enter(dest)` (by URL), `to(dest)` (through the chrome), `expectAt`, `back`, `reload`, `open(url)`, `location()` |
-| `app.api` | the server, typed against `api/openapi.yaml`; `as(token)` for another credential |
+| `app.api` | the server, typed against `api/openapi.yaml` (`tests/api-types.ts`, minted by `npm run typecheck`, not committed); `as(token)` for another credential |
 | `app.seed` | preconditions, set through the API rather than driven |
 | `app.admin` `app.auth` `app.books` `app.cast` `app.discovery` `app.home` `app.music` `app.player` `app.playlists` `app.podcasts` `app.queue` `app.radio` `app.review` `app.search` `app.settings` `app.sharing` `app.shell` `app.sso` `app.stats` `app.uploads` | one surface per area of the app |
 

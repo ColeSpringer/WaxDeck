@@ -140,6 +140,8 @@ jobs:
       # was in that state.
       - name: Item-query lint
         run: cd server && go run ./cmd/querylint ./...
+      - name: Import-boundary lint
+        run: cd server && go run ./cmd/importlint ./...
       # internal/service and internal/api build a full harness (fresh
       # migrated DB, catalog, service stack) per test and run for about
       # ten minutes each under -race here, with modernc's checkptr
@@ -211,6 +213,8 @@ jobs:
           cache: true
       - name: Pub get (workspace root)
         run: cd app && flutter pub get
+      - name: Format check
+        run: make dart-format-check
       - name: Analyze (whole workspace)
         run: cd app && flutter analyze --no-pub
       # The same six packages `make test-app` runs, and for the same
