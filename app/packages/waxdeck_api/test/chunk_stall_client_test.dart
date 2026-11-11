@@ -7,6 +7,8 @@ import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'support/recording_adapter.dart';
+
 /// Takes a chunk's body the way [take] says, then answers the session.
 class _ChunkAdapter implements HttpClientAdapter {
   _ChunkAdapter(this.take);
@@ -42,11 +44,8 @@ class _ChunkAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-WaxDeckClient _client(_ChunkAdapter adapter) => WaxDeckClient(
-  baseUrl: 'http://host:4420',
-  dio: Dio()..httpClientAdapter = adapter,
-  chunkStall: const Duration(milliseconds: 300),
-);
+WaxDeckClient _client(_ChunkAdapter adapter) =>
+    clientOn(adapter, chunkStall: const Duration(milliseconds: 300));
 
 const _session = <String, Object?>{
   'id': 'up-01JZX5N8QW3F4V9T2B7KD3M9R6',
@@ -380,15 +379,13 @@ void main() {
       // From the body taken: due at 300 ms and asked until 500 ms; the
       // progress at 400 ms sets the next deadline, and the answer at
       // 650 ms comes inside it.
-      final client = WaxDeckClient(
-        baseUrl: 'http://host:4420',
-        dio: Dio()
-          ..httpClientAdapter = _LateProgressAdapter(
-            progressAfter: const Duration(milliseconds: 400),
-            answerAfter: const Duration(milliseconds: 250),
-            checkAfter: const Duration(milliseconds: 200),
-            checkIdleMs: 5000,
-          ),
+      final client = clientOn(
+        _LateProgressAdapter(
+          progressAfter: const Duration(milliseconds: 400),
+          answerAfter: const Duration(milliseconds: 250),
+          checkAfter: const Duration(milliseconds: 200),
+          checkIdleMs: 5000,
+        ),
         chunkStall: const Duration(milliseconds: 300),
       );
 
@@ -412,11 +409,7 @@ void main() {
         checkAfter: const Duration(milliseconds: 900),
         checkIdleMs: 0,
       );
-      final client = WaxDeckClient(
-        baseUrl: 'http://host:4420',
-        dio: Dio()..httpClientAdapter = adapter,
-        chunkStall: const Duration(seconds: 1),
-      );
+      final client = clientOn(adapter, chunkStall: const Duration(seconds: 1));
 
       await client.putUploadData(
         'up-01JZX5N8QW3F4V9T2B7KD3M9R6',

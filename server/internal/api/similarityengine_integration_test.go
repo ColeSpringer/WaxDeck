@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"strings"
+	"slices"
 	"testing"
 
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
@@ -67,16 +67,15 @@ func reportVectors(t *testing.T, h *harness, pids ...string) {
 func TestNoAnalysisWorkIsLeasedWhileTheEngineIsAway(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	alpha := strings.TrimPrefix(musicPid(t, h, "Alpha Song"), "tr-")
-	if err := h.store.EnqueueSimilarity(context.Background(), "essence-of-alpha", alpha); err != nil {
-		t.Fatal(err)
-	}
+	alpha := musicPid(t, h, "Alpha Song")
+	queueLibrary(t, h)
 	takeEngineAway(t, h)
 	if page := pullWork(t, h); len(page.Items) != 0 || page.RetryAfterSeconds != flow.EngineRetrySeconds {
 		t.Fatalf("pull while away = %+v, want no work and a retry in %ds", page, flow.EngineRetrySeconds)
 	}
 	bringEngineBack(t, h)
-	if page := pullWork(t, h); len(page.Items) != 1 || page.Items[0].Essence != "essence-of-alpha" {
+	page := pullWork(t, h)
+	if !slices.ContainsFunc(page.Items, func(w SimilarityWorkItem) bool { return w.Pid == alpha }) {
 		t.Fatalf("pull once the engine answered = %+v, want the queued work leased", page)
 	}
 }

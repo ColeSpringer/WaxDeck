@@ -33,6 +33,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/colespringer/waxdeck/server/cmd/internal/atomicfile"
 )
 
 const header = "Third-party license notices for the WaxDeck server binary.\n" +
@@ -301,30 +303,5 @@ func run(out string) error {
 		return err
 	}
 
-	final := []byte(b.String())
-	if old, err := os.ReadFile(out); err == nil && bytes.Equal(old, final) {
-		return nil
-	}
-	// Same write discipline as specbundle: temp in the target dir,
-	// sync, rename.
-	tmp, err := os.CreateTemp(filepath.Dir(out), ".noticegen-*.txt")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(final); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), out)
+	return atomicfile.WriteIfChanged(out, []byte(b.String()))
 }

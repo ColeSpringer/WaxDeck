@@ -161,6 +161,7 @@ components:
           example: sh-01JZX5N8QW3F4V9T2B7KD3M9R6
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative capability URL of the landing page.
             Anyone holding the full URL can open it; treat it as the

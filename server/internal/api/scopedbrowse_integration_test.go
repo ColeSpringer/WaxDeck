@@ -120,6 +120,23 @@ func TestBrowseCursorCarriesItsScope(t *testing.T) {
 	}
 }
 
+// A JavaScript client reads the seed as a double and sends the rounded
+// value back, which the cursor it rode with then refuses. A 63-bit draw
+// fits in 53 bits once in 1024, so 64 draws all fitting is not luck.
+func TestBrowseMintsASeedAJavaScriptClientReadsExactly(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	for range 64 {
+		page := browsePage(t, h, "?list=random&limit=1")
+		if page.Seed == nil {
+			t.Fatal("a random browse answered no seed")
+		}
+		if seed := *page.Seed; seed < 1 || seed >= 1<<53 {
+			t.Fatalf("minted seed %d is outside [1, 2^53), so a JavaScript client rounds it", seed)
+		}
+	}
+}
+
 // Inverted risk from browse's: a reused cursor here only loses the new
 // filter's head. Refused anyway, for the same reason browse's is.
 func TestItemsCursorCarriesItsScope(t *testing.T) {

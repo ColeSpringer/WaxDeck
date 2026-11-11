@@ -1,0 +1,892 @@
+# What the spec cannot say about the Dart client: model names, client
+# defaults, wire conversions, the enums, and the shape of each operation's
+# method. server/cmd/dartgen/hints.go documents every key.
+
+models:
+  AdminSettings:
+    # The app reads none of these; drop the omit to start.
+    omit: [enrichmentWriteTags]
+    fields:
+      sonicAnalysis: {default: true}
+      # Absent is a server predating the field, which made no outbound
+      # lookups at all - so off is what it was doing.
+      radioExternalArt: {default: false}
+      trashRetentionDays: {default: 0}
+      # Absent is a server predating the field, whose prune ran on 30 days.
+      taskRetentionDays: {default: 30}
+  AdminSettingsChange:
+    # The app sets none of these; drop the omit to start.
+    omit: [enrichmentWriteTags]
+  ArtRoleInfo:
+    fields:
+      locked: {default: false}
+  BookDetail:
+    fields:
+      authors: {default: []}
+      narrators: {default: []}
+      chapters: {default: []}
+      parts: {default: []}
+  BookSeries:
+    fields:
+      bookCount: {default: 0}
+      totalDurationMs: {default: 0}
+  BookSeriesDetail:
+    fields:
+      bookCount: {default: 0}
+      totalDurationMs: {default: 0}
+      books: {default: []}
+  BookSeriesPage:
+    fields:
+      series: {default: []}
+  BootstrapStatus:
+    fields:
+      signupEnabled: {default: false}
+  BulkEditResult:
+    fields:
+      skipped: {default: []}
+  CatalogSyncPage:
+    fields:
+      entries: {default: []}
+      more: {default: false}
+  DeleteItemFilesRequest:
+    fields:
+      mode: {serverDefault: true}
+  DeleteItemsRequest:
+    fields:
+      mode: {serverDefault: true}
+  DeleteItemsResult:
+    fields:
+      entries: {default: []}
+      trashed: {default: 0}
+      deleted: {default: 0}
+      failed: {default: 0}
+      dirsPruned: {default: 0}
+      reclaimedBytes: {default: 0}
+  DeletePlanEntry:
+    fields:
+      itemSurvives: {default: false}
+  DetachResult:
+    fields:
+      failures: {as: writeBackFailures}
+  DownloadFile: {as: DownloadFileInfo}
+  EnrichFieldProposal:
+    fields:
+      current: {default: ''}
+  EnrichItemResult:
+    fields:
+      applied: {default: []}
+      skipped: {default: []}
+  EnrichPreview:
+    fields:
+      fields: {default: []}
+      skipped: {default: []}
+  EnrichmentCacheKind:
+    fields:
+      exempt: {default: false}
+  EnrichmentCacheReport:
+    fields:
+      kinds: {default: []}
+      exemptRows: {default: 0}
+      exemptBytes: {default: 0}
+  EnrichmentCoverage:
+    fields:
+      lyricsAsked: {default: 0}
+  EnrichmentLastRun:
+    fields:
+      artistsEnriched: {default: 0}
+      artistsMatched: {default: 0}
+      releaseGroupsEnriched: {default: 0}
+      releaseGroupsMatched: {default: 0}
+      albumsSearched: {default: 0}
+      albumsMatched: {default: 0}
+      booksEnriched: {default: 0}
+      booksMatched: {default: 0}
+      lyricsEnriched: {default: 0}
+      lyricsMatched: {default: 0}
+      groupArtEnriched: {default: 0}
+      groupArtMatched: {default: 0}
+      artistArtEnriched: {default: 0}
+      artistArtMatched: {default: 0}
+      albumArtEnriched: {default: 0}
+      albumArtMatched: {default: 0}
+      trackFieldsEnriched: {default: 0}
+      trackFieldsMatched: {default: 0}
+      bookFieldsEnriched: {default: 0}
+      bookFieldsMatched: {default: 0}
+      albumFieldsEnriched: {default: 0}
+      albumFieldsMatched: {default: 0}
+      retried: {default: 0}
+      deferred: {default: 0}
+      artFetched: {default: 0}
+      auxArtFetched: {default: 0}
+      artReused: {default: 0}
+      tagsWritten: {default: 0}
+      tagsFailed: {default: 0}
+      tagsUnrepresented: {default: 0}
+      tagsSkipped: {default: 0}
+      tagsReadOnly: {default: 0}
+      stalled: {default: [], unknownAs: drop}
+  EnrichmentProvider:
+    fields:
+      capabilities: {default: []}
+  EnrichmentRunRequest:
+    fields:
+      forcePhases: {omitEmpty: true}
+      phases: {omitEmpty: true}
+  EnrichmentStatus:
+    fields:
+      providers: {default: []}
+      configured: {default: true}
+      musicbrainzConfigured: {default: false}
+      phases: {default: [], unknownAs: drop}
+  EntityCardList:
+    as: EntityResolution
+    fields:
+      entities: {as: cards}
+  EntityRenameResult:
+    fields:
+      failures: {as: writeBackFailures}
+  Episode: {as: EpisodeDetail}
+  EpisodeFilter:
+    fields:
+      include: {omitEmpty: true}
+      exclude: {omitEmpty: true}
+  # The transport and convert: apiError read errors as WaxDeckApiException.
+  Error: {skip: true}
+  GenreNode:
+    fields:
+      parent: {emptyAsNull: true}
+      aliases: {omitEmpty: true}
+  Health: {as: ServerHealth}
+  HealthFixResult: {as: HealthFixStart}
+  HealthRuleCount:
+    fields:
+      fixing: {default: false}
+  HealthSummary:
+    fields:
+      warmingUp: {default: false}
+      sweeping: {default: false}
+      sweepFailed: {default: false}
+      rules: {default: []}
+  InstantMix:
+    fields:
+      items: {default: []}
+      excluded: {default: 0}
+  InstantMixRequest:
+    fields:
+      adventurousness: {serverDefault: true}
+      size: {serverDefault: true}
+      excludePids: {omitEmpty: true}
+  Invite:
+    fields:
+      roles: {default: []}
+      uploadEnabled: {default: false}
+      usedCount: {default: 0}
+      revoked: {default: false}
+  InviteCreate:
+    fields:
+      maxUses: {serverDefault: true}
+  Item: {as: ItemDetail}
+  ItemMetadata:
+    fields:
+      lockedFields: {default: []}
+      provenance: {default: []}
+      credits: {default: []}
+      customTags: {default: []}
+      unofficial: {default: false}
+      virtualTrack: {default: false}
+      hasArtwork: {default: false}
+      hasOwnArtwork: {default: false}
+      writeBackIssues: {default: []}
+  KindFields:
+    fields:
+      creditRoles: {default: []}
+  Library:
+    as: LibraryInfo
+    fields:
+      readOnly: {default: false}
+      folderFallback: {default: false}
+      managed: {default: false}
+  LibraryAccess:
+    fields:
+      libraryPids: {default: [], omitEmpty: true}
+  LibraryCreated: {as: LibraryInfo}
+  LibraryMatching:
+    fields:
+      singlesAutoApply: {default: false}
+  LibraryMediaChanged: {as: LibraryInfo}
+  ListenIngestResult: {as: ListenOutcome}
+  ListeningHeatmap:
+    fields:
+      days: {default: []}
+  ListeningStats:
+    fields:
+      buckets: {default: []}
+      byMediaType: {default: []}
+  LoginResponse:
+    as: LoginResult
+    # _adoptLogin hands it to the transport, not to the class.
+    omit: [csrfToken]
+  M3uPreviewEntry: {as: M3uPreviewLine}
+  MergeResult:
+    as: MergeOutcome
+    fields:
+      folds: {default: []}
+  MetadataCommit:
+    fields:
+      credits: {default: [], omitEmpty: true}
+      clearLyrics: {default: false, omitDefault: true}
+      tagSets: {default: {}, omitDefault: true}
+      tagRemoves: {default: [], omitEmpty: true}
+  MetadataCommitPart:
+    fields:
+      refusal: {convert: apiError}
+  Notification: {as: ServerNotification}
+  NotificationEvent: {as: NotifyEvent}
+  NotificationPage: {as: ServerNotificationPage}
+  NotificationTarget:
+    fields:
+      muted: {default: false}
+  # A target's config drops its nulls on create and update alike (absent,
+  # not null, on the wire).
+  NotificationTargetCreate:
+    fields:
+      config: {dropNullValues: true}
+  NotificationTargetUpdate:
+    fields:
+      config: {dropNullValues: true}
+  OpmlImportEntry: {as: OpmlImportOutcome}
+  OrganizeBatch:
+    fields:
+      # A history row; a kind this build does not know reads as a run, the
+      # kind that names no undo.
+      kind: {unknownAs: organize}
+      committed: {default: 0}
+      rolledBack: {default: 0}
+      planned: {default: 0}
+      undoable: {default: false}
+  OrganizeHistory:
+    as: OrganizeHistoryPage
+    fields:
+      batches: {as: runs}
+  OrganizeHold:
+    fields:
+      # A hold with its code in wire spelling; one this build does not know
+      # has an empty code, which reads as held back for no named cause.
+      code: {unknownAs: ''}
+  OrganizePlan:
+    fields:
+      held: {default: 0}
+      heldByCode: {default: {}}
+      readOnlyLibraries: {default: 0}
+      actions: {default: []}
+      tagWrite: {default: false}
+  OrganizeProfile:
+    fields:
+      musicTemplate: {default: ''}
+      audiobookTemplate: {default: ''}
+      podcastTemplate: {default: ''}
+      tagWrite: {default: false}
+      builtIn: {default: false}
+      sample: {default: {}}
+  OrganizeProfiles:
+    fields:
+      managedLibraries: {default: 0}
+  OrganizeReport:
+    fields:
+      jobPid: {default: ''}
+      held: {default: 0}
+      readOnlyLibraries: {default: 0}
+      dirsPruned: {default: 0}
+  OrganizeSample:
+    fields:
+      music: {default: ''}
+      audiobook: {default: ''}
+      podcast: {default: ''}
+      compilation: {default: ''}
+  OrganizeTemplates:
+    fields:
+      musicTemplate: {as: music, default: ''}
+      audiobookTemplate: {as: audiobook, default: ''}
+      podcastTemplate: {as: podcast, default: ''}
+  Permissions:
+    fields:
+      download: {default: true}
+      delete: {default: false}
+      explicitContent: {default: true}
+      sharedOutputs: {default: true}
+      managePodcasts: {default: true}
+      tagAllow: {omitEmpty: true}
+      tagDeny: {omitEmpty: true}
+  PlaybackSession: {as: PlaybackSessionInfo}
+  PlaylistCreate:
+    fields:
+      itemPids: {omitEmpty: true}
+  PlaylistImportResult:
+    fields:
+      missing: {default: []}
+  PodcastShow:
+    fields:
+      persons: {default: []}
+  PortablePlaylist:
+    fields:
+      refs: {default: []}
+  PortableRef:
+    fields:
+      fingerprint: {convert: base64Text}
+  # Prefs' lists take no omitEmpty, so they are faithful either way: an
+  # absent list is sent absent and an empty one is sent as `[]`. PUT
+  # replaces the whole document, so both clear the field - which is what
+  # makes the last unpin stick, and why nothing here has to invent one
+  # shape for the other.
+
+  RestorePlan:
+    fields:
+      sealedCasualties: {default: []}
+      warnings: {default: []}
+  ReviewCandidate:
+    fields:
+      pairings: {default: []}
+  ReviewEntry:
+    fields:
+      identifying: {default: false}
+  ReviewEntryDetail:
+    fields:
+      tracks: {default: []}
+      candidates: {default: []}
+  ReviewIdentifyRequest: {as: ReviewOverride}
+  RuleSort:
+    fields:
+      desc: {omitDefault: true}
+  Schedule:
+    fields:
+      kind: {unknownAs: drop}
+  SearchResults:
+    fields:
+      artists: {default: []}
+      albums: {default: []}
+      tracks: {default: []}
+      books: {default: []}
+      episodes: {default: []}
+      truncated: {default: false}
+  ServerSyncEvent:
+    # The app reads none of these; drop the omit to start.
+    omit: [playlist]
+  ServerSyncPage:
+    fields:
+      events: {default: []}
+  ServerYearInReview:
+    fields:
+      topArtists: {default: []}
+      topTracks: {default: []}
+      topGenres: {default: []}
+  SessionInfo: {as: SessionState}
+  SimilarTracks:
+    fields:
+      items: {default: []}
+  SkipMap:
+    # The app reads none of these; drop the omit to start.
+    omit: [thresholdDb, minSeconds, updatedAt]
+    fields:
+      spans: {default: []}
+  SmartRule:
+    fields:
+      sorts: {omitEmpty: true}
+      limit: {omitDefault: true}
+      limitMode: {default: '', omitDefault: true}
+      limitSeed: {omitDefault: true}
+  SonicPath:
+    fields:
+      items: {default: []}
+  StreamingEngineState:
+    as: ServerStreaming
+    fields:
+      timelines: {default: false}
+      voiceBoost: {default: false}
+      fileTools: {default: false}
+  SubscriptionSettings:
+    fields:
+      # Sent only when it has terms, as each side of it is, matching what
+      # the server puts on the wire.
+      autoDownloadFilter: {omitEmpty: true}
+  TimelineBoundary: {as: QueueTimelineMember}
+  TimelineInfo:
+    as: QueueTimeline
+    fields:
+      boundaries: {as: members}
+  ToolTasksCleared:
+    fields:
+      kept: {default: 0}
+  TopList:
+    fields:
+      entries: {default: []}
+  TrashEmptyResult:
+    fields:
+      skippedReadOnly: {default: 0}
+  UpgradeResolveRequest:
+    fields:
+      removeItemPids: {omitEmpty: true}
+      removeFilePids: {omitEmpty: true}
+  Upload:
+    as: UploadSession
+    fields:
+      idleMs: {as: idle, convert: durationMs}
+  UploadBatch:
+    fields:
+      reviewEntryIds: {default: []}
+  User:
+    as: WaxDeckUser
+    fields:
+      roles: {default: []}
+      uploadEnabled: {default: false}
+      managePodcasts: {default: false}
+      delete: {as: canDelete, default: false}
+  UserAccount:
+    fields:
+      disabled: {default: false}
+      pending: {default: false}
+      permissions: {default: {}}
+      hasPassword: {default: true}
+  Waveform:
+    # The app reads none of these; drop the omit to start.
+    omit: [partIndex]
+    fields:
+      peaks: {default: []}
+  YearInReview:
+    fields:
+      byMonth: {default: []}
+      byMediaType: {default: []}
+      topArtists: {default: []}
+      topTracks: {default: []}
+      topGenres: {default: []}
+      topShows: {default: []}
+
+hand:
+  M3uPreview: {covers: [matched, merged, unmatched, entries]}
+  M3uPreviewEntry: {covers: [path, outcome, item]}
+  PlaybackSession:
+    covers: [id, endpointId, endpointName, mine, ownerName, authority,
+      playing, index, positionMs, positionAt, rate, volume, repeat, shuffle,
+      queueVersion, entries, ended, updatedAt]
+  PlaybackSessionEntry: {covers: [pid, title, artist, durationMs]}
+  Playlist:
+    covers: [pid, name, kind, visibility, ownerName, isOwner, hasArt,
+      itemCount, rule, createdAt, updatedAt]
+    # Retired: rule edits apply in place under a stable pid now.
+    ignores: [previousPid]
+  RuleNode: {covers: [type, nodes, node, field, op, value, values]}
+  SessionInfo:
+    covers: [authenticated, user, server]
+    # getSession hands it to the transport, not to the class.
+    ignores: [csrfToken]
+
+enums:
+  DeviceSession.kind: {as: SessionKind, fallback: device}
+  DiscoveryList: {}
+  EntityCard.kind: {fallback: drop}
+  EntityRenameResult.outcome: {as: EntityRenameOutcome, fallback: renamed}
+  FacetSort: {}
+  MediaType: {fallback: music}
+  MetadataCommitPart.part: {as: MetadataCommitPartKind, add: [unknown], fallback: unknown}
+  MetadataCommitPart.status: {as: MetadataCommitStatus, add: [unknown], fallback: unknown}
+  MixBasis: {fallback: metadata}
+  Prefs.theme: {as: ThemePref, fallback: system}
+  # The listening record's own media type, which carries `radio` where
+  # MediaType carries only the item kinds. Unknown falls to `music`, as
+  # MediaType's does: a value this build has not heard of is a newer
+  # server, not a reason to fail a page of stats.
+  StatsMediaType: {fallback: music}
+  UploadGrouping: {fallback: auto}
+  listSubscribedEpisodes.filter: {as: SubscribedEpisodes}
+
+operations:
+  addPlaylistItems:
+    positional: [pid, itemPids]
+    params:
+      baseUpdatedAt: {omit: true}
+  analyzeLibrary: {skip: true}
+  # It answers once its run has moved every file.
+  applyOrganize: {long: true}
+  bootstrap: {hand: true}
+  browseList:
+    as: browse
+    hand: true
+    positional: [list]
+    named: [mediaType, facet, facetKey, cursor, limit, seed]
+  clearEntityArtwork:
+    params:
+      role: {default: front}
+  clearFinishedJobs: {unwrap: cleared}
+  clearFinishedToolTasks:
+    hand: true
+    params:
+      scope: {as: all, type: bool, default: false}
+  clearItemAcquisition:
+    params:
+      writeBack: {default: false}
+      lock: {default: true}
+      force: {default: false}
+  clearItemArtwork:
+    params:
+      role: {default: front}
+  clearItemLyrics:
+    params:
+      writeBack: {default: false}
+  clearItemTag:
+    params:
+      writeBack: {default: false}
+  commitItemMetadata: {body: commit, positional: [pid, commit]}
+  # The seal fingerprints, and may import, before it answers.
+  completeUpload: {long: true}
+  # The finalize imports every declined entry before it answers.
+  completeUploadBatch: {long: true}
+  connectListenBrainz: {positional: [token]}
+  createAcquisition:
+    hand: true
+    params:
+      mediaType: {type: MediaType}
+  createAppPassword: {positional: [label]}
+  createBookmark:
+    positional: [pid, positionMs]
+    named: [note, id]
+  createGenreNormalization: {as: normalizeGenres}
+  createLibrary:
+    params:
+      media: {nullable: true}
+      managed: {nullable: true}
+      allowAbsent: {nullable: true}
+  createMigration:
+    named: [source, serverUrl, username, password, token, accountId,
+      exportId, options, dryRun]
+  createPlaybackSession:
+    params:
+      index: {default: 0}
+      positionMs: {default: 0}
+      play: {default: true}
+  createPlaylist:
+    params:
+      itemPids: {default: []}
+  createQueueTimeline:
+    hand: true
+    positional: [itemPids]
+    params:
+      itemPids: {as: pids}
+  createUpload: {hand: true}
+  createUploadBatch: {hand: true}
+  # Every entry's files are retagged before the server answers.
+  decideReviewBulk: {long: true, positional: [entryIds], unwrap: results}
+  # The server rewrites every file's tags before it answers.
+  decideReviewEntry: {long: true}
+  deleteAllPushRegistrations: {skip: true}
+  deleteItemFiles: {positional: []}
+  deleteMyNotification:
+    params:
+      notificationId: {as: id}
+  deleteMyNotificationTarget:
+    params:
+      targetId: {as: pid}
+  deletePushRegistration:
+    params:
+      registrationId: {as: pid}
+  deleteServerNotificationTarget:
+    params:
+      targetId: {as: pid}
+  deleteUser:
+    params:
+      transferTo: {omit: true}
+      playlists: {default: transfer}
+  discardMigrationExport:
+    params:
+      exportId: {as: pid}
+  downloadBackup: {skip: true}
+  exchangeOidcCode: {as: oidcExchange, hand: true}
+  # The document is another server's grammar, carried verbatim. It stays a
+  # map: nothing here reads it, and a model of it would be a second place
+  # to keep in step with a format WaxDeck does not own.
+  exportPlaylistNsp:
+    params:
+      # Only when it is asked for: the parameter defaults false on the
+      # wire, and sending it always would put a query string on every
+      # strict export for nothing.
+      partial: {omitFalse: true}
+  getAlbumPlayState: {raw: true}
+  getArtistPlayState:
+    as: getEntityPlayState
+    hand: true
+    doc: |
+      `GET /artists/{pid}/play-state` or `GET /albums/{pid}/play-state`:
+      the caller's star and rating for one catalog entity, selected by the
+      pid's own prefix. An untouched entity reads back zero.
+  getBootstrapStatus: {as: bootstrapStatus}
+  getCastPreflight: {unwrap: bases}
+  # The check counts the whole catalog before it answers.
+  getCatalogConsistency: {long: true}
+  getDiagnosticSummary: {unwrap: counts}
+  getEntityArtworkLock:
+    unwrap: locked
+    params:
+      role: {default: front}
+  getEntityCuration: {unwrap: curated}
+  getHealth: {as: health}
+  getItemArt: {skip: true}
+  getItemFiles: {unwrap: files}
+  # An item with no words is a state, not an error, for callers.
+  getItemLyrics: {nullOn: [404]}
+  getLibraryMatching:
+    params:
+      pid: {as: libraryPid}
+  getRadioNowPlayingArt: {skip: true}
+  getRadioSavedSongArt: {skip: true}
+  getRadioStation: {skip: true}
+  getRadioStationLogo: {skip: true}
+  getSession: {hand: true}
+  # No staged restore is a state, not an error, for callers.
+  getStagedRestore: {nullOn: [404]}
+  getWaveform:
+    hand: true
+    params:
+      span: {as: wholeItem, type: bool, default: false}
+      partIndex: {omit: true}
+      If-None-Match: {omit: true}
+  importBackup: {long: true, body: openRead, length: sizeBytes}
+  # Every feed is subscribed, one after another, before it answers.
+  importOpml: {long: true, positional: [opml], unwrap: results}
+  # Every line is resolved before the answer, each relative one a scan of
+  # the catalog's files.
+  importPlaylistM3u:
+    long: true
+    named: [name, content, visibility]
+  importPlaylistNsp:
+    as: importNsp
+    body: document
+    positional: [document]
+    named: [partial, name]
+    params:
+      partial: {omitFalse: true}
+  lastfmCallback: {skip: true}
+  listAppPasswords: {unwrap: appPasswords}
+  listBackups: {unwrap: backups}
+  listBookmarks: {unwrap: bookmarks}
+  listDuplicates: {unwrap: groups}
+  listFacets:
+    hand: true
+    positional: [dimension]
+    named: [sort, cursor, startsAt, facet, facetKey, limit]
+  listInvites: {unwrap: invites}
+  listItems: {hand: true}
+  listJobs:
+    unwrap: jobs
+    params:
+      limit: {omit: true}
+  listLibraries:
+    unwrap: libraries
+    params:
+      counts: {default: false}
+  listMyNotificationTargets: {unwrap: targets}
+  listNotificationEvents: {unwrap: events}
+  listOidcProviders: {as: oidcProviders, unwrap: providers}
+  listPlayStates: {positional: [pids], unwrap: states}
+  listPlaybackSessionHistory: {unwrap: sessions}
+  listPlaybackSessions: {unwrap: sessions}
+  listPlayerEndpoints: {unwrap: endpoints}
+  listPushRegistrations: {unwrap: registrations}
+  listRadioStations: {unwrap: stations}
+  listSchedules: {unwrap: schedules}
+  listScrobblers: {unwrap: scrobblers}
+  listServerNotificationTargets: {unwrap: targets}
+  listSessions: {unwrap: sessions}
+  listShares:
+    named: [cursor, limit, all]
+    params:
+      all: {omitFalse: true}
+  listSubscribedEpisodes:
+    params:
+      filter: {default: latest}
+  listTrash:
+    params:
+      includeRestored: {default: false}
+  listUpgrades: {unwrap: groups}
+  listUploadTargets: {unwrap: targets}
+  login: {hand: true}
+  logout: {hand: true}
+  markMyNotificationsRead:
+    params:
+      ids: {default: []}
+  oidcCallback: {skip: true}
+  previewEnrichItem:
+    params:
+      proposal: {omit: true}
+  previewOrganize: {hand: true}
+  previewOrganizeProfile:
+    params:
+      tagWrite: {omit: true}
+      musicTemplate: {default: ''}
+      audiobookTemplate: {default: ''}
+      podcastTemplate: {default: ''}
+  # Resolved line by line before the answer, as the import is.
+  previewPlaylistM3u: {long: true, positional: [content]}
+  previewPlaylistSync:
+    hand: true
+    named: [mode, url, source, payload, refs, intervalHours]
+    params:
+      mode: {nullable: true}
+  previewSmartRule: {body: rule, positional: [rule]}
+  # The server drives a real device through every candidate address
+  # before it answers, and each one gets ten seconds to fetch: the whole
+  # job happens before the response line, and the ordinary receive budget
+  # would call a healthy check dead at exactly the moment it had something
+  # to say.
+  probeCastEndpoint: {long: true}
+  pullSimilarityWork: {skip: true}
+  purgeTrashEntry: {unwrap: reclaimedBytes}
+  putAdminSettings: {body: change, positional: [change]}
+  putBookSettings: {body: settings, positional: [pid, settings]}
+  putEnrichmentSources: {positional: [sources]}
+  putGenreTree: {positional: [genres]}
+  putOrganizeProfile:
+    params:
+      musicTemplate: {default: ''}
+      audiobookTemplate: {default: ''}
+      podcastTemplate: {default: ''}
+  putPlayState: {positional: [pid, positionMs]}
+  putPrefs: {body: prefs, positional: [prefs]}
+  putScrobblingConfig:
+    params:
+      lastfmApiKey: {as: apiKey}
+      lastfmSecret: {as: secret}
+  putSubscriptionSettings: {body: settings, positional: [pid, settings]}
+  putTranscodingLimits: {body: limits, positional: [limits]}
+  putUploadData:
+    hand: true
+    body: bytes
+    named: [offset, bytes]
+  refreshToken: {hand: true}
+  rematchItem: {unwrap: reviewEntryId}
+  removeLibrary:
+    params:
+      pid: {as: libraryPid}
+  renameSession: {positional: [sessionId, deviceName]}
+  replacePlaylistItems: {positional: [pid, itemPids]}
+  reportEmbeddings: {skip: true}
+  reportListens: {positional: [sessions]}
+  reportPlaylistNspImport:
+    as: checkNspImport
+    body: document
+    positional: [document]
+  rescanLibrary: {hand: true}
+  resolveEntities: {hand: true, positional: [pids]}
+  resolveItems: {hand: true, positional: [pids]}
+  resolveUpgrade:
+    unwrap: trashed
+    params:
+      removeItemPids: {default: []}
+      removeFilePids: {default: []}
+  # Restoring the snapshot retags every file before it answers.
+  revertReviewEntry: {long: true}
+  revokeAppPassword:
+    params:
+      appPasswordId: {as: id}
+  runEnrichment:
+    unwrap: jobPid
+    params:
+      forcePhases: {default: []}
+      phases: {default: []}
+  search: {positional: [q]}
+  searchPodcastDirectory: {positional: [query], unwrap: entries}
+  searchRadioDirectory: {positional: [query], unwrap: entries}
+  setAlbumRating: {raw: true}
+  setAlbumStar: {raw: true}
+  setArtistRating:
+    as: setEntityRating
+    hand: true
+    positional: [pid, rating]
+    doc: |
+      `PUT /artists/{pid}/rating` or `PUT /albums/{pid}/rating`: rates one
+      catalog entity, 0 to 100, or clears the rating with null.
+      [recordedAt] marks an offline-queue replay.
+  setArtistStar:
+    as: setEntityStar
+    hand: true
+    positional: [pid, starred]
+    doc: |
+      `PUT /artists/{pid}/star` or `PUT /albums/{pid}/star`: stars or
+      unstars one catalog entity, returning its updated state. Entity stars
+      are independent of item stars: starring an album does not star its
+      tracks. [recordedAt] marks an offline-queue replay.
+  setEntityArtwork:
+    body: bytes
+    params:
+      role: {default: front}
+      writeBack: {default: false}
+  setEntityArtworkLock:
+    unwrap: locked
+    params:
+      roleLocked: {omit: true}
+      role: {default: front}
+  setItemArtwork:
+    body: bytes
+    params:
+      role: {default: front}
+      writeBack: {default: false}
+      lock: {default: true}
+  setItemKind: {positional: [pids]}
+  setItemLocks: {unwrap: lockedFields}
+  setItemTag:
+    named: [values, writeBack, lock, force]
+  setLibraryFolderFallback:
+    unwrap: folderFallback
+    positional: [pid, folderFallback]
+    params:
+      pid: {as: libraryPid}
+      folderFallback: {as: 'on'}
+      libraryPid: {omit: true}
+  setLibraryMatching:
+    body: matching
+    positional: [pid, matching]
+    params:
+      pid: {as: libraryPid}
+  setLibraryMedia:
+    unwrap: scanStarted
+    positional: [pid, media]
+    params:
+      pid: {as: libraryPid}
+  setLibraryProfile:
+    positional: [pid, profile]
+    params:
+      pid: {as: libraryPid}
+  setLibraryReadOnly:
+    unwrap: readOnly
+    positional: [pid, readOnly]
+    params:
+      pid: {as: libraryPid}
+      libraryPid: {omit: true}
+  setPassword: {as: setUserPassword, positional: [userId, newPassword]}
+  setPlaylistSource:
+    named: [mode, url, source, payload, refs, intervalHours]
+  setRating: {positional: [pid, rating]}
+  setStar: {positional: [pid, starred]}
+  stageMigrationExport: {long: true, body: openRead, length: sizeBytes}
+  startLastfmConnect: {unwrap: authUrl}
+  startOidc: {skip: true}
+  streamToolTaskEvents: {skip: true}
+  syncCatalogRemoved: {positional: [pids], unwrap: pids}
+  testMyNotificationTarget:
+    params:
+      targetId: {as: pid}
+  testServerNotificationTarget:
+    params:
+      targetId: {as: pid}
+  transferPlaybackSession: {positional: [sessionId, endpointId]}
+  # It answers once its run has moved every file back.
+  undoOrganize: {long: true, positional: [jobPid]}
+  unsubscribePodcast:
+    params:
+      removeDownloads: {omitFalse: true}
+  updateMyNotificationTarget:
+    positional: []
+    params:
+      targetId: {as: pid}
+  updateServerNotificationTarget:
+    positional: []
+    params:
+      targetId: {as: pid}

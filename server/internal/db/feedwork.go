@@ -160,6 +160,18 @@ func (d *DB) CompleteAnalysis(ctx context.Context, essenceHash string) error {
 	return nil
 }
 
+// ReleaseAnalysis hands a leased analysis row back at once, counting
+// nothing: a run that reached no verdict (the catalog handed off, the
+// server stopping) owes no attempt, and a failure's backoff would only
+// delay it.
+func (d *DB) ReleaseAnalysis(ctx context.Context, essenceHash string) error {
+	_, err := d.w.ExecContext(ctx, `UPDATE analysis_queue SET lease_until_ns = 0 WHERE essence_hash = ?`, essenceHash)
+	if err != nil {
+		return fmt.Errorf("db: releasing analysis: %w", err)
+	}
+	return nil
+}
+
 // FailAnalysis records a failed attempt; the row stays leased until
 // retryAtNS, which is what makes the caller's backoff real (a zero
 // lease would hand the oldest, just-failed row straight back to the

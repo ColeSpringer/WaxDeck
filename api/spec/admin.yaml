@@ -1682,6 +1682,7 @@ components:
           example: music
         mediaDeclared:
           type: boolean
+          default: false
           description: >
             The server's configuration names what the library holds
             (`WAXDECK_AUDIOBOOK_ROOTS`), so setLibraryMedia refuses any
@@ -1719,6 +1720,7 @@ components:
           example: waxbin-native
         configured:
           type: boolean
+          default: false
           description: >
             The server's configuration names the library
             (`WAXDECK_LIBRARY_ROOTS`), so every start registers it and
@@ -1726,6 +1728,7 @@ components:
             Absent means false.
         unreachable:
           type: boolean
+          default: false
           description: >
             The library's folder was not there at its last scan, which
             marked nothing under it missing: its items stay listed and play
@@ -1826,6 +1829,7 @@ components:
             default keeps files strictly in place.
         allowAbsent:
           type: boolean
+          default: false
           description: >
             Register a root whose folder is mounted later; a scan reports it
             unreachable until then. Absent means false.
@@ -1995,6 +1999,7 @@ components:
         detail:
           type: object
           additionalProperties: true
+          default: {}
           description: >
             Action-specific structure: what changed, from what, to
             what. Shapes are stable per action but may grow fields.
@@ -2229,10 +2234,8 @@ components:
       type: string
       enum: [scan, backup, prune, analyze, enrich]
       description: >
-        A schedulable job kind. A shared named schema on purpose (the
-        path parameter and the schedule object both use it): identical
-        inline enums make the Dart generator emit one enum class into
-        two files, which does not compile.
+        A schedulable job kind, shared by the path parameter and the
+        schedule object.
 
         `analyze` is off by default and costs a full audio decode per
         file; see `POST /library/analyze` for what it produces and what
@@ -2853,6 +2856,7 @@ components:
         aliases:
           type: array
           maxItems: 64
+          default: []
           description: >
             The spellings that resolve to this genre. Case, diacritics,
             and punctuation already fold, so list only what folding

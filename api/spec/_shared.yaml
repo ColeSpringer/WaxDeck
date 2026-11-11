@@ -239,6 +239,10 @@ components:
         answers with, which for an album with no durable cover of its own
         is a member track's - reported honestly as that track's source,
         with `derived` marking that the album did not choose it.
+
+
+        Absent wherever the catalog holds no attribution for the
+        picture.
       required: [source]
       properties:
         source:
@@ -288,6 +292,7 @@ components:
           example: album
         derived:
           type: boolean
+          default: false
           description: >
             True when the answering level holds no cover of its own and
             the picture came from a member instead - an album showing one
@@ -397,6 +402,7 @@ components:
           example: 214000
         artUrl:
           type: string
+          format: uri-reference
           description: >
             Origin-relative URL of the item's artwork endpoint. Always
             populated; the endpoint itself returns 404 for items with no

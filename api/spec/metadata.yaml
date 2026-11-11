@@ -1547,7 +1547,10 @@ components:
             Empty for every other source.
         synced:
           type: array
-          description: Time-synced lines, ordered by `timeMs`.
+          default: []
+          description: >
+            Time-synced lines, ordered by `timeMs`. Empty when the
+            source carried no timings.
           items:
             $ref: "#/components/schemas/SyncedLine"
         unsynced:
@@ -1584,6 +1587,7 @@ components:
             $ref: "#/components/schemas/EntityTypeFields"
         reservedTagKeys:
           type: array
+          default: []
           description: >
             Custom-tag keys the catalog owns through a field of its own
             (`BPM` through `bpm`, `ISRC` through `isrc`, and so on), in
@@ -1685,6 +1689,7 @@ components:
           $ref: "#/components/schemas/LyricsState"
         chapters:
           type: array
+          default: []
           description: Chapter marks (books).
           items:
             $ref: "#/components/schemas/ChapterMark"
@@ -1829,6 +1834,7 @@ components:
             would render as a confident wrong date.
         locked:
           type: boolean
+          default: false
           description: >
             Whether the origin is locked against automatic rewrites -
             an import re-recording over it, or a scan re-deriving it
@@ -2182,11 +2188,13 @@ components:
           description: Always true; the catalog committed.
         writeBackFailures:
           type: array
+          default: []
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
         warnings:
           type: array
+          default: []
           description: >
             Non-fatal notes: typed drop warnings from the tag
             library (a format refusing embedded synced lyrics, a
@@ -2203,6 +2211,7 @@ components:
             instead.
         movedAlbums:
           type: array
+          default: []
           description: >
             Albums that left the edited release group because the clear
             re-keyed it and their titles put them in a group of their
@@ -2371,6 +2380,7 @@ components:
             $ref: "#/components/schemas/MetadataCommitPart"
         writeBackFailures:
           type: array
+          default: []
           description: >
             Files whose tags could not be updated, merged across every
             part and deduplicated: several parts can report the same
@@ -2380,6 +2390,7 @@ components:
             $ref: "#/components/schemas/WriteBackFailure"
         warnings:
           type: array
+          default: []
           description: >
             The parts' non-fatal notes, merged: typed drop warnings
             from the tag library, roles without a tag form, malformed
@@ -2467,6 +2478,7 @@ components:
             type: string
         writeBackFailures:
           type: array
+          default: []
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
@@ -2603,6 +2615,7 @@ components:
           description: Values stored after deduplication.
         writeBackFailures:
           type: array
+          default: []
           description: >
             Files the write-back could not update; the catalog edit
             stands. Absent when every file took the values or no
@@ -2733,6 +2746,7 @@ components:
           description: The release group above that album, when there is one.
         failures:
           type: array
+          default: []
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
@@ -2787,7 +2801,13 @@ components:
         outcome:
           type: string
           enum: [renamed, merged, refreshed]
-          description: What the rename did to the entity's identity key.
+          description: >
+            What the rename did to the entity's identity key: `renamed`
+            when it moved and the row stayed, keeping its pid; `merged`
+            when the new key was already taken and the entity folded
+            into the incumbent named by `mergedInto`; `refreshed` when
+            the new key equals the old one, so only the display fields
+            moved (a case-only rename lands here).
         mergedInto:
           type: string
           description: >
@@ -2795,6 +2815,7 @@ components:
             only then.
         movedAlbums:
           type: array
+          default: []
           description: >
             Albums that came out under a different release group than
             they went in under, which an album rename can do when the
@@ -2812,6 +2833,7 @@ components:
             An item can be counted in both `members` and here.
         failures:
           type: array
+          default: []
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
@@ -2908,6 +2930,7 @@ components:
       properties:
         fields:
           type: array
+          default: []
           description: The approved field proposals.
           items:
             $ref: "#/components/schemas/EnrichFieldProposal"

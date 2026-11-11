@@ -188,6 +188,18 @@ func TestQueueLeaseCycle(t *testing.T) {
 		t.Fatalf("attempts = %d, want 1", row.Attempts)
 	}
 
+	// A release hands a leased row straight back, counting nothing.
+	if _, err := d.LeaseAnalysis(ctx, 310, 50, 5); err != ErrNotFound {
+		t.Fatalf("lease under a lease = %v, want ErrNotFound", err)
+	}
+	if err := d.ReleaseAnalysis(ctx, "essence-1"); err != nil {
+		t.Fatal(err)
+	}
+	row, err = d.LeaseAnalysis(ctx, 310, 50, 5)
+	if err != nil || row.Attempts != 1 {
+		t.Fatalf("lease after a release = %+v (%v), want the row, attempts kept at 1", row, err)
+	}
+
 	// Rows at the attempt cap stop being served.
 	for range 4 {
 		if err := d.FailAnalysis(ctx, "essence-1", "boom", 350); err != nil {

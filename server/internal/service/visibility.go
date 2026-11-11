@@ -194,14 +194,25 @@ func (l *Library) attribution(ctx context.Context, forceReload bool) ([]libraryD
 func (l *Library) attributionTable(ctx context.Context, forceReload bool) (dirs []libraryDir, podcast string, atRoot bool, err error) {
 	l.libDirs.mu.Lock()
 	defer l.libDirs.mu.Unlock()
+	if err = l.loadLibraryDirs(ctx, forceReload); err != nil {
+		return nil, "", false, err
+	}
+	return l.libDirs.dirs, l.libDirs.podcast, l.libDirs.podcastAtRoot, nil
+}
+
+// loadLibraryDirs reads the attribution table into libDirs, unless it
+// holds one and forceReload is false. libDirs.mu is held.
+func (l *Library) loadLibraryDirs(ctx context.Context, forceReload bool) error {
 	if l.libDirs.dirs != nil && !forceReload {
-		return l.libDirs.dirs, l.libDirs.podcast, l.libDirs.podcastAtRoot, nil
+		return nil
 	}
 	libs, err := l.lib.Libraries(ctx)
 	if err != nil {
-		return nil, "", false, classify(err)
+		return classify(err)
 	}
-	dirs = make([]libraryDir, 0, len(libs))
+	dirs := make([]libraryDir, 0, len(libs))
+	var podcast string
+	var atRoot bool
 	var podcasts []string
 	for _, lib := range libs {
 		if lib.Mode == model.ModePodcast {
@@ -223,18 +234,19 @@ func (l *Library) attributionTable(ctx context.Context, forceReload bool) (dirs 
 	sort.Slice(dirs, func(i, j int) bool { return len(dirs[i].path) > len(dirs[j].path) })
 	l.libDirs.dirs, l.libDirs.podcast, l.libDirs.podcastAtRoot = dirs, podcast, atRoot
 	l.libDirs.podcasts, l.libDirs.missFailed = podcasts, false
-	return dirs, podcast, atRoot, nil
+	return nil
 }
 
 // podcastLibraries answers every podcast-mode library: the one at the
 // configured directory, and any an earlier directory left, which still
-// holds the episodes fetched while it was configured.
+// holds the episodes fetched while it was configured. Read under the lock
+// that loads the table: a table dropped in between would answer none.
 func (l *Library) podcastLibraries(ctx context.Context) ([]string, error) {
-	if _, _, _, err := l.attributionTable(ctx, false); err != nil {
-		return nil, err
-	}
 	l.libDirs.mu.Lock()
 	defer l.libDirs.mu.Unlock()
+	if err := l.loadLibraryDirs(ctx, false); err != nil {
+		return nil, err
+	}
 	return slices.Clone(l.libDirs.podcasts), nil
 }
 

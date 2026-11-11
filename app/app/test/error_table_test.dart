@@ -54,13 +54,14 @@ void main() {
     test('the codes this client mints for itself have one too', () {
       // Deliberately absent from the contract's list: nothing on the
       // server can produce them, so the check above cannot see them.
-      // `waxdeck_api` owns the transport three; the `local-` ones name a
+      // `waxdeck_api` owns the transport four; the `local-` ones name a
       // failure of this device, and they are why nothing here borrows a
       // spec code for a failure the server never reported.
       for (final code in const <String>[
         'transport',
         'transport-timeout',
         'transport-empty',
+        'transport-decode',
         'local-channel-offline',
         'local-command-timeout',
         'local-unregistered',

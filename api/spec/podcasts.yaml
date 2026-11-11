@@ -774,6 +774,7 @@ components:
           example: rss
         artUrl:
           type: string
+          format: uri-reference
           description: Origin-relative URL of the show's artwork endpoint.
           example: /api/v1/items/pc-01JZX5N8QW3F4V9T2B7KD3M9R6/art
         artSource:
@@ -787,11 +788,13 @@ components:
           description: Publication time of the newest cataloged episode.
         refreshDisabled:
           type: boolean
+          default: false
           description: >
             True when scheduled refresh is suspended after repeated feed
             failures. A successful manual refresh clears it.
         explicit:
           type: boolean
+          default: false
           description: >
             Feed-declared explicit flag for the whole show. Episodes
             carry their own flag, which wins where the feed sets both.
@@ -833,6 +836,7 @@ components:
             never removes playback history (archive, not delete).
         autoDownload:
           type: boolean
+          default: false
           description: >
             Fetch new episodes to the server automatically as the feed
             publishes them. `autoDownloadFilter` narrows which ones. A
@@ -852,6 +856,7 @@ components:
             than 512 characters, is refused with `invalid-request`.
         private:
           type: boolean
+          default: false
           description: >
             Mark the show private (see the show schema: privacy is
             global and sticky, hiding the feed URL from everyone who does
@@ -911,6 +916,7 @@ components:
         include:
           type: array
           maxItems: 64
+          default: []
           description: >
             Take an episode only when its title contains one of these
             terms. Empty or absent takes every episode.
@@ -921,6 +927,7 @@ components:
         exclude:
           type: array
           maxItems: 64
+          default: []
           description: >
             Skip an episode whose title contains one of these terms,
             even when `include` matched it.
@@ -978,7 +985,9 @@ components:
 
     PodcastDetail:
       type: object
-      description: A show together with the caller's subscription state.
+      description: >
+        A show together with the caller's subscription state. `settings`
+        is present only when the caller is subscribed.
       required: [show, subscribed]
       properties:
         show:
@@ -1136,12 +1145,15 @@ components:
                 `failed`). Retrying the fetch endpoint re-queues it.
             explicit:
               type: boolean
+              default: false
               description: Feed-declared explicit flag.
             hasTranscript:
               type: boolean
+              default: false
               description: Whether a transcript is available.
             hasEnclosure:
               type: boolean
+              default: false
               description: >
                 Whether the feed named audio this server could relay for
                 this episode: an enclosure URL, over http or https, that
@@ -1195,11 +1207,13 @@ components:
               description: The episode's web page, when the feed declares one.
             chapters:
               type: array
+              default: []
               description: Chapter marks, ordered by `startMs`.
               items:
                 $ref: "#/components/schemas/ChapterMark"
             persons:
               type: array
+              default: []
               description: >
                 Episode-level `<podcast:person>` credits, layered on top
                 of the show's credits for this episode.
@@ -1207,6 +1221,7 @@ components:
                 $ref: "#/components/schemas/FeedPerson"
             soundbites:
               type: array
+              default: []
               description: >
                 Highlight clips the feed marks with `<podcast:soundbite>`,
                 each a window into the episode audio.

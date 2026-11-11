@@ -96,6 +96,11 @@ class _Handles {
   var groups = 0;
 }
 
+/// The longest limit the box takes. The contract sets no ceiling, so it is
+/// the longest count every int.parse reads: 18 digits fit a 64-bit int, 19
+/// may not.
+const _limitDigits = 18;
+
 /// The smart playlist rule editor: nested groups of typed conditions,
 /// sort keys, a limit, and a live preview of what the rule matches.
 ///
@@ -135,6 +140,9 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   var _unsupported = false;
   var _busy = false;
   PlaylistPreview? _preview;
+
+  /// Why the last preview request failed, until the next answer.
+  WaxDeckApiException? _previewError;
   Timer? _debounce;
   var _generation = 0;
 
@@ -253,7 +261,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     sorts: <RuleSort>[
       for (final s in _sorts) RuleSort(field: s.field, desc: s.desc),
     ],
-    limit: int.tryParse(_limit.text.trim()) ?? 0,
+    limit: _limitCount!,
     limitMode: _limitMode,
     limitSeed: _limitSeed,
   );
@@ -267,11 +275,21 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   bool get _sortsBlocked =>
       _limitMode == 'random' || (_isBudget && _limitSeed != 0);
 
+  /// The limit box as a count: 0 for a blank one, null for text no count
+  /// can hold.
+  int? get _limitCount {
+    final text = _limit.text.trim();
+    return text.isEmpty ? 0 : int.tryParse(text);
+  }
+
   /// A random draw or a budget needs a positive limit; a count reads
-  /// blank as "no limit". Caught here rather than as a 400.
+  /// blank as "no limit". Caught here rather than as a 400. The field
+  /// takes digits only, so the limit is never negative. Text no count can
+  /// hold, which the box's length bound keeps the keyboard from typing, is
+  /// invalid in either mode, never read as "no limit".
   bool get _limitInvalid {
-    if (_limitMode.isEmpty) return false;
-    return (int.tryParse(_limit.text.trim()) ?? 0) <= 0;
+    final count = _limitCount;
+    return count == null || (_limitMode.isNotEmpty && count <= 0);
   }
 
   // -- editing ---------------------------------------------------------
@@ -285,19 +303,27 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () async {
       final generation = ++_generation;
+      if (_limitInvalid) {
+        _showPreview(null);
+        return;
+      }
       try {
         final preview = await ref
             .read(repositoryProvider)
             .previewSmartRule(_draftRule(), limit: 10);
-        if (mounted && generation == _generation) {
-          setState(() => _preview = preview);
-        }
-      } on WaxDeckApiException {
-        // A draft in progress may be momentarily invalid.
-        if (mounted && generation == _generation) {
-          setState(() => _preview = null);
-        }
+        if (mounted && generation == _generation) _showPreview(preview);
+      } on WaxDeckApiException catch (e) {
+        // A draft in progress may be momentarily invalid; the pane says
+        // how, so the person is not left watching it work.
+        if (mounted && generation == _generation) _showPreview(null, error: e);
       }
+    });
+  }
+
+  void _showPreview(PlaylistPreview? preview, {WaxDeckApiException? error}) {
+    setState(() {
+      _preview = preview;
+      _previewError = error;
     });
   }
 
@@ -311,7 +337,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   }
 
   Future<void> _save() async {
-    if (_busy) return;
+    if (_busy || _limitInvalid) return;
     setState(() => _busy = true);
     final router = GoRouter.of(context);
     final messenger = ref.read(shellMessengerProvider.notifier);
@@ -355,6 +381,8 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     final l10n = context.l10n;
     final name = widget.editing?.name ?? widget.createName!;
     final twoPane = sizeClass.hasSidebar && !_unsupported;
+    // A limit that cannot be previewed shows nothing stale, and says why.
+    final limitMissing = _limitInvalid;
 
     return WaxScaffold(
       title: l10n.playlistRuleEditorTitle(name),
@@ -372,7 +400,13 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
       ],
       // The count follows the tree on a phone, where the preview is
       // below the fold. Two-pane has it on screen already.
-      bottom: twoPane || _unsupported ? null : _MatchBar(preview: _preview),
+      bottom: twoPane || _unsupported
+          ? null
+          : _MatchBar(
+              preview: _preview,
+              failed: _previewError != null,
+              limitMissing: limitMissing,
+            ),
       slivers: <Widget>[
         // Before the vocabulary is asked for: no answer to that
         // question would make this rule drawable.
@@ -396,7 +430,11 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                     hasScrollBody: true,
                     child: _TwoPane(
                       tree: _tree(value, twoPane: true),
-                      preview: _PreviewPane(preview: _preview),
+                      preview: _PreviewPane(
+                        preview: _preview,
+                        error: _previewError,
+                        limitMissing: limitMissing,
+                      ),
                     ),
                   )
                 : SliverList.list(
@@ -404,6 +442,8 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                       _tree(value, twoPane: false),
                       _PreviewPane(
                         preview: _preview,
+                        error: _previewError,
+                        limitMissing: limitMissing,
                         showCount: false,
                         padding: sizeClass.gutter.add(
                           const EdgeInsets.symmetric(vertical: WaxSpace.s12),
@@ -778,10 +818,12 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   }) => SizedBox(
     width: 180,
     child: _RuleValueField(
-      // Keyed on the condition and its operator: a control that changes
-      // shape has to be a new field, not one holding a stale string.
+      // Keyed on the condition, its field and its operator: a control
+      // that changes shape has to be a new field, not one holding a stale
+      // string.
       key: ValueKey<String>(
-        '${identityHashCode(condition)}-${condition.op}-$low',
+        '${identityHashCode(condition)}-${condition.field}-${condition.op}-'
+        '$low',
       ),
       initial: low ? condition.value : condition.valueHigh,
       number: number,
@@ -956,6 +998,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
                 child: _RuleValueField(
                   controller: _limit,
                   number: true,
+                  maxCharacters: _limitDigits,
                   hint: _limitMode.isEmpty
                       ? l10n.playlistRuleLimitNoLimit
                       : l10n.playlistRuleLimitRequired,
@@ -1023,11 +1066,21 @@ class _TwoPane extends StatelessWidget {
 class _PreviewPane extends StatelessWidget {
   const _PreviewPane({
     required this.preview,
+    this.error,
+    this.limitMissing = false,
     this.showCount = true,
     this.padding = const EdgeInsets.all(WaxSpace.s12),
   });
 
   final PlaylistPreview? preview;
+
+  /// Why the last request failed: the pane says so in place of "working",
+  /// and the headline over the count says no preview is coming.
+  final WaxDeckApiException? error;
+
+  /// The limit mode needs a number that is not there: no request is made,
+  /// and the pane says so in place of "working".
+  final bool limitMissing;
 
   /// False where the count is in the sticky bar instead.
   final bool showCount;
@@ -1054,7 +1107,12 @@ class _PreviewPane extends StatelessWidget {
               identifier: SemanticsIds.rulePreviewTotal,
               liveRegion: true,
               child: Text(
-                matchLabel(l10n, preview),
+                matchLabel(
+                  l10n,
+                  preview,
+                  failed: error != null,
+                  limitMissing: limitMissing,
+                ),
                 style: WaxType.headline.copyWith(color: colors.textPrimary),
               ),
             )
@@ -1064,7 +1122,20 @@ class _PreviewPane extends StatelessWidget {
               style: WaxType.overline.copyWith(color: colors.textTertiary),
             ),
           const SizedBox(height: WaxSpace.s8),
-          if (preview == null)
+          if (limitMissing)
+            Text(
+              l10n.playlistRuleLimitMissing,
+              style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+            )
+          else if (error case final failure?)
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                explainRefusal(l10n, failure),
+                style: WaxType.bodySmall.copyWith(color: colors.error),
+              ),
+            )
+          else if (preview == null)
             Text(
               l10n.playlistRuleWorking,
               style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
@@ -1084,9 +1155,19 @@ class _PreviewPane extends StatelessWidget {
 
 /// The sticky count on a phone, where the preview list is below the fold.
 class _MatchBar extends StatelessWidget {
-  const _MatchBar({required this.preview});
+  const _MatchBar({
+    required this.preview,
+    required this.failed,
+    required this.limitMissing,
+  });
 
   final PlaylistPreview? preview;
+
+  /// The last preview request failed: the pane below the tree says why.
+  final bool failed;
+
+  /// The limit needs a number that is not there: no count is coming.
+  final bool limitMissing;
 
   @override
   Widget build(BuildContext context) {
@@ -1110,7 +1191,12 @@ class _MatchBar extends StatelessWidget {
             identifier: SemanticsIds.rulePreviewTotal,
             liveRegion: true,
             child: Text(
-              matchLabel(context.l10n, preview),
+              matchLabel(
+                context.l10n,
+                preview,
+                failed: failed,
+                limitMissing: limitMissing,
+              ),
               style: WaxType.titleItem.copyWith(color: colors.textPrimary),
             ),
           ),
@@ -1120,9 +1206,19 @@ class _MatchBar extends StatelessWidget {
   }
 }
 
-/// "Matches 214 items", or that the answer is still being worked out.
-String matchLabel(AppLocalizations l10n, PlaylistPreview? preview) =>
-    preview == null
+/// "Matches 214 items", or that the limit has no number to ask with, or
+/// that the last request failed, or that the answer is still being worked
+/// out.
+String matchLabel(
+  AppLocalizations l10n,
+  PlaylistPreview? preview, {
+  required bool failed,
+  required bool limitMissing,
+}) => limitMissing
+    ? l10n.playlistRuleMatchesLimitMissing
+    : failed
+    ? l10n.playlistRulePreviewFailed
+    : preview == null
     ? l10n.playlistRulePreviewPending
     : l10n.playlistRuleMatches(preview.total);
 
@@ -1263,6 +1359,7 @@ class _RuleValueField extends StatefulWidget {
     this.label,
     this.hint,
     this.number = false,
+    this.maxCharacters,
     this.semanticsId,
     this.onChanged,
     this.onSubmitted,
@@ -1279,6 +1376,9 @@ class _RuleValueField extends StatefulWidget {
 
   final String? hint;
   final bool number;
+
+  /// How many characters the box holds, null for no bound.
+  final int? maxCharacters;
   final String? semanticsId;
   final ValueChanged<String>? onChanged;
   final VoidCallback? onSubmitted;
@@ -1311,6 +1411,8 @@ class _RuleValueFieldState extends State<_RuleValueField> {
     showLabel: false,
     hint: widget.hint,
     controller: _controller,
+    digitsOnly: widget.number,
+    maxCharacters: widget.maxCharacters,
     textInputAction: TextInputAction.done,
     semanticsId: widget.semanticsId,
     onChanged: widget.onChanged,

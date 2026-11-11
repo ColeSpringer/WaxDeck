@@ -605,11 +605,15 @@ func TestAStopBeforeTheFeedDrainsKeepsTheGeneration(t *testing.T) {
 func TestTheQueuesWaitOutAHandOff(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
+	svc.SetFlowJobs(stubFlowJobs{jobs: true})
 	task := newToolTask(uc, taskTypeHealthFix, "", toolTaskParams{Rule: ruleMissingLyrics}, "{}")
 	if err := svc.db.InsertToolTask(ctx, task); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.db.EnqueueRetention(ctx, "pc-show", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.EnqueueAnalysis(ctx, "essence", "item", 1); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.db.SettingSet(ctx, healthSweepReqKey, uc.ID+"@1", 1); err != nil {
@@ -618,7 +622,8 @@ func TestTheQueuesWaitOutAHandOff(t *testing.T) {
 	if err := svc.lib.BeginMaintenance(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if svc.DrainLongToolTasks(ctx) || svc.DrainToolTasks(ctx) || svc.DrainMatchQueue(ctx) || svc.DrainFetchQueue(ctx) {
+	if svc.DrainLongToolTasks(ctx) || svc.DrainToolTasks(ctx) || svc.DrainMatchQueue(ctx) || svc.DrainFetchQueue(ctx) ||
+		svc.DrainAnalysisQueue(ctx) {
 		t.Error("a queue drained during the hand-off")
 	}
 	svc.SweepRetention(ctx)
@@ -634,6 +639,9 @@ func TestTheQueuesWaitOutAHandOff(t *testing.T) {
 	}
 	if shows, err := svc.db.TakeRetentionQueue(ctx); err != nil || len(shows) != 1 {
 		t.Errorf("retention queue = %v (%v), want the show still queued", shows, err)
+	}
+	if row, err := svc.db.LeaseAnalysis(ctx, time.Now().UnixNano(), 1, analysisMaxAttempts); err != nil || row.Attempts != 0 {
+		t.Errorf("analysis = %+v (%v), want it queued and unattempted", row, err)
 	}
 	if !svc.SweepRequested(ctx) || svc.sweepFailed.Load() {
 		t.Error("a sweep cut short by the hand-off answered its request or read as failed")

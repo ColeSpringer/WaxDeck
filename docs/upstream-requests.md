@@ -698,6 +698,29 @@ note.
   fell behind is caught up the same way, a batch at a time; an item it
   cannot place at all (a trash row naming no library the server can
   place) is tombstoned to every such account.
+- **Synced lyrics come back in the order the writer sent them.**
+  `putLyricsTx` stores `Lyrics.Synced` as given and `Lyrics` reads the
+  array back unchanged, although `model.Lyrics` documents the lines as
+  ordered by `TimeMS` and the store's own comment says they are kept in
+  time order. A custom enrichment provider or `Library.SetLyrics` need
+  not send them sorted. Wanted: the lines stored in time order (equal
+  times in the order sent), or returned that way. Shipped workaround:
+  WaxDeck sorts stably at each read site, `syncedInTimeOrder` in
+  `server/internal/service/reads.go` (the lyrics read, the editor's LRC
+  text and the enrichment proposal), and goes when the ask lands.
+- **A trash entry does not say what audio it holds.** `TrashFile`
+  stores the trashed file's essence on the trash row, but
+  `model.TrashEntry` leaves it out, and the row of a trashed carved rip
+  names only one of its tracks. WaxDeck checks a reported sonic vector
+  against the audio its track holds, and a trashed track has no file to
+  check: a track leased under one key, rewritten by a scan, pulled by
+  pid and then trashed would have the rewrite's vector filed under the
+  old key. Wanted: the essence on `TrashEntry`, and so on what
+  `RestorableTrash` answers, for every track the trashed file carried,
+  carved ones included, so a vector reported for a restorably trashed
+  track can be filed when its key's audio is the trashed file's.
+  Shipped workaround: such a vector is refused as `not-found` and its
+  work dropped; a restore queues the track for a full analysis.
 
 ## WaxTap
 

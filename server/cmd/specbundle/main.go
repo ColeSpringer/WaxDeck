@@ -17,7 +17,6 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -27,6 +26,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/colespringer/waxdeck/server/cmd/internal/atomicfile"
 )
 
 const rootName = "_root.yaml"
@@ -103,7 +104,7 @@ func bundle(src, out string) error {
 		return fmt.Errorf("internal: assembled bundle does not match fragment semantics; not writing %s", out)
 	}
 
-	return writeIfChanged(out, []byte(text))
+	return atomicfile.WriteIfChanged(out, []byte(text))
 }
 
 // fragmentNames lists the non-root fragment files in bundle order.
@@ -440,39 +441,4 @@ func writeLines(b *strings.Builder, lines []string) {
 		b.WriteString(l)
 		b.WriteString("\n")
 	}
-}
-
-// writeIfChanged replaces out atomically (temp in target dir, fsync,
-// rename) and leaves an up-to-date file untouched. The temp file's
-// 0600 creation mode must not leak through the rename: the bundle
-// keeps the existing file's permissions, or 0644 for a fresh one.
-func writeIfChanged(out string, data []byte) error {
-	if old, err := os.ReadFile(out); err == nil && bytes.Equal(old, data) {
-		return nil
-	}
-	mode := os.FileMode(0o644)
-	if st, err := os.Stat(out); err == nil {
-		mode = st.Mode().Perm()
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(out), ".specbundle-*.yaml")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(mode); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), out)
 }

@@ -1,0 +1,1221 @@
+# The generator's golden fixture: a small spec in the WaxDeck style, one
+# tag per operation and $ref bodies, giving every hint key of
+# testdata/hints.yaml its subject; the mini-spec tests cover the rarer
+# shapes and the errors. The operations after /books/{pid} reach only
+# schemas earlier ones reach first, so they leave the model files as they
+# are.
+openapi: 3.0.3
+info:
+  title: dartgen fixture
+  version: "1"
+tags:
+  - name: library
+    description: Browsing and reading the library.
+  - name: podcasts
+  - name: metadata
+  - name: admin
+    description: |
+      Server administration.
+
+      Administrators only.
+  - name: users
+  - name: uploads
+  - name: notifications
+  - name: playlists
+  - name: playback
+  - name: books
+paths:
+  /items/{pid}:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getItem
+      tags: [library]
+      responses:
+        "200":
+          description: The item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemDetail"
+        "404":
+          $ref: "#/components/responses/Error"
+        default:
+          $ref: "#/components/responses/Error"
+  /items/{pid}/art:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getArtwork
+      tags: [library]
+      responses:
+        "200":
+          description: The artwork.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Artwork"
+  /shelves/{key}:
+    get:
+      operationId: getShelf
+      tags: [library]
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The shelf.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shelf"
+  /libraries:
+    get:
+      operationId: listLibraries
+      tags: [library]
+      responses:
+        "200":
+          description: Every library.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryPage"
+  /libraries/{pid}/rescan:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: rescanLibrary
+      tags: [library]
+      summary: Rescan one library
+      responses:
+        "200":
+          description: The library, and whether its scan started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryRescan"
+  /items/delete:
+    post:
+      operationId: deleteItems
+      tags: [library]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteRequest"
+      responses:
+        "200":
+          description: What was deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResult"
+  /items/delete-files:
+    post:
+      operationId: deleteFiles
+      tags: [library]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteFilesRequest"
+      responses:
+        "200":
+          description: What was deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResult"
+  /episodes/{pid}:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getEpisode
+      tags: [podcasts]
+      responses:
+        "200":
+          description: The episode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpisodeDetail"
+  /metadata/{pid}:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getItemMetadata
+      tags: [metadata]
+      responses:
+        "200":
+          description: The item's metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemMetadata"
+    patch:
+      operationId: editItemMetadata
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataEdit"
+      responses:
+        "200":
+          description: What became of each part.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommitResult"
+  /metadata/bulk:
+    post:
+      operationId: bulkEdit
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkEdit"
+      responses:
+        "204":
+          description: Edited.
+        "4XX":
+          $ref: "#/components/responses/Error"
+  /genres:
+    get:
+      operationId: getGenres
+      tags: [metadata]
+      responses:
+        "200":
+          description: The vocabulary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenreTree"
+  /schedules:
+    get:
+      operationId: listSchedules
+      tags: [admin]
+      responses:
+        "200":
+          description: Every schedule.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulePage"
+  /schedules/{kind}:
+    put:
+      operationId: putSchedule
+      tags: [admin]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ScheduleKind"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleUpdate"
+      responses:
+        "200":
+          description: The schedule as stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+  /enrichment:
+    get:
+      operationId: getEnrichmentStatus
+      tags: [admin]
+      responses:
+        "200":
+          description: Enrichment status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichmentStatus"
+  /audit:
+    get:
+      operationId: listAuditEvents
+      tags: [admin]
+      responses:
+        "200":
+          description: The audit log.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditEventPage"
+  /users/{pid}:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getUser
+      tags: [users]
+      responses:
+        "200":
+          description: The user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /users/{pid}/rating:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setRating
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingUpdate"
+      responses:
+        "204":
+          description: Rated.
+  /uploads/{id}:
+    get:
+      operationId: getUpload
+      tags: [uploads]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The upload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+  /targets:
+    post:
+      operationId: createTarget
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TargetCreate"
+      responses:
+        "204":
+          description: Created.
+  /playlists/{pid}/rule:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getRule
+      tags: [playlists]
+      responses:
+        "200":
+          description: The rule.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SmartRule"
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [playback]
+      responses:
+        "200":
+          description: Every session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionPage"
+  /books/{pid}:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getBook
+      tags: [books]
+      responses:
+        "200":
+          description: The book.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+  /libraries/{scope}/search:
+    get:
+      operationId: searchLibraries
+      tags: [library]
+      summary: Search the libraries
+      description: |
+        Libraries whose name matches, best first.
+
+        A cursor belongs to the sort it was issued under.
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [all, mine]
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: mediaType
+          in: query
+          schema:
+            $ref: "#/components/schemas/MediaType"
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [title, added]
+            default: title
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: day
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: exact
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: debug
+          in: query
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryPage"
+  /items/{pid}/notes:
+    get:
+      operationId: exportNotes
+      tags: [library]
+      summary: Export an item's notes
+      description: The notes as an XML document.
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The document.
+          content:
+            application/xml:
+              schema:
+                type: string
+  /items/{pid}/cover:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getCover
+      tags: [library]
+      summary: Get an item's cover
+      description: The image bytes, or not modified for a matching tag.
+      parameters:
+        - name: If-None-Match
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The image.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: The item has no cover.
+        "410":
+          description: The item is gone.
+    put:
+      operationId: setCover
+      tags: [library]
+      summary: Replace an item's cover
+      description: The body is the image's bytes.
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [front, back]
+            default: front
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "204":
+          description: Replaced.
+  /uploads/{id}/data:
+    put:
+      operationId: putUploadData
+      tags: [uploads]
+      summary: Send upload bytes
+      description: Appends one chunk at offset.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: The session after the chunk.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+  /notifications/read:
+    post:
+      operationId: markRead
+      tags: [notifications]
+      summary: Mark notifications read
+      description: The body is optional; absent, every unread row is stamped.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataEdit"
+      responses:
+        "204":
+          description: Stamped.
+  /targets/{targetId}:
+    put:
+      operationId: updateTarget
+      tags: [notifications]
+      summary: Replace a target
+      description: Replaces a target's settings whole.
+      parameters:
+        - name: targetId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TargetCreate"
+      responses:
+        "200":
+          description: Replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResult"
+  /playlists/{pid}/items/{position}:
+    delete:
+      operationId: removePlaylistItem
+      tags: [playlists]
+      summary: Remove the member at a position
+      description: Removes the member at one stored position.
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: position
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemPid
+          in: query
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed.
+  /admin/schedules/{kind}/settings:
+    put:
+      operationId: putScheduleSettings
+      tags: [admin]
+      summary: Replace a schedule's settings
+      description: Answers whether the schedule is now enabled.
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ScheduleKind"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleUpdate"
+      responses:
+        "200":
+          description: Replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+  /player/timeline:
+    post:
+      operationId: createTimeline
+      tags: [playback]
+      summary: Mint a timeline
+      description: Answers 202 with a job while member lengths are measured.
+      parameters:
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [fast, slow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkEdit"
+      responses:
+        "201":
+          description: The timeline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+        "202":
+          description: Still measuring.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResult"
+  /player/timeline/preview:
+    post:
+      operationId: previewTimeline
+      tags: [playback]
+      summary: Preview a timeline
+      description: Answers as the mint does, without keeping it.
+      responses:
+        "201":
+          description: The timeline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+        "202":
+          description: Still measuring.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResult"
+components:
+  parameters:
+    Pid:
+      name: pid
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    Error:
+      description: An error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      description: Structured error.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+        message:
+          type: string
+        params:
+          type: object
+          additionalProperties:
+            type: string
+    MediaType:
+      type: string
+      description: The three first-class media types.
+      enum: [music, podcast, audiobook]
+    ItemSummary:
+      type: object
+      description: Compact item representation used by list endpoints.
+      required: [pid, mediaType, title, durationMs]
+      properties:
+        pid:
+          type: string
+          description: Type-prefixed ULID.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        title:
+          type: string
+        durationMs:
+          type: integer
+          format: int64
+        artist:
+          type: string
+          description: Primary display artist, author, or show name.
+        artUrl:
+          type: string
+          format: uri-reference
+          description: Artwork URL.
+        addedAt:
+          type: string
+          format: date-time
+    ItemDetail:
+      description: Full detail for a single library item.
+      allOf:
+        - $ref: "#/components/schemas/ItemSummary"
+        - type: object
+          properties:
+            genres:
+              type: array
+              default: []
+              items:
+                type: string
+            bitrate:
+              type: integer
+            artSource:
+              allOf:
+                - $ref: "#/components/schemas/ArtSource"
+              description: Where the cover came from, when anything says.
+    ArtSource:
+      type: object
+      description: Who provided a cover.
+      required: [provider]
+      properties:
+        provider:
+          type: string
+    EpisodeSummary:
+      description: An episode as a listing row draws it.
+      allOf:
+        - $ref: "#/components/schemas/ItemSummary"
+        - type: object
+          required: [showPid, publishedAt, downloaded]
+          properties:
+            showPid:
+              type: string
+            publishedAt:
+              type: string
+              format: date-time
+            downloaded:
+              type: boolean
+            fetchState:
+              type: string
+              enum: [queued, failed]
+              description: Present while a fetch is queued or after one failed.
+            season:
+              type: integer
+    EpisodeDetail:
+      description: Everything about one episode.
+      allOf:
+        - $ref: "#/components/schemas/EpisodeSummary"
+        - type: object
+          properties:
+            notes:
+              type: string
+            transcriptUrl:
+              type: string
+    Artwork:
+      type: object
+      required: [thumbnail]
+      properties:
+        thumbnail:
+          type: string
+          format: byte
+          description: A small JPEG, inline.
+        url:
+          type: string
+          format: uri-reference
+          description: The full-size image, or empty when there is none.
+        width:
+          type: integer
+        hash:
+          type: string
+          format: byte
+          description: The image's perceptual hash.
+    Shelf:
+      type: object
+      required: [key, cards]
+      properties:
+        key:
+          type: string
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntityCard"
+        want:
+          type: array
+          items:
+            type: string
+            enum: [albums, artists, books]
+        sizes:
+          type: object
+          description: How large each card draws, by pid.
+          additionalProperties:
+            type: string
+            enum: [small, large]
+    EntityCard:
+      type: object
+      description: Display facts for one entity.
+      required: [pid, kind, title]
+      properties:
+        pid:
+          type: string
+        kind:
+          type: string
+          enum: [album, artist, release-group, playlist]
+          description: What the card is about, which is what a tap opens.
+        title:
+          type: string
+        year:
+          type: integer
+    LibraryPage:
+      type: object
+      required: [libraries]
+      properties:
+        libraries:
+          type: array
+          items:
+            $ref: "#/components/schemas/Library"
+    Library:
+      type: object
+      required: [pid, name, media]
+      properties:
+        pid:
+          type: string
+        name:
+          type: string
+        media:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaType"
+    LibraryRescan:
+      allOf:
+        - $ref: "#/components/schemas/Library"
+        - type: object
+          required: [scanStarted]
+          properties:
+            scanStarted:
+              type: boolean
+    DeleteRequest:
+      type: object
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          items:
+            type: string
+        mode:
+          type: string
+          enum: [trash, purge]
+          default: trash
+    DeleteFilesRequest:
+      type: object
+      required: [filePids, mode]
+      properties:
+        filePids:
+          type: array
+          items:
+            type: string
+        mode:
+          type: string
+          enum: [trash, purge]
+    DeleteResult:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: integer
+    ItemMetadata:
+      type: object
+      required: [fields]
+      properties:
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+        provenance:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/Provenance"
+        extras:
+          type: object
+          additionalProperties:
+            type: string
+        labels:
+          type: object
+          additionalProperties: true
+    Provenance:
+      type: object
+      required: [source]
+      properties:
+        source:
+          type: string
+        at:
+          type: string
+          format: date-time
+    MetadataEdit:
+      type: object
+      properties:
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+        removeTags:
+          type: array
+          items:
+            type: string
+    CommitResult:
+      type: object
+      required: [parts]
+      properties:
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommitPart"
+        warnings:
+          type: array
+          items:
+            type: string
+    CommitPart:
+      type: object
+      description: One part of a compound commit and what became of it.
+      required: [part, status]
+      properties:
+        part:
+          type: string
+          enum: [fields, credit, lyrics]
+        status:
+          type: string
+          enum: [committed, refused, skipped]
+        detail:
+          type: string
+        refusal:
+          $ref: "#/components/schemas/Error"
+    BulkEdit:
+      type: object
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+    GenreTree:
+      type: object
+      required: [source, genres]
+      properties:
+        source:
+          type: string
+          enum: [default, custom]
+        genres:
+          type: array
+          items:
+            $ref: "#/components/schemas/Genre"
+    Genre:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        parent:
+          type: string
+          description: The parent genre, absent or empty for a top-level one.
+        aliases:
+          type: array
+          default: []
+          items:
+            type: string
+    ScheduleKind:
+      type: string
+      description: A schedulable job kind.
+      enum: [scan, backup, prune]
+    Schedule:
+      type: object
+      required: [kind, cron, enabled]
+      properties:
+        kind:
+          $ref: "#/components/schemas/ScheduleKind"
+        cron:
+          type: string
+        enabled:
+          type: boolean
+        lastRunAt:
+          type: string
+          format: date-time
+    ScheduleUpdate:
+      type: object
+      required: [cron, enabled]
+      properties:
+        cron:
+          type: string
+        enabled:
+          type: boolean
+    SchedulePage:
+      type: object
+      required: [schedules]
+      properties:
+        schedules:
+          type: array
+          items:
+            $ref: "#/components/schemas/Schedule"
+    EnrichmentPhase:
+      type: string
+      enum: [identity, releases, lyrics]
+    EnrichmentStatus:
+      type: object
+      required: [running, phases]
+      properties:
+        running:
+          type: boolean
+        phases:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnrichmentPhase"
+        forced:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnrichmentPhase"
+    AuditEventPage:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEvent"
+    AuditEvent:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+          default: {}
+          description: What the event carried, by kind.
+    User:
+      type: object
+      required: [id, username]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        delete:
+          type: boolean
+          description: The effective right to move items to the trash.
+        legacyTheme:
+          type: string
+    RatingUpdate:
+      type: object
+      required: [rating, ratedAt]
+      properties:
+        rating:
+          type: integer
+          nullable: true
+          description: Stars out of five, or null to clear the rating.
+        ratedAt:
+          type: string
+          format: date-time
+          nullable: true
+    Upload:
+      type: object
+      required: [id, idleMs, mediaType]
+      properties:
+        id:
+          type: string
+        idleMs:
+          type: integer
+          format: int64
+          description: How long the session has gone without a byte.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+    TargetCreate:
+      type: object
+      required: [kind, config]
+      properties:
+        kind:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+          description: The kind's delivery configuration.
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+            nullable: true
+        muted:
+          type: boolean
+          default: false
+        minIntervalSeconds:
+          type: integer
+          default: 0
+        ratio:
+          type: number
+          default: 0.4
+        channel:
+          type: string
+          default: live
+        events:
+          type: array
+          default: []
+          items:
+            type: string
+        scope:
+          type: string
+          enum: [server, user]
+          default: user
+    RuleNode:
+      type: object
+      description: One node of a rule's condition tree.
+      required: [type]
+      properties:
+        type:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuleNode"
+        node:
+          $ref: "#/components/schemas/RuleNode"
+        field:
+          type: string
+        values:
+          type: array
+          items:
+            type: string
+    SmartRule:
+      type: object
+      required: [root]
+      properties:
+        root:
+          $ref: "#/components/schemas/RuleNode"
+        limit:
+          type: integer
+          default: 0
+    SessionInfo:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        positionMs:
+          type: integer
+    SessionPage:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionInfo"
+        current:
+          $ref: "#/components/schemas/SessionInfo"
+    AcquisitionFormat:
+      type: string
+      enum: [best, opus, mp3]
+      default: best
+    Book:
+      type: object
+      required: [pid, title]
+      properties:
+        pid:
+          type: string
+        title:
+          type: string
+        publishedOn:
+          type: string
+          format: date
+        format:
+          $ref: "#/components/schemas/AcquisitionFormat"
+        gaps:
+          type: array
+          items:
+            $ref: "#/components/schemas/Gap"
+    Gap:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+        value:
+          description: The value that has no counterpart, as the document held it.
+    WsPingFrame:
+      type: object
+      description: A keepalive the server sends on the socket.
+      required: [type]
+      properties:
+        type:
+          type: string
+        at:
+          type: string
+          format: date-time

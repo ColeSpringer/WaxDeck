@@ -1,0 +1,41 @@
+/// The counters an enrichment status carries for its last run.
+const lastRunCounters = [
+  'artistsEnriched',
+  'artistsMatched',
+  'releaseGroupsEnriched',
+  'releaseGroupsMatched',
+  'albumsSearched',
+  'albumsMatched',
+  'booksEnriched',
+  'booksMatched',
+  'lyricsEnriched',
+  'lyricsMatched',
+  'groupArtEnriched',
+  'groupArtMatched',
+  'artistArtEnriched',
+  'artistArtMatched',
+  'albumArtEnriched',
+  'albumArtMatched',
+  'trackFieldsEnriched',
+  'trackFieldsMatched',
+  'bookFieldsEnriched',
+  'bookFieldsMatched',
+  'albumFieldsEnriched',
+  'albumFieldsMatched',
+  'retried',
+  'deferred',
+  'artFetched',
+  'auxArtFetched',
+  'artReused',
+  'tagsWritten',
+  'tagsFailed',
+  'tagsUnrepresented',
+  'tagsSkipped',
+  'tagsReadOnly',
+];
+
+/// A last run with every counter at zero and these phases stalled.
+Map<String, Object?> lastRun(List<String> stalled) => {
+  for (final counter in lastRunCounters) counter: 0,
+  'stalled': stalled,
+};

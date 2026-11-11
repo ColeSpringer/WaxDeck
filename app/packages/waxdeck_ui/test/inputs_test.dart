@@ -321,6 +321,232 @@ void main() {
       expect(controller.text.length, 5000);
     });
 
+    // A digits-only field, opened on [text] and listening for the edits an
+    // input method sends.
+    Future<TextEditingController> digitsOnly(
+      WidgetTester tester, {
+      String text = '',
+    }) async {
+      final controller = TextEditingController(text: text);
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _host(
+          WaxTextField(
+            label: 'Count',
+            controller: controller,
+            digitsOnly: true,
+          ),
+          height: 80,
+        ),
+      );
+      await tester.showKeyboard(find.byType(TextField));
+      return controller;
+    }
+
+    testWidgets('digits only drops what an edit inserts that is no digit', (
+      tester,
+    ) async {
+      final controller = await digitsOnly(tester);
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '-1,234.5x',
+          selection: TextSelection.collapsed(offset: 9),
+        ),
+      );
+      expect(controller.text, '12345');
+      expect(controller.selection, const TextSelection.collapsed(offset: 5));
+    });
+
+    testWidgets('digits only leaves the text it opened on as it is', (
+      tester,
+    ) async {
+      final controller = await digitsOnly(tester, text: '120.5');
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '120.50',
+          selection: TextSelection.collapsed(offset: 6),
+        ),
+      );
+      expect(controller.text, '120.50');
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '120.50x',
+          selection: TextSelection.collapsed(offset: 7),
+        ),
+      );
+      expect(controller.text, '120.50');
+      expect(controller.selection, const TextSelection.collapsed(offset: 6));
+      // A deletion adds nothing, so there is nothing to refuse.
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '120.5',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(controller.text, '120.5');
+    });
+
+    testWidgets('digits only keeps the caret behind the edit it trimmed', (
+      tester,
+    ) async {
+      final controller = await digitsOnly(tester, text: '12.5');
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '12.5',
+          selection: TextSelection.collapsed(offset: 2),
+        ),
+      );
+      // A letter typed before the point, and a pasted "7a" after it.
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '12a.5',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      expect(controller.text, '12.5');
+      expect(controller.selection, const TextSelection.collapsed(offset: 2));
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '12.7a5',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(controller.text, '12.75');
+      expect(controller.selection, const TextSelection.collapsed(offset: 4));
+    });
+
+    testWidgets('digits only moves the composing range with the text', (
+      tester,
+    ) async {
+      final controller = await digitsOnly(tester);
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '12a4',
+          selection: TextSelection.collapsed(offset: 4),
+          composing: TextRange(start: 1, end: 4),
+        ),
+      );
+      expect(controller.text, '124');
+      expect(controller.selection, const TextSelection.collapsed(offset: 3));
+      expect(controller.value.composing, const TextRange(start: 1, end: 3));
+
+      // A range that held only what was dropped is no range.
+      controller.clear();
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '1a',
+          selection: TextSelection.collapsed(offset: 2),
+          composing: TextRange(start: 1, end: 2),
+        ),
+      );
+      expect(controller.text, '1');
+      expect(controller.value.composing, TextRange.empty);
+    });
+
+    testWidgets('digits only reads a paste over a selection whole', (
+      tester,
+    ) async {
+      // The paste ends in what the replaced text ended in, so the text the
+      // two versions share would pass its point as the old one's.
+      final controller = await digitsOnly(tester, text: '120.5');
+      controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 5,
+      );
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '2.5',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      expect(controller.text, '25');
+      expect(controller.selection, const TextSelection.collapsed(offset: 2));
+
+      // The same inside the text: the selection holds the stored point and
+      // the paste brings another, and neither is left.
+      controller.value = const TextEditingValue(
+        text: '12.5',
+        selection: TextSelection(baseOffset: 1, extentOffset: 3),
+      );
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '17.5',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      expect(controller.text, '175');
+      expect(controller.selection, const TextSelection.collapsed(offset: 2));
+    });
+
+    testWidgets('digits only leaves a selection cut or deleted as it falls', (
+      tester,
+    ) async {
+      final controller = await digitsOnly(tester, text: '12.5');
+      controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 2,
+      );
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '.5',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      expect(controller.text, '.5');
+      expect(controller.selection, const TextSelection.collapsed(offset: 0));
+
+      // Inside the text, the stored point beside the cut stays.
+      controller.value = const TextEditingValue(
+        text: '1.25',
+        selection: TextSelection(baseOffset: 2, extentOffset: 3),
+      );
+      await send(
+        tester,
+        const TextEditingValue(
+          text: '1.5',
+          selection: TextSelection.collapsed(offset: 2),
+        ),
+      );
+      expect(controller.text, '1.5');
+      expect(controller.selection, const TextSelection.collapsed(offset: 2));
+    });
+
+    testWidgets(
+      'digits only keeps a composing range inside the rewritten text',
+      (tester) async {
+        await digitsOnly(tester);
+        final formatter = tester
+            .widget<TextField>(find.byType(TextField))
+            .inputFormatters!
+            .single;
+
+        // The platform channel refuses a range past the text in a debug build
+        // and a release build does not, so this goes to the formatter whole.
+        final formatted = formatter.formatEditUpdate(
+          TextEditingValue.empty,
+          const TextEditingValue(
+            text: '12a4',
+            selection: TextSelection.collapsed(offset: 4),
+            composing: TextRange(start: 1, end: 9),
+          ),
+        );
+        expect(formatted.text, '124');
+        expect(formatted.composing, const TextRange(start: 1, end: 3));
+      },
+    );
+
     testWidgets('clears its own text and hands the empty value back', (
       tester,
     ) async {

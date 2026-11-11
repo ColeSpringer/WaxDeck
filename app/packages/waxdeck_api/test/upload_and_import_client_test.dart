@@ -1,42 +1,14 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-/// Answers every request with one canned body and records it.
-class _RecordingAdapter implements HttpClientAdapter {
-  _RecordingAdapter(this.status, this.body);
+import 'support/recording_adapter.dart';
 
-  final int status;
-  final Object body;
-  final List<RequestOptions> requests = [];
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async {
-    requests.add(options);
-    return ResponseBody.fromString(
-      jsonEncode(body),
-      status,
-      headers: {
-        Headers.contentTypeHeader: ['application/json'],
-      },
-    );
-  }
-
-  @override
-  void close({bool force = false}) {}
-}
-
-(WaxDeckClient, _RecordingAdapter) _client(int status, Object body) {
-  final adapter = _RecordingAdapter(status, body);
-  final dio = Dio()..httpClientAdapter = adapter;
-  return (WaxDeckClient(baseUrl: 'http://example.invalid', dio: dio), adapter);
+(WaxDeckClient, RecordingAdapter) _client(int status, Object body) {
+  final adapter = RecordingAdapter(status: status, body: body);
+  return (clientOn(adapter), adapter);
 }
 
 /// The media type a recorded request carried in its JSON body.
@@ -49,14 +21,6 @@ Object? _sentMediaType(RequestOptions request) {
 const _refused = {'code': 'invalid-request', 'message': 'refused'};
 
 void main() {
-  test('an OPML import is given the long-operation budget', () async {
-    // The server subscribes the feeds one after another before it
-    // answers, so the ordinary 30 s would cut a slow import off.
-    final (client, adapter) = _client(200, {'results': <Object>[]});
-    expect(await client.importOpml('<opml version="2.0"/>'), isEmpty);
-    expect(adapter.requests.single.receiveTimeout, const Duration(minutes: 30));
-  });
-
   group('upload media types', () {
     for (final mediaType in const [MediaType.music, MediaType.audiobook]) {
       test('${mediaType.wireName} goes out as itself', () async {

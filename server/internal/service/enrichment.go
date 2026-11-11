@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/enrich"
@@ -1342,13 +1341,7 @@ func (l *Library) proposeLyrics(ctx context.Context, st enrichItemState) (propos
 		}
 		proposed := cand.Lyrics.Unsynced
 		if len(cand.Lyrics.Synced) > 0 {
-			lines := make([]waxlabel.SyncedLine, 0, len(cand.Lyrics.Synced))
-			for _, ln := range cand.Lyrics.Synced {
-				lines = append(lines, waxlabel.SyncedLine{
-					Time: time.Duration(ln.TimeMS) * time.Millisecond, Text: ln.Text,
-				})
-			}
-			proposed = waxlabel.FormatLRC(lines)
+			proposed = syncedLRC(cand.Lyrics.Synced)
 		}
 		return &EnrichFieldProposalDTO{
 			Name: "lyrics", Proposed: proposed, Provider: p.Name(),

@@ -92,6 +92,48 @@ void main() {
     );
   });
 
+  group('an error frame that is not an error object', () {
+    // Read as an HTTP error body is: a string code and a string message,
+    // or it did not come from a conforming server.
+    Future<void> rejectsAsProtocol(
+      Map<String, Object?> fields, {
+      String message = 'command failed',
+    }) async {
+      final bus = ConnectBus(send: (_) => true);
+      final future = bus.sendCmd('ps-1', 'play');
+      bus.handleFrame({'type': 'error', 'id': 'c1', ...fields});
+      await expectLater(
+        future,
+        throwsA(
+          isA<WaxDeckApiException>()
+              .having((e) => e.code, 'code', 'local-protocol')
+              .having((e) => e.message, 'message', message)
+              .having((e) => e.params, 'params', isNull),
+        ),
+      );
+    }
+
+    test(
+      'rejects as local-protocol when its code is not a string',
+      () => rejectsAsProtocol({'code': 7, 'message': 'boom'}, message: 'boom'),
+    );
+
+    test(
+      'rejects as local-protocol when it has no code',
+      () => rejectsAsProtocol({'message': 'boom'}, message: 'boom'),
+    );
+
+    test(
+      'rejects as local-protocol when its message is missing',
+      () => rejectsAsProtocol({'code': 'conflict'}),
+    );
+
+    test(
+      'rejects as local-protocol when its message is not a string',
+      () => rejectsAsProtocol({'code': 'conflict', 'message': 3}),
+    );
+  });
+
   test('an offline channel rejects immediately', () async {
     final bus = ConnectBus(send: (_) => false);
     await expectLater(

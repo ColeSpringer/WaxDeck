@@ -329,6 +329,26 @@ func TestARetiredKeyRests(t *testing.T) {
 	}
 }
 
+// A retirement given no reason rests its key all the same: an empty reason
+// is what marks a row never judged, which the prune clears for another
+// round.
+func TestARetirementWithoutAReasonStillRests(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	if err := d.EnqueueSimilarity(ctx, "mute", "it-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RetireSimilarityWork(ctx, "mute", ""); err != nil {
+		t.Fatal(err)
+	}
+	if states, err := d.SimilarityQueueStates(ctx); err != nil || states["mute"] != QueueRetired {
+		t.Fatalf("queue = %v (%v), want the row listed as retired", states, err)
+	}
+	if n, err := d.PruneExhaustedSimilarity(ctx, time.Now().UnixNano()+int64(time.Hour)); err != nil || n != 0 {
+		t.Fatalf("pruned %d rows (%v), want the retired one kept", n, err)
+	}
+}
+
 // A row out of attempts was never judged, so it is exhausted rather than
 // retired; its last attempt waits until that lease lapses.
 func TestARowOutOfAttemptsIsExhaustedOnceItsLastLeaseLapses(t *testing.T) {
@@ -354,4 +374,129 @@ func TestARowOutOfAttemptsIsExhaustedOnceItsLastLeaseLapses(t *testing.T) {
 	if states, err := d.SimilarityQueueStates(ctx); err != nil || states["e1"] != QueueExhausted {
 		t.Fatalf("once it lapsed = %v (%v), want exhausted", states, err)
 	}
+}
+
+// A lease that could not read its track gives its attempt back and keeps
+// its lease; a resting row keeps its count.
+func TestARefundGivesBackALeasesAttempt(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	for _, key := range []string{"e1", "e2"} {
+		if err := d.EnqueueSimilarity(ctx, key, "it-1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if work, err := d.LeaseSimilarityWork(ctx, 10, time.Hour, true); err != nil || len(work) != 2 {
+		t.Fatalf("lease = %+v (%v), want both rows", work, err)
+	}
+	if err := d.RetireSimilarityWork(ctx, "e2", "not audio"); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"e1", "e2"} {
+		if err := d.RefundSimilarityAttempt(ctx, key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := attemptsOf(t, d, "e1"); n != 0 {
+		t.Errorf("refunded row's attempts = %d, want 0", n)
+	}
+	if n := attemptsOf(t, d, "e2"); n != maxAnalysisAttempts {
+		t.Errorf("resting row's attempts = %d, want it kept at %d", n, maxAnalysisAttempts)
+	}
+	if work, err := d.LeaseSimilarityWork(ctx, 10, time.Hour, true); err != nil || len(work) != 0 {
+		t.Errorf("lease after the refund = %+v (%v), want the row still under its lease", work, err)
+	}
+}
+
+// exhaustedSimilarity queues key and spends its attempts, the last lease
+// ending lastTriedNS.
+func exhaustedSimilarity(t *testing.T, d *DB, key string, lastTriedNS int64) {
+	t.Helper()
+	ctx := context.Background()
+	if err := d.EnqueueSimilarity(ctx, key, "it-"+key); err != nil {
+		t.Fatal(err)
+	}
+	for range maxAnalysisAttempts {
+		if work, err := d.LeaseSimilarityWork(ctx, 10, 0, true); err != nil || len(work) == 0 {
+			t.Fatalf("lease = %+v (%v), want the row", work, err)
+		}
+	}
+	if _, err := d.w.ExecContext(ctx,
+		`UPDATE similarity_queue SET lease_until_ns = ? WHERE essence = ?`, lastTriedNS, key); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An exhausted row whose last lease ended before the horizon goes, which
+// is what lets the enqueue take its audio again.
+func TestPruneExhaustedSimilarityReopensTheWork(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	horizon := time.Now().Add(-7 * 24 * time.Hour).UnixNano()
+	exhaustedSimilarity(t, d, "old", horizon-1)
+	exhaustedSimilarity(t, d, "other-old", horizon-1)
+
+	n, err := d.PruneExhaustedSimilarity(ctx, horizon)
+	if err != nil || n != 2 {
+		t.Fatalf("pruned %d rows (%v), want both", n, err)
+	}
+	if err := d.EnqueueSimilarity(ctx, "old", "it-again"); err != nil {
+		t.Fatal(err)
+	}
+	work, err := d.LeaseSimilarityWork(ctx, 10, time.Hour, true)
+	if err != nil || len(work) != 1 || work[0].Essence != "old" || work[0].ItemPID != "it-again" {
+		t.Fatalf("lease after the prune = %+v (%v), want the audio queued afresh under its new track", work, err)
+	}
+	if n := attemptsOf(t, d, "old"); n != 1 {
+		t.Errorf("attempts after the first new lease = %d, want a fresh count", n)
+	}
+}
+
+// A retired row is a verdict on the audio, however long ago it was given.
+func TestPruneExhaustedSimilarityKeepsARetiredRow(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	if err := d.EnqueueSimilarity(ctx, "silent", "it-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RetireSimilarityWork(ctx, "silent", "all zeros"); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := d.PruneExhaustedSimilarity(ctx, time.Now().UnixNano()+int64(time.Hour)); err != nil || n != 0 {
+		t.Fatalf("pruned %d rows (%v), want the retired one kept", n, err)
+	}
+	if states, err := d.SimilarityQueueStates(ctx); err != nil || states["silent"] != QueueRetired {
+		t.Fatalf("queue = %v (%v), want the row still retired", states, err)
+	}
+}
+
+// A row that gave up within the horizon, or has attempts left, stays: its
+// lease may still be wanted.
+func TestPruneExhaustedSimilarityKeepsWhatIsStillTrying(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	now := time.Now().UnixNano()
+	horizon := now - int64(7*24*time.Hour)
+	exhaustedSimilarity(t, d, "fresh", horizon+1)
+	if err := d.EnqueueSimilarity(ctx, "untried", "it-2"); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := d.PruneExhaustedSimilarity(ctx, horizon); err != nil || n != 0 {
+		t.Fatalf("pruned %d rows (%v), want none", n, err)
+	}
+	states, err := d.SimilarityQueueStates(ctx)
+	if err != nil || len(states) != 2 || states["fresh"] != QueueExhausted || states["untried"] != QueueWaiting {
+		t.Fatalf("queue = %v (%v), want the fresh give-up exhausted and the untried row waiting", states, err)
+	}
+}
+
+// attemptsOf is how many attempts the queue has charged key.
+func attemptsOf(t *testing.T, d *DB, key string) int {
+	t.Helper()
+	var n int
+	if err := d.w.QueryRowContext(context.Background(),
+		`SELECT attempts FROM similarity_queue WHERE essence = ?`, key).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }

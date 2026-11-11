@@ -114,10 +114,10 @@ report_only=false
 FONTTOOLS_WHEEL="https://files.pythonhosted.org/packages/9c/57/c2487c281dde03abb2dec244fd67059b8d118bd30a653cbf69e94084cb23/fonttools-4.62.0-py3-none-any.whl"
 
 if ! $report_only; then
-  # fonttools has no system package guarantee; the script owns its own
-  # copy the way generate-dart.sh owns its JRE. The wheel is a zip of
-  # pure Python, so unpacking it beats depending on pip or venv being
-  # usable (Debian's python3 ships without ensurepip).
+  # fonttools has no system package guarantee, so the script owns its
+  # own copy. The wheel is a zip of pure Python, so unpacking it beats
+  # depending on pip or venv being usable (Debian's python3 ships without
+  # ensurepip).
   if [ ! -f "$VENV/fontTools/subset/__init__.py" ]; then
     echo "fetch-fonts: provisioning fonttools into tools/.cache/fonttools" >&2
     mkdir -p "$VENV"

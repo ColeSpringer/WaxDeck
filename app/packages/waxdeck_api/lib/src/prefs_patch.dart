@@ -1,10 +1,8 @@
 import 'dart:convert';
 
-import 'package:built_value/serializer.dart' show FullType;
-import 'package:waxdeck_api_gen/waxdeck_api_gen.dart' as gen;
-
-import 'mapping.dart';
+import 'gen/codec.g.dart';
 import 'models.dart';
+import 'wire.dart';
 
 /// The fields [to] changed from [from], each at its value in [to] as the
 /// wire spells it; a field [to] no longer holds is named with null.
@@ -13,15 +11,15 @@ import 'models.dart';
 /// document as it stands then ([applyPrefsPatch]), it changes only what
 /// the listener changed, where the whole document would put back every
 /// field another device moved in the meantime. Spelled through the
-/// generated serializers, so a field added to the contract is in the
-/// patch without anyone listing it here.
+/// generated codec, so a field added to the contract is in the patch
+/// without anyone listing it here.
 ///
 /// A field that is an object (the browse sorts) is merged, not replaced,
 /// so its patch names only the keys that changed, and a key it lost as
 /// null: another device's sort for another dimension is not this
 /// change's to overwrite.
 Map<String, Object?> prefsPatch(Prefs from, Prefs to) =>
-    _diff(_toJson(from), _toJson(to));
+    _diff(encodePrefs(from), encodePrefs(to));
 
 Map<String, Object?> _diff(
   Map<String, Object?> before,
@@ -82,12 +80,9 @@ Map<String, Object?> mergePrefsPatches(
 
 /// [base] with every field [patch] names set to the patch's value, every
 /// field it names with null cleared, and an object merged key by key.
-Prefs applyPrefsPatch(Prefs base, Map<String, Object?> patch) => prefsFromGen(
-  gen.standardSerializers.deserialize(
-        _laid(_toJson(base), patch),
-        specifiedType: const FullType(gen.Prefs),
-      )
-      as gen.Prefs,
+Prefs applyPrefsPatch(Prefs base, Map<String, Object?> patch) => decodePrefs(
+  _laid(encodePrefs(base), patch),
+  const WireContext(baseUrl: ''),
 );
 
 Map<String, Object?> _laid(
@@ -110,14 +105,6 @@ Map<String, Object?> _laid(
   });
   return laid;
 }
-
-Map<String, Object?> _toJson(Prefs prefs) => Map<String, Object?>.from(
-  gen.standardSerializers.serialize(
-        prefsToGen(prefs),
-        specifiedType: const FullType(gen.Prefs),
-      )
-      as Map,
-);
 
 /// A value as text with every map's keys in order, so two equal values
 /// compare equal however they were built.

@@ -29,6 +29,12 @@ test('every location serves its own screen cold', async ({ app }) => {
   // screen, with no in-memory payload behind it.
   test.setTimeout(J.journey);
 
+  // A fresh browser's first boot also pays every first-time cost (the
+  // bundle's compile, the fonts, the server's cold reads) and can run past
+  // the step tier on a small machine, so it happens once on the nav tier,
+  // outside what the loop measures.
+  await app.nav.enter(destinations[0], { within: T.nav });
+
   const unreachable: string[] = [];
   for (const dest of destinations) {
     try {

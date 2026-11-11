@@ -274,12 +274,11 @@ components:
             carry the same pid, so the later reason simply supersedes the
             earlier.
 
-            Open, like `op`, and deliberately not an enum: a closed one
-            generates a Dart `EnumClass` whose serializer throws on an
-            unrecognized wire value, so adding a third reason later would
-            fail the whole page's deserialization and stop sync rather
-            than degrade. A client that does not recognize a value must
-            treat it as `hidden`, which is the conservative half.
+            Open, like `op`, and deliberately not an enum: a client
+            decoding a closed one strictly would fail the whole page on a
+            third reason added later, and stop sync rather than degrade.
+            A client that does not recognize a value must treat it as
+            `hidden`, which is the conservative half.
           example: removed
         item:
           $ref: "#/components/schemas/ItemSummary"
@@ -472,6 +471,7 @@ components:
           description: Opaque server change cursor to sync from next.
         more:
           type: boolean
+          default: false
           description: >
             True when another page is already available; fetch it
             immediately with `since` set to this page's `nextSince`.

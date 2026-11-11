@@ -409,7 +409,7 @@ func TestAReversedWindowIsNoWindow(t *testing.T) {
 	}
 	reversed := *it
 	reversed.StartFrames = it.EndFrames + 75
-	if _, from, to, err := svc.sonicSource(ctx, &reversed); !errors.Is(err, errNoWindow) {
+	if from, to, err := sonicWindow(&reversed); !errors.Is(err, errNoWindow) {
 		t.Errorf("window = [%d, %d) (%v), want errNoWindow", from, to, err)
 	}
 }
@@ -427,7 +427,7 @@ func TestTheAnalysedWindowIsTheViewsOwn(t *testing.T) {
 	}
 	moved := *it
 	moved.StartFrames = 150
-	_, from, to, err := svc.sonicSource(ctx, &moved)
+	from, to, err := sonicWindow(&moved)
 	if err != nil || from != 2*ripRate || to != 0 {
 		t.Fatalf("window = [%d, %d) (%v), want the view's own [%d, 0)", from, to, err, 2*ripRate)
 	}

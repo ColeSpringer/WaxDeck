@@ -695,6 +695,7 @@ components:
           example: "off"
         shuffle:
           type: boolean
+          default: false
           description: >
             Whether shuffle is on. `entries` always lists the true
             play order: turning shuffle on reorders the unplayed
@@ -722,6 +723,7 @@ components:
             $ref: "#/components/schemas/PlaybackSessionEntry"
         ended:
           type: boolean
+          default: false
           description: >
             Present true only over the WebSocket, and terminal for
             that delivery context: the watched or reported session
@@ -810,6 +812,7 @@ components:
           example: "off"
         shuffle:
           type: boolean
+          default: false
           description: >
             Whether shuffle was on. `entries` is the play order as it
             stood, already shuffled.
@@ -998,6 +1001,8 @@ components:
       description: >
         A minted gapless timeline: one HLS stream URL that plays the
         whole queue, plus the per-member boundaries to map positions.
+        Timelines are immutable: editing the queue means minting
+        another.
       required:
         [url, mimeType, durationMs, expiresAt, envelopeRate, boundaries]
       properties:
@@ -1011,6 +1016,7 @@ components:
           example: tl-01JZX5N8QW3F4V9T2B7KD3M9R6
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative, media-token-authenticated HLS playlist
             URL for the whole timeline. The token lives at least the
@@ -1075,8 +1081,13 @@ components:
         reachable:
           type: boolean
           description: >
-            Whether the server could fetch its own health endpoint
-            through this base.
+            Whether the server's own fetch of its health endpoint through
+            this base answered `200`. `false` also covers a fetch that
+            failed on the server's side of the network (a proxy that
+            cannot loop back, split-horizon name resolution) and a check
+            cancelled before the base was tried; `notes` says which. The
+            fetch comes from the server, not the device, so either
+            verdict is evidence about the device, not proof.
         notes:
           type: array
           description: >

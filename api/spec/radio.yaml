@@ -825,6 +825,7 @@ components:
       properties:
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative proxied stream URL carrying a short-lived
             media token.
@@ -902,6 +903,7 @@ components:
           $ref: "#/components/schemas/ArtSource"
         nowPlayingSaved:
           type: boolean
+          default: false
           description: >
             Whether the caller has already kept what the station is
             announcing, so the heart on a playing surface draws filled.

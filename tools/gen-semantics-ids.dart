@@ -20,6 +20,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'src/output_file.dart';
+
 const _dartOut = 'app/app/lib/src/shell/semantics_ids.dart';
 const _tsOut = 'e2e/tests/semantics-ids.ts';
 const _sourceDir = 'app/semantics-ids';
@@ -64,7 +66,7 @@ Never _fail(String message) {
   exit(1);
 }
 
-void main(List<String> args) {
+Future<void> main(List<String> args) async {
   final root = Directory.current.path;
   final dir = Directory('$root/$_sourceDir');
   if (!dir.existsSync()) {
@@ -107,11 +109,29 @@ void main(List<String> args) {
     }
   }
 
-  File('$root/$_dartOut').writeAsStringSync(dart);
-  File('$root/$_tsOut').writeAsStringSync(typescript);
+  writeIfChanged('$root/$_dartOut', await _formatted(dart, '$root/$_dartOut'));
+  writeIfChanged('$root/$_tsOut', typescript);
   stdout.writeln(
     'gen-semantics-ids: ${seen.length} identifiers -> $_dartOut, $_tsOut',
   );
+}
+
+/// [source] as dart format leaves it at [path], by the language version
+/// and options of the package there.
+Future<String> _formatted(String source, String path) async {
+  final format = await Process.start(Platform.resolvedExecutable, [
+    'format',
+    '--output=show',
+    '--show=none',
+    '--summary=none',
+    '--stdin-name=$path',
+  ]);
+  final out = format.stdout.transform(utf8.decoder).join();
+  final err = format.stderr.transform(utf8.decoder).join();
+  format.stdin.write(source);
+  await format.stdin.close();
+  if (await format.exitCode != 0) _fail('dart format: ${await err}');
+  return out;
 }
 
 /// Reads one group file. [seen] holds every constant name across groups,

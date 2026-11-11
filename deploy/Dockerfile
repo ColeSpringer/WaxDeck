@@ -42,7 +42,6 @@ WORKDIR /src
 COPY app/pubspec.yaml app/pubspec.lock app/
 COPY app/app/pubspec.yaml app/app/
 COPY app/packages/waxdeck_api/pubspec.yaml app/packages/waxdeck_api/
-COPY app/packages/waxdeck_api_gen/pubspec.yaml app/packages/waxdeck_api_gen/
 COPY app/packages/waxdeck_data/pubspec.yaml app/packages/waxdeck_data/
 COPY app/packages/waxdeck_player/pubspec.yaml app/packages/waxdeck_player/
 COPY app/packages/waxdeck_player_testing/pubspec.yaml app/packages/waxdeck_player_testing/

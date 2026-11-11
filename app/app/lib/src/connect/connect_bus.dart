@@ -50,15 +50,19 @@ class ConnectBus {
         final id = frame['id'];
         final completer = id is String ? _pending.remove(id) : null;
         completer?.completeError(
-          WaxDeckApiException(
-            // `local-protocol`, not `internal`: the server names a code
-            // on every error frame it sends, so a frame without one did
-            // not come from a conforming server, and saying the server
-            // reported a fault would put words in its mouth.
-            code: frame['code'] as String? ?? 'local-protocol',
-            message: frame['message'] as String? ?? 'command failed',
-            params: errorParamsFromWire(frame['params']),
-          ),
+          apiErrorFromWire(frame) ??
+              WaxDeckApiException(
+                // `local-protocol`, not `internal`: the server names a code
+                // and a message on every error frame it sends, so a frame
+                // without them did not come from a conforming server, and
+                // saying the server reported a fault would put words in
+                // its mouth.
+                code: 'local-protocol',
+                message: switch (frame['message']) {
+                  final String message => message,
+                  _ => 'command failed',
+                },
+              ),
         );
       case 'endpoint-cmd':
         onEndpointCommand?.call(frame);

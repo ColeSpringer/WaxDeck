@@ -1,34 +1,9 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-/// Answers one canned body and records the request.
-class _RecordingAdapter implements HttpClientAdapter {
-  final List<RequestOptions> requests = [];
-  Object body = const <String, Object?>{};
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async {
-    requests.add(options);
-    return ResponseBody.fromString(
-      jsonEncode(body),
-      200,
-      headers: {
-        Headers.contentTypeHeader: ['application/json'],
-      },
-    );
-  }
-
-  @override
-  void close({bool force = false}) {}
-}
+import 'support/recording_adapter.dart';
 
 const _item = <String, Object?>{
   'pid': 'bk-01JZX5N8QW3F4V9T2B7KD3M9R7',
@@ -41,7 +16,7 @@ const _item = <String, Object?>{
 
 void main() {
   test('a preview sends the document and reads every line', () async {
-    final adapter = _RecordingAdapter()
+    final adapter = RecordingAdapter()
       ..body = <String, Object?>{
         'matched': 1,
         'merged': 1,
@@ -70,10 +45,7 @@ void main() {
           },
         ],
       };
-    final client = WaxDeckClient(
-      baseUrl: 'http://host:4420',
-      dio: Dio()..httpClientAdapter = adapter,
-    );
+    final client = clientOn(adapter);
 
     final preview = await client.previewPlaylistM3u('#EXTM3U\n/a.flac\n');
 

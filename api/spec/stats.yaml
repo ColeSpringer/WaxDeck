@@ -410,6 +410,7 @@ components:
           example: ar-01JZX5N8QW3F4V9T2B7KD3M9R6
         artUrl:
           type: string
+          format: uri-reference
           description: >
             Origin-relative artwork URL, when the entry has one.
           example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/art

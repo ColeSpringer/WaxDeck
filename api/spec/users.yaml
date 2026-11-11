@@ -622,10 +622,7 @@ components:
             On administrative account views (`UserAccount`) it is the
             stored per-account flag the account editor round-trips;
             an administrator's own stored flag may therefore read
-            false while their effective right is true. Defined once
-            here because the generators flatten `UserAccount`'s
-            `allOf` over this schema; a duplicate declaration there
-            would silently lose.
+            false while their effective right is true.
         managePodcasts:
           type: boolean
           description: >
@@ -655,9 +652,10 @@ components:
         - type: object
           description: Administrative account fields beyond the self view.
           # uploadEnabled stays in this required list (it is required on
-          # account views) but is defined once, on User: the generators
-          # flatten this allOf, and a duplicate property definition here
-          # would silently override the merged field in one of them.
+          # account views) but is defined once, on User: the Go generator
+          # flattens this allOf, and a duplicate property definition here
+          # would silently override the merged field there (dartgen
+          # refuses one).
           required: [disabled, libraryAccess, createdAt, uploadEnabled, pending, permissions]
           properties:
             disabled:
@@ -697,6 +695,7 @@ components:
                 (false for accounts provisioned by OIDC that never set one).
             identities:
               type: array
+              default: []
               description: Linked single sign-on identities.
               items:
                 $ref: "#/components/schemas/LinkedIdentity"
@@ -739,10 +738,7 @@ components:
     Role:
       type: string
       enum: [admin, user]
-      description: >
-        An assignable account role. A shared named schema on purpose:
-        identical inline enums make the Dart generator emit one enum class
-        into two files, which does not compile.
+      description: An assignable account role.
 
     UserCreate:
       type: object
@@ -1208,6 +1204,7 @@ components:
             server default applies.
         tagAllow:
           type: array
+          default: []
           description: >
             When non-empty, only items matching every rule are
             visible to the account (kids-mode allow-listing). Applies
@@ -1217,6 +1214,7 @@ components:
             $ref: "#/components/schemas/TagRule"
         tagDeny:
           type: array
+          default: []
           description: >
             Items matching any rule are hidden from the account. An
             item without the rule's tag passes a deny rule (absence

@@ -3,7 +3,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
-import 'package:waxdeck_api/waxdeck_api.dart';
+
+import 'support/recording_adapter.dart';
 
 /// Answers the catalog check and the repair, recording what was asked.
 class _CatalogAdapter implements HttpClientAdapter {
@@ -62,10 +63,7 @@ class _CatalogAdapter implements HttpClientAdapter {
 void main() {
   test('the check reads every count into its own field', () async {
     final adapter = _CatalogAdapter();
-    final client = WaxDeckClient(
-      baseUrl: 'http://host:4420',
-      dio: Dio()..httpClientAdapter = adapter,
-    );
+    final client = clientOn(adapter);
     final c = await client.getCatalogConsistency();
     expect(adapter.requests, ['GET /api/v1/admin/catalog/consistency']);
     expect(
@@ -94,10 +92,7 @@ void main() {
 
   test('the repair posts and answers its task', () async {
     final adapter = _CatalogAdapter();
-    final client = WaxDeckClient(
-      baseUrl: 'http://host:4420',
-      dio: Dio()..httpClientAdapter = adapter,
-    );
+    final client = clientOn(adapter);
     final task = await client.repairCatalog();
     expect(adapter.requests, ['POST /api/v1/admin/catalog/repair']);
     expect(task.id, 'tk-1');
@@ -112,10 +107,7 @@ void main() {
       // ordinary 30 s would cut it off on a large one; the repair answers
       // once its task is queued.
       final adapter = _CatalogAdapter();
-      final client = WaxDeckClient(
-        baseUrl: 'http://host:4420',
-        dio: Dio()..httpClientAdapter = adapter,
-      );
+      final client = clientOn(adapter);
       await client.getCatalogConsistency();
       await client.repairCatalog();
       expect(adapter.options.first.receiveTimeout, const Duration(minutes: 30));

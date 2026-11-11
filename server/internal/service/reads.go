@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -1275,8 +1276,18 @@ func (l *Library) ItemLyrics(ctx context.Context, uc *UserCtx, apiItemPID string
 		return Lyrics{}, classify(err)
 	}
 	out := Lyrics{PID: apiItemPID, Source: string(ly.Source), Provider: ly.Provider, Unsynced: ly.Unsynced}
-	for _, line := range ly.Synced {
+	for _, line := range syncedInTimeOrder(ly.Synced) {
 		out.Synced = append(out.Synced, SyncedLine{TimeMS: line.TimeMS, Text: line.Text})
 	}
 	return out, nil
+}
+
+// syncedInTimeOrder returns the stored lines by time, equal times in stored
+// order. The store keeps lines as its producer sent them, and a custom
+// enrichment provider or the catalog's IPC set_lyrics need not send them
+// sorted.
+func syncedInTimeOrder(lines []model.SyncedLine) []model.SyncedLine {
+	out := slices.Clone(lines)
+	slices.SortStableFunc(out, func(a, b model.SyncedLine) int { return cmp.Compare(a.TimeMS, b.TimeMS) })
+	return out
 }

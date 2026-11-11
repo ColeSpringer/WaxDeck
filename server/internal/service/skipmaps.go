@@ -55,6 +55,13 @@ const (
 // entry that spends its attempts bars that audio for good.
 var errAnalysisMoot = errors.New("nothing left to analyze")
 
+// errAnalysisStale marks queued analysis whose item no longer holds the
+// audio it was queued for, after an unfetch, a delete, other bytes landing
+// in its place, its file moving under a measurement or a moved cue window:
+// dropped without acting, since there is none of that audio to measure,
+// and a write-off would land on whatever took its place.
+var errAnalysisStale = errors.New("the item no longer holds the queued audio")
+
 // SkipMapFor answers one item's skip map, queuing analysis on a miss
 // when the item is mappable. partIndex selects a multi-file book's
 // part (ignored elsewhere).
@@ -109,13 +116,11 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 		}
 		// A named part is the one case the item's state cannot express:
 		// MarkMissing vetoes on any surviving sibling, so a book whose
-		// second part is gone stays `present` forever. Resolve that part
+		// second part is gone stays `present` forever. Stat that part
 		// here; every other shape reads the state above, which is what
 		// keeps an unmounted network root off the request path.
-		if filePID != "" {
-			if _, err := l.analysisSource(ctx, string(it.PID), filePID); errors.Is(err, errAnalysisMoot) {
-				return SkipMapResult{State: skipStateUnavailable}, nil
-			}
+		if filePID != "" && errors.Is(l.usableSource(string(f.Path)), errAnalysisMoot) {
+			return SkipMapResult{State: skipStateUnavailable}, nil
 		}
 
 		key := string(it.PID)
@@ -260,9 +265,11 @@ type FlowJobs interface {
 func (l *Library) SetFlowJobs(j FlowJobs) { l.flowJobs = j }
 
 // DrainAnalysisQueue works one queued analysis; returns false when the
-// queue is idle so the caller can sleep.
+// queue is idle so the caller can sleep. A hand-off leaves the queue
+// waiting for it, as does a shutdown, whenever either begins: neither is a
+// verdict on the audio, so the entry is handed back uncounted.
 func (l *Library) DrainAnalysisQueue(ctx context.Context) bool {
-	if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
+	if l.Maintenance() || l.flowJobs == nil || !l.flowJobs.JobsSupported() {
 		return false
 	}
 	row, err := l.db.LeaseAnalysis(ctx, time.Now().UnixNano(), analysisLease.Nanoseconds(), analysisMaxAttempts)
@@ -273,7 +280,16 @@ func (l *Library) DrainAnalysisQueue(ctx context.Context) bool {
 		return false
 	}
 	if err := l.runAnalysis(ctx, row); err != nil {
-		if errors.Is(err, errAnalysisMoot) {
+		switch {
+		case KindOf(err) == KindMaintenance || ctx.Err() != nil:
+			if dbErr := l.db.ReleaseAnalysis(context.WithoutCancel(ctx), row.Key); dbErr != nil {
+				l.log.Warn("handing back an analysis", "key", row.Key, "err", dbErr)
+			}
+			return false
+		case errors.Is(err, errAnalysisStale):
+			itemPID, _, _ := strings.Cut(row.ItemPID, "|")
+			l.log.Debug("dropped an analysis: the item no longer holds its audio", "key", row.Key, "item", itemPID)
+		case errors.Is(err, errAnalysisMoot):
 			// Not a failure: no attempt can bring the bytes back, and a
 			// re-fetch or a rescan of the same essence queues fresh work.
 			// Tell the catalog first, though - dropping the entry silently
@@ -281,17 +297,14 @@ func (l *Library) DrainAnalysisQueue(ctx context.Context) bool {
 			// the next request queued the same doomed work and the skip
 			// map answered pending forever.
 			l.markAudioMissing(ctx, row.ItemPID)
-			if dbErr := l.db.CompleteAnalysis(ctx, row.Key); dbErr != nil {
-				l.log.Warn("dropping analysis with no audio", "key", row.Key, "err", dbErr)
+		default:
+			l.log.Warn("silence analysis failed", "key", row.Key, "attempt", row.Attempts+1, "err", err)
+			retryAt := time.Now().Add(queueRetryDelay(row.Attempts)).UnixNano()
+			if dbErr := l.db.FailAnalysis(ctx, row.Key, err.Error(), retryAt); dbErr != nil {
+				l.log.Warn("recording analysis failure", "key", row.Key, "err", dbErr)
 			}
 			return true
 		}
-		l.log.Warn("silence analysis failed", "key", row.Key, "attempt", row.Attempts+1, "err", err)
-		retryAt := time.Now().Add(queueRetryDelay(row.Attempts)).UnixNano()
-		if dbErr := l.db.FailAnalysis(ctx, row.Key, err.Error(), retryAt); dbErr != nil {
-			l.log.Warn("recording analysis failure", "key", row.Key, "err", dbErr)
-		}
-		return true
 	}
 	if err := l.db.CompleteAnalysis(ctx, row.Key); err != nil {
 		l.log.Warn("completing analysis", "key", row.Key, "err", err)
@@ -310,7 +323,7 @@ func (l *Library) markAudioMissing(ctx context.Context, queueKey string) {
 	if itemPID == "" {
 		return
 	}
-	outcome, err := l.lib.MarkMissing(ctx, model.PID(itemPID), waxbin.MarkMissingOptions{Force: false})
+	outcome, err := l.markMissing(ctx, model.PID(itemPID))
 	if err != nil {
 		// The dropped-mount refusal lands here; the catalog's text names
 		// the root and the remedy.
@@ -335,63 +348,77 @@ func (l *Library) markAudioMissing(ctx context.Context, queueKey string) {
 	}
 }
 
-// analysisSource resolves the file a queued entry names, errAnalysisMoot
-// when there is nothing left to measure.
-func (l *Library) analysisSource(ctx context.Context, itemPID, filePID string) (string, error) {
-	// A named part reads the catalog directly, so its answer is current.
-	if filePID != "" {
-		f, err := l.fileByPID(ctx, model.PID(filePID))
-		if err != nil {
-			if KindOf(err) == KindNotFound {
-				return "", errAnalysisMoot
-			}
-			return "", err
-		}
-		return l.usableSource(string(f.Path))
+// markMissing is the catalog's mark-missing, through markMissingHook in a
+// test.
+func (l *Library) markMissing(ctx context.Context, pid model.PID) (model.MarkMissingOutcome, error) {
+	if l.markMissingHook != nil {
+		return l.markMissingHook(ctx, pid)
 	}
-	loc, err := l.paths.Locate(ctx, model.PID(itemPID))
-	if err != nil {
-		if KindOf(classify(err)) == KindNotFound {
-			return "", errAnalysisMoot
-		}
-		return "", classify(err)
-	}
-	path, err := l.usableSource(loc.Path)
-	if !errors.Is(err, errAnalysisMoot) {
-		return path, err
-	}
-	// Locate is cached and invalidates on a poll, so it can be a rename or
-	// a fresh landing behind the catalog. Nothing is written off on it.
-	fresh, err := l.paths.Relocate(ctx, model.PID(itemPID))
-	if err != nil {
-		if KindOf(classify(err)) == KindNotFound {
-			return "", errAnalysisMoot
-		}
-		return "", classify(err)
-	}
-	if fresh.Path == loc.Path {
-		return "", errAnalysisMoot
-	}
-	return l.usableSource(fresh.Path)
+	return l.lib.MarkMissing(ctx, pid, waxbin.MarkMissingOptions{Force: false})
 }
 
-// usableSource answers a path worth analyzing: errAnalysisMoot when the
-// catalog names bytes that are not there, a retryable error when the
-// library root itself is missing, which is storage that has not arrived
-// rather than audio that is gone.
-func (l *Library) usableSource(path string) (string, error) {
+// itemFile reads an item and its file as the catalog holds them now,
+// through the seams a test fails reads by: not-found when either is gone,
+// as an item in the trash keeps no file.
+func (l *Library) itemFile(ctx context.Context, pid model.PID) (*model.ItemView, *model.File, error) {
+	it, err := l.catalogItem(ctx, pid)
+	if err != nil {
+		return nil, nil, classify(err)
+	}
+	if it.FilePID == "" {
+		return nil, nil, errNotFound("the item has no file")
+	}
+	f, err := l.fileByPID(ctx, it.FilePID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return it, f, nil
+}
+
+// entryFile reads the file a queued analysis names as the catalog holds
+// it now, not through the located-path cache, which can still name a file
+// that moved or what took its place: the named part's, or the item's own.
+func (l *Library) entryFile(ctx context.Context, itemPID, filePID string) (*model.File, error) {
+	if filePID == "" {
+		_, f, err := l.itemFile(ctx, model.PID(itemPID))
+		return f, err
+	}
+	return l.fileByPID(ctx, model.PID(filePID))
+}
+
+// holdsEssence checks that the catalog, read now, still backs the item, or
+// its named part, with a file of the given essence at path:
+// errAnalysisStale when it does not.
+func (l *Library) holdsEssence(ctx context.Context, itemPID, filePID, essence, path string) error {
+	f, err := l.entryFile(ctx, itemPID, filePID)
+	switch {
+	case KindOf(err) == KindNotFound:
+		return errAnalysisStale
+	case err != nil:
+		return err
+	case f.EssenceHash != essence || string(f.Path) != path:
+		return errAnalysisStale
+	}
+	return nil
+}
+
+// usableSource reports whether a path is worth analyzing: errAnalysisMoot
+// when the catalog names bytes that are not there, a retryable error when
+// the library root itself is missing, which is storage that has not
+// arrived rather than audio that is gone.
+func (l *Library) usableSource(path string) error {
 	if path == "" {
-		return "", errAnalysisMoot
+		return errAnalysisMoot
 	}
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		if root := l.storageRootFor(path); root != "" {
 			if _, err := os.Stat(root); errors.Is(err, os.ErrNotExist) {
-				return "", fmt.Errorf("root %s is not mounted", root)
+				return fmt.Errorf("root %s is not mounted", root)
 			}
 		}
-		return "", errAnalysisMoot
+		return errAnalysisMoot
 	}
-	return path, nil
+	return nil
 }
 
 // storageRootFor answers the library root a path sits under, longest match,
@@ -425,9 +452,26 @@ func rootPaths(roots []Root) []string {
 
 func (l *Library) runAnalysis(ctx context.Context, row wdb.QueueRow) error {
 	itemPID, filePID, _ := strings.Cut(row.ItemPID, "|")
-	path, err := l.analysisSource(ctx, itemPID, filePID)
+	f, err := l.entryFile(ctx, itemPID, filePID)
+	if KindOf(err) == KindNotFound {
+		return errAnalysisStale
+	}
 	if err != nil {
 		return err
+	}
+	path := string(f.Path)
+	sourceErr := l.usableSource(path)
+	if sourceErr != nil && !errors.Is(sourceErr, errAnalysisMoot) {
+		return sourceErr
+	}
+	// After the source, so it is the last read before acting: a download
+	// that commits later has its bytes on disk already, which a write-off's
+	// own check finds.
+	if err := l.holdsEssence(ctx, itemPID, filePID, row.Key, path); err != nil {
+		return err
+	}
+	if sourceErr != nil {
+		return sourceErr
 	}
 
 	// One analysis is bounded well under the lease so a wedged job
@@ -450,6 +494,11 @@ func (l *Library) runAnalysis(ctx context.Context, row wdb.QueueRow) error {
 	}
 	encoded, err := encodeSkipSpans(spans)
 	if err != nil {
+		return err
+	}
+	// The job can outlast the file it measured: audio replaced or moved
+	// meanwhile may be what it read, so its spans are filed under neither.
+	if err := l.holdsEssence(ctx, itemPID, filePID, row.Key, path); err != nil {
 		return err
 	}
 	return l.db.PutSilenceMap(ctx, wdb.SilenceMap{

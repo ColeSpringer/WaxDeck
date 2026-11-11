@@ -5,7 +5,84 @@ rules:
   operation-operationId: error
   operation-description: error
   oas3-unused-component: error
+  # The Dart client resolves a uri-reference string against the server's
+  # origin and leaves every other string as it is, so a property that
+  # documents itself as origin-relative has to say so in its format. The
+  # enumeration alone passes a missing format, so truthy guards that.
+  # Two ways into the check: the description says origin-relative anywhere,
+  # or the property is a string named like a URL. A URL that is absolute by
+  # contract is exempted in the overrides below, each with its reason.
+  origin-relative-is-uri-reference:
+    description: A property described as origin-relative, or a string named like a URL, carries format uri-reference.
+    message: A property described as origin-relative, or a string named like a URL, must carry format uri-reference (a URL absolute by contract is listed in the overrides of .spectral.yaml).
+    severity: error
+    given:
+      - '$..properties[?(@.description && @.description.match && @.description.match(/origin-relative/i))]'
+      - '$..properties[?(@property.match && @property.match(/[uU]rl$/) && @.type === "string")]'
+    then:
+      - field: format
+        function: truthy
+      - field: format
+        function: enumeration
+        functionOptions:
+          values: [uri-reference]
 overrides:
+  # URL properties that are absolute by contract: each names an address
+  # outside this server, which the client uses as given. Anything else
+  # named like a URL carries format uri-reference.
+  # Where fetched bytes came from: an external http(s) address, redacted
+  # to scheme, host and path.
+  - files:
+      - "api/openapi.yaml#/components/schemas/ArtSource/properties/sourceUrl"
+      - "api/openapi.yaml#/components/schemas/ArtRoleInfo/properties/sourceUrl"
+      - "api/openapi.yaml#/components/schemas/ItemAcquisition/properties/sourceUrl"
+      - "api/openapi.yaml#/components/schemas/ItemAcquisitionEdit/properties/sourceUrl"
+      - "api/openapi.yaml#/components/schemas/FieldProvenance/properties/sourceUrl"
+      - "api/openapi.yaml#/components/schemas/EnrichCoverProposal/properties/sourceUrl"
+    rules:
+      origin-relative-is-uri-reference: "off"
+  # A podcast feed, its directory artwork and its funding page: addresses
+  # at the publisher or the directory, fetched or opened as given.
+  - files:
+      - "api/openapi.yaml#/components/schemas/SubscribeRequest/properties/url"
+      - "api/openapi.yaml#/components/schemas/PodcastShow/properties/feedUrl"
+      - "api/openapi.yaml#/components/schemas/OpmlImportEntry/properties/feedUrl"
+      - "api/openapi.yaml#/components/schemas/PodcastDirectoryEntry/properties/feedUrl"
+      - "api/openapi.yaml#/components/schemas/PodcastDirectoryEntry/properties/artworkUrl"
+      - "api/openapi.yaml#/components/schemas/PodcastFunding/properties/url"
+    rules:
+      origin-relative-is-uri-reference: "off"
+  # A station's stream, website and logo: addresses at the broadcaster
+  # or the directory, with no proxy for the client to resolve against.
+  - files:
+      - "api/openapi.yaml#/components/schemas/RadioStation/properties/streamUrl"
+      - "api/openapi.yaml#/components/schemas/RadioStation/properties/homepageUrl"
+      - "api/openapi.yaml#/components/schemas/RadioStation/properties/logoUrl"
+      - "api/openapi.yaml#/components/schemas/RadioStationEdit/properties/streamUrl"
+      - "api/openapi.yaml#/components/schemas/RadioStationEdit/properties/homepageUrl"
+      - "api/openapi.yaml#/components/schemas/RadioStationEdit/properties/logoUrl"
+      - "api/openapi.yaml#/components/schemas/RadioDirectoryEntry/properties/streamUrl"
+      - "api/openapi.yaml#/components/schemas/RadioDirectoryEntry/properties/homepageUrl"
+      - "api/openapi.yaml#/components/schemas/RadioDirectoryEntry/properties/logoUrl"
+    rules:
+      origin-relative-is-uri-reference: "off"
+  # A playlist, video or channel on an outside service, named by the
+  # address the user pasted.
+  - files:
+      - "api/openapi.yaml#/components/schemas/PlaylistSource/properties/url"
+      - "api/openapi.yaml#/components/schemas/PlaylistSourceUpdate/properties/url"
+      - "api/openapi.yaml#/components/schemas/AcquisitionRequest/properties/url"
+    rules:
+      origin-relative-is-uri-reference: "off"
+  # The base or authorization address of an outside service (a source
+  # server, a ListenBrainz-compatible API, Last.fm).
+  - files:
+      - "api/openapi.yaml#/components/schemas/MigrationCreate/properties/serverUrl"
+      - "api/openapi.yaml#/components/schemas/Scrobbler/properties/apiUrl"
+      - "api/openapi.yaml#/components/schemas/ListenBrainzConnect/properties/apiUrl"
+      - "api/openapi.yaml#/components/schemas/LastfmConnectStart/properties/authUrl"
+    rules:
+      origin-relative-is-uri-reference: "off"
   # The WebSocket frame schemas ride the event channel (api/events.md), not a
   # REST path, so no path references them; they are still real contract DTOs
   # that both generated clients carry.

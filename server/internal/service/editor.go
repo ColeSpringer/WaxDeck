@@ -806,17 +806,9 @@ func (l *Library) writeLyricsSidecar(ctx context.Context, it *model.ItemView, sy
 	if fail != nil {
 		return fail
 	}
-	var content string
+	content := plain
 	if len(synced) > 0 {
-		lines := make([]waxlabel.SyncedLine, 0, len(synced))
-		for _, ln := range synced {
-			lines = append(lines, waxlabel.SyncedLine{
-				Time: time.Duration(ln.TimeMS) * time.Millisecond, Text: ln.Text,
-			})
-		}
-		content = waxlabel.FormatLRC(lines)
-	} else {
-		content = plain
+		content = syncedLRC(synced)
 	}
 	if !strings.HasSuffix(content, "\n") {
 		content += "\n"
@@ -2702,15 +2694,20 @@ func groupCredits(rows []model.Contributor) []CreditDTO {
 func lyricsStateDTO(ly *model.Lyrics) *LyricsStateDTO {
 	out := &LyricsStateDTO{Source: string(ly.Source), Provider: ly.Provider, Synced: len(ly.Synced) > 0}
 	if len(ly.Synced) > 0 {
-		lines := make([]waxlabel.SyncedLine, 0, len(ly.Synced))
-		for _, ln := range ly.Synced {
-			lines = append(lines, waxlabel.SyncedLine{
-				Time: time.Duration(ln.TimeMS) * time.Millisecond, Text: ln.Text,
-			})
-		}
-		out.LRC = waxlabel.FormatLRC(lines)
+		out.LRC = syncedLRC(ly.Synced)
 	} else {
 		out.LRC = ly.Unsynced
 	}
 	return out
+}
+
+// syncedLRC renders timed lyric lines as an LRC document, in time order.
+func syncedLRC(synced []model.SyncedLine) string {
+	lines := make([]waxlabel.SyncedLine, 0, len(synced))
+	for _, ln := range syncedInTimeOrder(synced) {
+		lines = append(lines, waxlabel.SyncedLine{
+			Time: time.Duration(ln.TimeMS) * time.Millisecond, Text: ln.Text,
+		})
+	}
+	return waxlabel.FormatLRC(lines)
 }

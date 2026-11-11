@@ -62,6 +62,7 @@
   "errorToolTaskParked": "Una unión o división anterior de esto se detuvo y necesita atención. Descártala en Tareas y vuelve a intentarlo.",
   "errorToolTaskRunning": "Todavía hay una unión o división de esto en marcha. Vuelve a intentarlo cuando termine.",
   "errorTranscodeLimited": "Se están convirtiendo demasiadas reproducciones a la vez. Inténtalo de nuevo en un momento.",
+  "errorTransportDecode": "Esta app no ha podido leer la respuesta del servidor. Comprueba que la app y el servidor estén actualizados.",
   "errorTransportEmpty": "La respuesta del servidor ha llegado vacía.",
   "errorTransportTimeout": "El servidor no ha respondido a tiempo.",
   "errorUnauthenticated": "Vuelve a iniciar sesión para continuar.",

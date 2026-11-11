@@ -1,37 +1,10 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-/// Answers every request with one health body.
-class _HealthAdapter implements HttpClientAdapter {
-  _HealthAdapter(this.body);
+import 'support/recording_adapter.dart';
 
-  final Map<String, Object?> body;
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async => ResponseBody.fromString(
-    jsonEncode(body),
-    200,
-    headers: {
-      Headers.contentTypeHeader: [Headers.jsonContentType],
-    },
-  );
-
-  @override
-  void close({bool force = false}) {}
-}
-
-Future<ServerHealth> _health(Map<String, Object?> body) => WaxDeckClient(
-  baseUrl: 'http://host:4420',
-  dio: Dio()..httpClientAdapter = _HealthAdapter(body),
-).health();
+Future<ServerHealth> _health(Map<String, Object?> body) =>
+    clientOn(RecordingAdapter(body: body)).health();
 
 void main() {
   const base = {'status': 'ok', 'version': '1.0.0', 'apiVersion': 1};

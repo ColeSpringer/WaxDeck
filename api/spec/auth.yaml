@@ -699,6 +699,7 @@ components:
           example: Company SSO
         startUrl:
           type: string
+          format: uri-reference
           description: >
             Origin-relative URL that starts this provider's login flow
             (web mode; other modes add their query parameters).

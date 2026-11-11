@@ -470,12 +470,14 @@ components:
           description: When a waiting task tries again.
         bookInTrash:
           type: boolean
+          default: false
           description: >
             True while a book merge's or split's sources are in the
             trash and its new files not yet the book: the book is
             missing from the library until the task finishes.
         resultPids:
           type: array
+          default: []
           description: >
             What the task produced once `done`: the merged book or
             the split pieces (item pids), or the review entries an

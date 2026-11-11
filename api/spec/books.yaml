@@ -77,8 +77,8 @@ paths:
       operationId: getBookResume
       summary: Where the caller left off in a book
       description: >
-        The calling user's resume point on the book timeline, with the
-        chapter that position falls in (when the book has chapters).
+        The calling user's resume point on the book timeline, with its
+        chapter (when the book has chapters; see `BookResume.chapter`).
         This is the cross-device resume answer: the position reflects
         the newest checkpoint from any device after the server's
         per-medium reconciliation.
@@ -360,7 +360,9 @@ components:
 
     Bookmark:
       type: object
-      description: One place a listener marked in a book.
+      description: >
+        One place a listener marked in a book. Not the resume point: a
+        book has one of those and any number of these.
       required: [id, positionMs, createdAt]
       properties:
         id:
@@ -460,7 +462,8 @@ components:
       type: object
       description: >
         Full audiobook detail. All positions are book-timeline
-        milliseconds spanning every part.
+        milliseconds spanning every part. `settings` is the caller's own
+        per-book playback settings, absent when none are stored.
       required: [pid, title, durationMs, authors, narrators, chapters, parts]
       properties:
         pid:
@@ -537,6 +540,7 @@ components:
           description: Total duration across all parts, in milliseconds.
         artUrl:
           type: string
+          format: uri-reference
           description: Origin-relative URL of the book's artwork endpoint.
         chapters:
           type: array
@@ -554,7 +558,12 @@ components:
 
     BookResume:
       type: object
-      description: The calling user's resume point in one book.
+      description: >
+        The calling user's resume point in one book. `chapter` is the last
+        chapter that starts at or before `positionMs`: a position in a gap
+        between two chapters answers the one before the gap, and one before
+        the first chapter answers the first. Present when the book has
+        chapters.
       required: [positionMs]
       properties:
         positionMs:

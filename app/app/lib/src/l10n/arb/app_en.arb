@@ -5317,6 +5317,10 @@
   "@errorTranscodeLimited": {
     "description": "Error sentence for the spec code `transcode-limited`."
   },
+  "errorTransportDecode": "This app could not read the server's answer. Check that the app and the server are both up to date.",
+  "@errorTransportDecode": {
+    "description": "Error sentence for the client's own `transport-decode` code: an answer arrived that this build cannot read, most likely from a server on another version."
+  },
   "errorTransportEmpty": "The server's answer arrived empty.",
   "@errorTransportEmpty": {
     "description": "Error sentence for the client's own `transport-empty` code: an answer arrived with no body in it."
@@ -10788,6 +10792,10 @@
       }
     }
   },
+  "playlistRuleLimitMissing": "Give the limit a number above zero to see what matches.",
+  "@playlistRuleLimitMissing": {
+    "description": "Said in the preview, in place of the working message, while a random or budget limit has no number above zero and so no preview is asked for."
+  },
   "playlistRuleLimitNoLimit": "no limit",
   "@playlistRuleLimitNoLimit": {
     "description": "Hint in the limit field when leaving it blank means every match joins."
@@ -10821,6 +10829,10 @@
         "type": "int"
       }
     }
+  },
+  "playlistRuleMatchesLimitMissing": "Limit needs a number above zero",
+  "@playlistRuleMatchesLimitMissing": {
+    "description": "The one-pane match bar, in place of the count, while a random or budget limit has no number above zero."
   },
   "playlistRuleMediaType": "{kind, select, music{music} podcast{podcast} audiobook{audiobook} other{{kind}}}",
   "@playlistRuleMediaType": {
@@ -10953,6 +10965,10 @@
   "playlistRulePinnedOrder": "A pinned budget draws its own order.",
   "@playlistRulePinnedOrder": {
     "description": "Said where the sort card would be, when a pinned budget already decides the order."
+  },
+  "playlistRulePreviewFailed": "Preview unavailable",
+  "@playlistRulePreviewFailed": {
+    "description": "The match count while the last preview request has failed; the preview pane gives the reason (under it on a wide screen, above the bar on a phone)."
   },
   "playlistRulePreviewPending": "Preview pending",
   "@playlistRulePreviewPending": {

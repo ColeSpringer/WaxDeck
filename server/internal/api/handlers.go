@@ -471,6 +471,10 @@ func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (L
 	return ListFacets200JSONResponse(out), nil
 }
 
+// maxBrowseSeed is the largest integer a JavaScript number holds
+// exactly (2^53 - 1): a minted shuffle seed never exceeds it.
+const maxBrowseSeed = 1<<53 - 1
+
 func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (BrowseListResponseObject, error) {
 	if !req.Params.List.Valid() {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown list")
@@ -484,10 +488,12 @@ func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (B
 	// would otherwise be a fixed order silently posing as a shuffle.
 	// Not when a cursor came with it: minting one there would refuse the
 	// cursor for a difference the caller never made, and the contract
-	// says to send back the seed the first page answered with.
+	// says to send back the seed the first page answered with. The seed
+	// stays within a JavaScript number's exact integers, which a web
+	// client would otherwise round before sending it back.
 	seed := derefInt64(req.Params.Seed)
 	if req.Params.List == DiscoveryListRandom && req.Params.Seed == nil && req.Params.Cursor == nil {
-		seed = rand.Int64()
+		seed = 1 + rand.Int64N(maxBrowseSeed)
 	}
 	uc := userCtx(ctx)
 	filter := itemFilterOf(req.Params.MediaType, req.Params.Facet, req.Params.FacetKey)

@@ -1,32 +1,7 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-/// Answers each request with the next canned body.
-class _CannedAdapter implements HttpClientAdapter {
-  final List<Object> _bodies = [];
-
-  void enqueue(Object body) => _bodies.add(body);
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async => ResponseBody.fromString(
-    jsonEncode(_bodies.removeAt(0)),
-    200,
-    headers: {
-      Headers.contentTypeHeader: ['application/json'],
-    },
-  );
-
-  @override
-  void close({bool force = false}) {}
-}
+import 'support/recording_adapter.dart';
 
 const _user = {
   'id': 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -36,19 +11,16 @@ const _user = {
 };
 
 void main() {
-  late _CannedAdapter adapter;
+  late RecordingAdapter adapter;
   late WaxDeckClient client;
 
   setUp(() {
-    adapter = _CannedAdapter();
-    client = WaxDeckClient(
-      baseUrl: 'http://host:4420',
-      dio: Dio()..httpClientAdapter = adapter,
-    );
+    adapter = RecordingAdapter();
+    client = clientOn(adapter);
   });
 
   test('a session carries the server\'s read-only state', () async {
-    adapter.enqueue({
+    adapter.enqueue(200, {
       'authenticated': true,
       'user': _user,
       'csrfToken': 'csrf-1',
@@ -56,7 +28,7 @@ void main() {
     });
     expect((await client.getSession()).serverReadOnly, isTrue);
 
-    adapter.enqueue({
+    adapter.enqueue(200, {
       'authenticated': true,
       'user': _user,
       'csrfToken': 'csrf-1',
@@ -67,10 +39,10 @@ void main() {
 
   test('a server that says nothing is not read-only', () async {
     // The `server` object is optional and a signed-out probe carries none.
-    adapter.enqueue({'authenticated': true, 'user': _user});
+    adapter.enqueue(200, {'authenticated': true, 'user': _user});
     expect((await client.getSession()).serverReadOnly, isFalse);
 
-    adapter.enqueue({'authenticated': false});
+    adapter.enqueue(200, {'authenticated': false});
     expect((await client.getSession()).serverReadOnly, isFalse);
   });
 }

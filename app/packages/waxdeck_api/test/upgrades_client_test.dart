@@ -1,37 +1,9 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-/// Answers each request with the next canned body and records it.
-class _RecordingAdapter implements HttpClientAdapter {
-  final List<RequestOptions> requests = [];
-  final List<(int, Object)> _canned = [];
-
-  void enqueue(int status, Object body) => _canned.add((status, body));
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async {
-    requests.add(options);
-    final (status, body) = _canned.removeAt(0);
-    return ResponseBody.fromString(
-      jsonEncode(body),
-      status,
-      headers: {
-        Headers.contentTypeHeader: ['application/json'],
-      },
-    );
-  }
-
-  @override
-  void close({bool force = false}) {}
-}
+import 'support/recording_adapter.dart';
 
 const _flacItem = 'tr-01JZX5N8QW3F4V9T2B7KDUPFLAC';
 const _mp3Item = 'tr-01JZX5N8QW3F4V9T2B7KDUPMP3X';
@@ -99,15 +71,12 @@ const _listing = <String, Object?>{
 };
 
 void main() {
-  late _RecordingAdapter adapter;
+  late RecordingAdapter adapter;
   late WaxDeckClient client;
 
   setUp(() {
-    adapter = _RecordingAdapter();
-    client = WaxDeckClient(
-      baseUrl: 'http://host:4420',
-      dio: Dio()..httpClientAdapter = adapter,
-    );
+    adapter = RecordingAdapter();
+    client = clientOn(adapter);
   });
 
   test('an upgrade listing reads every field of every member', () async {

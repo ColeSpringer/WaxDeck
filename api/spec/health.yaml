@@ -694,6 +694,7 @@ components:
           description: The multi-file book part the lengths are of, zero-based.
         wholeFile:
           type: boolean
+          default: false
           description: The lengths are of the whole file a cue-carved track is cut from.
 
     HealthFixRequest:

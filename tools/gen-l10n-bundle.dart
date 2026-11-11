@@ -18,16 +18,18 @@
 // or lossy.
 //
 // Nothing is written until every locale has validated, and each bundle
-// then goes temp-in-target-dir -> flush -> rename, untouched when
-// already up to date - the same discipline as cmd/specbundle. A bundle
-// whose locale no longer has fragments is deleted, so a retired locale
-// cannot ship on a stale committed file.
+// then goes temp-in-target-dir -> flush -> verify -> rename, untouched
+// when already up to date (src/output_file.dart). A bundle whose locale
+// no longer has fragments is deleted, so a retired locale cannot ship on
+// a stale committed file.
 //
 //   dart run tools/gen-l10n-bundle.dart        (via `make generate`)
 //
 // Uses only dart: libraries, so it runs without a package resolution.
 import 'dart:convert';
 import 'dart:io';
+
+import 'src/output_file.dart';
 
 const _sourceDir = 'app/app/l10n';
 const _outDir = 'app/app/lib/src/l10n/arb';
@@ -209,9 +211,7 @@ void main(List<String> args) {
       stdout.writeln('gen-l10n-bundle: pruned $_outDir/$base (no fragments)');
     }
   }
-  bundles.forEach(
-    (name, content) => _writeIfChanged('$_outDir/$name', content),
-  );
+  bundles.forEach((name, content) => writeIfChanged('$_outDir/$name', content));
 
   final sizes = counts.values.toSet();
   final keySummary = sizes.length == 1
@@ -221,23 +221,6 @@ void main(List<String> args) {
     'gen-l10n-bundle: $keySummary, ${features.length} features, '
     '${locales.length} locales -> $_outDir',
   );
-}
-
-/// Replaces [out] atomically (temp in target dir, flush, rename) and
-/// leaves an up-to-date file untouched, like cmd/specbundle.
-void _writeIfChanged(String out, String content) {
-  final file = File(out);
-  if (file.existsSync() && file.readAsStringSync() == content) return;
-  final tmp = File('$_outDir/.gen-l10n-$pid.tmp');
-  try {
-    final raf = tmp.openSync(mode: FileMode.write);
-    raf.writeStringSync(content);
-    raf.flushSync();
-    raf.closeSync();
-    tmp.renameSync(out);
-  } finally {
-    if (tmp.existsSync()) tmp.deleteSync();
-  }
 }
 
 /// The locales a feature directory carries, from its filenames.

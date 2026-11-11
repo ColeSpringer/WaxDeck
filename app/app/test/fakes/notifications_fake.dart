@@ -115,8 +115,8 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
-    bool muted = false,
-    int minIntervalSeconds = 0,
+    bool? muted,
+    int? minIntervalSeconds,
   }) {
     final index = into.indexWhere((t) => t.pid == pid);
     if (index < 0) {
@@ -134,8 +134,9 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
       label: label,
       config: Map.of(config),
       enabledEvents: List.of(enabledEvents),
-      muted: muted,
-      minIntervalSeconds: minIntervalSeconds,
+      // Omitted, either keeps what the target holds.
+      muted: muted ?? old.muted,
+      minIntervalSeconds: minIntervalSeconds ?? old.minIntervalSeconds,
       createdAt: old.createdAt,
       lastSuccessAt: old.lastSuccessAt,
       lastError: old.lastError,
@@ -177,8 +178,8 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
-    bool muted = false,
-    int minIntervalSeconds = 0,
+    bool? muted,
+    int? minIntervalSeconds,
   }) async {
     if (notificationTargetError != null) throw notificationTargetError!;
     return _replaceTarget(
@@ -234,8 +235,8 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
     String? label,
     required Map<String, Object?> config,
     required List<String> enabledEvents,
-    bool muted = false,
-    int minIntervalSeconds = 0,
+    bool? muted,
+    int? minIntervalSeconds,
   }) async {
     if (notificationTargetError != null) throw notificationTargetError!;
     return _replaceTarget(

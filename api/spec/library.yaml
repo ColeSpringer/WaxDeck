@@ -1141,6 +1141,7 @@ components:
           example: al-01JZX5N8QW3F4V9T2B7KD3M9R6
         unknown:
           type: boolean
+          default: false
           description: >
             True for the bucket holding items the dimension is absent
             from. Its `label` is the canonical sentinel and its `key` is
@@ -1197,6 +1198,7 @@ components:
           description: Context line (artist for a track, author for a book).
         exact:
           type: boolean
+          default: false
           description: >
             True on an artist or album whose own name is the query,
             ignoring case, accents, punctuation and spacing (`jayz`
@@ -1277,7 +1279,8 @@ components:
       type: object
       description: >
         Summaries for the requested PIDs, in request order, minus the
-        ones that could not be resolved.
+        ones that could not be resolved. An item whose kind changed
+        answers under the prefix its kind has now, with the same ULID.
       required: [items]
       properties:
         items:
@@ -1286,12 +1289,15 @@ components:
             $ref: "#/components/schemas/ItemSummary"
         departed:
           type: array
+          default: []
           description: >
             The requested PIDs gone for everyone: no item answers to it
             any more (a kind change folded it into another) or ever did.
-            An archived item is answered rather than named here. As
-            requested, in request order, a repeated PID once, and absent
-            rather than empty when no miss was one of these.
+            An archived item is answered rather than named here. One
+            merely out of the caller's sight (a grant, a content
+            setting) is not named either, because it can come back. As
+            requested, in request order, a repeated PID once, and empty
+            (left off the wire) when no miss was one of these.
           items:
             type: string
             pattern: "^(tr|ep|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
@@ -1321,8 +1327,8 @@ components:
           type: string
           description: >
             The context line: an album's or book's artist, a show's
-            author. Absent for an artist (whose title is the name) and
-            wherever the catalog has none.
+            author, a playlist's owner. Absent for an artist (whose
+            title is the name) and wherever the catalog has none.
         year:
           type: integer
           description: Release year, where the entity carries one.
@@ -1356,11 +1362,12 @@ components:
             $ref: "#/components/schemas/EntityCard"
         departed:
           type: array
+          default: []
           description: >
             The requested PIDs that no longer name anything on this
             server, for anyone: deleted, merged away, or never real. In
-            request order, a repeated PID once, and absent rather than
-            empty when every miss was merely out of the caller's sight
+            request order, a repeated PID once, and empty (left off the
+            wire) when every miss was merely out of the caller's sight
             (a grant, a lapsed subscription, the trash) - those stay
             unnamed, because they can come back. This is the set a
             client holding `Prefs.pinned` prunes.
@@ -1371,7 +1378,11 @@ components:
 
     AlbumDetail:
       type: object
-      description: One album entity's identity and counts.
+      description: >
+        One album entity's identity and counts. Its release facts
+        (barcode, label, catalog number, media, country) are what the
+        catalog keeps on the entity rather than on any of its tracks:
+        they describe the edition, not the file.
       required: [pid, title]
       properties:
         pid:
@@ -1444,6 +1455,7 @@ components:
           properties:
             genres:
               type: array
+              default: []
               description: >
                 The item's display genres, one each: a tag holding
                 several (`Rock; Pop / Indie`) is split on `;`, `/` and
@@ -1505,6 +1517,7 @@ components:
                 it here, whether or not its audio has been fetched.
             copies:
               type: integer
+              default: 0
               description: >
                 How many copies the item holds beside its own files
                 (getItemFiles lists them), counting those in libraries
@@ -1548,7 +1561,9 @@ components:
           description: >
             The effective shuffle seed. Present only on `random` browse
             pages; pass it back together with `nextCursor` so later pages
-            keep the same order.
+            keep the same order. A seed the server mints is a positive
+            integer that fits in 53 bits, so a client that reads numbers
+            as doubles holds it exactly.
 
     DeleteItemsRequest:
       type: object
@@ -1584,7 +1599,9 @@ components:
           description: False for a dry run.
         mode:
           type: string
-          description: The mode that was (or would be) used.
+          description: >
+            The mode that was (or would be) used: `trash` or
+            `permanent`.
         entries:
           type: array
           description: Per-item breakdown.
@@ -1592,6 +1609,7 @@ components:
             $ref: "#/components/schemas/DeletePlanEntry"
         warnings:
           type: array
+          default: []
           description: >
             What the deletion did beside removing files, in sentences: a
             copy that took a deleted file's place, and a file it could
@@ -1648,6 +1666,7 @@ components:
           description: Bytes reclaimed (or to reclaim).
         fileList:
           type: array
+          default: []
           description: >
             The files `files` counts, by name. Absent for an entry whose
             file counts under another track of its rip.
@@ -1655,6 +1674,7 @@ components:
             $ref: "#/components/schemas/DeletePlanFile"
         paths:
           type: array
+          default: []
           description: >
             Where the files `fileList` names are, in the same order, each
             relative to its library's root, so two files of one name in
@@ -1664,6 +1684,7 @@ components:
             example: Hum Collective/Shell Songs/01 - Hell Shell.m4a
         sidecars:
           type: array
+          default: []
           description: >
             The sidecars that go with this entry's files, each relative
             to its library's root as `paths` are: the covers, lyrics,
@@ -1677,6 +1698,7 @@ components:
             example: Hum Collective/Shell Songs/01 - Hell Shell.lrc
         failed:
           type: integer
+          default: 0
           description: >
             Files of this item the deletion tried to remove and could
             not; they stayed, and `files` does not count them. Absent

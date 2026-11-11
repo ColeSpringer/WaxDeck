@@ -21,7 +21,7 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
   final Map<String, List<Credit>> creditsByPid = {};
   final Map<String, LyricsState> lyricsByPid = {};
   final Map<String, Map<String, List<String>>> tagsByPid = {};
-  final Map<String, List<ChapterEdit>> chapterEditsByPid = {};
+  final Map<String, List<ChapterMark>> chapterEditsByPid = {};
   final Map<String, List<ChapterMark>> chaptersByPid = {};
   final Set<String> artworkPids = {};
   final Set<String> ownArtworkPids = {};
@@ -513,7 +513,7 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
   @override
   Future<MetadataEditResult> setBookChapters(
     String pid, {
-    required List<ChapterEdit> chapters,
+    required List<ChapterMark> chapters,
     bool lock = true,
     bool force = false,
   }) async {

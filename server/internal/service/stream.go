@@ -187,7 +187,7 @@ func (l *Library) fillLoudness(ctx context.Context, src *flow.Source) {
 
 // fileByPID reads one file row, classified.
 func (l *Library) fileByPID(ctx context.Context, pid model.PID) (*model.File, error) {
-	f, err := l.lib.File(ctx, pid)
+	f, err := l.catalogFile(ctx, pid)
 	if err != nil {
 		return nil, classify(err)
 	}

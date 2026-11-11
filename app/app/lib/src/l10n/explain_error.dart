@@ -77,12 +77,13 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   // The codes the client mints for itself, which never appear in the
   // spec's list. Keying on the code is what neutralizes the English the
   // HTTP layer would otherwise put on screen. `waxdeck_api` owns the
-  // transport three; the `local-` ones name a failure of this device,
+  // transport four; the `local-` ones name a failure of this device,
   // and they exist because borrowing a spec code for one would tell a
   // listener the server said something it never said.
   'transport' => l.errorNetwork,
   'transport-timeout' => l.errorTransportTimeout,
   'transport-empty' => l.errorTransportEmpty,
+  'transport-decode' => l.errorTransportDecode,
   'local-channel-offline' => l.errorLocalChannelOffline,
   'local-command-timeout' => l.errorLocalCommandTimeout,
   'local-unregistered' => l.errorLocalUnregistered,

@@ -1,37 +1,15 @@
-import 'dart:typed_data';
-
-import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-/// Records each request and answers it with an empty 204.
-class _RecordingAdapter implements HttpClientAdapter {
-  final List<RequestOptions> requests = [];
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async {
-    requests.add(options);
-    return ResponseBody.fromString('', 204);
-  }
-
-  @override
-  void close({bool force = false}) {}
-}
+import 'support/recording_adapter.dart';
 
 void main() {
-  late _RecordingAdapter adapter;
+  late RecordingAdapter adapter;
   late WaxDeckClient client;
 
   setUp(() {
-    adapter = _RecordingAdapter();
-    client = WaxDeckClient(
-      baseUrl: 'http://host:4420',
-      dio: Dio()..httpClientAdapter = adapter,
-    );
+    adapter = RecordingAdapter(status: 204);
+    client = clientOn(adapter);
   });
 
   test(

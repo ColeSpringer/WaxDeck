@@ -8,7 +8,7 @@
     "pretypecheck": "npm run gen-types",
     "typecheck": "tsc --noEmit",
     "conform": "node lint/conformance.mjs",
-    "gen-types": "openapi-typescript ../api/openapi.yaml -o tests/api-types.ts"
+    "gen-types": "openapi-typescript ../api/openapi.yaml --default-non-nullable=false -o tests/api-types.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

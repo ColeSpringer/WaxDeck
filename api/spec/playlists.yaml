@@ -1286,7 +1286,8 @@ components:
       type: object
       description: >
         A playlist's external source binding: what it follows, how,
-        and how the syncing has been going.
+        and how the syncing has been going. `lastRun` is the last
+        completed run's counts, absent before the first success.
       required: [source, live, mode, disabled, consecutiveFailures]
       properties:
         source:
@@ -1480,6 +1481,7 @@ components:
           description: Matched-source refs with no library match.
         misses:
           type: array
+          default: []
           description: >
             The unmatched refs themselves, in source order. Matched
             bindings only.
@@ -1537,6 +1539,7 @@ components:
           description: True when the caller owns this playlist and may edit it.
         hasArt:
           type: boolean
+          default: false
           description: >
             A cover is stored for this playlist, readable at
             `/items/{pid}/art` with the playlist's own PID. It is true
@@ -1694,6 +1697,7 @@ components:
           $ref: "#/components/schemas/RuleNode"
         sorts:
           type: array
+          default: []
           description: >
             Sort order, applied in sequence. Rejected with
             `limitMode` `random` (the shuffle is the order).
@@ -1702,6 +1706,7 @@ components:
             $ref: "#/components/schemas/RuleSort"
         limit:
           type: integer
+          default: 0
           description: >
             The limit value, interpreted by `limitMode`: a maximum
             member count (`count`, the default), a maximum count of a
@@ -1727,6 +1732,7 @@ components:
         limitSeed:
           type: integer
           format: int64
+          default: 0
           description: >
             Pins the shuffle order of a `random` or budget evaluation
             so the same rule yields the same members each read; zero or
@@ -1766,6 +1772,7 @@ components:
           example: condition
         nodes:
           type: array
+          default: []
           description: Children of an `all` or `any` group.
           maxItems: 100
           items:
@@ -1809,6 +1816,7 @@ components:
           example: lastPlayedAt
         desc:
           type: boolean
+          default: false
           description: Descending when true.
 
     RuleField:
@@ -2019,6 +2027,7 @@ components:
           enum: [export, import]
         gaps:
           type: array
+          default: []
           description: >
             Losses that refuse the strict conversion.
 
@@ -2034,6 +2043,7 @@ components:
             $ref: "#/components/schemas/NspGap"
         notes:
           type: array
+          default: []
           description: >
             Losses that refuse nothing. Deduplicated and capped the same
             way.
@@ -2042,6 +2052,7 @@ components:
             $ref: "#/components/schemas/NspGap"
         truncated:
           type: boolean
+          default: false
           description: >
             Present and true when `gaps` or `notes` stopped at the cap, so
             there is more than they list.
@@ -2143,6 +2154,7 @@ components:
           description: Entries no cataloged item matched.
         unmatchedPaths:
           type: array
+          default: []
           description: The unmatched entry paths, in document order.
           items:
             type: string

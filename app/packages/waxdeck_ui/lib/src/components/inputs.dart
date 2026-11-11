@@ -65,6 +65,90 @@ class _CodePointLimit extends TextInputFormatter {
   }
 }
 
+/// Keeps the digits an edit inserts and drops the rest of what it inserts,
+/// leaving the text around the edit as it was.
+///
+/// [FilteringTextInputFormatter.digitsOnly] refilters the whole string, so
+/// a field that opens on "120.5" turns it into "12050" at the next
+/// keystroke.
+class _InsertedDigitsOnly extends TextInputFormatter {
+  const _InsertedDigitsOnly();
+
+  static final _notDigit = RegExp('[^0-9]');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final after = newValue.text;
+    final (head, end) = _editedSpan(oldValue, newValue);
+    final inserted = after.substring(head, end);
+    final digits = inserted.replaceAll(_notDigit, '');
+    if (digits.length == inserted.length) return newValue;
+
+    int moved(int offset) {
+      if (offset <= head) return offset;
+      if (offset >= end) return offset - (inserted.length - digits.length);
+      return head +
+          inserted.substring(0, offset - head).replaceAll(_notDigit, '').length;
+    }
+
+    final text = after.substring(0, head) + digits + after.substring(end);
+    final selection = newValue.selection;
+    final composing = newValue.composing;
+    final composingStart = composing.isValid ? moved(composing.start) : -1;
+    final composingEnd = composing.isValid ? moved(composing.end) : -1;
+    return TextEditingValue(
+      text: text,
+      selection: selection.isValid
+          ? TextSelection(
+              baseOffset: moved(selection.baseOffset),
+              extentOffset: moved(selection.extentOffset),
+              affinity: selection.affinity,
+              isDirectional: selection.isDirectional,
+            )
+          : selection,
+      composing: composingStart < composingEnd
+          ? TextRange(
+              start: math.min(composingStart, text.length),
+              end: math.min(composingEnd, text.length),
+            )
+          : TextRange.empty,
+    );
+  }
+
+  /// The span of [after]'s text the edit wrote: what replaced the old
+  /// selection when the text around it is unchanged, else what lies between
+  /// the text the two versions share at each end, which cuts short a paste
+  /// that ends as the replaced text did ("2.5" over a selected "120.5").
+  static (int, int) _editedSpan(TextEditingValue old, TextEditingValue after) {
+    final before = old.text;
+    final text = after.text;
+    final selection = old.selection;
+    if (selection.isValid && selection.end <= before.length) {
+      final end = text.length - (before.length - selection.end);
+      if (end >= selection.start &&
+          text.startsWith(before.substring(0, selection.start)) &&
+          text.endsWith(before.substring(selection.end))) {
+        return (selection.start, end);
+      }
+    }
+    final shared = math.min(before.length, text.length);
+    var head = 0;
+    while (head < shared && before.codeUnitAt(head) == text.codeUnitAt(head)) {
+      head++;
+    }
+    var tail = 0;
+    while (tail < shared - head &&
+        before.codeUnitAt(before.length - 1 - tail) ==
+            text.codeUnitAt(text.length - 1 - tail)) {
+      tail++;
+    }
+    return (head, text.length - tail);
+  }
+}
+
 /// A single-line text input.
 ///
 /// It carries its own leading glyph and clear control rather than leaving
@@ -156,8 +240,9 @@ class WaxTextField extends StatefulWidget {
 
   /// Refuses everything but digits and raises the number pad, for a
   /// field that only ever holds a count or a year. The refusal happens
-  /// as typed rather than as a validation message afterwards, so the
-  /// field never holds a value it would have to complain about.
+  /// as typed rather than as a validation message afterwards, so an edit
+  /// never adds a value the field would have to complain about. Text the
+  /// field already held, such as a stored "120.5", stays as it is.
   final bool digitsOnly;
 
   /// Holds the text to this many characters as it is typed, counted in
@@ -378,8 +463,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
                       ? TextInputType.number
                       : widget.keyboardType,
                   inputFormatters: <TextInputFormatter>[
-                    if (widget.digitsOnly)
-                      FilteringTextInputFormatter.digitsOnly,
+                    if (widget.digitsOnly) const _InsertedDigitsOnly(),
                     if (widget.maxCharacters case final max?)
                       _CodePointLimit(max),
                   ],

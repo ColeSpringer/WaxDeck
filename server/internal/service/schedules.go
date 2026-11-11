@@ -173,7 +173,8 @@ func (l *Library) MarkScheduleRun(ctx context.Context, kind string, runErr error
 // gpodder episode actions and subscription removals, bookmark
 // tombstones, held YouTube entries, audit log, ended playback sessions,
 // finished tool tasks and the organize journal past the same window, and
-// analysis rows that will never come good.
+// silence and sonic analysis rows that spent their attempts, so their audio
+// gets another round.
 // Horizons are deliberately server-owned constants; sync consumers whose
 // cursor falls below the surviving event floor get a clean resync by
 // design.
@@ -285,6 +286,12 @@ func (l *Library) RunPrune(ctx context.Context) error {
 	record("exhausted analysis", err)
 	if qn > 0 {
 		l.log.Info("pruned exhausted analysis", "rows", qn)
+	}
+	xn, err := l.db.PruneExhaustedSimilarity(ctx, time.Now().Add(-keepExhaustedAnalysis).UnixNano())
+	record("exhausted sonic analysis", err)
+	if xn > 0 {
+		l.log.Info("pruned exhausted sonic analysis", "rows", xn)
+		l.sweepOwed(xn)
 	}
 	return firstErr
 }

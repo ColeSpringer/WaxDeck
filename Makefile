@@ -54,18 +54,28 @@ gen-go: spec-bundle
 	cd server && go tool oapi-codegen -config ../tools/oapi-codegen.yaml ../$(SPEC)
 	cd server && gofmt -w internal/api/gen.go
 
+# The Dart client's models, codec, interfaces and calls. -client fails the
+# run unless client.dart takes calls.g.dart, its one part, and -extensions
+# unless model_extensions.dart's extensions on generated classes take no
+# generated field's name (and each copyWith takes every field). -format
+# formats the output before comparing it, so only changed files are
+# written and a run that changes nothing leaves the web build current.
 gen-dart: spec-bundle
-	tools/generate-dart.sh
+	cd server && go run ./cmd/dartgen -format -spec ../$(SPEC) -hints ../app/packages/waxdeck_api/dartgen.yaml -out ../app/packages/waxdeck_api/lib/src/gen -client ../app/packages/waxdeck_api/lib/src/client.dart -extensions ../app/packages/waxdeck_api/lib/src/model_extensions.dart
 
 # The semantics identifiers the e2e suite drives the UI by, emitted into
-# the app and the specs from one list so the two cannot drift.
-gen-semantics:
+# the app and the specs from one list so the two cannot drift. The tool
+# formats the Dart by app/app's analysis options, which resolve once
+# app-deps has.
+gen-semantics: app-deps
 	dart run tools/gen-semantics-ids.dart
-	dart format app/app/lib/src/shell/semantics_ids.dart >/dev/null
 
 # Types the e2e driver against the contract, so a removed endpoint fails
 # typecheck instead of arriving as a 404. npm ci is guarded because
-# `generate` runs on Go- and Dart-only changes too.
+# `generate` runs on Go- and Dart-only changes too. gen-types passes
+# --default-non-nullable=false (e2e/package.json): without it a property
+# that has a default is typed required, and every request body a spec
+# builds without it fails typecheck.
 gen-api-types: spec-bundle
 	cd e2e && { test -d node_modules || npm ci --no-audit --no-fund; } && npm run --silent gen-types
 
@@ -74,14 +84,16 @@ gen-api-types: spec-bundle
 # fails a translation that does not compile before a build does. The app's
 # table is authored as per-feature fragments in app/app/l10n/, which the
 # bundler merges into the per-locale files gen-l10n reads. gen-l10n
-# formats what it writes; nothing formats it again.
-gen-l10n:
+# formats what it writes, but only in a resolved workspace; nothing
+# formats it again. It rewrites every class it writes, so it runs on a
+# staging copy, and only the classes that changed are written.
+gen-l10n: app-deps
 	dart run tools/gen-l10n-bundle.dart
-	cd app/app && flutter gen-l10n
-	cd app/packages/waxdeck_ui && flutter gen-l10n
+	dart run tools/gen-l10n-classes.dart app/app app/packages/waxdeck_ui
 
 # Resolves the pub workspace, which also mints the l10n classes. The lint,
-# test and web targets depend on it so a fresh clone needs no earlier step.
+# test and web targets depend on it, as do the generate steps that need
+# it, so a fresh clone needs no earlier step.
 app-deps:
 	cd app && flutter pub get
 
@@ -91,18 +103,19 @@ gen-version:
 	dart run tools/gen-app-version.dart
 
 # The client mirror's database.g.dart (named for the mirror, not the
-# drift-check gate). Runs its own pub get: under `make -j` nothing
-# orders this after gen-dart, and build_runner needs a package config.
-gen-mirror:
-	cd app && dart pub get
+# drift-check gate). build_runner needs a package config, which app-deps
+# resolves, and analyzes waxdeck_data, which imports the client gen-dart
+# writes, so under make -j it waits for that to finish.
+gen-mirror: gen-dart app-deps
 	cd app/packages/waxdeck_data && dart run build_runner build
 
 # Embedded third-party notices (waxdeck --third-party-notices). GOWORK=off
 # pins the module set to the zips, not workspace checkouts. The app LICENSE
-# copy is how Flutter's NOTICES bundling conveys the GPL text.
+# copy is how Flutter's NOTICES bundling conveys the GPL text; it is a web
+# input, so it is copied only when it differs.
 gen-notices:
 	cd server && GOWORK=off go run ./cmd/noticegen -out internal/notices/third_party_notices.txt
-	cp LICENSE app/app/LICENSE
+	cmp -s LICENSE app/app/LICENSE || cp LICENSE app/app/LICENSE
 
 # Rarely regenerated assets; not in `generate` because they hit the
 # network and take minutes. Run them when the design changes.
@@ -215,18 +228,19 @@ test-app-chrome: app-deps
 # The cap is a deadlock detector, not a budget. Go's default is 10
 # minutes per package, so a worker that never returns costs ten minutes
 # and answers with an eight-thousand-line goroutine dump - which is how
-# a supervised teardown that deadlocked `Group.Wait` was found. Here
-# `internal/service` measures about 85s, `internal/api` and the gpodder
-# adapter about 50s, and everything else under four, so two minutes
-# still turns a hang into a fast answer. Raise it when a package
-# legitimately grows past it; do not raise it to make a hang pass.
+# a supervised teardown that deadlocked `Group.Wait` was found. On four
+# CPUs `internal/service` measures about two minutes, `internal/api`
+# about 85s, the gpodder adapter about 50s, and everything else under
+# four, so four minutes still turns a hang into a fast answer. Raise it
+# when a package legitimately grows past it; do not raise it to make a
+# hang pass.
 #
 # CI is deliberately not this number: it runs the same suite under
 # `-race` on a shared runner, where `internal/service` and
 # `internal/api` run for minutes rather than seconds, and
 # `.github/workflows/ci.yaml` sets 20m for that with its own note.
 test-server:
-	cd server && go test -timeout 120s ./...
+	cd server && go test -timeout 240s ./...
 
 test-fixtures:
 	cd fixtures && go test ./...
@@ -239,14 +253,19 @@ test-app: app-deps
 	cd app/packages/waxdeck_player_testing && flutter test
 	cd app/app && flutter test
 
-# Regenerate everything and fail if the tree changes (CI codegen-drift gate).
+# Regenerate everything and fail if the tree changes (CI codegen-drift
+# gate): a tracked file the run changed, or one under these paths that git
+# does not track, which a commit made without it would lack.
+DRIFT_PATHS := $(SPEC) server/internal/api app/packages/waxdeck_api/lib/src/gen \
+	app/app/lib/src/shell/semantics_ids.dart e2e/tests/semantics-ids.ts \
+	app/app/lib/src/l10n/arb \
+	app/app/lib/src/shell/app_version.dart \
+	app/packages/waxdeck_data/lib/src/database.g.dart \
+	server/internal/notices/third_party_notices.txt app/app/LICENSE
 drift-check: generate
-	git diff --exit-code -- $(SPEC) server/internal/api app/packages/waxdeck_api_gen \
-		app/app/lib/src/shell/semantics_ids.dart e2e/tests/semantics-ids.ts \
-		app/app/lib/src/l10n/arb \
-		app/app/lib/src/shell/app_version.dart \
-		app/packages/waxdeck_data/lib/src/database.g.dart \
-		server/internal/notices/third_party_notices.txt app/app/LICENSE
+	git diff --exit-code -- $(DRIFT_PATHS)
+	@untracked=$$(git status --porcelain --untracked-files=all -- $(DRIFT_PATHS) | grep '^??' || true); \
+	 if [ -n "$$untracked" ]; then printf 'drift-check: untracked under the generated paths:\n%s\n' "$$untracked" >&2; exit 1; fi
 
 # Breaking-change gate against the base ref. The allow file lists accepted
 # breaks, one per line as `METHOD /path` followed by the change text the
@@ -255,7 +274,8 @@ drift-check: generate
 # part of that: coloured output quotes values with ' instead, and a line
 # copied from it would allow nothing. The file is deleted once the base
 # has the breaks.
-# --flatten-allof: both generators flatten, so allOf moves are wire no-ops.
+# --flatten-allof: an allOf move is a wire no-op, and the wire is all the
+# gate judges.
 BASE ?= origin/main
 OASDIFF_ALLOW := api/oasdiff-allow.txt
 oasdiff:
@@ -277,15 +297,15 @@ web: app-deps
 WEB_STAMP := $(WEB_DIST)/flutter_bootstrap.js
 # Everything the web build reads, so that none of it can change under a
 # bundle that stays: the Dart and the l10n bundles beside it, every font
-# and asset a pubspec declares, the pubspecs and the lockfile, and the
-# page template with the files served beside it. `make fonts`,
-# `make brand` and a dependency bump each change some of these without
-# touching a line of Dart.
+# and asset a pubspec declares, the pubspecs and the lockfile, the
+# licenses its NOTICES carry, and the page template with the files served
+# beside it. `make fonts`, `make brand` and a dependency bump each change
+# some of these without touching a line of Dart.
 WEB_INPUTS := $(shell find app/app/lib app/app/web app/app/assets \
                 $(wildcard app/packages/*/lib app/packages/*/fonts app/packages/*/assets) \
                 -type f 2>/dev/null) \
               $(wildcard app/pubspec.yaml app/pubspec.lock app/app/pubspec.yaml app/app/l10n.yaml \
-                app/packages/*/pubspec.yaml app/packages/*/l10n.yaml)
+                app/packages/*/pubspec.yaml app/packages/*/l10n.yaml app/app/LICENSE app/packages/*/LICENSE)
 
 $(WEB_STAMP): $(WEB_INPUTS)
 	$(MAKE) web

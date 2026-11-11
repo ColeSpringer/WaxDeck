@@ -193,6 +193,7 @@ components:
         excludePids:
           type: array
           maxItems: 500
+          default: []
           description: >
             Tracks to leave out (already played in this radio
             session). The seed is always excluded.

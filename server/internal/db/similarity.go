@@ -242,7 +242,10 @@ func (d *DB) EnqueueSimilarity(ctx context.Context, essence, itemPID string) err
 
 // maxAnalysisAttempts caps how often one essence is offered. An item a
 // worker leases but never reports would otherwise re-lease forever.
-// Attempts grow only on a lease, and a re-rip starts fresh.
+// Attempts grow only on a lease, a lease that could not read its track
+// gives its attempt back, and a re-rip starts fresh. A row that spent them
+// all without its audio judged is cleared for another round by
+// PruneExhaustedSimilarity.
 const maxAnalysisAttempts = 8
 
 // CarvedKeyMark joins a carved track's frame window to its file's essence
@@ -296,13 +299,52 @@ func (d *DB) CompleteSimilarityWork(ctx context.Context, essence string) error {
 
 // RetireSimilarityWork rests a key whose audio cannot be analyzed: never
 // leased again, and never queued again while the row stands. Changed audio
-// is a new key.
+// is a new key. The reason is what marks a row's audio judged, so an empty
+// one is stored as "unreadable".
 func (d *DB) RetireSimilarityWork(ctx context.Context, key, reason string) error {
+	if reason == "" {
+		reason = "unreadable"
+	}
 	_, err := d.w.ExecContext(ctx, `
 		UPDATE similarity_queue SET attempts = ?, lease_until_ns = 0, last_error = ?
 		WHERE essence = ?`, maxAnalysisAttempts, reason, key)
 	if err != nil {
 		return fmt.Errorf("db: retiring analysis work: %w", err)
+	}
+	return nil
+}
+
+// PruneExhaustedSimilarity removes queue rows out of attempts with their
+// audio never judged whose last lease ended before gaveUpBeforeNS, reporting
+// how many went. The enqueue leaves a key it holds alone, so this is what
+// gives the audio another round once an outage that spent the attempts, or
+// a worker that never reported, is over.
+//
+// The age is read off lease_until_ns like PruneExhaustedAnalysis, since
+// enqueued_at_ns never moves; a freshly exhausted row keeps its place for
+// the horizon. A retired row stays, however old: its last_error is the
+// analyzer's verdict on the audio, which a retry cannot change.
+func (d *DB) PruneExhaustedSimilarity(ctx context.Context, gaveUpBeforeNS int64) (int64, error) {
+	res, err := d.w.ExecContext(ctx, `
+		DELETE FROM similarity_queue
+		WHERE attempts >= ? AND last_error = '' AND lease_until_ns < ?`,
+		maxAnalysisAttempts, gaveUpBeforeNS)
+	if err != nil {
+		return 0, fmt.Errorf("db: pruning exhausted analysis work: %w", err)
+	}
+	return res.RowsAffected()
+}
+
+// RefundSimilarityAttempt gives back the attempt a lease charged key, the
+// lease running on: a lease whose read of the catalog failed attempted
+// nothing, and charging it would spend every queued row's attempts in a
+// lasting failure. A resting row keeps its count.
+func (d *DB) RefundSimilarityAttempt(ctx context.Context, key string) error {
+	_, err := d.w.ExecContext(ctx, `
+		UPDATE similarity_queue SET attempts = MAX(attempts - 1, 0)
+		WHERE essence = ? AND last_error = ''`, key)
+	if err != nil {
+		return fmt.Errorf("db: refunding an analysis attempt: %w", err)
 	}
 	return nil
 }
@@ -333,7 +375,8 @@ const (
 	// QueueWaiting is a row a worker may lease, or one under a lease: a
 	// row's last attempt waits until its lease lapses.
 	QueueWaiting QueueState = iota
-	// QueueExhausted is a row out of attempts whose audio was never judged.
+	// QueueExhausted is a row out of attempts whose audio was never judged;
+	// PruneExhaustedSimilarity clears it for another round in time.
 	QueueExhausted
 	// QueueRetired is a row whose audio the analyzer judged it cannot read.
 	QueueRetired

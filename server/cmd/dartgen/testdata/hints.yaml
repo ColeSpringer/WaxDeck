@@ -1,0 +1,121 @@
+# Hints for the golden fixture: every key of the vocabulary at least once.
+models:
+  Error: {skip: true}
+  LibraryRescan: {as: Library}
+  EpisodeSummary:
+    fields:
+      fetchState: {unknownAs: queued}
+  Artwork:
+    fields:
+      url: {emptyAsNull: true}
+      hash: {convert: base64Text}
+  User:
+    as: WaxDeckUser
+    omit: [legacyTheme]
+    fields:
+      roles: {default: []}
+      delete: {as: canDelete, default: false}
+  Upload:
+    fields:
+      idleMs: {as: idle, convert: durationMs}
+  CommitPart:
+    fields:
+      refusal: {convert: apiError}
+  Genre:
+    fields:
+      parent: {emptyAsNull: true}
+  ItemMetadata:
+    fields:
+      extras: {default: {}}
+      labels: {default: {}}
+  MetadataEdit:
+    fields:
+      removeTags: {omitEmpty: true}
+  BulkEdit:
+    fields:
+      tags: {default: [], omitEmpty: true}
+  Schedule:
+    fields:
+      kind: {unknownAs: drop}
+  EnrichmentStatus:
+    fields:
+      phases: {unknownAs: drop}
+      forced: {unknownAs: identity}
+  TargetCreate:
+    fields:
+      config: {dropNullValues: true}
+      headers: {dropNullValues: true}
+      ratio: {serverDefault: true}
+      channel: {omitDefault: true}
+  RuleNode:
+    fields:
+      nodes: {default: []}
+  SessionInfo:
+    as: PlaybackSessionInfo
+
+hand:
+  SessionInfo: {covers: [id], ignores: [positionMs]}
+
+enums:
+  MediaType: {fallback: music}
+  EntityCard.kind: {fallback: drop}
+  CommitPart.status: {as: CommitStatus, add: [unknown], fallback: unknown}
+  Shelf.want: {as: ShelfWant, fallback: drop}
+  Shelf.sizes: {as: ShelfSize}
+  DeleteRequest.mode: {as: DeleteMode}
+  DeleteFilesRequest.mode: {as: DeleteMode}
+  searchLibraries.scope: {as: SearchScope}
+  searchLibraries.sort: {}
+
+operations:
+  getItem: {nullOn: [404]}
+  getShelf: {as: shelf, positional: [key, limit]}
+  rescanLibrary: {unwrap: scanStarted}
+  deleteFiles: {unwrap: deleted}
+  deleteItems: {unwrap: deleted}
+  listAuditEvents: {unwrap: events}
+  listLibraries: {unwrap: libraries}
+  listSchedules: {unwrap: schedules}
+  putSchedule: {positional: [kind, cron]}
+  bulkEdit: {long: true}
+  listSessions:
+    hand: true
+    doc: |
+      `GET /sessions` or `GET /sessions/active`: every session, or only
+      the live ones.
+
+      Which of the two is asked for is the hand method's call.
+  getRule: {raw: true}
+  setRating: {skip: true}
+  searchLibraries:
+    positional: [scope, q]
+    named: [sort, exact, mediaType, since, day, cursor, limit]
+    params:
+      sort: {default: title}
+      exact: {omitFalse: true}
+      debug: {omit: true}
+      cursor: {as: after}
+  getCover: {nullOn: [404, 410]}
+  setCover:
+    body: bytes
+    params:
+      role: {default: front}
+  putUploadData: {body: openRead, length: sizeBytes, long: true}
+  markRead:
+    params:
+      removeTags: {default: []}
+  updateTarget:
+    unwrap: deleted
+    positional: []
+    params:
+      targetId: {as: pid}
+      muted: {nullable: true}
+      headers: {omit: true}
+  putScheduleSettings: {body: update, positional: [kind, update], unwrap: enabled}
+  createTimeline:
+    hand: true
+    long: true
+    positional: [pids]
+    params:
+      pids: {as: itemPids}
+      mode: {as: fast, type: bool, default: false}

@@ -414,6 +414,7 @@ components:
       description: >
         One review queue entry: an album-sized unit of files awaiting
         or past a matching decision. The unit decides as a whole.
+        `best` is absent when lookup produced no candidate.
       required: [id, kind, status, mediaType, origin, trackCount, createdAt, identifying]
       properties:
         id:
@@ -454,6 +455,7 @@ components:
           description: Files in the unit.
         duplicateCount:
           type: integer
+          default: 0
           description: >
             Files in the unit arriving with a duplicate warning (their
             tracks carry it). Absent when none.
@@ -564,6 +566,7 @@ components:
           $ref: "#/components/schemas/DuplicateWarning"
         joined:
           type: boolean
+          default: false
           description: >
             The file entered the library as a copy of, or a further
             part of, an item that already existed; that item's
@@ -626,7 +629,7 @@ components:
         distance:
           type: number
           format: double
-          description: The pairing's own distance in 0 to 1.
+          description: The pairing's own distance in 0 to 1 (0 is identical).
 
     ReviewCandidate:
       type: object
@@ -672,6 +675,7 @@ components:
           description: Match quality in percent (0 to 100).
         components:
           type: array
+          default: []
           description: The distance breakdown.
           items:
             $ref: "#/components/schemas/CandidateComponent"
@@ -682,6 +686,7 @@ components:
             $ref: "#/components/schemas/CandidatePairing"
         missingTitles:
           type: array
+          default: []
           description: >
             Titles of release tracks no file matched (the rip is
             missing them).
@@ -689,6 +694,7 @@ components:
             type: string
         extraTrackIndexes:
           type: array
+          default: []
           description: >
             Indexes (into the entry's `tracks`) of files no release
             track matched (bonus or junk files).
@@ -719,6 +725,7 @@ components:
                 $ref: "#/components/schemas/ReviewCandidate"
             identifyDeclined:
               type: boolean
+              default: false
               description: >
                 The submission asked not to be identified, so the
                 entry never entered the match queue. Absent means it
@@ -739,11 +746,6 @@ components:
                 files' own tags. Absent when nothing was typed. The
                 `tracks` below always report the tags the files carry,
                 never this.
-
-
-                Not named `override`: the Dart generator emits a
-                property name verbatim, and `override` there collides
-                with the language's own annotation.
             suggested:
               allOf:
                 - $ref: "#/components/schemas/ReviewIdentifyRequest"
@@ -809,6 +811,7 @@ components:
           $ref: "#/components/schemas/ReviewEntry"
         warnings:
           type: array
+          default: []
           description: >
             Non-fatal problems (per-file write-back failures, roles
             without a tag form). The decision itself stood.
@@ -868,6 +871,7 @@ components:
           description: Why it did not, when `ok` is false.
         warnings:
           type: array
+          default: []
           description: >
             What the single-entry decide reports under `warnings`, when
             `ok` is true: the decision stood, with these problems.
@@ -890,6 +894,7 @@ components:
             listing.
         identifying:
           type: integer
+          default: 0
           description: Entries whose identify pipeline still runs.
         applied:
           type: integer
@@ -899,12 +904,15 @@ components:
           description: Entries the engine applied on its own.
         asIs:
           type: integer
+          default: 0
           description: Entries accepted as they were.
         unofficial:
           type: integer
+          default: 0
           description: Entries marked as having no canonical release.
         skipped:
           type: integer
+          default: 0
           description: Entries dismissed without action.
         reverted:
           type: integer
@@ -925,9 +933,9 @@ components:
       properties:
         mode:
           type: string
-          # "off" is quoted deliberately: YAML 1.1 parsers (the Dart
-          # generator's among them) read a bare off as boolean false,
-          # which silently became a "false" wire value once already.
+          # "off" is quoted deliberately: YAML 1.1 parsers read a bare off
+          # as boolean false, which silently became a "false" wire value
+          # once already.
           enum: [auto, review, "off"]
           description: The matching mode.
         singlesAutoApply:

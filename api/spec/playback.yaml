@@ -1034,7 +1034,9 @@ components:
       description: >
         The calling user's star and rating for one catalog entity (an
         artist or an album). Entities carry no resume position or play
-        count of their own; their items keep those.
+        count of their own; their items keep those. An entity the
+        caller has never starred or rated reads back as the zero state,
+        not an error.
       required: [pid, starred]
       properties:
         pid:
@@ -1063,7 +1065,10 @@ components:
 
     StarredEntities:
       type: object
-      description: The caller's starred catalog entities, grouped by kind.
+      description: >
+        The caller's starred catalog entities, grouped by kind, most
+        recently starred first within each group. Independent of item
+        stars: starring an album does not star its tracks.
       required: [artists, albums]
       properties:
         artists:
@@ -1180,6 +1185,7 @@ components:
             for the time-saved counter. Omit when neither applies.
         finished:
           type: boolean
+          default: false
           description: Whether playback reached the end of the item.
         client:
           type: string
@@ -1224,6 +1230,7 @@ components:
           description: Sessions already recorded (replay of a known `sessionId`); ignored without error.
         rejected:
           type: array
+          default: []
           description: Sessions that could not be recorded at all (unknown item, malformed fields).
           items:
             $ref: "#/components/schemas/RejectedListen"
@@ -1250,6 +1257,7 @@ components:
       properties:
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative, media-token-authenticated download URL serving
             this file's original bytes with range support.
@@ -1345,6 +1353,7 @@ components:
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative, media-token-authenticated stream URL. Short TTL;
             re-request play-info on expiry or a `stream-stale` error. Which
@@ -1369,7 +1378,13 @@ components:
         durationMs:
           type: integer
           format: int64
-          description: Duration in milliseconds.
+          description: >
+            Duration in milliseconds. It is the length of what the client
+            plays: the resolved part for a multi-file audiobook (the
+            item's own `durationMs` is the book total), the item's own
+            window for a carved track, and the whole item or part for a
+            stream cut at a position (`startOffsetMs`), not the cut
+            audio's remainder.
           example: 214000
         seekable:
           type: boolean
@@ -1389,6 +1404,7 @@ components:
         startOffsetMs:
           type: integer
           format: int64
+          default: 0
           description: >
             Milliseconds into the resolved item (into the resolved part,
             for a multi-file audiobook) at which the served audio begins.
@@ -1425,6 +1441,7 @@ components:
             exactly when `partCount` is.
         voiceBoost:
           type: boolean
+          default: false
           description: >
             True when the stream applies server-side spoken-word loudness
             normalization. Absent or false otherwise, including when it
@@ -1538,7 +1555,9 @@ components:
           description: >
             `ready` (peaks present), `pending` (analyzable, not yet
             analyzed), or `unavailable` (there will never be a waveform
-            for this item). Open set; treat unknown values as
+            for this item: an episode, a file the pass could not
+            measure, or a carved track whose window reaches past its
+            file's decoded audio). Open set; treat unknown values as
             `unavailable`.
           example: ready
         partIndex:

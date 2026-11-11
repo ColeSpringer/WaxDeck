@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -41,6 +44,29 @@ void main() {
     expect(e.code, 'transport');
   });
 
+  test('a bytes body is read as the error it carries', () {
+    // A call that asks for bytes gets its error body as bytes too.
+    final e = apiExceptionFromDio(
+      _dioError(
+        Uint8List.fromList(
+          utf8.encode('{"code":"not-found","message":"no such item"}'),
+        ),
+        status: 404,
+      ),
+    );
+    expect(e.code, 'not-found');
+    expect(e.message, 'no such item');
+    expect(e.statusCode, 404);
+  });
+
+  test('a bytes body that is not an error falls back with its status', () {
+    final e = apiExceptionFromDio(
+      _dioError(Uint8List.fromList(utf8.encode('Bad Gateway')), status: 502),
+    );
+    expect(e.code, 'transport');
+    expect(e.statusCode, 502);
+  });
+
   // A deadline has no response to read a code out of, so it is
   // recognized by type. All three of dio's timeout types map to one
   // name: what a caller does about "the server did not answer in time"
@@ -67,16 +93,76 @@ void main() {
   // The detail behind an umbrella code. A caller keys on it instead of
   // matching the message's prose, so what does and does not become a
   // param has to be exact.
-  test('only no answer or a 503 reads as the server being out of reach', () {
+  test('only no answer, a 503 or a proxy\'s gateway error is out of reach', () {
     // The one rule both outboxes queue on: a refusal is an answer, and a
     // change the server refused must not wait to be refused again.
-    WaxDeckApiException failure(int? status) =>
-        WaxDeckApiException(code: 'x', message: 'x', statusCode: status);
+    WaxDeckApiException failure(int? status, {String code = 'x'}) =>
+        WaxDeckApiException(code: code, message: 'x', statusCode: status);
     expect(failure(null).unreachable, isTrue);
     expect(failure(503).unreachable, isTrue);
     expect(failure(500).unreachable, isFalse);
     expect(failure(400).unreachable, isFalse);
     expect(failure(401).unreachable, isFalse);
+    // A gateway answering without the server's words: the server is down
+    // or restarting behind it. 521 to 524 and 530 are a CDN or tunnel
+    // saying the same for an origin it cannot reach.
+    for (final status in [502, 504, 521, 522, 523, 524, 530]) {
+      expect(
+        failure(status, code: 'transport').unreachable,
+        isTrue,
+        reason: '$status',
+      );
+      // The server's own words make it an answer about something else.
+      expect(
+        failure(status, code: 'service-unreachable').unreachable,
+        isFalse,
+        reason: '$status',
+      );
+    }
+    expect(failure(504, code: 'feed-unreachable').unreachable, isFalse);
+    expect(failure(500, code: 'transport').unreachable, isFalse);
+  });
+
+  test('an answer that arrived is never out of reach', () {
+    for (final code in ['transport-empty', 'transport-decode']) {
+      expect(
+        WaxDeckApiException(
+          code: code,
+          message: 'x',
+          statusCode: 200,
+        ).unreachable,
+        isFalse,
+        reason: code,
+      );
+    }
+  });
+
+  group('an error object off the wire', () {
+    test('is a string code and message, with its status', () {
+      final e = apiErrorFromWire({
+        'code': 'not-found',
+        'message': 'no such item',
+        'params': {'pid': 'tr-1'},
+      }, statusCode: 404);
+      expect(e?.code, 'not-found');
+      expect(e?.message, 'no such item');
+      expect(e?.statusCode, 404);
+      expect(e?.params, {'pid': 'tr-1'});
+    });
+
+    test('is nothing else', () {
+      for (final raw in <Object?>[
+        null,
+        'not-found',
+        ['not-found', 'no'],
+        {'message': 'no'},
+        {'code': 'not-found'},
+        {'code': 404, 'message': 'no'},
+        {'code': 'not-found', 'message': 7},
+      ]) {
+        expect(apiErrorFromWire(raw), isNull, reason: '$raw');
+      }
+    });
   });
 
   group('structured params', () {

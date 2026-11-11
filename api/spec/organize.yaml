@@ -486,6 +486,7 @@ components:
             type: integer
         holds:
           type: array
+          default: []
           description: The first five hundred moves held back.
           items:
             $ref: "#/components/schemas/OrganizeHold"
@@ -584,6 +585,7 @@ components:
             read-only after the plan.
         holds:
           type: array
+          default: []
           description: The first five hundred moves held back.
           items:
             $ref: "#/components/schemas/OrganizeHold"
@@ -595,6 +597,7 @@ components:
           description: Files that could not move.
         failures:
           type: array
+          default: []
           description: The failures, path and reason each.
           items:
             $ref: "#/components/schemas/OrganizeFailure"

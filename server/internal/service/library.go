@@ -502,6 +502,10 @@ type Library struct {
 	// pinHook stands in for the catalog write that pins or unpins an
 	// episode in a test; nothing in the server sets it.
 	pinHook func(context.Context, model.PID, *model.Episode, bool) error
+	// markMissingHook stands in for the catalog's mark-missing of an item
+	// whose audio the analysis worker found gone, in a test; nothing in
+	// the server sets it.
+	markMissingHook func(context.Context, model.PID) (model.MarkMissingOutcome, error)
 	// handoverHook fails a step of handing a deleted account's playlist
 	// over in a test; nothing in the server sets it.
 	handoverHook func(stage string, pl *model.Playlist) error
@@ -638,9 +642,12 @@ type Library struct {
 	// for the check a new session runs. A field rather than a direct
 	// call so a test can hand it a full disk; nothing configures it.
 	stagingFree func(string) (int64, bool)
-	// catalogFile reads a file row for the similarity sweep; a field so
-	// a test can hand it a read that fails.
+	// catalogFile reads a file row, for fileByPID and the similarity
+	// sweep; a field so a test can hand it a read that fails.
 	catalogFile func(context.Context, model.PID) (*model.File, error)
+	// catalogItem reads an item row for the analysis queues; a field so a
+	// test can hand one row a read that fails.
+	catalogItem func(context.Context, model.PID) (*model.ItemView, error)
 	// admitUpload serializes the allowance checks a new session runs
 	// against the insert that spends them.
 	admitUpload sync.Mutex
@@ -695,17 +702,24 @@ type Library struct {
 	// waxdeck.db on first use (it only holds data when a worker has
 	// posted embeddings). simSweepVersion remembers the catalog data
 	// version the last analysis sweep covered, so an unchanged catalog
-	// never re-walks. simWake nudges the sweep loop when tracks may have
-	// arrived; lossy, ticker-backstopped. simIndex is the latest walk's
-	// analysisIndex, which the status counts from; simIndexMu keeps two
-	// walks of one catalog from running at once, and simIndexChecked is
-	// when the index was last walked or checked against the catalog, in
-	// unix nanoseconds. simWalk is the walk running off any request, under
-	// simWalkMu. workerLocalPaths mirrors Config.WorkerLocalPaths.
+	// never re-walks. simDrops counts the queue rows removed because their
+	// own track left or moved on, or because they rested out of attempts
+	// for a week, whose audio may be queued again, and simSweptDrops is the
+	// count the last sweep covered: a sweep owed one runs on an unchanged
+	// catalog. simWake nudges the sweep loop when tracks may have arrived;
+	// lossy, ticker-backstopped.
+	// simIndex is the latest walk's analysisIndex, which the status counts
+	// from; simIndexMu keeps two walks of one catalog from running at
+	// once, and simIndexChecked is when the index was last walked or
+	// checked against the catalog, in unix nanoseconds. simWalk is the
+	// walk running off any request, under simWalkMu. workerLocalPaths
+	// mirrors Config.WorkerLocalPaths.
 	sim              *similarity.Engine
 	simWarm          sync.Once
 	simWarmErr       error
 	simSweepVersion  atomic.Int64
+	simDrops         atomic.Uint64
+	simSweptDrops    atomic.Uint64
 	simWake          chan struct{}
 	simIndex         atomic.Pointer[analysisIndex]
 	simIndexMu       sync.Mutex
@@ -936,6 +950,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	l = &Library{
 		sources: sources,
 		lib:     lib, paths: paths, db: store, configRoots: cfg.Roots, log: log, procCtx: ctx,
+		catalogFile:              lib.File,
+		catalogItem:              lib.Get,
 		catalogPath:              opts.DBPath,
 		socketDir:                socketDir,
 		catalogWake:              make(chan struct{}, 1),
@@ -1034,7 +1050,6 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		return nil, fmt.Errorf("service: staging directory: %w", err)
 	}
 	l.stagingFree = diskspace.Free
-	l.catalogFile = lib.File
 	l.setUploadFormats(cfg.UploadFormats)
 	l.uploadRetention = cfg.UploadRetention
 	if l.uploadRetention == 0 {

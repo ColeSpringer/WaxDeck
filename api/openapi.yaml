@@ -2722,8 +2722,8 @@ paths:
       operationId: getBookResume
       summary: Where the caller left off in a book
       description: >
-        The calling user's resume point on the book timeline, with the
-        chapter that position falls in (when the book has chapters).
+        The calling user's resume point on the book timeline, with its
+        chapter (when the book has chapters; see `BookResume.chapter`).
         This is the cross-device resume answer: the position reflects
         the newest checkpoint from any device after the server's
         per-medium reconciliation.
@@ -11624,6 +11624,8 @@ paths:
                 $ref: "#/components/schemas/SimilarityWorkPage"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
 
   /similarity/embeddings:
     post:
@@ -11632,7 +11634,9 @@ paths:
       description: >
         Records a batch of embeddings, keyed by each item's analysis key, in the
         batch's `model` and `dims` (a vector of another length is refused alone).
-        A new `model` replaces coverage, since models never mix. Worker token.
+        A vector for audio its track no longer holds is refused alone as
+        `not-found`. A new `model` replaces coverage, since models never mix.
+        Worker token.
       tags: [similarity]
       security:
         - workerAuth: []
@@ -11653,6 +11657,8 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
 
   /stats/listening:
     get:
@@ -14031,6 +14037,10 @@ components:
         answers with, which for an album with no durable cover of its own
         is a member track's - reported honestly as that track's source,
         with `derived` marking that the album did not choose it.
+
+
+        Absent wherever the catalog holds no attribution for the
+        picture.
       required: [source]
       properties:
         source:
@@ -14080,6 +14090,7 @@ components:
           example: album
         derived:
           type: boolean
+          default: false
           description: >
             True when the answering level holds no cover of its own and
             the picture came from a member instead - an album showing one
@@ -14189,6 +14200,7 @@ components:
           example: 214000
         artUrl:
           type: string
+          format: uri-reference
           description: >
             Origin-relative URL of the item's artwork endpoint. Always
             populated; the endpoint itself returns 404 for items with no
@@ -14268,6 +14280,7 @@ components:
           example: music
         mediaDeclared:
           type: boolean
+          default: false
           description: >
             The server's configuration names what the library holds
             (`WAXDECK_AUDIOBOOK_ROOTS`), so setLibraryMedia refuses any
@@ -14305,6 +14318,7 @@ components:
           example: waxbin-native
         configured:
           type: boolean
+          default: false
           description: >
             The server's configuration names the library
             (`WAXDECK_LIBRARY_ROOTS`), so every start registers it and
@@ -14312,6 +14326,7 @@ components:
             Absent means false.
         unreachable:
           type: boolean
+          default: false
           description: >
             The library's folder was not there at its last scan, which
             marked nothing under it missing: its items stay listed and play
@@ -14412,6 +14427,7 @@ components:
             default keeps files strictly in place.
         allowAbsent:
           type: boolean
+          default: false
           description: >
             Register a root whose folder is mounted later; a scan reports it
             unreachable until then. Absent means false.
@@ -14581,6 +14597,7 @@ components:
         detail:
           type: object
           additionalProperties: true
+          default: {}
           description: >
             Action-specific structure: what changed, from what, to
             what. Shapes are stable per action but may grow fields.
@@ -14815,10 +14832,8 @@ components:
       type: string
       enum: [scan, backup, prune, analyze, enrich]
       description: >
-        A schedulable job kind. A shared named schema on purpose (the
-        path parameter and the schedule object both use it): identical
-        inline enums make the Dart generator emit one enum class into
-        two files, which does not compile.
+        A schedulable job kind, shared by the path parameter and the
+        schedule object.
 
         `analyze` is off by default and costs a full audio decode per
         file; see `POST /library/analyze` for what it produces and what
@@ -15439,6 +15454,7 @@ components:
         aliases:
           type: array
           maxItems: 64
+          default: []
           description: >
             The spellings that resolve to this genre. Case, diacritics,
             and punctuation already fold, so list only what folding
@@ -15912,6 +15928,7 @@ components:
           example: Company SSO
         startUrl:
           type: string
+          format: uri-reference
           description: >
             Origin-relative URL that starts this provider's login flow
             (web mode; other modes add their query parameters).
@@ -16074,7 +16091,9 @@ components:
 
     Bookmark:
       type: object
-      description: One place a listener marked in a book.
+      description: >
+        One place a listener marked in a book. Not the resume point: a
+        book has one of those and any number of these.
       required: [id, positionMs, createdAt]
       properties:
         id:
@@ -16174,7 +16193,8 @@ components:
       type: object
       description: >
         Full audiobook detail. All positions are book-timeline
-        milliseconds spanning every part.
+        milliseconds spanning every part. `settings` is the caller's own
+        per-book playback settings, absent when none are stored.
       required: [pid, title, durationMs, authors, narrators, chapters, parts]
       properties:
         pid:
@@ -16251,6 +16271,7 @@ components:
           description: Total duration across all parts, in milliseconds.
         artUrl:
           type: string
+          format: uri-reference
           description: Origin-relative URL of the book's artwork endpoint.
         chapters:
           type: array
@@ -16268,7 +16289,12 @@ components:
 
     BookResume:
       type: object
-      description: The calling user's resume point in one book.
+      description: >
+        The calling user's resume point in one book. `chapter` is the last
+        chapter that starts at or before `positionMs`: a position in a gap
+        between two chapters answers the one before the gap, and one before
+        the first chapter answers the first. Present when the book has
+        chapters.
       required: [positionMs]
       properties:
         positionMs:
@@ -16339,6 +16365,7 @@ components:
         excludePids:
           type: array
           maxItems: 500
+          default: []
           description: >
             Tracks to leave out (already played in this radio
             session). The seed is always excluded.
@@ -17429,6 +17456,7 @@ components:
           description: The multi-file book part the lengths are of, zero-based.
         wholeFile:
           type: boolean
+          default: false
           description: The lengths are of the whole file a cue-carved track is cut from.
 
     HealthFixRequest:
@@ -17970,6 +17998,7 @@ components:
           example: al-01JZX5N8QW3F4V9T2B7KD3M9R6
         unknown:
           type: boolean
+          default: false
           description: >
             True for the bucket holding items the dimension is absent
             from. Its `label` is the canonical sentinel and its `key` is
@@ -18026,6 +18055,7 @@ components:
           description: Context line (artist for a track, author for a book).
         exact:
           type: boolean
+          default: false
           description: >
             True on an artist or album whose own name is the query,
             ignoring case, accents, punctuation and spacing (`jayz`
@@ -18106,7 +18136,8 @@ components:
       type: object
       description: >
         Summaries for the requested PIDs, in request order, minus the
-        ones that could not be resolved.
+        ones that could not be resolved. An item whose kind changed
+        answers under the prefix its kind has now, with the same ULID.
       required: [items]
       properties:
         items:
@@ -18115,12 +18146,15 @@ components:
             $ref: "#/components/schemas/ItemSummary"
         departed:
           type: array
+          default: []
           description: >
             The requested PIDs gone for everyone: no item answers to it
             any more (a kind change folded it into another) or ever did.
-            An archived item is answered rather than named here. As
-            requested, in request order, a repeated PID once, and absent
-            rather than empty when no miss was one of these.
+            An archived item is answered rather than named here. One
+            merely out of the caller's sight (a grant, a content
+            setting) is not named either, because it can come back. As
+            requested, in request order, a repeated PID once, and empty
+            (left off the wire) when no miss was one of these.
           items:
             type: string
             pattern: "^(tr|ep|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
@@ -18150,8 +18184,8 @@ components:
           type: string
           description: >
             The context line: an album's or book's artist, a show's
-            author. Absent for an artist (whose title is the name) and
-            wherever the catalog has none.
+            author, a playlist's owner. Absent for an artist (whose
+            title is the name) and wherever the catalog has none.
         year:
           type: integer
           description: Release year, where the entity carries one.
@@ -18185,11 +18219,12 @@ components:
             $ref: "#/components/schemas/EntityCard"
         departed:
           type: array
+          default: []
           description: >
             The requested PIDs that no longer name anything on this
             server, for anyone: deleted, merged away, or never real. In
-            request order, a repeated PID once, and absent rather than
-            empty when every miss was merely out of the caller's sight
+            request order, a repeated PID once, and empty (left off the
+            wire) when every miss was merely out of the caller's sight
             (a grant, a lapsed subscription, the trash) - those stay
             unnamed, because they can come back. This is the set a
             client holding `Prefs.pinned` prunes.
@@ -18200,7 +18235,11 @@ components:
 
     AlbumDetail:
       type: object
-      description: One album entity's identity and counts.
+      description: >
+        One album entity's identity and counts. Its release facts
+        (barcode, label, catalog number, media, country) are what the
+        catalog keeps on the entity rather than on any of its tracks:
+        they describe the edition, not the file.
       required: [pid, title]
       properties:
         pid:
@@ -18273,6 +18312,7 @@ components:
           properties:
             genres:
               type: array
+              default: []
               description: >
                 The item's display genres, one each: a tag holding
                 several (`Rock; Pop / Indie`) is split on `;`, `/` and
@@ -18334,6 +18374,7 @@ components:
                 it here, whether or not its audio has been fetched.
             copies:
               type: integer
+              default: 0
               description: >
                 How many copies the item holds beside its own files
                 (getItemFiles lists them), counting those in libraries
@@ -18377,7 +18418,9 @@ components:
           description: >
             The effective shuffle seed. Present only on `random` browse
             pages; pass it back together with `nextCursor` so later pages
-            keep the same order.
+            keep the same order. A seed the server mints is a positive
+            integer that fits in 53 bits, so a client that reads numbers
+            as doubles holds it exactly.
 
     DeleteItemsRequest:
       type: object
@@ -18413,7 +18456,9 @@ components:
           description: False for a dry run.
         mode:
           type: string
-          description: The mode that was (or would be) used.
+          description: >
+            The mode that was (or would be) used: `trash` or
+            `permanent`.
         entries:
           type: array
           description: Per-item breakdown.
@@ -18421,6 +18466,7 @@ components:
             $ref: "#/components/schemas/DeletePlanEntry"
         warnings:
           type: array
+          default: []
           description: >
             What the deletion did beside removing files, in sentences: a
             copy that took a deleted file's place, and a file it could
@@ -18477,6 +18523,7 @@ components:
           description: Bytes reclaimed (or to reclaim).
         fileList:
           type: array
+          default: []
           description: >
             The files `files` counts, by name. Absent for an entry whose
             file counts under another track of its rip.
@@ -18484,6 +18531,7 @@ components:
             $ref: "#/components/schemas/DeletePlanFile"
         paths:
           type: array
+          default: []
           description: >
             Where the files `fileList` names are, in the same order, each
             relative to its library's root, so two files of one name in
@@ -18493,6 +18541,7 @@ components:
             example: Hum Collective/Shell Songs/01 - Hell Shell.m4a
         sidecars:
           type: array
+          default: []
           description: >
             The sidecars that go with this entry's files, each relative
             to its library's root as `paths` are: the covers, lyrics,
@@ -18506,6 +18555,7 @@ components:
             example: Hum Collective/Shell Songs/01 - Hell Shell.lrc
         failed:
           type: integer
+          default: 0
           description: >
             Files of this item the deletion tried to remove and could
             not; they stayed, and `files` does not count them. Absent
@@ -18781,7 +18831,10 @@ components:
             Empty for every other source.
         synced:
           type: array
-          description: Time-synced lines, ordered by `timeMs`.
+          default: []
+          description: >
+            Time-synced lines, ordered by `timeMs`. Empty when the
+            source carried no timings.
           items:
             $ref: "#/components/schemas/SyncedLine"
         unsynced:
@@ -18818,6 +18871,7 @@ components:
             $ref: "#/components/schemas/EntityTypeFields"
         reservedTagKeys:
           type: array
+          default: []
           description: >
             Custom-tag keys the catalog owns through a field of its own
             (`BPM` through `bpm`, `ISRC` through `isrc`, and so on), in
@@ -18919,6 +18973,7 @@ components:
           $ref: "#/components/schemas/LyricsState"
         chapters:
           type: array
+          default: []
           description: Chapter marks (books).
           items:
             $ref: "#/components/schemas/ChapterMark"
@@ -19063,6 +19118,7 @@ components:
             would render as a confident wrong date.
         locked:
           type: boolean
+          default: false
           description: >
             Whether the origin is locked against automatic rewrites -
             an import re-recording over it, or a scan re-deriving it
@@ -19416,11 +19472,13 @@ components:
           description: Always true; the catalog committed.
         writeBackFailures:
           type: array
+          default: []
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
         warnings:
           type: array
+          default: []
           description: >
             Non-fatal notes: typed drop warnings from the tag
             library (a format refusing embedded synced lyrics, a
@@ -19437,6 +19495,7 @@ components:
             instead.
         movedAlbums:
           type: array
+          default: []
           description: >
             Albums that left the edited release group because the clear
             re-keyed it and their titles put them in a group of their
@@ -19605,6 +19664,7 @@ components:
             $ref: "#/components/schemas/MetadataCommitPart"
         writeBackFailures:
           type: array
+          default: []
           description: >
             Files whose tags could not be updated, merged across every
             part and deduplicated: several parts can report the same
@@ -19614,6 +19674,7 @@ components:
             $ref: "#/components/schemas/WriteBackFailure"
         warnings:
           type: array
+          default: []
           description: >
             The parts' non-fatal notes, merged: typed drop warnings
             from the tag library, roles without a tag form, malformed
@@ -19701,6 +19762,7 @@ components:
             type: string
         writeBackFailures:
           type: array
+          default: []
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
@@ -19837,6 +19899,7 @@ components:
           description: Values stored after deduplication.
         writeBackFailures:
           type: array
+          default: []
           description: >
             Files the write-back could not update; the catalog edit
             stands. Absent when every file took the values or no
@@ -19967,6 +20030,7 @@ components:
           description: The release group above that album, when there is one.
         failures:
           type: array
+          default: []
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
@@ -20021,7 +20085,13 @@ components:
         outcome:
           type: string
           enum: [renamed, merged, refreshed]
-          description: What the rename did to the entity's identity key.
+          description: >
+            What the rename did to the entity's identity key: `renamed`
+            when it moved and the row stayed, keeping its pid; `merged`
+            when the new key was already taken and the entity folded
+            into the incumbent named by `mergedInto`; `refreshed` when
+            the new key equals the old one, so only the display fields
+            moved (a case-only rename lands here).
         mergedInto:
           type: string
           description: >
@@ -20029,6 +20099,7 @@ components:
             only then.
         movedAlbums:
           type: array
+          default: []
           description: >
             Albums that came out under a different release group than
             they went in under, which an album rename can do when the
@@ -20046,6 +20117,7 @@ components:
             An item can be counted in both `members` and here.
         failures:
           type: array
+          default: []
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
@@ -20142,6 +20214,7 @@ components:
       properties:
         fields:
           type: array
+          default: []
           description: The approved field proposals.
           items:
             $ref: "#/components/schemas/EnrichFieldProposal"
@@ -20253,16 +20326,14 @@ components:
       description: >
         Where a notification event or target belongs: `server` is the
         administrator-managed operations scope, `user` a single user's
-        personal scope. A shared named schema on purpose: identical
-        inline enums make the Dart generator emit one enum class into
-        two files, which does not compile.
+        personal scope.
 
     NotificationTargetKind:
       type: string
       enum: [pushover, ntfy, gotify, discord, webhook, apprise, unifiedpush]
       description: >
-        A notification delivery provider. A shared named schema on
-        purpose, like NotificationScope.
+        A notification delivery provider, as named on a target and on a
+        request to create one.
 
     NotificationEvent:
       type: object
@@ -20407,7 +20478,7 @@ components:
         target URLs; empty relies on the Apprise server's own
         configuration);
         `unifiedpush` takes `endpoint` (the distributor-issued https
-        URL, unique per owner).
+        URL, unique per owner). The `kind` is fixed at creation.
       required: [pid, kind, scope, config, enabledEvents, createdAt]
       properties:
         pid:
@@ -20458,6 +20529,7 @@ components:
             than held for the unmute.
         minIntervalSeconds:
           type: integer
+          default: 0
           description: >
             The shortest gap between two deliveries to this target, in
             seconds; 0 (the default) paces nothing. A delivery inside
@@ -20807,6 +20879,7 @@ components:
             type: integer
         holds:
           type: array
+          default: []
           description: The first five hundred moves held back.
           items:
             $ref: "#/components/schemas/OrganizeHold"
@@ -20905,6 +20978,7 @@ components:
             read-only after the plan.
         holds:
           type: array
+          default: []
           description: The first five hundred moves held back.
           items:
             $ref: "#/components/schemas/OrganizeHold"
@@ -20916,6 +20990,7 @@ components:
           description: Files that could not move.
         failures:
           type: array
+          default: []
           description: The failures, path and reason each.
           items:
             $ref: "#/components/schemas/OrganizeFailure"
@@ -21155,7 +21230,9 @@ components:
       description: >
         The calling user's star and rating for one catalog entity (an
         artist or an album). Entities carry no resume position or play
-        count of their own; their items keep those.
+        count of their own; their items keep those. An entity the
+        caller has never starred or rated reads back as the zero state,
+        not an error.
       required: [pid, starred]
       properties:
         pid:
@@ -21184,7 +21261,10 @@ components:
 
     StarredEntities:
       type: object
-      description: The caller's starred catalog entities, grouped by kind.
+      description: >
+        The caller's starred catalog entities, grouped by kind, most
+        recently starred first within each group. Independent of item
+        stars: starring an album does not star its tracks.
       required: [artists, albums]
       properties:
         artists:
@@ -21301,6 +21381,7 @@ components:
             for the time-saved counter. Omit when neither applies.
         finished:
           type: boolean
+          default: false
           description: Whether playback reached the end of the item.
         client:
           type: string
@@ -21345,6 +21426,7 @@ components:
           description: Sessions already recorded (replay of a known `sessionId`); ignored without error.
         rejected:
           type: array
+          default: []
           description: Sessions that could not be recorded at all (unknown item, malformed fields).
           items:
             $ref: "#/components/schemas/RejectedListen"
@@ -21371,6 +21453,7 @@ components:
       properties:
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative, media-token-authenticated download URL serving
             this file's original bytes with range support.
@@ -21466,6 +21549,7 @@ components:
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative, media-token-authenticated stream URL. Short TTL;
             re-request play-info on expiry or a `stream-stale` error. Which
@@ -21490,7 +21574,13 @@ components:
         durationMs:
           type: integer
           format: int64
-          description: Duration in milliseconds.
+          description: >
+            Duration in milliseconds. It is the length of what the client
+            plays: the resolved part for a multi-file audiobook (the
+            item's own `durationMs` is the book total), the item's own
+            window for a carved track, and the whole item or part for a
+            stream cut at a position (`startOffsetMs`), not the cut
+            audio's remainder.
           example: 214000
         seekable:
           type: boolean
@@ -21510,6 +21600,7 @@ components:
         startOffsetMs:
           type: integer
           format: int64
+          default: 0
           description: >
             Milliseconds into the resolved item (into the resolved part,
             for a multi-file audiobook) at which the served audio begins.
@@ -21546,6 +21637,7 @@ components:
             exactly when `partCount` is.
         voiceBoost:
           type: boolean
+          default: false
           description: >
             True when the stream applies server-side spoken-word loudness
             normalization. Absent or false otherwise, including when it
@@ -21659,7 +21751,9 @@ components:
           description: >
             `ready` (peaks present), `pending` (analyzable, not yet
             analyzed), or `unavailable` (there will never be a waveform
-            for this item). Open set; treat unknown values as
+            for this item: an episode, a file the pass could not
+            measure, or a carved track whose window reaches past its
+            file's decoded audio). Open set; treat unknown values as
             `unavailable`.
           example: ready
         partIndex:
@@ -21868,6 +21962,7 @@ components:
           example: "off"
         shuffle:
           type: boolean
+          default: false
           description: >
             Whether shuffle is on. `entries` always lists the true
             play order: turning shuffle on reorders the unplayed
@@ -21895,6 +21990,7 @@ components:
             $ref: "#/components/schemas/PlaybackSessionEntry"
         ended:
           type: boolean
+          default: false
           description: >
             Present true only over the WebSocket, and terminal for
             that delivery context: the watched or reported session
@@ -21983,6 +22079,7 @@ components:
           example: "off"
         shuffle:
           type: boolean
+          default: false
           description: >
             Whether shuffle was on. `entries` is the play order as it
             stood, already shuffled.
@@ -22171,6 +22268,8 @@ components:
       description: >
         A minted gapless timeline: one HLS stream URL that plays the
         whole queue, plus the per-member boundaries to map positions.
+        Timelines are immutable: editing the queue means minting
+        another.
       required:
         [url, mimeType, durationMs, expiresAt, envelopeRate, boundaries]
       properties:
@@ -22184,6 +22283,7 @@ components:
           example: tl-01JZX5N8QW3F4V9T2B7KD3M9R6
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative, media-token-authenticated HLS playlist
             URL for the whole timeline. The token lives at least the
@@ -22248,8 +22348,13 @@ components:
         reachable:
           type: boolean
           description: >
-            Whether the server could fetch its own health endpoint
-            through this base.
+            Whether the server's own fetch of its health endpoint through
+            this base answered `200`. `false` also covers a fetch that
+            failed on the server's side of the network (a proxy that
+            cannot loop back, split-horizon name resolution) and a check
+            cancelled before the base was tried; `notes` says which. The
+            fetch comes from the server, not the device, so either
+            verdict is evidence about the device, not proof.
         notes:
           type: array
           description: >
@@ -22520,7 +22625,8 @@ components:
       type: object
       description: >
         A playlist's external source binding: what it follows, how,
-        and how the syncing has been going.
+        and how the syncing has been going. `lastRun` is the last
+        completed run's counts, absent before the first success.
       required: [source, live, mode, disabled, consecutiveFailures]
       properties:
         source:
@@ -22714,6 +22820,7 @@ components:
           description: Matched-source refs with no library match.
         misses:
           type: array
+          default: []
           description: >
             The unmatched refs themselves, in source order. Matched
             bindings only.
@@ -22771,6 +22878,7 @@ components:
           description: True when the caller owns this playlist and may edit it.
         hasArt:
           type: boolean
+          default: false
           description: >
             A cover is stored for this playlist, readable at
             `/items/{pid}/art` with the playlist's own PID. It is true
@@ -22928,6 +23036,7 @@ components:
           $ref: "#/components/schemas/RuleNode"
         sorts:
           type: array
+          default: []
           description: >
             Sort order, applied in sequence. Rejected with
             `limitMode` `random` (the shuffle is the order).
@@ -22936,6 +23045,7 @@ components:
             $ref: "#/components/schemas/RuleSort"
         limit:
           type: integer
+          default: 0
           description: >
             The limit value, interpreted by `limitMode`: a maximum
             member count (`count`, the default), a maximum count of a
@@ -22961,6 +23071,7 @@ components:
         limitSeed:
           type: integer
           format: int64
+          default: 0
           description: >
             Pins the shuffle order of a `random` or budget evaluation
             so the same rule yields the same members each read; zero or
@@ -23000,6 +23111,7 @@ components:
           example: condition
         nodes:
           type: array
+          default: []
           description: Children of an `all` or `any` group.
           maxItems: 100
           items:
@@ -23043,6 +23155,7 @@ components:
           example: lastPlayedAt
         desc:
           type: boolean
+          default: false
           description: Descending when true.
 
     RuleField:
@@ -23253,6 +23366,7 @@ components:
           enum: [export, import]
         gaps:
           type: array
+          default: []
           description: >
             Losses that refuse the strict conversion.
 
@@ -23268,6 +23382,7 @@ components:
             $ref: "#/components/schemas/NspGap"
         notes:
           type: array
+          default: []
           description: >
             Losses that refuse nothing. Deduplicated and capped the same
             way.
@@ -23276,6 +23391,7 @@ components:
             $ref: "#/components/schemas/NspGap"
         truncated:
           type: boolean
+          default: false
           description: >
             Present and true when `gaps` or `notes` stopped at the cap, so
             there is more than they list.
@@ -23377,6 +23493,7 @@ components:
           description: Entries no cataloged item matched.
         unmatchedPaths:
           type: array
+          default: []
           description: The unmatched entry paths, in document order.
           items:
             type: string
@@ -23441,6 +23558,7 @@ components:
           example: rss
         artUrl:
           type: string
+          format: uri-reference
           description: Origin-relative URL of the show's artwork endpoint.
           example: /api/v1/items/pc-01JZX5N8QW3F4V9T2B7KD3M9R6/art
         artSource:
@@ -23454,11 +23572,13 @@ components:
           description: Publication time of the newest cataloged episode.
         refreshDisabled:
           type: boolean
+          default: false
           description: >
             True when scheduled refresh is suspended after repeated feed
             failures. A successful manual refresh clears it.
         explicit:
           type: boolean
+          default: false
           description: >
             Feed-declared explicit flag for the whole show. Episodes
             carry their own flag, which wins where the feed sets both.
@@ -23500,6 +23620,7 @@ components:
             never removes playback history (archive, not delete).
         autoDownload:
           type: boolean
+          default: false
           description: >
             Fetch new episodes to the server automatically as the feed
             publishes them. `autoDownloadFilter` narrows which ones. A
@@ -23519,6 +23640,7 @@ components:
             than 512 characters, is refused with `invalid-request`.
         private:
           type: boolean
+          default: false
           description: >
             Mark the show private (see the show schema: privacy is
             global and sticky, hiding the feed URL from everyone who does
@@ -23578,6 +23700,7 @@ components:
         include:
           type: array
           maxItems: 64
+          default: []
           description: >
             Take an episode only when its title contains one of these
             terms. Empty or absent takes every episode.
@@ -23588,6 +23711,7 @@ components:
         exclude:
           type: array
           maxItems: 64
+          default: []
           description: >
             Skip an episode whose title contains one of these terms,
             even when `include` matched it.
@@ -23645,7 +23769,9 @@ components:
 
     PodcastDetail:
       type: object
-      description: A show together with the caller's subscription state.
+      description: >
+        A show together with the caller's subscription state. `settings`
+        is present only when the caller is subscribed.
       required: [show, subscribed]
       properties:
         show:
@@ -23803,12 +23929,15 @@ components:
                 `failed`). Retrying the fetch endpoint re-queues it.
             explicit:
               type: boolean
+              default: false
               description: Feed-declared explicit flag.
             hasTranscript:
               type: boolean
+              default: false
               description: Whether a transcript is available.
             hasEnclosure:
               type: boolean
+              default: false
               description: >
                 Whether the feed named audio this server could relay for
                 this episode: an enclosure URL, over http or https, that
@@ -23862,11 +23991,13 @@ components:
               description: The episode's web page, when the feed declares one.
             chapters:
               type: array
+              default: []
               description: Chapter marks, ordered by `startMs`.
               items:
                 $ref: "#/components/schemas/ChapterMark"
             persons:
               type: array
+              default: []
               description: >
                 Episode-level `<podcast:person>` credits, layered on top
                 of the show's credits for this episode.
@@ -23874,6 +24005,7 @@ components:
                 $ref: "#/components/schemas/FeedPerson"
             soundbites:
               type: array
+              default: []
               description: >
                 Highlight clips the feed marks with `<podcast:soundbite>`,
                 each a window into the episode audio.
@@ -24097,6 +24229,7 @@ components:
       properties:
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative proxied stream URL carrying a short-lived
             media token.
@@ -24174,6 +24307,7 @@ components:
           $ref: "#/components/schemas/ArtSource"
         nowPlayingSaved:
           type: boolean
+          default: false
           description: >
             Whether the caller has already kept what the station is
             announcing, so the heart on a playing surface draws filled.
@@ -24365,6 +24499,7 @@ components:
       description: >
         One review queue entry: an album-sized unit of files awaiting
         or past a matching decision. The unit decides as a whole.
+        `best` is absent when lookup produced no candidate.
       required: [id, kind, status, mediaType, origin, trackCount, createdAt, identifying]
       properties:
         id:
@@ -24405,6 +24540,7 @@ components:
           description: Files in the unit.
         duplicateCount:
           type: integer
+          default: 0
           description: >
             Files in the unit arriving with a duplicate warning (their
             tracks carry it). Absent when none.
@@ -24515,6 +24651,7 @@ components:
           $ref: "#/components/schemas/DuplicateWarning"
         joined:
           type: boolean
+          default: false
           description: >
             The file entered the library as a copy of, or a further
             part of, an item that already existed; that item's
@@ -24577,7 +24714,7 @@ components:
         distance:
           type: number
           format: double
-          description: The pairing's own distance in 0 to 1.
+          description: The pairing's own distance in 0 to 1 (0 is identical).
 
     ReviewCandidate:
       type: object
@@ -24623,6 +24760,7 @@ components:
           description: Match quality in percent (0 to 100).
         components:
           type: array
+          default: []
           description: The distance breakdown.
           items:
             $ref: "#/components/schemas/CandidateComponent"
@@ -24633,6 +24771,7 @@ components:
             $ref: "#/components/schemas/CandidatePairing"
         missingTitles:
           type: array
+          default: []
           description: >
             Titles of release tracks no file matched (the rip is
             missing them).
@@ -24640,6 +24779,7 @@ components:
             type: string
         extraTrackIndexes:
           type: array
+          default: []
           description: >
             Indexes (into the entry's `tracks`) of files no release
             track matched (bonus or junk files).
@@ -24670,6 +24810,7 @@ components:
                 $ref: "#/components/schemas/ReviewCandidate"
             identifyDeclined:
               type: boolean
+              default: false
               description: >
                 The submission asked not to be identified, so the
                 entry never entered the match queue. Absent means it
@@ -24690,11 +24831,6 @@ components:
                 files' own tags. Absent when nothing was typed. The
                 `tracks` below always report the tags the files carry,
                 never this.
-
-
-                Not named `override`: the Dart generator emits a
-                property name verbatim, and `override` there collides
-                with the language's own annotation.
             suggested:
               allOf:
                 - $ref: "#/components/schemas/ReviewIdentifyRequest"
@@ -24760,6 +24896,7 @@ components:
           $ref: "#/components/schemas/ReviewEntry"
         warnings:
           type: array
+          default: []
           description: >
             Non-fatal problems (per-file write-back failures, roles
             without a tag form). The decision itself stood.
@@ -24819,6 +24956,7 @@ components:
           description: Why it did not, when `ok` is false.
         warnings:
           type: array
+          default: []
           description: >
             What the single-entry decide reports under `warnings`, when
             `ok` is true: the decision stood, with these problems.
@@ -24841,6 +24979,7 @@ components:
             listing.
         identifying:
           type: integer
+          default: 0
           description: Entries whose identify pipeline still runs.
         applied:
           type: integer
@@ -24850,12 +24989,15 @@ components:
           description: Entries the engine applied on its own.
         asIs:
           type: integer
+          default: 0
           description: Entries accepted as they were.
         unofficial:
           type: integer
+          default: 0
           description: Entries marked as having no canonical release.
         skipped:
           type: integer
+          default: 0
           description: Entries dismissed without action.
         reverted:
           type: integer
@@ -24876,9 +25018,9 @@ components:
       properties:
         mode:
           type: string
-          # "off" is quoted deliberately: YAML 1.1 parsers (the Dart
-          # generator's among them) read a bare off as boolean false,
-          # which silently became a "false" wire value once already.
+          # "off" is quoted deliberately: YAML 1.1 parsers read a bare off
+          # as boolean false, which silently became a "false" wire value
+          # once already.
           enum: [auto, review, "off"]
           description: The matching mode.
         singlesAutoApply:
@@ -24995,6 +25137,7 @@ components:
           example: sh-01JZX5N8QW3F4V9T2B7KD3M9R6
         url:
           type: string
+          format: uri-reference
           description: >
             Origin-relative capability URL of the landing page.
             Anyone holding the full URL can open it; treat it as the
@@ -25171,6 +25314,7 @@ components:
             vector.
         audioUrl:
           type: string
+          format: uri-reference
           description: >
             Origin-relative URL serving decode-ready audio (16 kHz
             mono, gain untouched). Append `format=flac` for lossless
@@ -25269,8 +25413,15 @@ components:
         code:
           type: string
           description: >
-            Stable machine-readable reason (`not-found`,
-            `invalid-request`).
+            Stable machine-readable reason, which says what to do next.
+            `not-found`: the track no longer holds the audio the key names
+            (rewritten, replaced, re-cut, trashed or gone), its work is
+            dropped, and the vector is not to be sent again.
+            `invalid-request`: the vector itself is wrong (a malformed pid
+            or key, a length that disagrees with `dims`, or all zeros), and
+            the work stays leased and is offered again when its lease
+            lapses. `internal`: the server could not check the track, and
+            the work is offered again when its lease lapses.
         message:
           type: string
           description: Human-readable explanation.
@@ -25450,6 +25601,7 @@ components:
           example: ar-01JZX5N8QW3F4V9T2B7KD3M9R6
         artUrl:
           type: string
+          format: uri-reference
           description: >
             Origin-relative artwork URL, when the entry has one.
           example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/art
@@ -25726,12 +25878,11 @@ components:
             carry the same pid, so the later reason simply supersedes the
             earlier.
 
-            Open, like `op`, and deliberately not an enum: a closed one
-            generates a Dart `EnumClass` whose serializer throws on an
-            unrecognized wire value, so adding a third reason later would
-            fail the whole page's deserialization and stop sync rather
-            than degrade. A client that does not recognize a value must
-            treat it as `hidden`, which is the conservative half.
+            Open, like `op`, and deliberately not an enum: a client
+            decoding a closed one strictly would fail the whole page on a
+            third reason added later, and stop sync rather than degrade.
+            A client that does not recognize a value must treat it as
+            `hidden`, which is the conservative half.
           example: removed
         item:
           $ref: "#/components/schemas/ItemSummary"
@@ -25924,6 +26075,7 @@ components:
           description: Opaque server change cursor to sync from next.
         more:
           type: boolean
+          default: false
           description: >
             True when another page is already available; fetch it
             immediately with `since` set to this page's `nextSince`.
@@ -26089,12 +26241,14 @@ components:
           description: When a waiting task tries again.
         bookInTrash:
           type: boolean
+          default: false
           description: >
             True while a book merge's or split's sources are in the
             trash and its new files not yet the book: the book is
             missing from the library until the task finishes.
         resultPids:
           type: array
+          default: []
           description: >
             What the task produced once `done`: the merged book or
             the split pieces (item pids), or the review entries an
@@ -26638,10 +26792,7 @@ components:
             On administrative account views (`UserAccount`) it is the
             stored per-account flag the account editor round-trips;
             an administrator's own stored flag may therefore read
-            false while their effective right is true. Defined once
-            here because the generators flatten `UserAccount`'s
-            `allOf` over this schema; a duplicate declaration there
-            would silently lose.
+            false while their effective right is true.
         managePodcasts:
           type: boolean
           description: >
@@ -26671,9 +26822,10 @@ components:
         - type: object
           description: Administrative account fields beyond the self view.
           # uploadEnabled stays in this required list (it is required on
-          # account views) but is defined once, on User: the generators
-          # flatten this allOf, and a duplicate property definition here
-          # would silently override the merged field in one of them.
+          # account views) but is defined once, on User: the Go generator
+          # flattens this allOf, and a duplicate property definition here
+          # would silently override the merged field there (dartgen
+          # refuses one).
           required: [disabled, libraryAccess, createdAt, uploadEnabled, pending, permissions]
           properties:
             disabled:
@@ -26713,6 +26865,7 @@ components:
                 (false for accounts provisioned by OIDC that never set one).
             identities:
               type: array
+              default: []
               description: Linked single sign-on identities.
               items:
                 $ref: "#/components/schemas/LinkedIdentity"
@@ -26755,10 +26908,7 @@ components:
     Role:
       type: string
       enum: [admin, user]
-      description: >
-        An assignable account role. A shared named schema on purpose:
-        identical inline enums make the Dart generator emit one enum class
-        into two files, which does not compile.
+      description: An assignable account role.
 
     UserCreate:
       type: object
@@ -27224,6 +27374,7 @@ components:
             server default applies.
         tagAllow:
           type: array
+          default: []
           description: >
             When non-empty, only items matching every rule are
             visible to the account (kids-mode allow-listing). Applies
@@ -27233,6 +27384,7 @@ components:
             $ref: "#/components/schemas/TagRule"
         tagDeny:
           type: array
+          default: []
           description: >
             Items matching any rule are hidden from the account. An
             item without the rule's tag passes a deny rule (absence

@@ -6,6 +6,8 @@ import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'support/recording_adapter.dart';
+
 /// Serves canned responses in call order and records every request, so
 /// tests can pin exactly which headers the client attaches.
 class _RecordingAdapter implements HttpClientAdapter {
@@ -54,8 +56,7 @@ Map<String, Object> _loginJson({
 
 (_RecordingAdapter, WaxDeckClient) _client() {
   final adapter = _RecordingAdapter();
-  final dio = Dio()..httpClientAdapter = adapter;
-  return (adapter, WaxDeckClient(baseUrl: 'http://host:4420', dio: dio));
+  return (adapter, clientOn(adapter));
 }
 
 /// Holds the session probe's answer until [release], and answers the
@@ -107,10 +108,7 @@ void main() {
         {'authenticated': true, 'user': _userJson, 'csrfToken': 'csrf-stale'},
         [(200, _loginJson(csrf: 'csrf-fresh')), (204, null)],
       );
-      final client = WaxDeckClient(
-        baseUrl: 'http://host:4420',
-        dio: Dio()..httpClientAdapter = adapter,
-      );
+      final client = clientOn(adapter);
       final probe = client.getSession();
       await client.login(username: 'admin', password: 'pw');
       adapter.release.complete();

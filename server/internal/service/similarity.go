@@ -83,51 +83,87 @@ type SonicAnalyzer interface {
 // second a large library still finishes in days, which is fine.
 const embeddedAnalysisPace = 250 * time.Millisecond
 
+// embeddedAnalysisBatch is how many queued tracks one embedded drain leases.
+const embeddedAnalysisBatch = 5
+
 // DrainEmbeddedAnalysis leases queued tracks and analyzes them in
 // process, one at a time. It returns whether any work was attempted
 // (the worker loop paces on that). Filesystem failures keep their
 // leased rows and re-offer when the lease lapses (a transient read
-// failure heals on its own; the attempt cap is the backstop); a
-// decoder verdict about the bytes (undecodable, too short, silent)
-// retires the row, since retrying cannot fix it and a rescan
-// re-enqueues if the file changes.
-func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (bool, error) {
-	if an == nil || !l.SonicAnalysisEnabled() {
+// failure heals on its own); the attempt cap is the backstop, and the
+// scheduled prune queues a row it stopped again a week after its last
+// lease. A decoder verdict about the bytes (undecodable, too short,
+// silent) retires the row, since retrying cannot fix it and a rescan
+// re-enqueues if the file changes. A track that left the library, or
+// holds other audio than it was queued with, drops its row unread. A
+// hand-off leaves the queue waiting for it, and one that begins mid-batch
+// ends the batch with its rows still leased, as a shutdown does, which is
+// no verdict on a decode it cuts short: the rows it had not settled get
+// back their attempts. A catalog read that fails for any other reason,
+// before the decode or as its vector is filed, keeps that row leased
+// without spending its attempt, and the batch goes on, paced like an
+// analyzed row since the worker loop calls again while work is attempted.
+func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (_ bool, err error) {
+	if an == nil || !l.SonicAnalysisEnabled() || l.Maintenance() {
 		return false, nil
 	}
-	work, err := l.db.LeaseSimilarityWork(ctx, 5, workLease, true)
+	work, err := l.db.LeaseSimilarityWork(ctx, embeddedAnalysisBatch, workLease, true)
 	if err != nil {
+		// A lease the caller's end cut short leased nothing and is no failure.
+		if ctx.Err() != nil {
+			return false, nil
+		}
 		return false, &Error{Kind: KindInternal, Err: err}
 	}
 	if len(work) == 0 {
 		return false, nil
 	}
-	for _, w := range work {
-		if err := ctx.Err(); err != nil {
+	// The rows from work[settled] on are leased and not settled yet: a stop
+	// for a hand-off or a shutdown gives back their attempts.
+	settled := 0
+	defer func() {
+		if KindOf(err) == KindMaintenance || ctx.Err() != nil {
+			l.refundAttempts(ctx, work[settled:])
+		}
+	}()
+	for i, w := range work {
+		if ctx.Err() != nil {
 			return true, nil
 		}
-		// A catalog miss retires the row: the item left the library, and
-		// a return re-enqueues under a fresh data version.
-		it, err := l.lib.Get(ctx, model.PID(w.ItemPID))
-		if err != nil {
-			l.completeAnalysis(ctx, w.Essence)
+		it, f, err := l.sonicTrack(ctx, model.PID(w.ItemPID), w.Essence)
+		switch {
+		case errors.Is(err, errAnalysisStale):
+			l.log.Debug("dropped a sonic analysis: the track no longer holds its audio", "pid", w.ItemPID, "essence", w.Essence)
+			fallthrough
+		case KindOf(err) == KindNotFound:
+			l.dropSonicRow(ctx, w.Essence)
+			settled = i + 1
 			continue
-		}
-		path, from, to, err := l.sonicSource(ctx, it)
-		if err != nil && !errors.Is(err, errNoWindow) {
-			l.completeAnalysis(ctx, w.Essence)
+		case err != nil:
+			if err = l.keepUnread(ctx, err, w); err != nil {
+				return true, err
+			}
+			settled = i + 1
+			if !restBetweenTracks(ctx) {
+				return true, nil
+			}
 			continue
 		}
 		var vec []float32
+		from, to, err := sonicWindow(it)
 		if err == nil {
-			vec, err = an.AnalyzeFileWindow(ctx, path, from, to)
+			vec, err = an.AnalyzeFileWindow(ctx, string(f.Path), from, to)
 		}
 		var pathErr *fs.PathError
 		switch {
+		case ctx.Err() != nil:
+			// A shutdown cut the decode short: no verdict on the audio, and
+			// the row re-offers when its lease lapses.
+			return true, nil
 		case errors.As(err, &pathErr):
 			// A filesystem-level failure (a locked file, a NAS hiccup, a
 			// slow mount) keeps the row leased: it re-offers when the
-			// lease lapses and rests after the attempt cap.
+			// lease lapses; the attempt cap stops it, for a week.
 			l.log.Warn("embedded analysis could not read a track; it will retry", "pid", w.ItemPID, "err", err)
 		case err != nil:
 			// A verdict on the audio (undecodable, too short, silent, a
@@ -143,41 +179,112 @@ func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (
 				return true, err
 			}
 			for _, rej := range res.Rejected {
-				l.retireAnalysis(ctx, w, rej.Message)
+				// Only a refusal of the vector itself judges the audio. One for
+				// audio that changed during the decode, or for a track the
+				// catalog could not read, was settled by the ingest.
+				if rej.Code == string(KindInvalid) {
+					l.retireAnalysis(ctx, w, rej.Message)
+				}
 			}
 		}
+		settled = i + 1
 		// Paced whatever came of it: the decode is the cost.
-		select {
-		case <-ctx.Done():
+		if !restBetweenTracks(ctx) {
 			return true, nil
-		case <-time.After(embeddedAnalysisPace):
 		}
 	}
 	return true, nil
+}
+
+// restBetweenTracks waits out embeddedAnalysisPace; false when ctx ended
+// first.
+func restBetweenTracks(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(embeddedAnalysisPace):
+		return true
+	}
+}
+
+// keepUnread settles a leased row whose catalog read failed, which is no
+// verdict on its track: the row stays leased, to re-offer when its lease
+// lapses, and gets back the attempt the lease charged, since the read
+// attempted nothing, and keepUnread returns nil so the batch goes on. A
+// hand-off is returned with the row unsettled: it ends the batch (every
+// read fails then), whose owner settles what it left.
+func (l *Library) keepUnread(ctx context.Context, err error, w wdb.SimilarityWork) error {
+	if KindOf(err) == KindMaintenance {
+		return err
+	}
+	// A read the caller's own end cut short is no failure to report.
+	if ctx.Err() == nil {
+		l.log.Warn("could not read a track for analysis; it will retry", "pid", w.ItemPID, "essence", w.Essence, "err", err)
+	}
+	l.refundAttempts(ctx, []wdb.SimilarityWork{w})
+	return nil
+}
+
+// refundAttempts gives back the attempt a lease charged each row, on a
+// context the caller's end does not cut short: a shutdown is no verdict on
+// a row either.
+func (l *Library) refundAttempts(ctx context.Context, rows []wdb.SimilarityWork) {
+	ctx = context.WithoutCancel(ctx)
+	for _, w := range rows {
+		if err := l.db.RefundSimilarityAttempt(ctx, w.Essence); err != nil {
+			l.log.Warn("giving back an analysis attempt", "essence", w.Essence, "err", err)
+		}
+	}
+}
+
+// dropSonicRow drops the queue row of key, whose own track left the
+// catalog or holds other audio now. Another track can hold that audio
+// still, so the next sweep queues it again even if nothing else in the
+// catalog moved.
+func (l *Library) dropSonicRow(ctx context.Context, key string) {
+	l.completeAnalysis(ctx, key)
+	l.sweepOwed(1)
+}
+
+// sweepOwed has the next sweep walk the catalog though its data version
+// did not move, for n queue rows removed whose audio may be queued again.
+func (l *Library) sweepOwed(n int64) {
+	l.simDrops.Add(uint64(n))
+	l.similarityWakeup()
+}
+
+// sonicTrack reads a queued track as the catalog holds it now: its view,
+// and the file its analysis key is taken from. errAnalysisStale when they
+// hold other audio than key; not-found when the track or its file is gone.
+func (l *Library) sonicTrack(ctx context.Context, pid model.PID, key string) (*model.ItemView, *model.File, error) {
+	it, f, err := l.itemFile(ctx, pid)
+	if err != nil {
+		return nil, nil, err
+	}
+	if analysisKey(f.EssenceHash, it) != key {
+		return it, f, errAnalysisStale
+	}
+	return it, f, nil
 }
 
 // errNoWindow is a carved track whose frame window cannot be placed in
 // samples: its file declares no rate, or the window ends before it starts.
 var errNoWindow = errors.New("the track's window cannot be placed in its file")
 
-// sonicSource is where an item's own audio lives: its file, and for a
-// carved track the sample window its frames name (to 0 running to the
-// end). Read off it, the view the analysis key was taken from.
-func (l *Library) sonicSource(ctx context.Context, it *model.ItemView) (path string, from, to int64, err error) {
-	f, err := l.lib.File(ctx, it.FilePID)
-	if err != nil {
-		return "", 0, 0, err
-	}
+// sonicWindow is the sample window a track's view places it at in its
+// file (to 0 running to the end), [0, 0) for a whole file: read off the
+// view its analysis key was taken from.
+func sonicWindow(it *model.ItemView) (from, to int64, err error) {
 	// Placed the way streaming places it.
 	loc := pidpath.Location{FilePID: it.FilePID, SampleRate: it.SampleRate,
 		Virtual: it.Virtual, StartFrames: it.StartFrames, EndFrames: it.EndFrames}
 	switch from, to, err = loc.Span(); {
 	case err != nil:
-		return "", 0, 0, fmt.Errorf("%w: the file declares no sample rate", errNoWindow)
+		return 0, 0, fmt.Errorf("%w: the file declares no sample rate", errNoWindow)
 	case to > 0 && to < from:
-		return "", 0, 0, fmt.Errorf("%w: it ends before it starts", errNoWindow)
+		return 0, 0, fmt.Errorf("%w: it ends before it starts", errNoWindow)
 	}
-	return string(f.Path), from, to, nil
+	return from, to, nil
 }
 
 // retireAnalysis rests a key whose audio cannot be analyzed, and says so.
@@ -292,7 +399,8 @@ func (l *Library) analysisOn() bool {
 // analysisCoverage is the status counts: tracks holding a vector, tracks
 // waiting in the queue, and the rest: tracks no sweep has queued yet,
 // and those out of attempts with their audio never judged, which stay
-// in the total so an outage shows.
+// in the total so an outage shows, until the weekly prune clears them for
+// another round.
 type analysisCoverage struct{ embedded, queued, pending int }
 
 func (c analysisCoverage) total() int { return c.embedded + c.queued + c.pending }
@@ -555,8 +663,19 @@ func (l *Library) walkInBackground() *analysisWalk {
 	return w
 }
 
-// LeaseSimilarityWork leases a work batch for a polling worker.
-func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int, windows bool) ([]SimilarityWorkItem, error) {
+// LeaseSimilarityWork leases a work batch for a polling worker. A hand-off
+// hands out nothing, since a lease spends an attempt on work that cannot be
+// read. A track the catalog no longer has, or one holding other audio than
+// its work names, drops its row: a worker would pull audio its report is
+// then refused for. Any other failed read keeps its row leased, its attempt
+// given back, and leaves it out of the batch. A hand-off that begins
+// mid-batch ends it, as does a request that ends mid-batch: nothing of it
+// reaches the worker, and every row it kept stays leased with its attempt
+// given back.
+func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int, windows bool) (_ []SimilarityWorkItem, err error) {
+	if l.Maintenance() {
+		return nil, nil
+	}
 	work, err := l.db.LeaseSimilarityWork(ctx, limit, workLease, windows)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
@@ -566,37 +685,60 @@ func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int, windows bo
 	// disable it for the rest of this batch consistently.
 	singleRoot := len(l.libraryRoots()) == 1
 	out := make([]SimilarityWorkItem, 0, len(work))
-	for _, w := range work {
-		item := SimilarityWorkItem{
-			PID:       apiPID(PrefixTrack, model.PID(w.ItemPID)),
-			Essence:   w.Essence,
-			MediaType: "music",
+	// A batch that stops reaches no worker: the rows read ready, and those
+	// from work[settled] on, not read yet, get back their attempts.
+	var ready []wdb.SimilarityWork
+	settled := 0
+	defer func() {
+		if err != nil {
+			l.refundAttempts(ctx, append(ready, work[settled:]...))
 		}
-		if it, err := l.lib.Get(ctx, model.PID(w.ItemPID)); err == nil {
-			item.DurationMs = it.DurationMS
-			// A carved track's file is the whole rip; only its audio URL
-			// serves the window.
-			if l.workerLocalPaths && singleRoot && !it.Virtual {
-				if f, err := l.lib.File(ctx, it.FilePID); err == nil {
-					item.LocalPath = string(f.RelPath)
-				}
+	}()
+	for i, w := range work {
+		if err := ctx.Err(); err != nil {
+			return nil, &Error{Kind: KindInternal, Err: err}
+		}
+		it, f, err := l.sonicTrack(ctx, model.PID(w.ItemPID), w.Essence)
+		switch {
+		case errors.Is(err, errAnalysisStale):
+			l.log.Debug("dropped a sonic analysis: the track no longer holds its audio", "pid", w.ItemPID, "essence", w.Essence)
+			fallthrough
+		case KindOf(err) == KindNotFound:
+			l.dropSonicRow(ctx, w.Essence)
+			settled = i + 1
+			continue
+		case err != nil:
+			if err = l.keepUnread(ctx, err, w); err != nil {
+				return nil, err
 			}
-		} else {
-			// The item vanished between enqueue and lease; retire the
-			// row instead of handing out dead work.
-			if cerr := l.db.CompleteSimilarityWork(ctx, w.Essence); cerr != nil {
-				l.log.Warn("retiring dead analysis work", "essence", w.Essence, "err", cerr)
-			}
+			settled = i + 1
 			continue
 		}
+		item := SimilarityWorkItem{
+			PID:        apiPID(PrefixTrack, model.PID(w.ItemPID)),
+			Essence:    w.Essence,
+			MediaType:  "music",
+			DurationMs: it.DurationMS,
+		}
+		// A carved track's file is the whole rip; only its audio URL
+		// serves the window.
+		if l.workerLocalPaths && singleRoot && !it.Virtual {
+			item.LocalPath = string(f.RelPath)
+		}
 		out = append(out, item)
+		ready = append(ready, w)
+		settled = i + 1
 	}
 	return out, nil
 }
 
 // IngestEmbeddings records a worker's batch: vectors persist by analysis
 // key, the engine updates its neighbor graph incrementally, and the touched
-// edge lists persist. A new model replaces coverage (models never mix).
+// edge lists persist. A new model replaces coverage (models never mix). A
+// vector for audio its track no longer holds, a trashed track's included, is
+// refused as not-found; one whose track the catalog could not read is
+// refused as internal, its work left leased to come back. A hand-off ends
+// the report, as does a request that ends mid-report.
 func (l *Library) IngestEmbeddings(ctx context.Context, mdl string, dims int, batch []EmbeddingUpload) (EmbeddingIngestResult, error) {
 	if err := l.warmSimilarity(ctx); err != nil {
 		return EmbeddingIngestResult{}, err
@@ -615,6 +757,9 @@ func (l *Library) IngestEmbeddings(ctx context.Context, mdl string, dims int, ba
 	}
 	var res EmbeddingIngestResult
 	for _, up := range batch {
+		if err := ctx.Err(); err != nil {
+			return res, &Error{Kind: KindInternal, Err: err}
+		}
 		reject := func(code, msg string) {
 			res.Rejected = append(res.Rejected, RejectedEmbedding{
 				PID: up.PID, Essence: up.Essence, Code: code, Message: msg,
@@ -631,6 +776,23 @@ func (l *Library) IngestEmbeddings(ctx context.Context, mdl string, dims int, ba
 		}
 		if len(up.Vector) != dims {
 			reject("invalid-request", "vector length disagrees with dims")
+			continue
+		}
+		// A worker reads the audio by pid, so a vector reported after the
+		// track's audio changed may be of either: filed under neither, and
+		// its work dropped rather than handed out under the track again.
+		held, err := l.holdsSonicKey(ctx, pid, up.Essence)
+		if err != nil {
+			if err := l.keepUnread(ctx, err, wdb.SimilarityWork{Essence: up.Essence, ItemPID: string(pid)}); err != nil {
+				return res, err
+			}
+			reject(string(KindInternal), "the catalog could not be read to check this vector; its work comes back when its lease lapses")
+			continue
+		}
+		if !held {
+			l.log.Debug("refused a vector: the track no longer holds its audio", "pid", string(pid), "essence", up.Essence)
+			l.dropSonicRow(ctx, up.Essence)
+			reject(string(KindNotFound), "the track no longer holds this audio")
 			continue
 		}
 		edges, updated, ok := l.sim.Ingest(up.Essence, up.Vector)
@@ -666,6 +828,21 @@ func (l *Library) IngestEmbeddings(ctx context.Context, mdl string, dims int, ba
 		}
 	}
 	return res, nil
+}
+
+// holdsSonicKey reports whether the catalog, read now, files the track's
+// audio under key. A track in the trash holds none: it has no file to check
+// key against, and a rewrite before the trash would have had a worker pull
+// other audio by its pid.
+func (l *Library) holdsSonicKey(ctx context.Context, pid model.PID, key string) (bool, error) {
+	_, _, err := l.sonicTrack(ctx, pid, key)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errAnalysisStale), KindOf(err) == KindNotFound:
+		return false, nil
+	}
+	return false, err
 }
 
 // mustVector reads back the normalized stored vector for persistence
@@ -760,7 +937,8 @@ func (l *Library) similarityWakeup() {
 // (edges removed, affected nodes queued for lazy recompute), and
 // pending backfills recompute. Its walk is the analysisIndex the status
 // counts from. It short-circuits when the catalog data version has not
-// moved since the last sweep. Returns true when it did meaningful work
+// moved since the last sweep and no queue row was dropped for its track or
+// pruned out of attempts since. Returns true when it did meaningful work
 // (the worker loop uses that to pace itself).
 func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 	if !l.analysisOn() || l.Maintenance() {
@@ -773,11 +951,13 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 	if err != nil {
 		return worked, err
 	}
+	// Read before the walk, so a row dropped while it runs owes the next.
+	drops := l.simDrops.Load()
 	version, err := l.lib.DataVersion(ctx)
 	if err != nil {
 		return worked, classify(err)
 	}
-	if version == l.simSweepVersion.Load() {
+	if version == l.simSweepVersion.Load() && drops == l.simSweptDrops.Load() {
 		return worked, nil
 	}
 	// A walk that cannot read the catalog prunes nothing.
@@ -869,6 +1049,7 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 		return worked, err
 	}
 	l.simSweepVersion.Store(version)
+	l.simSweptDrops.Store(drops)
 	return worked, nil
 }
 

@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
+
+	"github.com/colespringer/waxbin/model"
 )
 
 // Until the first episode download there is no podcast library, so every
@@ -86,5 +89,41 @@ func TestAFailedReloadJudgesNothingUntilALoadWorks(t *testing.T) {
 	}
 	if _, judged := f.svc.podcastsJudged(f.ctx, restricted); !judged {
 		t.Error("after a reload worked, the throttle still answered no judgment")
+	}
+}
+
+// A start that cannot continue its feed position reads the catalog's
+// history back, the configured root's row among it. The library table is
+// read from the catalog that row was already in, so a row from before the
+// start drops no table: dropped under a request, it would answer that the
+// server has no podcast library.
+func TestARowFromBeforeTheStartKeepsTheLibraryTable(t *testing.T) {
+	t.Parallel()
+	f := openStubFeeds(t)
+	feedCaughtUp(t, f.ctx, f.svc)
+	rows, err := f.svc.lib.Changes(f.ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(rows, func(ch model.Change) bool { return ch.EntityType == "library" })
+	if i < 0 {
+		t.Fatal("the catalog holds no row for the configured root")
+	}
+	f.svc.feed.mu.Lock()
+	history := rows[i].TS <= f.svc.feed.bootTS
+	f.svc.feed.mu.Unlock()
+	if !history {
+		t.Fatal("the root's row is not from before the start; the start continued its position")
+	}
+	if dirs, err := f.svc.attribution(f.ctx, false); err != nil || len(dirs) == 0 {
+		t.Fatalf("the library table = %v, %v; want the configured root", dirs, err)
+	}
+
+	f.svc.advanceFeed(f.ctx, rows[i])
+	f.svc.libDirs.mu.Lock()
+	dropped := f.svc.libDirs.dirs == nil
+	f.svc.libDirs.mu.Unlock()
+	if dropped {
+		t.Error("a row from before the start dropped the library table")
 	}
 }

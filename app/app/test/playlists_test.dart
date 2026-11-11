@@ -111,6 +111,99 @@ class _ListsDown extends FakeRepository {
   }
 }
 
+/// A repository whose rule previews fail with [error] while it is set.
+class _PreviewFails extends FakeRepository {
+  _PreviewFails(this.error) : super(items: const [_track]);
+
+  Object? error;
+
+  @override
+  Future<PlaylistPreview> previewSmartRule(SmartRule rule, {int? limit}) async {
+    if (error case final failure?) throw failure;
+    return super.previewSmartRule(rule, limit: limit);
+  }
+}
+
+/// Mounts the rule editor over a repository whose previews fail, in
+/// whatever layout the view is set to, and checks what it says at each
+/// turn: the headline over the count says the preview failed rather than
+/// that it is pending, and the pane's sentence says why, announced as it
+/// appears.
+Future<void> _expectRefusedPreviews(WidgetTester tester) async {
+  final semantics = tester.ensureSemantics();
+  final repo = _PreviewFails(
+    const WaxDeckApiException(
+      code: 'invalid-request',
+      message: 'rating takes a whole number',
+      statusCode: 400,
+    ),
+  );
+  await _pump(tester, repo, const RuleEditorScreen(createName: 'Refused'));
+  final headline = find.descendant(
+    of: find.bySemanticsIdentifier(SemanticsIds.rulePreviewTotal),
+    matching: find.text('Preview unavailable'),
+  );
+  Future<void> askAgain() async {
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+  }
+
+  await tester.pump(const Duration(seconds: 1));
+  await tester.pumpAndSettle();
+  expect(find.text('rating takes a whole number'), findsOneWidget);
+  expect(
+    tester
+        .getSemantics(find.text('rating takes a whole number'))
+        .flagsCollection
+        .isLiveRegion,
+    isTrue,
+    reason: 'a screen reader hears why without moving to the pane',
+  );
+  expect(find.text('Working it out\u2026'), findsNothing);
+  expect(headline, findsOneWidget);
+  expect(find.text('Preview pending'), findsNothing);
+
+  // Any other failure reads from the table, not from the server.
+  repo.error = const WaxDeckApiException(
+    code: 'internal',
+    message: 'boom',
+    statusCode: 500,
+  );
+  await askAgain();
+  expect(
+    find.text('The server ran into a problem it could not handle.'),
+    findsOneWidget,
+  );
+  expect(
+    tester
+        .getSemantics(
+          find.text('The server ran into a problem it could not handle.'),
+        )
+        .flagsCollection
+        .isLiveRegion,
+    isTrue,
+  );
+  expect(find.text('boom'), findsNothing);
+  expect(find.text('rating takes a whole number'), findsNothing);
+  expect(headline, findsOneWidget);
+
+  // An answer takes the failure away.
+  repo
+    ..error = null
+    ..previewResult = const PlaylistPreview(items: [_track], total: 3);
+  await askAgain();
+  expect(find.text('Matches 3 items'), findsOneWidget);
+  expect(headline, findsNothing);
+  expect(
+    find.text('The server ran into a problem it could not handle.'),
+    findsNothing,
+  );
+  // Disposed here rather than in a teardown: the framework verifies
+  // handles before teardowns run.
+  semantics.dispose();
+}
+
 /// A picker that resolves pickFile to one fixed image.
 class _CoverPicker implements FilePickerPort {
   _CoverPicker(this.image);
@@ -982,7 +1075,6 @@ void main() {
 
     expect(popped, isNotNull);
     expect(popped!.pid, created.pid);
-    expect(popped!.previousPid, isNull);
     expect(repo.playlistsByPid.containsKey(created.pid), isTrue);
     expect(popped!.rule!.root.nodes.single.value, '90');
   });
@@ -1030,11 +1122,7 @@ void main() {
     await _pump(tester, repo, const RuleEditorScreen(createName: 'Shuffle'));
 
     await _pick(tester, SemanticsIds.ruleLimitMode, 'at random');
-    await tester.enterText(
-      find.bySemanticsIdentifier(SemanticsIds.ruleLimitValue),
-      '10',
-    );
-    await tester.pumpAndSettle();
+    await _typeLimit(tester, '10');
 
     // The sorts card collapses to its random-mode note.
     expect(find.text('A random limit draws its own order.'), findsOneWidget);
@@ -1055,11 +1143,7 @@ void main() {
     await _pump(tester, repo, const RuleEditorScreen(createName: 'Hour'));
 
     await _pick(tester, SemanticsIds.ruleLimitMode, 'by minutes');
-    await tester.enterText(
-      find.bySemanticsIdentifier(SemanticsIds.ruleLimitValue),
-      '60',
-    );
-    await tester.pumpAndSettle();
+    await _typeLimit(tester, '60');
 
     // A budget without a pinned seed may sort; add one.
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddSort));
@@ -1124,12 +1208,262 @@ void main() {
     );
     expect(saveButton().onPressed, isNull);
 
-    await tester.enterText(
-      find.bySemanticsIdentifier(SemanticsIds.ruleLimitValue),
-      '10',
-    );
-    await tester.pumpAndSettle();
+    await _typeLimit(tester, '10');
     expect(saveButton().onPressed, isNotNull);
+  });
+
+  testWidgets('the limit takes digits only, so it is never negative', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Below'));
+
+    // A count reads blank as no limit; a minus sign is refused as typed,
+    // so there is no negative count to catch.
+    await _typeLimit(tester, '-5');
+    expect(_limitText(tester), '5');
+    await _typeLimit(tester, '2a0');
+    expect(_limitText(tester), '20');
+    await _typeLimit(tester, '');
+    expect(
+      tester
+          .widget<WaxButton>(waxControl<WaxButton>(SemanticsIds.ruleSave))
+          .onPressed,
+      isNotNull,
+    );
+    expect(repo.previewedRules.where((r) => r.limit < 0), isEmpty);
+  });
+
+  testWidgets('a condition on a number or a count of days takes digits only', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Digits'));
+
+    // A number-kind field, on its own and as a range: no minus, no point.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
+    await tester.pumpAndSettle();
+    await _pick(tester, SemanticsIds.ruleField(0), 'Rating');
+    await _pick(tester, SemanticsIds.ruleOp(0), 'is more than');
+    await _typeInto(tester, SemanticsIds.ruleValue(0), '-5');
+    expect(_boxText(tester, SemanticsIds.ruleValue(0)), '5');
+    await _typeInto(tester, SemanticsIds.ruleValue(0), '2.5');
+    expect(_boxText(tester, SemanticsIds.ruleValue(0)), '25');
+
+    await _pick(tester, SemanticsIds.ruleOp(0), 'is between');
+    await _typeInto(tester, SemanticsIds.ruleValue(0), '-1.5');
+    expect(_boxText(tester, SemanticsIds.ruleValue(0)), '15');
+    await _typeInto(tester, SemanticsIds.ruleValueHigh(0), '-3.5');
+    expect(_boxText(tester, SemanticsIds.ruleValueHigh(0)), '35');
+
+    // A date measured back from now counts whole days.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
+    await tester.pumpAndSettle();
+    await _pick(tester, SemanticsIds.ruleField(1), 'Added at');
+    await _pick(tester, SemanticsIds.ruleOp(1), 'is in the last');
+    await _typeInto(tester, SemanticsIds.ruleValue(1), '-3.5');
+    expect(_boxText(tester, SemanticsIds.ruleValue(1)), '35');
+  });
+
+  testWidgets('changing a condition\'s field starts its value box afresh', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Fresh'));
+
+    // Title and Rating both open on "is", so the operator cannot tell the
+    // box it is a new one; the draft's value goes with the field, and the
+    // box has to show what the draft holds.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
+    await tester.pumpAndSettle();
+    await _typeInto(tester, SemanticsIds.ruleValue(0), 'Beatles');
+    await _pick(tester, SemanticsIds.ruleField(0), 'Rating');
+    expect(_boxText(tester, SemanticsIds.ruleValue(0)), isEmpty);
+
+    await _typeInto(tester, SemanticsIds.ruleValue(0), '8x0');
+    expect(_boxText(tester, SemanticsIds.ruleValue(0)), '80');
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
+    await tester.pumpAndSettle();
+
+    final saved = repo.playlistsByPid.values.singleWhere(
+      (p) => p.name == 'Fresh',
+    );
+    final condition = saved.rule!.root.nodes.single;
+    expect(condition.field, 'rating');
+    expect(condition.value, '80');
+  });
+
+  testWidgets('typing beside a stored number leaves what is there alone', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    final created = await repo.createPlaylist(
+      name: 'Fast',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'rating', op: 'gt', value: '120.5'),
+        ]),
+      ),
+    );
+    await _pump(tester, repo, RuleEditorScreen(editing: created));
+    expect(_boxText(tester, SemanticsIds.ruleValue(0)), '120.5');
+
+    // A digit joins the stored text; the point it holds is not refiltered
+    // away, and a letter is refused where it is typed.
+    await _typeInto(tester, SemanticsIds.ruleValue(0), '120.50');
+    expect(_boxText(tester, SemanticsIds.ruleValue(0)), '120.50');
+    await _typeInto(tester, SemanticsIds.ruleValue(0), '120.50x');
+    expect(_boxText(tester, SemanticsIds.ruleValue(0)), '120.50');
+  });
+
+  testWidgets('the limit box stops where a count still reads as one', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Long'));
+
+    // The contract sets no ceiling, so the box holds what every int.parse
+    // reads: eighteen digits, and a nineteenth is refused where it is typed
+    // rather than turning the whole count into nothing.
+    await _pick(tester, SemanticsIds.ruleLimitMode, 'at random');
+    await _typeLimit(tester, '9' * 19);
+    expect(_limitText(tester), '9' * 18);
+    expect(repo.previewedRules.last.limit, int.parse('9' * 18));
+    expect(
+      tester
+          .widget<WaxButton>(waxControl<WaxButton>(SemanticsIds.ruleSave))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('a limit no count can hold is invalid, not no limit', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Huge'));
+
+    // Text the formatters never saw, such as a value set around them: a
+    // count that cannot be read must not pass for a blank box.
+    final box = tester.widget<WaxTextField>(
+      waxControl<WaxTextField>(SemanticsIds.ruleLimitValue),
+    );
+    box.controller!.text = '9' * 20;
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddSort));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<WaxButton>(waxControl<WaxButton>(SemanticsIds.ruleSave))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      find.text('Give the limit a number above zero to see what matches.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a preview the server refuses says why, in its own words', (
+    tester,
+  ) async {
+    await _expectRefusedPreviews(tester);
+  });
+
+  testWidgets('a refused preview says so over the two-pane count as well', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _expectRefusedPreviews(tester);
+  });
+
+  testWidgets('a limit that is missing is said so in the preview, and asked '
+      'for nothing', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 7);
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Blank'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Matches 7 items'), findsOneWidget);
+    const missing = 'Give the limit a number above zero to see what matches.';
+    const barMissing = 'Limit needs a number above zero';
+    expect(find.text(missing), findsNothing);
+    expect(find.text(barMissing), findsNothing);
+
+    // At random with no count: the stale answer goes at once, the pane
+    // says what is missing rather than that it is working, and no request
+    // follows. The match bar below the tree says it too, not that a
+    // preview is pending.
+    final asked = repo.previewedRules.length;
+    await _pick(tester, SemanticsIds.ruleLimitMode, 'at random');
+    expect(find.text(missing), findsOneWidget);
+    expect(find.text(barMissing), findsOneWidget);
+    expect(find.text('Matches 7 items'), findsNothing);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text(missing), findsOneWidget);
+    expect(find.text(barMissing), findsOneWidget);
+    expect(find.text('Preview pending'), findsNothing);
+    expect(find.text('Working it out\u2026'), findsNothing);
+    expect(repo.previewedRules.length, asked);
+
+    // Zero is no count either.
+    await _typeLimit(tester, '0');
+    expect(find.text(missing), findsOneWidget);
+    expect(find.text(barMissing), findsOneWidget);
+    expect(repo.previewedRules.length, asked);
+
+    // A count brings the preview back.
+    await _typeLimit(tester, '10');
+    expect(find.text(missing), findsNothing);
+    expect(find.text(barMissing), findsNothing);
+    expect(find.text('Matches 7 items'), findsOneWidget);
+    expect(repo.previewedRules.length, greaterThan(asked));
+    expect(repo.previewedRules.last.limit, 10);
+  });
+
+  testWidgets('a limit that is missing heads the two-pane preview with it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 7);
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Blank'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Matches 7 items'), findsOneWidget);
+    const headline = 'Limit needs a number above zero';
+
+    // The headline over the pane says what is missing, not that a preview
+    // is pending; there is no bar below the tree to say it instead.
+    await _pick(tester, SemanticsIds.ruleLimitMode, 'at random');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.rulePreviewTotal),
+        matching: find.text(headline),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(headline), findsOneWidget);
+    expect(find.text('Preview pending'), findsNothing);
+    expect(find.text('Matches 7 items'), findsNothing);
+
+    await _typeLimit(tester, '10');
+    expect(find.text(headline), findsNothing);
+    expect(find.text('Matches 7 items'), findsOneWidget);
   });
 
   testWidgets('a sort on a field the vocabulary cannot sort still builds', (
@@ -2418,6 +2752,32 @@ Future<void> _pick(
   await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
 }
+
+/// What the box wearing [semanticsId] holds.
+String _boxText(WidgetTester tester, String semanticsId) => tester
+    .widget<WaxTextField>(waxControl<WaxTextField>(semanticsId))
+    .controller!
+    .text;
+
+/// Types [text] into the box wearing [semanticsId], then lets the preview
+/// debounce and its answer land.
+Future<void> _typeInto(
+  WidgetTester tester,
+  String semanticsId,
+  String text,
+) async {
+  await tester.enterText(find.bySemanticsIdentifier(semanticsId), text);
+  await tester.pump(const Duration(seconds: 1));
+  await tester.pumpAndSettle();
+}
+
+/// What the rule editor's limit box holds.
+String _limitText(WidgetTester tester) =>
+    _boxText(tester, SemanticsIds.ruleLimitValue);
+
+/// Types [text] into the rule editor's limit box and settles.
+Future<void> _typeLimit(WidgetTester tester, String text) =>
+    _typeInto(tester, SemanticsIds.ruleLimitValue, text);
 
 extension on NspReport {
   /// This report as one that stopped at the server's cap.

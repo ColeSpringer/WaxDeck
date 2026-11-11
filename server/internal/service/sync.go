@@ -615,8 +615,10 @@ func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 	// A root added or re-flagged elsewhere (the CLI, a restore) reaches
 	// the root table here; mid-hand-off the reopen hook rebuilds it. The
 	// podcast library is left out of that table, so its creation is
-	// caught here too.
-	if ch.EntityType == "library" && !l.Maintenance() {
+	// caught here too. History needs neither: the start built the root
+	// table before it fixed the boot's head, and the library table is read
+	// on first use from a catalog already holding those rows.
+	if ch.EntityType == "library" && !history && !l.Maintenance() {
 		l.refreshLibraryState(ctx)
 		l.podcastLibraryMayHaveLanded()
 	}

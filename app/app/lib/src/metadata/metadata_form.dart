@@ -223,7 +223,7 @@ class MetadataChanges {
   /// The replacement chapter list, or null when it did not change. An
   /// empty list restores the file's own chapters - that is the
   /// endpoint's contract, not a quirk of this form.
-  final List<ChapterEdit>? chapters;
+  final List<ChapterMark>? chapters;
 
   int get count =>
       fields.length +
@@ -605,7 +605,7 @@ class MetadataDraft extends ChangeNotifier {
     return true;
   }
 
-  List<ChapterEdit>? _chapterChanges(List<ChapterMark> stored) {
+  List<ChapterMark>? _chapterChanges(List<ChapterMark> stored) {
     if (_chapterRows == null || !chapterRowsValid) return null;
     final rows = _orderedChapterRows()!;
     final parsed = <({String title, int startMs})>[
@@ -630,9 +630,9 @@ class MetadataDraft extends ChangeNotifier {
     // chapters and a closed final chapter are real stored data - and
     // only a new, moved, or no-longer-fitting row derives one: to the
     // next chapter's start, or open-ended at the tail.
-    return <ChapterEdit>[
+    return <ChapterMark>[
       for (var i = 0; i < rows.length; i++)
-        ChapterEdit(
+        ChapterMark(
           index: i,
           title: parsed[i].title.isEmpty ? null : parsed[i].title,
           startMs: parsed[i].startMs,

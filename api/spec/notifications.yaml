@@ -548,16 +548,14 @@ components:
       description: >
         Where a notification event or target belongs: `server` is the
         administrator-managed operations scope, `user` a single user's
-        personal scope. A shared named schema on purpose: identical
-        inline enums make the Dart generator emit one enum class into
-        two files, which does not compile.
+        personal scope.
 
     NotificationTargetKind:
       type: string
       enum: [pushover, ntfy, gotify, discord, webhook, apprise, unifiedpush]
       description: >
-        A notification delivery provider. A shared named schema on
-        purpose, like NotificationScope.
+        A notification delivery provider, as named on a target and on a
+        request to create one.
 
     NotificationEvent:
       type: object
@@ -702,7 +700,7 @@ components:
         target URLs; empty relies on the Apprise server's own
         configuration);
         `unifiedpush` takes `endpoint` (the distributor-issued https
-        URL, unique per owner).
+        URL, unique per owner). The `kind` is fixed at creation.
       required: [pid, kind, scope, config, enabledEvents, createdAt]
       properties:
         pid:
@@ -753,6 +751,7 @@ components:
             than held for the unmute.
         minIntervalSeconds:
           type: integer
+          default: 0
           description: >
             The shortest gap between two deliveries to this target, in
             seconds; 0 (the default) paces nothing. A delivery inside

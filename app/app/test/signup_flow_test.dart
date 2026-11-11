@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/login_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
