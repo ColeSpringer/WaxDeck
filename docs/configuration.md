@@ -395,6 +395,11 @@ root).
   checks the shared browser and relaunches a dead one. An image cached
   from before that answers a keyed daemon 401 and reports unhealthy
   until `docker compose pull waxseal`; the sidecar still serves.
+  A daemon YouTube refuses at start, which a datacenter address can
+  meet, restarts without end (its log says `ytcfg visitor_data not
+  available`), and `make up` or `docker compose up -d --wait` then
+  reports it unhealthy with the rest of the stack running; turn it off
+  as above.
   Compose runs `waxseal:latest`; this release was run against WaxSeal
   1.5.0.
 

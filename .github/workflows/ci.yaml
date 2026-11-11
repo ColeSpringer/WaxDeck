@@ -366,6 +366,8 @@ jobs:
       # ever drift apart.
       - name: Image toolchain pin agrees with CI
         run: grep -qxF "ARG FLUTTER_VERSION=$FLUTTER_VERSION" deploy/Dockerfile
+      # A cache scope per image: under a shared one each build's export
+      # replaces the other's, and neither ever finds a layer.
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -375,8 +377,8 @@ jobs:
           tags: ghcr.io/colespringer/waxdeck:latest
           build-args: |
             FLUTTER_VERSION=${{ env.FLUTTER_VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=waxdeck
+          cache-to: type=gha,mode=max,scope=waxdeck
       # The engine at the server's pin, under upstream's name so
       # --no-build finds it locally.
       - uses: docker/build-push-action@v7
@@ -386,8 +388,8 @@ jobs:
           push: false
           load: true
           tags: ghcr.io/colespringer/waxflow:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=waxflow
+          cache-to: type=gha,mode=max,scope=waxflow
       # Synthesized, never committed: no binary media in git. The full
       # preset, so the scan has something with structure to find.
       - name: Synthesize a library
@@ -410,19 +412,23 @@ jobs:
             echo "WAXDECK_SONIC_ANALYSIS=false"
             echo "WAXDECK_WORKER_TOKENS=$(openssl rand -hex 24)"
           } >> deploy/.env
-      # --wait blocks until every container reports healthy (all three
-      # images bake HEALTHCHECKs), so "up" already means answering. The
-      # poll then proves the server reached the engine over the host
-      # network: extra_hosts, the loopback port, the seeded roots file
-      # and the shared key, which the bridge refuses when wrong.
+      # All three started, as an operator's `up -d` starts them. --wait
+      # then blocks until the two this job drives report healthy (their
+      # images bake HEALTHCHECKs), so "up" already means answering;
+      # WaxSeal has the step after this one. The poll then proves the
+      # server reached the engine over the host network: extra_hosts,
+      # the loopback port, the seeded roots file and the shared key,
+      # which the bridge refuses when wrong.
       - name: Bring the stack up
         env:
           WAXDECK_MUSIC: ${{ runner.temp }}/library
           WAXDECK_AUDIOBOOKS: ${{ runner.temp }}/audiobooks
         run: |
           set -euo pipefail
-          WAXDECK_UID=$(id -u) WAXDECK_GID=$(id -g) \
-            docker compose -f deploy/compose.yaml up -d --wait --no-build
+          WAXDECK_UID=$(id -u) WAXDECK_GID=$(id -g)
+          export WAXDECK_UID WAXDECK_GID
+          docker compose -f deploy/compose.yaml up -d --no-build
+          docker compose -f deploy/compose.yaml up -d --wait --no-build waxdeck waxflow
           for _ in $(seq 1 30); do
             if curl -sf -o "$RUNNER_TEMP/health.json" http://localhost:4420/api/v1/health \
               && grep -q '"connected":true' "$RUNNER_TEMP/health.json"; then
@@ -433,6 +439,12 @@ jobs:
           done
           echo "::error::the server never connected to the engine"
           exit 1
+      # WaxSeal alone needs something outside the runner: YouTube has to
+      # serve its browser a watch page, and does not serve every address.
+      # The script takes that refusal as a warning and fails on anything
+      # else that keeps the daemon from coming up.
+      - name: WaxSeal starts
+        run: tools/ci/waxseal-starts.sh deploy/compose.yaml
       # The same readiness idiom run-desktop.sh uses: bootstrap the first
       # administrator (a no-op 409 afterwards), log in, and search for
       # something the scan should have found. A stack that comes up and
@@ -569,10 +581,9 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
       - name: Install Playwright browser
         if: steps.browser-cache.outputs.cache-hit != 'true'
-        run: cd e2e && npx playwright install --with-deps chromium
-      - name: Install Playwright system dependencies
-        if: steps.browser-cache.outputs.cache-hit == 'true'
-        run: cd e2e && npx playwright install-deps chromium
+        run: cd e2e && npx playwright install chromium
+      - name: Playwright system dependencies
+        run: tools/ci/playwright-deps.sh
       - name: Drive Feishin against the stack
         env:
           WAXDECK_BASE_URL: http://localhost:4420
@@ -667,14 +678,14 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
-      # The apt packages Chromium links against live outside the cached
-      # directory, so a cache hit still has to install those.
       - name: Install Playwright browser
         if: steps.browser-cache.outputs.cache-hit != 'true'
-        run: cd e2e && npx playwright install --with-deps chromium
-      - name: Install Playwright system dependencies
-        if: steps.browser-cache.outputs.cache-hit == 'true'
-        run: cd e2e && npx playwright install-deps chromium
+        run: cd e2e && npx playwright install chromium
+      # The libraries Chromium links against ship in the runner image,
+      # so apt and its mirrors are asked only when the browser does not
+      # start.
+      - name: Playwright system dependencies
+        run: tools/ci/playwright-deps.sh
       - name: Playwright e2e
         run: cd e2e && npx playwright test
       # Always: a green run is exactly when a test that needed a retry

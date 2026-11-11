@@ -744,6 +744,20 @@ note.
   Wanted: a `WAXSEAL_TENANT_KEYS` variable or a key file. Shipped
   workaround: `WAXDECK_SEAL_KEY` gives WaxSeal a key of its own, so what
   `ps` shows opens WaxSeal alone.
+- **A daemon YouTube refuses at boot exits.** `waxseal server` warms a
+  session before it serves and ends the process when that fails, so on
+  an address YouTube answers without an identity (`ytcfg visitor_data
+  not available before deadline`, which a datacenter address gets on
+  some days), or one that cannot reach it, the container restarts for
+  good: a new browser and a new request every half minute, never
+  healthy, and `docker compose up -d --wait` fails for the whole stack.
+  A serving daemon already outlives the same refusal: it answers with a
+  retry-after and tries again. Wanted: serve after a failed warm-up and
+  treat it the same way. Shipped workaround: CI waits on the server and
+  the engine only and takes a refused WaxSeal as a warning once
+  `waxseal doctor --stop-after-load` passes under the same service; an
+  operator on a refused address turns WaxSeal off (`WAXDECK_SEAL=0`
+  and an empty `WAXDECK_SEAL_URL`).
 
 ## WaxFlow
 

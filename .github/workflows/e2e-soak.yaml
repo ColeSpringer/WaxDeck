@@ -70,10 +70,9 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
       - name: Install Playwright browser
         if: steps.browser-cache.outputs.cache-hit != 'true'
-        run: cd e2e && npx playwright install --with-deps chromium
-      - name: Install Playwright system dependencies
-        if: steps.browser-cache.outputs.cache-hit == 'true'
-        run: cd e2e && npx playwright install-deps chromium
+        run: cd e2e && npx playwright install chromium
+      - name: Playwright system dependencies
+        run: tools/ci/playwright-deps.sh
       # The whole suite, N times over, rather than `--repeat-each=N`.
       # Two reasons, and both were found by trying the other way.
       #

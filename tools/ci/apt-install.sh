@@ -69,9 +69,27 @@ demote_first_mirror() {
 }
 
 pid=""
+# SIGTERM to apt-get and its fetch methods, then SIGKILL to whatever is
+# left of the group fifteen seconds on. Until setsid has run there is no
+# group, only the child.
+end_apt() {
+  local left=15
+  kill -TERM -- "-$pid" 2> /dev/null || {
+    kill -TERM "$pid" 2> /dev/null || true
+    return 0
+  }
+  while kill -0 -- "-$pid" 2> /dev/null; do
+    if (( left-- == 0 )); then
+      kill -KILL -- "-$pid" 2> /dev/null || true
+      return 0
+    fi
+    sleep 1
+  done
+}
+
 # Ends apt with the script, exiting as the signal would have.
 on_signal() {
-  [ -z "$pid" ] || kill -TERM "$pid" 2> /dev/null || true
+  [ -z "$pid" ] || end_apt
   exit $((128 + $1))
 }
 trap 'on_signal 1' HUP
@@ -79,13 +97,14 @@ trap 'on_signal 2' INT
 trap 'on_signal 15' TERM
 
 # apt-get with the arguments after <bytes>, ended once fewer than <bytes>
-# have been written in $WINDOW seconds. timeout is there for its process
-# group: a SIGTERM to it reaches apt-get and its fetch methods, and
-# SIGKILL follows.
+# have been written in $WINDOW seconds. setsid gives apt-get a process
+# group of its own, which its fetch methods join, so one signal reaches
+# them all. Not timeout for that: with no duration, the Rust coreutils
+# one (Ubuntu 26.04) drops a SIGTERM instead of passing it on.
 watched() {
   local need=$1 base since now status=0
   shift
-  timeout --kill-after=15 0 "${APT[@]}" "$@" &
+  setsid "${APT[@]}" "$@" &
   pid=$!
   base=$(written)
   since=$SECONDS
@@ -100,7 +119,7 @@ watched() {
       since=$SECONDS
     elif (( SECONDS - since >= WINDOW )); then
       echo "apt-install: $(( (now - base) / 1024 )) KiB written in ${WINDOW}s; ending apt-get" >&2
-      kill -TERM "$pid" 2> /dev/null || true
+      end_apt
       break
     fi
   done
