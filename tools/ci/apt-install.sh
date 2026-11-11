@@ -12,6 +12,13 @@
 # runner image sets it: apt spends its retries on one mirror before it
 # tries the next (actions/runner-images#14594).
 #
+# A mirror the resolver has no address for is looked up at a public
+# resolver instead and held in /etc/hosts until a try fails or the
+# script exits. When ubuntu.com's nameservers stop answering, a runner's
+# resolver times out on every mirror for the whole job, while the
+# mirrors are up and the public resolvers still serve the records they
+# hold.
+#
 #   apt-install.sh <package>...
 set -euo pipefail
 
@@ -23,11 +30,80 @@ set -euo pipefail
 # signal apt itself: sudo ignores a signal sent from its own process group.
 [ "$EUID" -eq 0 ] || exec sudo -- "$0" "$@"
 
+# No SRV lookup: apt makes one before it asks for a host's address, no
+# host in the runner's sources has the record, and a resolver that is
+# failing takes ten seconds over each one.
 APT=(apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15
-  -o DPkg::Lock::Timeout=60)
+  -o DPkg::Lock::Timeout=60 -o Acquire::EnableSrvRecords=false)
 WINDOW=90
 FLOOR=$((100 * 1024))
 MIRRORS=/etc/apt/apt-mirrors.txt
+HOSTS=/etc/hosts
+PIN="# apt-install.sh"
+# Asked by address over HTTPS, so reaching one takes no lookup.
+RESOLVERS=(1.1.1.1 9.9.9.9 8.8.8.8)
+# Mirrors no resolver had an address for. They are not asked about
+# again: each costs up to thirty-five seconds to find out.
+declare -A unplaced=()
+
+# Pins each mirror in the runner's list that the resolver gives no
+# address for in five seconds. curl does the lookup and the proof in one
+# request: it resolves through the public resolver, fetches the mirror's
+# root, and reports the address that answered.
+pin_unresolved_mirrors() {
+  local uri host resolver ip lead
+  [ -s "$MIRRORS" ] && command -v curl > /dev/null || return 0
+  # The last line counts with or without its newline.
+  while read -r uri _ <&3 || [ -n "$uri" ]; do
+    [[ $uri == http://* || $uri == https://* ]] || continue
+    host=${uri#*://}
+    host=${host%%[:/]*}
+    [ -z "${unplaced[$host]:-}" ] || continue
+    timeout 5 getent ahosts "$host" > /dev/null 2>&1 && continue
+    ip=""
+    for resolver in "${RESOLVERS[@]}"; do
+      ip=$(curl -sS --doh-url "https://$resolver/dns-query" --connect-timeout 5 --max-time 10 \
+        -o /dev/null -w '%{remote_ip}' "$uri" 2> /dev/null) && [ -n "$ip" ] && break
+      ip=""
+    done
+    if [ -z "$ip" ]; then
+      unplaced[$host]=1
+      echo "apt-install: the resolver has no address for $host, nor has any of ${RESOLVERS[*]}" >&2
+      continue
+    fi
+    lead=""
+    [ -z "$(tail -c 1 "$HOSTS")" ] || lead=$'\n'
+    printf '%s%s %s %s\n' "$lead" "$ip" "$host" "$PIN" >> "$HOSTS" || {
+      echo "apt-install: could not write $HOSTS" >&2
+      return 0
+    }
+    echo "apt-install: the resolver has no address for $host; using $ip, from $resolver" >&2
+  done 3< "$MIRRORS"
+}
+
+# Drops the pins and never fails, so the exit status stays apt's. By
+# rename where /etc/hosts can be replaced, so it is never seen cut
+# short; a container's is a mount, and a link is not ours to replace,
+# so those are rewritten in place.
+unpin_mirrors() {
+  grep -qF " $PIN" "$HOSTS" 2> /dev/null || return 0
+  if { grep -vF " $PIN" "$HOSTS" || [ $? -eq 1 ]; } > "$HOSTS.next"; then
+    if [ ! -L "$HOSTS" ] && chmod --reference="$HOSTS" "$HOSTS.next" &&
+      chown --reference="$HOSTS" "$HOSTS.next" && mv "$HOSTS.next" "$HOSTS" 2> /dev/null; then
+      return 0
+    fi
+    if cat "$HOSTS.next" > "$HOSTS"; then
+      rm -f "$HOSTS.next"
+      return 0
+    fi
+  fi
+  rm -f "$HOSTS.next" 2> /dev/null || true
+  echo "apt-install: could not take its pins out of $HOSTS" >&2
+}
+trap unpin_mirrors EXIT
+# A killed run leaves its pins, and they would pass for the resolver's
+# answer here.
+unpin_mirrors
 
 # Never fails: a file apt renames mid-count only skews one sample.
 written() {
@@ -128,11 +204,15 @@ watched() {
   return "$status"
 }
 
-# watched, three tries at most; only a stall ends the last.
+# watched, three tries at most; only a stall ends the last. Each try
+# starts with every mirror it can give an address, and a failed one
+# takes its pins with it: the next looks the mirrors up afresh instead
+# of going back to an address that may be what stalled.
 fetch() {
   local what=$1 attempt need demoted
   shift
   for attempt in 1 2 3; do
+    pin_unresolved_mirrors
     need=$((attempt < 3 ? FLOOR * WINDOW : 1))
     if watched "$need" "$@"; then
       return 0
@@ -141,6 +221,7 @@ fetch() {
       echo "apt-install: $what did not finish in three tries" >&2
       exit 1
     fi
+    unpin_mirrors
     demoted=$(demote_first_mirror || true)
     echo "apt-install: $what did not finish (try $attempt of 3); retrying${demoted:+ with $demoted last}" >&2
     sleep 10
