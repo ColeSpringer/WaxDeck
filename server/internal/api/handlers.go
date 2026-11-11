@@ -22,6 +22,7 @@ import (
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/pagetext"
+	"github.com/colespringer/waxdeck/server/internal/respwriter"
 	"github.com/colespringer/waxdeck/server/internal/service"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
@@ -224,7 +225,7 @@ const apiBaseURL = "/api/v1"
 func (s *Server) Handler() http.Handler {
 	// Loads the contract now rather than on the first request.
 	contractAccess()
-	return HandlerWithOptions(
+	routes := HandlerWithOptions(
 		NewStrictHandlerWithOptions(s, []StrictMiddlewareFunc{s.userContextMiddleware}, StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  RequestErrorHandler,
 			ResponseErrorHandlerFunc: s.ResponseErrorHandler,
@@ -235,6 +236,11 @@ func (s *Server) Handler() http.Handler {
 			ErrorHandlerFunc: RequestErrorHandler,
 		},
 	)
+	// Every answer goes out through a writer that notes it starting,
+	// which ResponseErrorHandler asks of it.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		routes.ServeHTTP(&respwriter.Writer{ResponseWriter: w}, r)
+	})
 }
 
 type discardLogger struct{}
@@ -1739,7 +1745,22 @@ func requestFailure(err error) string {
 // ResponseErrorHandler reports handler-returned errors through
 // responseError, a failure during a catalog hand-off as the hand-off (see
 // handedOff), logged.
+//
+// An error that strikes once the answer is under way has no answer left
+// to give: net/http refuses a second status, and the error's body would
+// land inside the first one. That is a listener gone mid-body, or a
+// streamed body that broke; a value that will not encode never gets this
+// far, since the generated writers encode before they write. The
+// connection is cut instead, so what arrived reads as broken rather than
+// whole, and the failure is logged unless the request itself is over: its
+// listener left, or the server is stopping.
 func (s *Server) ResponseErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	if respwriter.Started(w) {
+		if r.Context().Err() == nil {
+			s.log.Warn("a response failed after it started", "path", r.URL.Path, "err", err)
+		}
+		panic(http.ErrAbortHandler)
+	}
 	if s.handedOff(err) {
 		s.log.Warn("a request failed during catalog maintenance", "path", r.URL.Path, "err", err)
 		err = maintenanceAnswer()

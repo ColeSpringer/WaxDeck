@@ -27,7 +27,7 @@ func (u unwrapOnly) Unwrap() http.ResponseWriter { return u.w }
 func TestShareStreamWritersFlushThroughWrappers(t *testing.T) {
 	t.Parallel()
 	rec := httptest.NewRecorder()
-	(&sharePlayCounter{ResponseWriter: unwrapOnly{rec}}).Flush()
+	countSharePlay(unwrapOnly{rec}, nil).Flush()
 	if !rec.Flushed {
 		t.Error("the play counter's flush stopped at a wrapper")
 	}
@@ -74,7 +74,7 @@ func TestShareStreamWritersKeepTheFilePath(t *testing.T) {
 	defer f.Close()
 	rec := httptest.NewRecorder()
 	below := &handedFrom{ResponseWriter: rec}
-	counter := &sharePlayCounter{ResponseWriter: (&Server{}).boundWrites(below, nil)}
+	counter := countSharePlay((&Server{}).boundWrites(below, nil), nil)
 	size := int64(len(want)) - 100
 	if n, err := io.CopyN(counter, f, size); n != size || err != nil {
 		t.Fatalf("copied %d, %v; want %d", n, err, size)

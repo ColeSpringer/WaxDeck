@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/colespringer/waxdeck/server/internal/respwriter"
 )
 
 // relayWriteStallLimit is how long one write of a share's stream or
@@ -40,16 +42,17 @@ var errStreamEnded = errors.New("the stream's link no longer serves")
 // response says the player can resume by range, and the long one when it
 // does not. With live set it also asks, at most once every `every` while
 // bytes flow, whether the response should still be going, and ends it
-// when not. Unwrap, Flush and ReadFrom keep it a streaming writer with
-// the fast file path, as the other wrappers in front of it are.
+// when not. It is a respwriter.Writer for the rest: Write and ReadFrom
+// here go below themselves, a stretch at a time, so each starts the
+// answer first.
 type stallBoundWriter struct {
-	http.ResponseWriter
+	respwriter.Writer
 	rc *http.ResponseController
 	// resumable and unresumable are the two stalls; stall is the one in
-	// force, chosen once the status goes out. rangeAsked says the request
+	// force, chosen as the answer starts. rangeAsked says the request
 	// carried a Range, which a 200 answer ignored.
 	resumable, unresumable, stall time.Duration
-	picked, rangeAsked            bool
+	rangeAsked                    bool
 	live                          func() bool
 	every                         time.Duration
 	checked                       time.Time
@@ -62,15 +65,16 @@ type stallBoundWriter struct {
 // boundWrites wraps a stream's writer in the stall bound, and in the
 // liveness check when live is set.
 func (s *Server) boundWrites(w http.ResponseWriter, live func() bool) *stallBoundWriter {
-	return &stallBoundWriter{
-		ResponseWriter: w,
-		rc:             http.NewResponseController(w),
-		resumable:      s.relayWriteStall,
-		unresumable:    s.relayWriteStallNoRange,
-		live:           live,
-		every:          s.streamRecheckEvery,
-		checked:        time.Now(),
+	bound := &stallBoundWriter{
+		rc:          http.NewResponseController(w),
+		resumable:   s.relayWriteStall,
+		unresumable: s.relayWriteStallNoRange,
+		live:        live,
+		every:       s.streamRecheckEvery,
+		checked:     time.Now(),
 	}
+	bound.Writer = respwriter.Writer{ResponseWriter: w, Before: bound.pick}
+	return bound
 }
 
 // expire runs the bound out now, as an elapsed one would: a write blocked
@@ -83,15 +87,12 @@ func (w *stallBoundWriter) expire() {
 	_ = w.rc.SetWriteDeadline(time.Now())
 }
 
-// pick chooses the stall from the response going out: the short one when
-// its status or headers say byte ranges work, so a paused player can ask
-// for the rest on resume. A host that answered a ranged request with the
-// whole file has shown they do not, whatever it advertises.
+// pick chooses the stall from the response going out, as it starts: the
+// short one when its status or headers say byte ranges work, so a paused
+// player can ask for the rest on resume. A host that answered a ranged
+// request with the whole file has shown they do not, whatever it
+// advertises.
 func (w *stallBoundWriter) pick(status int) {
-	if w.picked || status < http.StatusOK {
-		return
-	}
-	w.picked = true
 	w.stall = w.unresumable
 	ignored := w.rangeAsked && status == http.StatusOK
 	offered := strings.EqualFold(strings.TrimSpace(w.Header().Get("Accept-Ranges")), "bytes")
@@ -100,18 +101,13 @@ func (w *stallBoundWriter) pick(status int) {
 	}
 }
 
-func (w *stallBoundWriter) WriteHeader(code int) {
-	w.pick(code)
-	w.ResponseWriter.WriteHeader(code)
-}
-
 // ready runs before each write: the liveness check when it is due, then
 // a fresh deadline.
 func (w *stallBoundWriter) ready() error {
 	if w.ended {
 		return errStreamEnded
 	}
-	w.pick(http.StatusOK)
+	w.Start(http.StatusOK)
 	if w.live != nil && time.Since(w.checked) >= w.every {
 		w.checked = time.Now()
 		if !w.live() {
@@ -195,10 +191,6 @@ func (w *stallBoundWriter) ReadFrom(src io.Reader) (int64, error) {
 	}
 	return total, nil
 }
-
-func (w *stallBoundWriter) Flush() { _ = w.rc.Flush() }
-
-func (w *stallBoundWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // writeOnly hides every method but Write, so io.Copy into it cannot find
 // a ReadFrom and recurse.

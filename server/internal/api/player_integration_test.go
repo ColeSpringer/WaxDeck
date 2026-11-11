@@ -45,6 +45,42 @@ func dialWS(t *testing.T, h *harness, token string, topics ...string) *wsClient 
 		t.Fatalf("subscribing: %v", err)
 	}
 	c := &wsClient{t: t, conn: conn, recv: make(chan map[string]any, 64)}
+	t.Cleanup(func() { conn.Close(websocket.StatusNormalClosure, "") })
+	// Nothing acks a subscribe frame, and the hub wakes only the sockets
+	// it has registered, so a caller that acted now could lose its
+	// invalidation. Frames are dispatched in order once the socket is
+	// registered, so the ping's answer is proof: a pong, or an error
+	// frame from a server with no command bus. Frames ahead of it are
+	// kept.
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"ping"}`)); err != nil {
+		t.Fatalf("ws ping: %v", err)
+	}
+	for registered := false; !registered; {
+		_, msg, err := conn.Read(ctx)
+		if err != nil {
+			// A socket the server closed instead (its session ended) is
+			// the caller's to judge.
+			if c.status = websocket.CloseStatus(err); c.status == -1 {
+				t.Fatalf("waiting for the subscription to register: %v", err)
+			}
+			close(c.recv)
+			return c
+		}
+		frame := c.decode(msg)
+		switch {
+		case frame == nil:
+		case frame["type"] == "pong", frame["type"] == "error":
+			registered = true
+		default:
+			// Nothing drains recv yet, so a full one fails rather than
+			// blocks.
+			select {
+			case c.recv <- frame:
+			default:
+				t.Fatalf("more than %d frames arrived ahead of the ping's answer", cap(c.recv))
+			}
+		}
+	}
 	go func() {
 		for {
 			_, msg, err := conn.Read(context.Background())
@@ -53,14 +89,22 @@ func dialWS(t *testing.T, h *harness, token string, topics ...string) *wsClient 
 				close(c.recv)
 				return
 			}
-			var frame map[string]any
-			if json.Unmarshal(msg, &frame) == nil {
+			if frame := c.decode(msg); frame != nil {
 				c.recv <- frame
 			}
 		}
 	}()
-	t.Cleanup(func() { conn.Close(websocket.StatusNormalClosure, "") })
 	return c
+}
+
+// decode reads one frame, failing the test on one that is not JSON.
+func (c *wsClient) decode(msg []byte) map[string]any {
+	var frame map[string]any
+	if err := json.Unmarshal(msg, &frame); err != nil {
+		c.t.Errorf("frame %s: %v", msg, err)
+		return nil
+	}
+	return frame
 }
 
 func (c *wsClient) send(v map[string]any) {
@@ -111,18 +155,33 @@ func (c *wsClient) stillOpen(window time.Duration) bool {
 // others (invalidations interleave freely).
 func (c *wsClient) expect(frameType string) map[string]any {
 	c.t.Helper()
+	return c.expectWhere(frameType, func(f map[string]any) bool { return f["type"] == frameType })
+}
+
+// expectInvalidate waits for an invalidation of topic. Those of other
+// topics may come first: ordering across topics is not contractual.
+func (c *wsClient) expectInvalidate(topic string) {
+	c.t.Helper()
+	c.expectWhere("invalidate/"+topic, func(f map[string]any) bool {
+		return f["type"] == "invalidate" && f["topic"] == topic
+	})
+}
+
+// expectWhere waits for the next frame wanted takes, discarding others.
+func (c *wsClient) expectWhere(what string, wanted func(map[string]any) bool) map[string]any {
+	c.t.Helper()
 	deadline := time.After(10 * time.Second)
 	for {
 		select {
 		case f, ok := <-c.recv:
 			if !ok {
-				c.t.Fatalf("socket closed waiting for %s", frameType)
+				c.t.Fatalf("socket closed waiting for %s", what)
 			}
-			if f["type"] == frameType {
+			if wanted(f) {
 				return f
 			}
 		case <-deadline:
-			c.t.Fatalf("no %s frame arrived", frameType)
+			c.t.Fatalf("no %s frame arrived", what)
 		}
 	}
 }

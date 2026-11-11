@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/colespringer/waxdeck/server/internal/respwriter"
 )
 
 // How long a browser may cache a preflight answer. A day: the answer is
@@ -55,7 +56,8 @@ func withCORS(origins []string, next http.Handler) http.Handler {
 		// endpoints do, from the spec) and Set replaces. Those are the
 		// cacheable responses where losing it matters most.
 		w.Header().Add("Vary", "Origin")
-		w = &corsWriter{ResponseWriter: w}
+		kept := keepVaryOrigin(w)
+		w = kept
 
 		_, ok := allowed[origin]
 		if ok {
@@ -109,70 +111,35 @@ func withCORS(origins []string, next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
+		// A handler that returned without starting its answer gets the
+		// 200 net/http sends next, grant and all: that is it starting.
+		kept.Start(http.StatusOK)
 	})
 }
 
-// corsWriter keeps `Vary: Origin` on responses whose handler sets a Vary
-// of its own, and is otherwise transparent.
+// keepVaryOrigin is a writer that keeps `Vary: Origin` on responses whose
+// handler sets a Vary of its own, and is otherwise the shared writer,
+// transparent.
 //
 // A handler's `Set("Vary", ...)` replaces what the wrapper added on the
 // way in, which would let a shared cache serve one origin's response -
 // carrying that origin's Access-Control-Allow-Origin - to another. This
-// runs at write time, after the handler has had its say.
-//
-// The delegation below is not optional, and countingWriter (httpmetrics)
-// explains why at length: it sits *inside* this wrapper, so its ReadFrom
-// resolves against this type. Without ReadFrom here, http.ServeContent
-// loses sendfile and every media byte goes back through a userspace copy
-// loop. Flush goes through a ResponseController so it reaches the real
-// writer, and Unwrap is what lets the WebSocket upgrade find it.
-type corsWriter struct {
-	http.ResponseWriter
-	varied bool
-}
-
-func (w *corsWriter) keepVary() {
-	if w.varied {
-		return
-	}
-	w.varied = true
-	h := w.Header()
-	for _, v := range h.Values("Vary") {
-		if strings.EqualFold(v, "Origin") {
-			return
+// runs as the answer starts, after the handler has had its say, on
+// whichever call starts it: a flush with nothing written yet commits an
+// implicit 200 as surely as a write, and a handler that replaced Vary and
+// then flushed would otherwise publish a grant a shared cache can key
+// without Origin.
+func keepVaryOrigin(w http.ResponseWriter) *respwriter.Writer {
+	return &respwriter.Writer{ResponseWriter: w, Before: func(int) {
+		h := w.Header()
+		for _, v := range h.Values("Vary") {
+			if strings.EqualFold(v, "Origin") {
+				return
+			}
 		}
-	}
-	h.Add("Vary", "Origin")
+		h.Add("Vary", "Origin")
+	}}
 }
-
-func (w *corsWriter) WriteHeader(status int) {
-	w.keepVary()
-	w.ResponseWriter.WriteHeader(status)
-}
-
-func (w *corsWriter) Write(b []byte) (int, error) {
-	w.keepVary()
-	return w.ResponseWriter.Write(b)
-}
-
-func (w *corsWriter) ReadFrom(r io.Reader) (int64, error) {
-	w.keepVary()
-	if rf, ok := w.ResponseWriter.(io.ReaderFrom); ok {
-		return rf.ReadFrom(r)
-	}
-	return io.Copy(w.ResponseWriter, r)
-}
-
-func (w *corsWriter) Flush() {
-	// A flush with nothing written yet commits an implicit 200, so this
-	// is a header-committing path like the three above it - a handler
-	// that replaced Vary and then flushed would otherwise publish a
-	// grant a shared cache can key without Origin.
-	w.keepVary()
-	_ = http.NewResponseController(w.ResponseWriter).Flush()
-}
-
-func (w *corsWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // normalizeOrigins trims each origin, drops a trailing slash, and
 // refuses anything a browser could never send.

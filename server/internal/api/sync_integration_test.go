@@ -785,49 +785,15 @@ func TestWebSocketInvalidations(t *testing.T) {
 	items := h.items(t, "")
 	pid := items.Items[0].Pid
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	wsURL := "ws" + strings.TrimPrefix(h.ts.URL, "http") + "/api/v1/ws"
-	conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
-		HTTPHeader: http.Header{"Authorization": []string{"Bearer " + h.token}},
-	})
-	if err != nil {
-		t.Fatalf("dialing event channel: %v", err)
-	}
-	defer conn.Close(websocket.StatusNormalClosure, "")
-
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`{}`)); err != nil {
-		t.Fatalf("subscribing: %v", err)
-	}
-
-	// waitFrame reads until the wanted frame arrives; frames for other
-	// topics may interleave (the startup scan's catalog invalidation can
-	// land after connect) and ordering across topics is not contractual.
-	waitFrame := func(wantType, wantTopic string) {
-		t.Helper()
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			rctx, rcancel := context.WithDeadline(ctx, deadline)
-			_, data, err := conn.Read(rctx)
-			rcancel()
-			if err != nil {
-				t.Fatalf("waiting for %s/%s: %v", wantType, wantTopic, err)
-			}
-			var f struct{ Type, Topic string }
-			if err := json.Unmarshal(data, &f); err != nil {
-				t.Fatalf("frame %s: %v", data, err)
-			}
-			if f.Type == wantType && f.Topic == wantTopic {
-				return
-			}
-		}
-		t.Fatalf("no %s/%s frame arrived", wantType, wantTopic)
-	}
+	// dialWS returns once the hub has the socket, so no wake below can
+	// land ahead of the subscription. Frames for other topics may
+	// interleave: the startup scan's catalog invalidation can land after
+	// connect.
+	ws := dialWS(t, h, h.token)
 
 	// A user-state mutation surfaces as a coalesced user invalidation.
-	resp := h.putJSON(t, "/api/v1/items/"+pid+"/star", map[string]any{"starred": true})
-	resp.Body.Close()
-	waitFrame("invalidate", "user")
+	wantStatus(t, h.putJSON(t, "/api/v1/items/"+pid+"/star", map[string]any{"starred": true}), 200, "star")
+	ws.expectInvalidate("user")
 
 	// A catalog change surfaces on the catalog topic.
 	if _, err := fixtures.Generate(h.library, fixtures.Spec{
@@ -837,9 +803,12 @@ func TestWebSocketInvalidations(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.rescanAndWait(t)
-	waitFrame("invalidate", "catalog")
+	ws.expectInvalidate("catalog")
 
 	// An unauthenticated upgrade is refused before the handshake.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	wsURL := "ws" + strings.TrimPrefix(h.ts.URL, "http") + "/api/v1/ws"
 	if _, resp2, err := websocket.Dial(ctx, wsURL, nil); err == nil {
 		t.Fatal("unauthenticated upgrade succeeded")
 	} else if resp2 == nil || resp2.StatusCode != 401 {
@@ -1147,10 +1116,6 @@ func TestWebSocketClosesWhenItsSessionEnds(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			userID, tokens, sessions := wsAccount(t, h, fmt.Sprintf("socket%d", i))
 			ws := dialWS(t, h, tokens[0])
-			// The subscribe frame registers the socket; one round trip
-			// proves the server has read it.
-			ws.send(map[string]any{"type": "ping", "id": "p1", "t": 1})
-			ws.expect("pong")
 			tc.end(userID, tokens, sessions)
 			if got := ws.closedWith(2 * time.Second); got != 4401 {
 				t.Errorf("close status = %d, want 4401", got)
@@ -1166,10 +1131,6 @@ func TestWebSocketRevokeAllKeepsTheCallersSocket(t *testing.T) {
 	h := newHarness(t)
 	userID, tokens, _ := wsAccount(t, h, "keeper")
 	other, mine := dialWS(t, h, tokens[0]), dialWS(t, h, tokens[1])
-	for _, ws := range []*wsClient{other, mine} {
-		ws.send(map[string]any{"type": "ping", "id": "p1", "t": 1})
-		ws.expect("pong")
-	}
 	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/users/"+userID+"/sessions", tokens[1], nil), 204, "revoke the others")
 	if got := other.closedWith(2 * time.Second); got != 4401 {
 		t.Errorf("the other session's socket closed with %d, want 4401", got)
@@ -1224,8 +1185,6 @@ func TestWebSocketBackstopClosesWithoutANotification(t *testing.T) {
 	h.srv.wsPingEvery = 50 * time.Millisecond
 	_, tokens, sessions := wsAccount(t, h, "backstop")
 	ws := dialWS(t, h, tokens[0])
-	ws.send(map[string]any{"type": "ping", "id": "p1", "t": 1})
-	ws.expect("pong")
 	if err := h.store.DeleteSession(context.Background(), sessions[0]); err != nil {
 		t.Fatal(err)
 	}
@@ -1299,8 +1258,6 @@ func TestBackstopEndsEverySocketOfTheSession(t *testing.T) {
 	// socket's can end it in time.
 	time.Sleep(150 * time.Millisecond)
 	ws := dialWS(t, h, tokens[0])
-	ws.send(map[string]any{"type": "ping", "id": "p1", "t": 1})
-	ws.expect("pong")
 	if err := h.store.DeleteSession(context.Background(), sessions[0]); err != nil {
 		t.Fatal(err)
 	}

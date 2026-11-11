@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/colespringer/waxdeck/server/internal/bodylimit/bodylimittest"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -95,6 +96,26 @@ func TestJSONBodiesPastTheCapAreRefusedUnread(t *testing.T) {
 		if read > limit {
 			t.Errorf("%s read %d bytes of the body, want at most %d", c.what, read, limit)
 		}
+	}
+}
+
+// A streamed body past the cap is refused where the cap falls. Only a
+// real connection shows it: the server stops reading when its own writer
+// is told, and the API answers through writers that wrap that one.
+func TestAStreamedBodyPastTheCapIsNotReadOn(t *testing.T) {
+	t.Parallel()
+	srv := NewServer("test", Options{})
+	over := bodylimittest.Overrun(t, srv.Handler(), jsonBodyMaxBytes, func(url string, filler io.Reader) *http.Request {
+		body := io.MultiReader(strings.NewReader(`{"username":"`), filler)
+		req, err := http.NewRequest("POST", url+"/api/v1/auth/login", body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req
+	})
+	if over > bodylimittest.Tolerated {
+		t.Errorf("the server had read %d bytes past the cap when it answered, want at most %d", over, bodylimittest.Tolerated)
 	}
 }
 

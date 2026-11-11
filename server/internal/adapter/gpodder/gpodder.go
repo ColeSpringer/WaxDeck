@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/bodylimit"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -315,7 +316,7 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 		Caption *string `json:"caption"`
 		Type    *string `json:"type"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+	if err := json.NewDecoder(bodylimit.Reader(w, r.Body, maxBodyBytes)).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 		h.failBody(w, err)
 		return
 	}
@@ -419,7 +420,7 @@ func (h *handler) subsPut(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	body, err := io.ReadAll(bodylimit.Reader(w, r.Body, maxBodyBytes))
 	if err != nil {
 		h.failBody(w, err)
 		return
@@ -483,7 +484,7 @@ func (h *handler) subDeltaPost(w http.ResponseWriter, r *http.Request) {
 		Add    []string `json:"add"`
 		Remove []string `json:"remove"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&body); err != nil {
+	if err := json.NewDecoder(bodylimit.Reader(w, r.Body, maxBodyBytes)).Decode(&body); err != nil {
 		h.failBody(w, err)
 		return
 	}
@@ -596,7 +597,7 @@ func (h *handler) episodesPost(w http.ResponseWriter, r *http.Request) {
 	// upload's.
 	timestamp := h.svc.GpodderEpisodesUploadCursor(uc, appPassword, arrived)
 	var actions []json.RawMessage
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&actions); err != nil {
+	if err := json.NewDecoder(bodylimit.Reader(w, r.Body, maxBodyBytes)).Decode(&actions); err != nil {
 		h.failBody(w, err)
 		return
 	}

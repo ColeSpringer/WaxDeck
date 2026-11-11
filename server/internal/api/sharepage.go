@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -17,6 +16,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/pagetext"
+	"github.com/colespringer/waxdeck/server/internal/respwriter"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -252,10 +252,11 @@ func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 	// with a tiny probe like `bytes=0-1`, which must not count a
 	// second play, and a HEAD reads no audio at all. Counted once the
 	// audio starts, so a refusal on the way counts nothing.
-	counter := &sharePlayCounter{ResponseWriter: bound}
+	var count func()
 	if r.Method == http.MethodGet && countableShareFetch(r.Header.Get("Range")) {
-		counter.count = func() { s.svc.CountSharePlay(r.Context(), id) }
+		count = func() { s.svc.CountSharePlay(r.Context(), id) }
 	}
+	counter := countSharePlay(bound, count)
 	if audio == service.ShareAudioRelay {
 		s.relayShareEpisode(counter, r, pub.OwnerUserID, it.PID)
 		return
@@ -338,52 +339,16 @@ func (s *Server) relayShareEpisode(w http.ResponseWriter, r *http.Request, owner
 	s.relayEnclosure(w, r, pid, src)
 }
 
-// sharePlayCounter counts a share's play once its audio starts: on the
-// first success status, 200 or 206, written for a request that begins a
-// listen (count is nil for one that does not).
-type sharePlayCounter struct {
-	http.ResponseWriter
-	count   func()
-	started bool
-}
-
-func (c *sharePlayCounter) WriteHeader(code int) {
-	// Informational answers are not the response starting.
-	if code >= 200 && !c.started {
-		c.started = true
-		if c.count != nil && (code == http.StatusOK || code == http.StatusPartialContent) {
-			c.count()
+// countSharePlay is a writer that counts a share's play once its audio
+// starts: as the answer starts with a success status, 200 or 206, for a
+// request that begins a listen (count is nil for one that does not).
+func countSharePlay(w http.ResponseWriter, count func()) *respwriter.Writer {
+	return &respwriter.Writer{ResponseWriter: w, Before: func(status int) {
+		if count != nil && (status == http.StatusOK || status == http.StatusPartialContent) {
+			count()
 		}
-	}
-	c.ResponseWriter.WriteHeader(code)
+	}}
 }
-
-func (c *sharePlayCounter) Write(b []byte) (int, error) {
-	if !c.started {
-		c.WriteHeader(http.StatusOK)
-	}
-	return c.ResponseWriter.Write(b)
-}
-
-// ReadFrom keeps the file path's sendfile, and Flush, through a
-// ResponseController so it reaches the real writer whatever wraps it,
-// keeps the writer a streaming one for the engine's proxy, which flushes
-// as audio arrives.
-func (c *sharePlayCounter) ReadFrom(src io.Reader) (int64, error) {
-	if !c.started {
-		c.WriteHeader(http.StatusOK)
-	}
-	if rf, ok := c.ResponseWriter.(io.ReaderFrom); ok {
-		return rf.ReadFrom(src)
-	}
-	return io.Copy(c.ResponseWriter, src)
-}
-
-func (c *sharePlayCounter) Flush() {
-	_ = http.NewResponseController(c.ResponseWriter).Flush()
-}
-
-func (c *sharePlayCounter) Unwrap() http.ResponseWriter { return c.ResponseWriter }
 
 // countableProbeFloor separates a browser's start-of-file probe from a
 // fetch that actually plays: Safari asks for `bytes=0-1` before its

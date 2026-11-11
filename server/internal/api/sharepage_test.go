@@ -152,7 +152,7 @@ func TestSharePlayCounterCountsTheFirstSuccess(t *testing.T) {
 		{"early hints first", func(w http.ResponseWriter) { w.WriteHeader(103); w.WriteHeader(200) }, 1},
 	} {
 		n := 0
-		counter := &sharePlayCounter{ResponseWriter: httptest.NewRecorder(), count: func() { n++ }}
+		counter := countSharePlay(httptest.NewRecorder(), func() { n++ })
 		c.write(counter)
 		if n != c.counts {
 			t.Errorf("%s: counted %d, want %d", c.name, n, c.counts)

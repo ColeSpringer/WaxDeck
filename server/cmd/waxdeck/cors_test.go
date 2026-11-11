@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -211,6 +212,30 @@ func TestWithCORSKeepsVaryAcrossFlush(t *testing.T) {
 	}
 }
 
+// An answer its handler never started still goes out, as the 200 net/http
+// sends once the handler returns, and with the grant on it, so it keeps
+// Vary: Origin too. A copy that brought nothing is one way there.
+func TestWithCORSKeepsVaryOnAnAnswerNothingStarted(t *testing.T) {
+	for name, write := range map[string]func(http.ResponseWriter){
+		"nothing written": func(http.ResponseWriter) {},
+		"an empty copy":   func(w http.ResponseWriter) { io.Copy(w, struct{ io.Reader }{strings.NewReader("")}) },
+	} {
+		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Vary", "Accept-Encoding")
+			write(w)
+		})
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/media/art", nil)
+		req.Header.Set("Origin", "http://localhost:9180")
+
+		withCORS([]string{"http://localhost:9180"}, next).ServeHTTP(rec, req)
+
+		if got := rec.Header().Values("Vary"); !slices.Contains(got, "Origin") {
+			t.Errorf("%s: Vary = %v; want Origin kept beside the handler's", name, got)
+		}
+	}
+}
+
 // Not duplicated when the handler already varies on Origin itself.
 func TestWithCORSDoesNotDuplicateVaryOrigin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -228,16 +253,21 @@ func TestWithCORSDoesNotDuplicateVaryOrigin(t *testing.T) {
 	}
 }
 
-// countingWriter (httpmetrics) sits inside this wrapper and resolves
-// io.ReaderFrom against it, so a missing ReadFrom here costs
-// http.ServeContent its sendfile path for every media byte.
-func TestCORSWriterKeepsTheReadFromFastPath(t *testing.T) {
-	var _ io.ReaderFrom = (*corsWriter)(nil)
-	var _ http.Flusher = (*corsWriter)(nil)
-
-	w := &corsWriter{ResponseWriter: httptest.NewRecorder()}
-	if _, ok := any(w).(interface{ Unwrap() http.ResponseWriter }); !ok {
-		t.Error("corsWriter does not implement Unwrap; ResponseController cannot reach the real writer")
+// The writer a handler is given under CORS is still a streaming one. The
+// metrics writer sits inside it and resolves io.ReaderFrom against it, so
+// one that lacked ReadFrom would cost http.ServeContent its sendfile path
+// for every media byte; Unwrap is how a ResponseController and the
+// WebSocket upgrade reach the real writer.
+func TestCORSKeepsAStreamingWriter(t *testing.T) {
+	var readsFrom, flushes, unwraps bool
+	h := withCORS([]string{"https://app.example.com"}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, readsFrom = w.(io.ReaderFrom)
+		_, flushes = w.(http.Flusher)
+		_, unwraps = w.(interface{ Unwrap() http.ResponseWriter })
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/x", nil))
+	if !readsFrom || !flushes || !unwraps {
+		t.Errorf("the writer under CORS: ReadFrom %v, Flusher %v, Unwrap %v; want all three", readsFrom, flushes, unwraps)
 	}
 }
 

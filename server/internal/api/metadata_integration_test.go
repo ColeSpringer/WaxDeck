@@ -1190,9 +1190,7 @@ func TestArtRefusesAnUndecodableMeasuredOriginalAsAThumbnail(t *testing.T) {
 	wantStatus(t, resp, 404, "a thumbnail of an undecodable measured original")
 }
 
-// readAll asserts a status and drains the body, which a test that leaves
-// a large one unread would otherwise turn into a "superfluous
-// response.WriteHeader" line in an otherwise clean run.
+// readAll asserts a status and answers the whole body.
 func readAll(t *testing.T, resp *http.Response, want int, what string) []byte {
 	t.Helper()
 	defer resp.Body.Close()

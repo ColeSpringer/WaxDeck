@@ -1,12 +1,12 @@
 package main
 
 import (
-	"io"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/metrics"
+	"github.com/colespringer/waxdeck/server/internal/respwriter"
 )
 
 // Request-level metrics: one counter and one latency histogram over the
@@ -63,7 +63,7 @@ func (m *httpMetrics) wrap(class string, h http.HandlerFunc, firstByteOnly bool)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		cw := &countingWriter{ResponseWriter: w}
+		cw := newCountingWriter(w)
 		// Deferred, so a panicking handler is still counted. Without it
 		// the one class of failure an operator most wants on a dashboard
 		// is the one class that never appears.
@@ -116,59 +116,22 @@ func statusLabel(status int, returned bool) string {
 	}
 }
 
-// countingWriter records the response status and the instant the first
-// byte went out, and is otherwise transparent.
-//
-// Unwrap covers the callers that resolve capabilities properly:
-// http.ResponseController (how httputil.ReverseProxy flushes audio as it
-// arrives) and the WebSocket upgrade both follow it to the real writer.
-// Flush is implemented anyway, and unconditionally, because not every
-// caller does: the generated SSE writer type-asserts `w.(http.Flusher)`
-// directly and silently degrades to a non-flushing io.Copy when the
-// assertion fails, which buffers tool-task progress frames instead of
-// delivering them per event. Claiming the capability costs nothing when
-// the writer underneath lacks it, since the fallback those callers take
-// does not flush either.
+// countingWriter records the status the answer started with and the
+// instant it did, and is otherwise the shared writer, transparent: Flush,
+// ReadFrom and Unwrap are respwriter's, which says why each matters.
 type countingWriter struct {
-	http.ResponseWriter
+	respwriter.Writer
 	status    int
 	firstByte time.Time
 }
 
-// Flush delegates through a ResponseController so it reaches the real
-// writer whatever else wraps it, and does nothing when that writer
-// cannot flush.
-func (w *countingWriter) Flush() {
-	_ = http.NewResponseController(w.ResponseWriter).Flush()
+func newCountingWriter(w http.ResponseWriter) *countingWriter {
+	cw := &countingWriter{}
+	cw.Writer = respwriter.Writer{ResponseWriter: w, Before: cw.mark}
+	return cw
 }
-
-func (w *countingWriter) WriteHeader(status int) {
-	w.mark(status)
-	w.ResponseWriter.WriteHeader(status)
-}
-
-func (w *countingWriter) Write(b []byte) (int, error) {
-	w.mark(http.StatusOK)
-	return w.ResponseWriter.Write(b)
-}
-
-// ReadFrom keeps the fast path http.ServeContent and io.Copy reach for:
-// net/http's own writer copies a file to the socket with sendfile, and
-// a wrapper without ReadFrom silently drops every media byte back to a
-// userspace buffer loop.
-func (w *countingWriter) ReadFrom(r io.Reader) (int64, error) {
-	w.mark(http.StatusOK)
-	if rf, ok := w.ResponseWriter.(io.ReaderFrom); ok {
-		return rf.ReadFrom(r)
-	}
-	return io.Copy(w.ResponseWriter, r)
-}
-
-func (w *countingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func (w *countingWriter) mark(status int) {
-	if w.status == 0 {
-		w.status = status
-		w.firstByte = time.Now()
-	}
+	w.status = status
+	w.firstByte = time.Now()
 }

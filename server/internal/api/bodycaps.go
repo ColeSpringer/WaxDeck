@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/colespringer/waxdeck/server/internal/bodylimit"
 )
 
 // opmlImportMaxBytes caps an OPML import's request body, which the
@@ -88,7 +90,7 @@ func capRequestBody(w http.ResponseWriter, r *http.Request) bool {
 		writeError(w, http.StatusBadRequest, "invalid-request", bodyTooLarge(limit))
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	r.Body = bodylimit.Reader(w, r.Body, limit)
 	return true
 }
 

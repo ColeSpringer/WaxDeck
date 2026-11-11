@@ -3,6 +3,7 @@ package gpodder
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/colespringer/waxdeck/server/internal/bodylimit/bodylimittest"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -198,6 +200,34 @@ func TestOversizedBodiesAreTooLarge(t *testing.T) {
 		resp, raw := e.call(c.method, c.path, huge, true)
 		if resp.StatusCode != 413 {
 			t.Errorf("%s %s = %d (%.80s), want 413", c.method, c.path, resp.StatusCode, raw)
+		}
+	}
+}
+
+// A streamed body over the limit is refused where the limit falls, behind
+// a writer in front of the server's own, as the metrics and CORS writers
+// stand in front of this surface. Only a real connection shows it: the
+// server stops reading when its own writer is told.
+func TestAStreamedOversizedBodyIsNotReadOn(t *testing.T) {
+	e := newEnv(t)
+	behind := bodylimittest.Behind(e.ts.Config.Handler)
+	for _, c := range []struct{ method, path string }{
+		{"PUT", "/subscriptions/alice/phone.json"},
+		{"POST", "/api/2/subscriptions/alice/phone.json"},
+		{"POST", "/api/2/episodes/alice.json"},
+		{"POST", "/api/2/devices/alice/phone.json"},
+	} {
+		over := bodylimittest.Overrun(t, behind, maxBodyBytes, func(url string, filler io.Reader) *http.Request {
+			req, err := http.NewRequest(c.method, url+c.path, io.MultiReader(strings.NewReader(`["`), filler))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.SetBasicAuth("alice", e.secret)
+			return req
+		})
+		if over > bodylimittest.Tolerated {
+			t.Errorf("%s %s: the server had read %d bytes past the limit when it answered, want at most %d",
+				c.method, c.path, over, bodylimittest.Tolerated)
 		}
 	}
 }
